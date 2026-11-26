@@ -113,8 +113,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -132,7 +133,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -246,8 +246,8 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
         if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self->sym, ni, _self->sym->funcs[gfi].nparams) != 0) {
             return (-1);
         }
-        memcpy(_self->sym->funcs[ni].ptype, _self->sym->funcs[gfi].ptype, ((size_t)(_self->sym->funcs[gfi].nparams) * MAX_TEXT));
-        memcpy(_self->sym->funcs[ni].pdim, _self->sym->funcs[gfi].pdim, ((size_t)(_self->sym->funcs[gfi].nparams) * MAX_TEXT));
+        memcpy(_self->sym->funcs[ni].ptype, _self->sym->funcs[gfi].ptype, ((size_t)(_self->sym->funcs[gfi].nparams) * sizeof(char *)));
+        memcpy(_self->sym->funcs[ni].pdim, _self->sym->funcs[gfi].pdim, ((size_t)(_self->sym->funcs[gfi].nparams) * sizeof(char *)));
         memcpy(_self->sym->funcs[ni].pann, _self->sym->funcs[gfi].pann, (size_t)(_self->sym->funcs[gfi].nparams));
     }
     _self->sym->funcs[ni].cname = runtime_text_ct_intern(cname);
@@ -268,16 +268,21 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     for (k = 0; k < _self->sym->funcs[gfi].nparams; k++) {
-        if (frontend_sym_ct_generic_subst((_self->sym->funcs[gfi].ptype + (k * MAX_TEXT)), _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) {
-            snprintf((_self->sym->funcs[ni].ptype + (k * MAX_TEXT)), MAX_TEXT, "%s", tmp);
+        const char * sub = frontend_sym_ct_generic_subst_text(_self->sym->funcs[gfi].ptype[k], _self->sym->funcs[gfi].tparam, targ);
+        if ((!sub)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
+        _self->sym->funcs[ni].ptype[k] = sub;
     }
     i = _self->sym->nginsts;
     _self->sym->ginsts[i].func = gfi;
     _self->sym->ginsts[i].row = ni;
     _self->sym->ginsts[i].owner = _self->cur_unit;
-    snprintf(_self->sym->ginsts[i].targ, MAX_TEXT, "%s", targ);
-    snprintf(_self->sym->ginsts[i].cname, MAX_TEXT, "%s", cname);
+    _self->sym->ginsts[i].targ = runtime_text_ct_intern(targ);
+    if ((!_self->sym->ginsts[i].targ)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->sym->ginsts[i].cname = _self->sym->funcs[ni].cname;
     _self->sym->ginsts[i].line = line;
     _self->sym->ginsts[i].col = col;
     _self->sym->nginsts++;
@@ -439,9 +444,10 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_elem_for
     return life;
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *self, const char * tname, int nargs, char * * args, char * * cargs, char * enc, int enc_cap, int depth, int line, int col) {
+static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *self, const char * tname, int nargs, char * * args, char * * cargs, const char * * enc_out, int depth, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     struct frontend_sym_StructTmpl * tp;
+    const char * enc;
     int tn;
     int ti2;
     int k;
@@ -450,8 +456,6 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     int pi2;
     int nt2;
     int carried2;
-    char sub1[MAX_TEXT];
-    char sub2[MAX_TEXT];
     ti2 = frontend_sym_ct_tmpl_find(tname);
     tp = frontend_sym_ct_tmpls((&tn));
     if (((!tp) || (ti2 < 0))) {
@@ -481,23 +485,20 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
             }
         }
     }
-    if (frontend_sym_ct_inst_encode(tname, nargs, args, enc, enc_cap) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+    enc = frontend_sym_ct_inst_encode_text(tname, nargs, args);
+    if ((!enc)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
 {
         int cx = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, enc);
         if (((cx >= 0) && (!_self->sym->structs[cx].is_inst))) {
-            char cmsg[MAX_TEXT * 2];
-            snprintf(cmsg, sizeof(cmsg), "the instance name '%s' collides with a declared struct", enc);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, cmsg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("the instance name '%s' collides with a declared struct", enc));
         }
     }
     carried2 = ((tp[ti2].is_pub && (tp[ti2].owner == _self->cur_unit)) ? 1 : 0);
     k = frontend_sym_ct_inst_add(enc, tname, nargs, args, cargs, _self->cur_unit, carried2, line, col);
     if (k == (-2)) {
-        char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "two type arguments encode to the same C name '%s'", enc);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("two type arguments encode to the same C name '%s'", enc));
     }
     if (k < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -511,18 +512,15 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
             return (-1);
         }
         for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
-            snprintf(sub2, sizeof(sub2), "%s", tp[ti2].fields[fi2].type);
+            const char * sub2 = tp[ti2].fields[fi2].type;
             for (pi2 = 0; pi2 < nt2; pi2++) {
-                snprintf(sub1, sizeof(sub1), "%s", sub2);
-                if (frontend_sym_ct_generic_subst(sub1, tp[ti2].tparam[pi2], cargs[pi2], sub2, MAX_TEXT) != 0) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
+                sub2 = frontend_sym_ct_generic_subst_text(sub2, tp[ti2].tparam[pi2], cargs[pi2]);
+                if ((!sub2)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
             }
             _self->sym->structs[si2].fields[fi2].name = tp[ti2].fields[fi2].name;
-            _self->sym->structs[si2].fields[fi2].type = runtime_text_ct_intern(sub2);
-            if ((!_self->sym->structs[si2].fields[fi2].type)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
+            _self->sym->structs[si2].fields[fi2].type = sub2;
             _self->sym->structs[si2].fields[fi2].dims = tp[ti2].fields[fi2].dims;
             _self->sym->structs[si2].fields[fi2].is_bitfield = tp[ti2].fields[fi2].is_bitfield;
             _self->sym->structs[si2].fields[fi2].is_pub = tp[ti2].fields[fi2].is_pub;
@@ -568,6 +566,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     if (_self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, enc, 1) != 0) {
         return (-1);
     }
+    (*enc_out) = enc;
     if (((strcmp(tname, "Map") == 0) && (nt2 > 1))) {
         char esub[MAX_TEXT * 2];
         snprintf(esub, sizeof(esub), "struct MapEntry<%s, %s> *", cargs[0], cargs[1]);
@@ -582,7 +581,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nest
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     char name[MAX_TEXT];
     char tail[MAX_TEXT];
-    char enc[MAX_TEXT];
+    const char * enc;
     char * * args = 0;
     char * * cargs = 0;
     int acap = 0;
@@ -633,13 +632,14 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nest
     if (ti2 < 0) {
         return 0;
     }
-    if (frontend_sym_ct_inst_encode(name, nargs, cargs, enc, sizeof(enc)) != 0) {
+    enc = frontend_sym_ct_inst_encode_text(name, nargs, cargs);
+    if ((!enc)) {
         return 0;
     }
     if (frontend_sym_ct_inst_find(enc) >= 0) {
         return 0;
     }
-    return _self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, name, nargs, cargs, cargs, enc, sizeof(enc), depth, 0, 0);
+    return _self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, name, nargs, cargs, cargs, (&enc), depth, 0, 0);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_inherent_method(void *self, const char * ibase, const char * fname) {
@@ -649,12 +649,12 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_inherent_meth
     int inst;
     int m;
     int ni;
-    char base[MAX_TEXT];
+    const char * base;
     struct frontend_sym_StructImpl * im;
     if (strncmp(ibase, "struct ", 7) != 0) {
         return (-1);
     }
-    snprintf(base, sizeof(base), "%s", (ibase + 7));
+    base = (ibase + 7);
     inst = frontend_sym_ct_inst_find(base);
     if (inst >= 0) {
         int best = (-1);

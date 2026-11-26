@@ -82,6 +82,9 @@ pub trait SupportOps {
     int  adopt_use(const char *name, const char *trait);
     int  expr_type(int n, char *out, int cap);
     int  expr_ctype(int n, char *out, int cap);
+    /* S1a-0 C2p-3: pool-text forms, for a caller with no fixed row. */
+    int  expr_type_text(int n, const char **out);
+    int  expr_ctype_text(int n, const char **out);
     int  maybe_box(int n, const char *trait, int addr);
     int  rewrite_init_text(const char *stype, const char *raw, char **out, int *ocap);
     int  mark_owned(int n, int line);
@@ -659,10 +662,12 @@ impl SupportOps for ParseSupport {
         while (p > 0) {
             if (self->sym->ensure_fn_param_capacity(i, k + 1) != 0)
                 return self->fail(self->sym->last_error());
-            snprintf(self->sym->funcs[i].ptype + (size_t)k * MAX_TEXT, MAX_TEXT,
-                     "%s", self->arena->nodes[p].text);
-            snprintf(self->sym->funcs[i].pdim + (size_t)k * MAX_TEXT, MAX_TEXT,
-                     "%s", self->arena->nodes[p].text3);
+            self->sym->funcs[i].ptype[k] =
+                runtime::text::ct_intern(self->arena->nodes[p].text);
+            if (!self->sym->funcs[i].ptype[k]) return self->fail("out of memory");
+            self->sym->funcs[i].pdim[k] =
+                runtime::text::ct_intern(self->arena->nodes[p].text3);
+            if (!self->sym->funcs[i].pdim[k]) return self->fail("out of memory");
             /* Phase 78 S2a: `ref` / `out` is part of the C signature (the
                emitter spells `T *`), so a prototype and its definition must
                agree; silently taking the last one would emit two conflicting
@@ -678,10 +683,11 @@ impl SupportOps for ParseSupport {
             /* a parameter's trailing `__attribute__` rides with its name/dims,
                so the prototype and the definition spell it the same way */
             if (self->arena->nodes[p].attr >= 0) {
-                char *dim = self->sym->funcs[i].pdim + (size_t)k * MAX_TEXT;
-                size_t dl = strlen(dim);
-                snprintf(dim + dl, MAX_TEXT - dl, " %s",
-                         self->arena->str_at(self->arena->nodes[p].attr));
+                const char *dim = runtime::text::ct_internf("%s %s",
+                    self->sym->funcs[i].pdim[k],
+                    self->arena->str_at(self->arena->nodes[p].attr));
+                if (!dim) return self->fail("out of memory");
+                self->sym->funcs[i].pdim[k] = dim;
             }
             k++;
             p = self->arena->nodes[p].next;
@@ -874,6 +880,16 @@ impl SupportOps for ParseSupport {
     int expr_ctype(int n, char *out, int cap)
     {
         return self->ty->expr_ctype(n, out, cap);
+    }
+
+    int expr_type_text(int n, const char **out)
+    {
+        return self->ty->expr_type_text(n, out);
+    }
+
+    int expr_ctype_text(int n, const char **out)
+    {
+        return self->ty->expr_ctype_text(n, out);
     }
 
     int maybe_box(int n, const char *trait, int addr)

@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10218 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10214 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=67123 io_cap=1024
+     emitted_before=48223 emitted_after=67577 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -23,6 +23,8 @@
       66858 行（仅 .c）。切片清单仍为 76，判别式仍各读 1 次，本次不改 kind 分支)
      (S1a-0 C2o 后复测：Lexer/Parser/Symbols 的 token/导入/限定名/导出表按需；
       Emitter.h.ct 不变（10218），发射 C 67123 行（仅 .c），切片清单仍为 76)
+     (S1a-0 C2p-3 后复测：类型拼写/实例名按需；Emitter.h.ct 10218 -> 10214，
+      发射 C 67123 -> 67577 行（仅 .c），切片清单仍为 76)
      (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
       Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，
       发射 C 54413 -> 54712，切片清单不变)

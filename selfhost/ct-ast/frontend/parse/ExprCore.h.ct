@@ -120,9 +120,17 @@ pub trait ExprTypeParse {
 
     int  parse_type(char *out, int cap);
 
+    /* S1a-0 C2p-3: the pool-text form of the type reader. The caller gets an
+       interned spelling, so a type name longer than the old 160-byte row is
+       kept whole and there is no caller buffer to size. */
+    int  parse_type_text(const char **out);
+
     /* Phase 29: read `Name<arg[, arg]>` (the lexer sits on `Name`) and append
        the encoded instance tag to `out`. */
     int  parse_inst_type(char *out, int cap);
+
+    /* S1a-0 C2p-3: pool-text form of the generic instance reader. */
+    int  parse_inst_type_text(const char **out);
 }
 
 
@@ -132,7 +140,7 @@ pub trait ExprInstantiate {
        `col` are the first type argument's source position (0 when a nested
        registration has no argument list of its own). */
     int  inst_make(const char *tname, int nargs, char **args, char **cargs,
-                   char *enc, int enc_cap, int depth, int line, int col);
+                   const char **enc_out, int depth, int line, int col);
 
     /* Phase 29: a substituted field spelling may itself name an instance
        (`MapEntry<K, V>`); register it so the emitter can print its layout. */
@@ -422,8 +430,9 @@ pub struct Expr {
        instance. Since S20b the surrounding instance takes that argument by its
        C spelling (`struct Vec_int`), so the encoder produces one name in every
        path (`Vec_Vec__int`); this flag only tells the reader the argument was an
-       instance. Empty when the last type was not an instance. */
-    char inst_canon[160];
+       instance. Empty when the last type was not an instance.
+       S1a-0 C2p-3: a pool text, so a long template name is not cut here. */
+    const char *inst_canon;
     /* S1a-0 C2o: the segment scratch for `parse_qual_path`, a persistent row
        block grown on demand (the old local `seg[8][160]` capped a path at
        eight segments). */
@@ -472,7 +481,9 @@ pub struct Expr {
     /* Phase 26 fix (SH-63): the last bare struct/union/enum tag `parse_type`
        expanded into `struct <tag>`. A template whose return type was written
        bare `T` must become the type parameter, not the same-named tag. */
-    char last_bare_tag[160];
+    /* S1a-0 C2p-3: the bare tag of the type just read is a pool text, so a
+       long struct name is not cut at the old 160-byte row. */
+    const char *last_bare_tag;
     /* Phase 26 fix (SH-62, reopened): a `sizeof` / `_Alignof` / `alignof` type
        operand written without parentheses (`sizeof T`) takes one type name and
        stops before `*`, which belongs to the surrounding multiplication. */

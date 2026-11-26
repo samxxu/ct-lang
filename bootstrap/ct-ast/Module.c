@@ -50,8 +50,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -69,7 +70,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -1436,7 +1436,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
             snprintf(msg, sizeof(msg), "'%s' cannot be exported: ", _self->sym->funcs[fi].name);
 {
                 for (k = (-1); k < _self->sym->funcs[fi].nparams; k++) {
-                    const char * tp = ((k < 0) ? _self->sym->funcs[fi].ret : (_self->sym->funcs[fi].ptype + (k * MAX_TEXT)));
+                    const char * tp = ((k < 0) ? _self->sym->funcs[fi].ret : _self->sym->funcs[fi].ptype[k]);
                     const char * base = tp;
                     if (strncmp(base, "struct ", 7) == 0) {
                         base += 7;

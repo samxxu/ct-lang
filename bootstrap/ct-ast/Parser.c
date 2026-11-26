@@ -92,8 +92,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -111,7 +112,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -310,7 +310,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_parse_type_alias(vo
     int line;
     int col;
     char name[MAX_TEXT];
-    char target[MAX_TEXT];
+    const char * target;
     (void)(_self);
     line = _self->lex->tokline;
     col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
@@ -335,7 +335,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_parse_type_alias(vo
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     _self->sym->alias_decl++;
     _self->ex->saw_atomic = 0;
-    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, target, sizeof(target)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&target)) != 0) {
         _self->sym->alias_decl--;
         _self->sym->__frontend_sym_typealiasops_vptr->abort_type_alias(_self->sym);
         return (-1);
@@ -1299,7 +1299,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     int ar;
     int attr;
     int lead;
-    char ret[MAX_TEXT];
+    const char * ret;
     const char * name;
     const char * cname;
     const char * gns = "";
@@ -1317,7 +1317,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     func_line = _self->lex->tokline;
     func_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
     _self->ex->saw_atomic = 0;
-    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret)) != 0) {
         return (-1);
     }
     ret_slice = 0;
@@ -1331,7 +1331,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             }
             ret_slice = 1;
             _self->sup->__frontend_parse_supportops_vptr->note_slice(_self->sup);
-            snprintf(ret, sizeof(ret), "struct __ct_slice");
+            ret = "struct __ct_slice";
         }
     }
     if (_self->ex->fnptr_state) {
@@ -1413,9 +1413,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             int ll = (int)(strlen(_self->ex->last_bare_tag));
             int tl = (int)(strlen(tparam));
             if (((((ll > tl) && (_self->ex->last_bare_tag[((ll - tl) - 1)] == ' ')) && (strcmp(((_self->ex->last_bare_tag + ll) - tl), tparam) == 0)) && (strncmp(ret, _self->ex->last_bare_tag, (size_t)(ll)) == 0))) {
-                char fixed[MAX_TEXT];
-                snprintf(fixed, sizeof(fixed), "%s%s", tparam, (ret + ll));
-                snprintf(ret, sizeof(ret), "%s", fixed);
+                ret = runtime_text_ct_internf("%s%s", tparam, (ret + ll));
+                if ((!ret)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
         }
     }
@@ -1448,10 +1449,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         if (g < 0) {
             return (-1);
         }
-        _self->arena->nodes[g].text = runtime_text_ct_intern(ret);
-        if ((!_self->arena->nodes[g].text)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->arena->nodes[g].text = ret;
         _self->arena->nodes[g].text2 = runtime_text_ct_intern(name);
         if ((!_self->arena->nodes[g].text2)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -1969,8 +1967,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
     int slice_const;
     int slice_line;
     int slice_col;
-    char slice_elem[MAX_TEXT];
-    char typebuf[MAX_TEXT];
+    const char * slice_elem = "";
+    const char * typebuf;
+    const char * parsed;
     char name[MAX_TEXT];
     (void)(_self);
     _self->nparams = 0;
@@ -2014,12 +2013,12 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
                 }
             }
         }
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&parsed)) != 0) {
             return (-1);
         }
+        typebuf = parsed;
         is_slice = 0;
         slice_const = 0;
-        slice_elem[0] = 0;
         slice_line = _self->lex->tokline;
         slice_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
         if (_self->sup->__frontend_parse_supportops_vptr->slice_brackets_ahead(_self->sup, (&slice_line), (&slice_col))) {
@@ -2029,12 +2028,12 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
             }
             is_slice = 1;
             _self->sup->__frontend_parse_supportops_vptr->note_slice(_self->sup);
-            snprintf(slice_elem, sizeof(slice_elem), "%s", typebuf);
+            slice_elem = typebuf;
             if (strncmp(slice_elem, "const ", 6) == 0) {
                 slice_const = 1;
-                memmove(slice_elem, (slice_elem + 6), (strlen((slice_elem + 6)) + 1));
+                slice_elem += 6;
             }
-            snprintf(typebuf, sizeof(typebuf), "struct __ct_slice");
+            typebuf = "struct __ct_slice";
         }
         if (_self->ex->fnptr_state) {
             snprintf(name, sizeof(name), "%s", _self->ex->fnptr_name);
@@ -2057,10 +2056,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
         if (p < 0) {
             return (-1);
         }
-        _self->arena->nodes[p].text = runtime_text_ct_intern(typebuf);
-        if ((!_self->arena->nodes[p].text)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->arena->nodes[p].text = typebuf;
         _self->arena->nodes[p].text2 = runtime_text_ct_intern(name);
         if ((!_self->arena->nodes[p].text2)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -2385,9 +2381,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
     int count;
     int ar;
     int ao;
-    char typebuf[MAX_TEXT];
-    char base[MAX_TEXT];
-    char firsttype[MAX_TEXT];
+    const char * typebuf;
+    const char * base;
+    const char * firsttype;
     const char * name;
     size_t bl;
     (void)(_self);
@@ -2400,7 +2396,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
             fpub = 1;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&typebuf)) != 0) {
             return (-1);
         }
         _self->field_pub = fpub;
@@ -2422,12 +2418,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
             }
         }
     }
-    snprintf(firsttype, sizeof(firsttype), "%s", typebuf);
-    snprintf(base, sizeof(base), "%s", typebuf);
-    bl = strlen(base);
-    while (((bl > 0) && ((base[(bl - 1)] == '*') || (base[(bl - 1)] == ' ')))) {
+    firsttype = typebuf;
+    bl = strlen(typebuf);
+    while (((bl > 0) && ((typebuf[(bl - 1)] == '*') || (typebuf[(bl - 1)] == ' ')))) {
         bl--;
-        base[bl] = 0;
+    }
+    base = runtime_text_ct_intern_len(typebuf, (int)(bl));
+    if ((!base)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     head = (-1);
     tail = (-1);
@@ -2446,18 +2444,20 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
             }
             else {
                 if (count > 0) {
-                    char t2[MAX_TEXT];
+                    const char * t2;
                     while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
                         stars++;
                         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                     }
-                    snprintf(t2, sizeof(t2), "%s", base);
+                    t2 = base;
                     while (stars > 0) {
-                        snprintf(typebuf, sizeof(typebuf), "%s *", t2);
-                        snprintf(t2, sizeof(t2), "%s", typebuf);
+                        t2 = runtime_text_ct_internf("%s *", t2);
+                        if ((!t2)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
                         stars--;
                     }
-                    snprintf(typebuf, sizeof(typebuf), "%s", t2);
+                    typebuf = t2;
                 }
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a field name");
@@ -2474,10 +2474,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
         if (m < 0) {
             return (-1);
         }
-        _self->arena->nodes[m].text = runtime_text_ct_intern(typebuf);
-        if ((!_self->arena->nodes[m].text)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->arena->nodes[m].text = typebuf;
         _self->arena->nodes[m].text2 = name;
         _self->arena->nodes[m].d = _self->field_pub;
         _self->arena->nodes[m].num = _self->field_col;
@@ -2546,10 +2543,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_field_def(void *s
     if (w < 0) {
         return (-1);
     }
-    _self->arena->nodes[w].text = runtime_text_ct_intern(firsttype);
-    if ((!_self->arena->nodes[w].text)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[w].text = firsttype;
     _self->arena->nodes[w].a = head;
     return w;
 }
@@ -3162,7 +3156,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
     int td_line;
     int ar;
     int ao;
-    char typebuf[MAX_TEXT];
+    const char * typebuf;
     char name[MAX_TEXT];
     char qname[MAX_TEXT];
     (void)(_self);
@@ -3332,7 +3326,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
         return t;
     }
     _self->ex->saw_atomic = 0;
-    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&typebuf)) != 0) {
         return (-1);
     }
     if (_self->ex->saw_atomic) {
@@ -3366,10 +3360,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
     if (ao >= 0) {
         _self->arena->nodes[t].attr = ao;
     }
-    _self->arena->nodes[t].text = runtime_text_ct_intern(typebuf);
-    if ((!_self->arena->nodes[t].text)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[t].text = typebuf;
     _self->arena->nodes[t].text2 = runtime_text_ct_intern(qname);
     if ((!_self->arena->nodes[t].text2)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -3471,7 +3462,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     int bcap = 0;
     char name[MAX_TEXT];
     char qname[MAX_TEXT];
-    char ret[MAX_TEXT];
+    const char * ret;
     char ptype[MAX_TEXT];
     char pname[MAX_TEXT];
     char * edge;
@@ -3605,7 +3596,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
             return tool_diag_ct_sem_error(mline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "receiver mutability is written after the parameter list: 'int f() mut;'", _self->mem->path);
         }
         _self->sup->map_sig = _self->unit_is_map;
-        rty = _self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret));
+        rty = _self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret));
         _self->sup->map_sig = 0;
         if (rty != 0) {
             return (-1);
@@ -3624,10 +3615,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         if ((!_self->sym->traits[ti].m[mi].name)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        _self->sym->traits[ti].m[mi].ret = runtime_text_ct_intern(ret);
-        if ((!_self->sym->traits[ti].m[mi].ret)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->sym->traits[ti].m[mi].ret = ret;
         _self->sym->traits[ti].m[mi].nparams = 0;
         _self->sym->traits[ti].m[mi].body = (-1);
         _self->sym->traits[ti].m[mi].pnode = (-1);
@@ -3887,13 +3875,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
     int brace_col;
     int found;
     int dup_i;
-    char tname[MAX_TEXT];
-    char sname[MAX_TEXT];
-    char rtrait[MAX_TEXT];
-    char rstruct[MAX_TEXT];
-    char ret[MAX_TEXT];
+    const char * tname;
+    const char * sname;
+    const char * rtrait;
+    const char * rstruct;
+    const char * ret;
     char mname[MAX_TEXT];
-    char stype[MAX_TEXT];
+    const char * stype;
     int type_index;
     (void)(_self);
     impl_line = _self->lex->tokline;
@@ -3907,31 +3895,45 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
     if (_self->lex->tok != T_ID) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a trait name");
     }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tname, sizeof(tname));
+    tname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!tname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
-        if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, tname, rtrait, sizeof(rtrait)) != 0) {
+        rtrait = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, tname);
+        if ((!rtrait)) {
             return (-1);
         }
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rtrait);
         if (((ti < 0) || (_self->sym->traits[ti].ntparams == 0))) {
             return _self->__frontend_parse_parseops_vptr->parse_impl_inst(_self, tname, 0);
         }
-        ti = parse_trait_inst_args(_self, rtrait, sizeof(rtrait));
-        if (ti < 0) {
-            return (-1);
+{
+            char rb[MAX_TEXT];
+            snprintf(rb, sizeof(rb), "%s", rtrait);
+            ti = parse_trait_inst_args(_self, rb, sizeof(rb));
+            if (ti < 0) {
+                return (-1);
+            }
+            rtrait = runtime_text_ct_intern(rb);
+            if ((!rtrait)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
         }
     }
     else {
-        if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, tname, rtrait, sizeof(rtrait)) != 0) {
+        rtrait = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, tname);
+        if ((!rtrait)) {
             return (-1);
         }
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rtrait);
     }
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
-        char rinh[MAX_TEXT];
+        const char * rinh;
         int si_inh;
-        if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, tname, rinh, sizeof(rinh)) != 0) {
+        rinh = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, tname);
+        if ((!rinh)) {
             return (-1);
         }
         si_inh = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, rinh);
@@ -3967,15 +3969,21 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
     if (_self->lex->tok != T_ID) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a struct name");
     }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, sname, sizeof(sname));
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, sname, rstruct, sizeof(rstruct)) != 0) {
+    sname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!sname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    rstruct = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, sname);
+    if ((!rstruct)) {
         return (-1);
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, rstruct);
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (si < 0) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "impl for undefined struct '%s'", sname);
+        const char * msg = runtime_text_ct_internf("impl for undefined struct '%s'", sname);
+        if ((!msg)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         if (tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->mem->path) != 0) {
             return (-1);
         }
@@ -3986,15 +3994,20 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
     }
     type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rstruct);
     if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
-        snprintf(stype, sizeof(stype), "struct %s", rstruct);
+        stype = runtime_text_ct_internf("struct %s", rstruct);
+        if ((!stype)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     else {
-        snprintf(stype, sizeof(stype), "%s", rstruct);
+        stype = rstruct;
     }
     for (dup_i = 0; dup_i < _self->arena->nnode; dup_i++) {
         if ((((_self->arena->nodes[dup_i].kind == N_IMPL) && (_self->arena->nodes[dup_i].aux == si)) && (strcmp(_self->arena->nodes[dup_i].text2, rtrait) == 0))) {
-            char dmsg[512];
-            snprintf(dmsg, sizeof(dmsg), "duplicate impl of trait '%s' for struct '%s' (first at %s:%d)", tname, sname, _self->arena->nodes[dup_i].text3, _self->arena->nodes[dup_i].line);
+            const char * dmsg = runtime_text_ct_internf("duplicate impl of trait '%s' for struct '%s' (first at %s:%d)", tname, sname, _self->arena->nodes[dup_i].text3, _self->arena->nodes[dup_i].line);
+            if ((!dmsg)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             if (tool_diag_ct_sem_error(impl_line, 1, dmsg, _self->mem->path) != 0) {
                 return (-1);
             }
@@ -4020,15 +4033,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         return (-1);
     }
     _self->arena->nodes[node].line = impl_line;
-    _self->arena->nodes[node].text2 = runtime_text_ct_intern(rtrait);
-    if ((!_self->arena->nodes[node].text2)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[node].text2 = rtrait;
     _self->arena->nodes[node].aux = si;
-    _self->arena->nodes[node].text = runtime_text_ct_intern(stype);
-    if ((!_self->arena->nodes[node].text)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[node].text = stype;
     _self->arena->nodes[node].text3 = runtime_text_ct_intern(_self->mem->path);
     if ((!_self->arena->nodes[node].text3)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4042,7 +4049,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "static"))) {
             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a static method cannot implement a trait", _self->mem->path);
         }
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret)) != 0) {
             return (-1);
         }
         if (_self->ex->fnptr_state) {
@@ -4083,9 +4090,12 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
             }
         }
         if (((ti >= 0) && (tm_i < _self->sym->traits[ti].nm))) {
-            char wmsg[MAX_TEXT];
+            const char * wmsg;
             if ((ret[0] && (strcmp(ret, _self->sym->traits[ti].m[tm_i].ret) != 0))) {
-                snprintf(wmsg, sizeof(wmsg), "return type '%s' does not match the trait's '%s'", ret, _self->sym->traits[ti].m[tm_i].ret);
+                wmsg = runtime_text_ct_internf("return type '%s' does not match the trait's '%s'", ret, _self->sym->traits[ti].m[tm_i].ret);
+                if ((!wmsg)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 if (tool_diag_ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, _self->mem->path) != 0) {
                     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                     return (-1);
@@ -4093,7 +4103,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
             }
             else {
                 if (nimpl != _self->sym->traits[ti].m[tm_i].nparams) {
-                    snprintf(wmsg, sizeof(wmsg), "takes %d parameter(s), the trait declares %d", nimpl, _self->sym->traits[ti].m[tm_i].nparams);
+                    wmsg = runtime_text_ct_internf("takes %d parameter(s), the trait declares %d", nimpl, _self->sym->traits[ti].m[tm_i].nparams);
+                    if ((!wmsg)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                     if (tool_diag_ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, _self->mem->path) != 0) {
                         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                         return (-1);
@@ -4104,7 +4117,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
                     for (k2 = params; k2 > 0; k2 = _self->arena->nodes[k2].next) {
                         const char * ft = (_self->sym->traits[ti].m[tm_i].ptype + (pk * MAX_TEXT));
                         if ((((!strchr(ft, '[')) && (!_self->arena->nodes[k2].text3[0])) && (_self->ex->__frontend_parse_exprclosure_vptr->decl_type_compat(_self->ex, ft, _self->arena->nodes[k2].text) == 1))) {
-                            snprintf(wmsg, sizeof(wmsg), "parameter %d type '%s' does not match the trait's '%s'", (pk + 1), _self->arena->nodes[k2].text, ft);
+                            wmsg = runtime_text_ct_internf("parameter %d type '%s' does not match the trait's '%s'", (pk + 1), _self->arena->nodes[k2].text, ft);
+                            if ((!wmsg)) {
+                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                            }
                             if (tool_diag_ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, _self->mem->path) != 0) {
                                 _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                                 return (-1);
@@ -4128,7 +4144,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
                 }
             }
         }
-        snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret);
+        if (snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret) >= (int)(sizeof(_self->sym->ret_type))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "return type is too long");
+        }
         _self->cur_func = runtime_text_ct_internf("%s_%s_%s", _self->sym->structs[si].name, rtrait, mname);
         if ((!_self->cur_func)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4231,9 +4249,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
     int mline;
     int is_static;
     int is_pub;
-    char ret[MAX_TEXT];
+    const char * ret;
     char mname[MAX_TEXT];
-    char stype[MAX_TEXT];
+    const char * stype;
     int type_index;
     int adt = ((si <= (-2)) ? ((-2) - si) : (-1));
     int type_is_pub = 0;
@@ -4244,16 +4262,22 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         if (((!adts) || (adt >= nadts))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the ADT row is missing");
         }
-        snprintf(stype, sizeof(stype), "struct %s", adts[adt].full);
+        stype = runtime_text_ct_internf("struct %s", adts[adt].full);
+        if ((!stype)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         type_is_pub = adts[adt].is_pub;
     }
     else {
         type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rname);
         if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
-            snprintf(stype, sizeof(stype), "struct %s", rname);
+            stype = runtime_text_ct_internf("struct %s", rname);
+            if ((!stype)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
         }
         else {
-            snprintf(stype, sizeof(stype), "%s", rname);
+            stype = rname;
         }
         type_is_pub = _self->sym->structs[si].is_pub;
     }
@@ -4265,10 +4289,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         return (-1);
     }
     _self->arena->nodes[node].line = impl_line;
-    _self->arena->nodes[node].text = runtime_text_ct_intern(stype);
-    if ((!_self->arena->nodes[node].text)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->arena->nodes[node].text = stype;
     _self->arena->nodes[node].text2 = runtime_text_ct_intern("");
     if ((!_self->arena->nodes[node].text2)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4306,7 +4327,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         if ((is_pub && ((!_self->unit_is_hdr) || (!type_is_pub)))) {
             return tool_diag_ct_sem_error(mline, 1, ((adt >= 0) ? "a pub method needs a pub ADT in a .h.ct unit" : "a pub method needs a pub struct in a .h.ct unit"), _self->mem->path);
         }
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret)) != 0) {
             return (-1);
         }
         if (_self->ex->fnptr_state) {
@@ -4356,7 +4377,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
             }
             free(pa);
         }
-        snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret);
+        if (snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret) >= (int)(sizeof(_self->sym->ret_type))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "return type is too long");
+        }
         _self->cur_func = runtime_text_ct_internf("%s_%s", rname, mname);
         if ((!_self->cur_func)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4426,7 +4449,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     int pcap = 0;
     char use[MAX_TEXT];
     char ruse[MAX_TEXT];
-    char ret[MAX_TEXT];
+    const char * ret;
     char mname[MAX_TEXT];
     char htype[MAX_TEXT];
     int nt;
@@ -4706,7 +4729,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     }
     while (((_self->lex->tok != T_EOF) && (!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "}"))))) {
         mline = _self->lex->tokline;
-        ret[0] = 0;
+        ret = "";
         is_static = 0;
         is_pub = 0;
         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "pub"))) {
@@ -4741,7 +4764,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                 return tool_diag_ct_sem_error(mline, 1, "a pub method needs a pub struct in a .h.ct unit", _self->mem->path);
             }
         }
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, ret, sizeof(ret)) != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret)) != 0) {
             return (-1);
         }
         if (_self->ex->fnptr_state) {
@@ -4791,7 +4814,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             }
             free(pa);
         }
-        snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret);
+        if (snprintf(_self->sym->ret_type, sizeof(_self->sym->ret_type), "%s", ret) >= (int)(sizeof(_self->sym->ret_type))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "return type is too long");
+        }
         _self->cur_func = runtime_text_ct_internf("%s_%s", tmpl, mname);
         if ((!_self->cur_func)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -5192,8 +5217,8 @@ static int check_generic_bounds(struct frontend_parse_Parser * self) {
     base = tool_diag_ct_diag_nsem();
     for (i = 0; i < self->sym->nginsts; i++) {
         int f = self->sym->ginsts[i].func;
-        char targ[MAX_TEXT];
-        char tbase[MAX_TEXT];
+        const char * targ;
+        const char * tbase;
         size_t tl;
         int ok;
         if (self->sym->ginsts[i].checked) {
@@ -5203,21 +5228,24 @@ static int check_generic_bounds(struct frontend_parse_Parser * self) {
         if ((!self->sym->funcs[f].bound[0])) {
             continue;
         }
-        snprintf(targ, sizeof(targ), "%s", self->sym->ginsts[i].targ);
+        targ = (self->sym->ginsts[i].targ ? self->sym->ginsts[i].targ : "");
         tl = strlen(targ);
         while (((tl > 0) && ((targ[(tl - 1)] == ' ') || (targ[(tl - 1)] == '*')))) {
             tl--;
-            targ[tl] = 0;
+        }
+        targ = runtime_text_ct_intern_len(targ, (int)(tl));
+        if ((!targ)) {
+            return (-1);
         }
         if (strncmp(targ, "struct ", 7) == 0) {
-            snprintf(tbase, sizeof(tbase), "%s", (targ + 7));
+            tbase = (targ + 7);
         }
         else {
             if (strncmp(targ, "union ", 6) == 0) {
-                snprintf(tbase, sizeof(tbase), "%s", (targ + 6));
+                tbase = (targ + 6);
             }
             else {
-                snprintf(tbase, sizeof(tbase), "%s", targ);
+                tbase = targ;
             }
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, tbase);
@@ -5371,7 +5399,7 @@ static int check_trait_bounds(struct frontend_parse_Parser * self) {
 static int parse_trait_inst_args(struct frontend_parse_Parser * self, char * tname, int cap) {
     char * * arg = 0;
     char * * ctype = 0;
-    char abuf[MAX_TEXT];
+    const char * abuf;
     int acap = 0;
     int ccap = 0;
     int nargs = 0;
@@ -5385,11 +5413,11 @@ static int parse_trait_inst_args(struct frontend_parse_Parser * self, char * tna
         if (((((!arg) || (acap < (nargs + 1))) || (!ctype)) || (ccap < (nargs + 1)))) {
             return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a generic trait has too many type arguments");
         }
-        self->ex->inst_canon[0] = 0;
-        if (self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(self->ex, abuf, sizeof(abuf)) != 0) {
+        self->ex->inst_canon = "";
+        if (self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(self->ex, (&abuf)) != 0) {
             return (-1);
         }
-        if (frontend_sym_ct_type_canon((self->ex->inst_canon[0] ? self->ex->inst_canon : abuf), arg[nargs], MAX_TEXT) != 0) {
+        if (frontend_sym_ct_type_canon(((self->ex->inst_canon && self->ex->inst_canon[0]) ? self->ex->inst_canon : abuf), arg[nargs], MAX_TEXT) != 0) {
             return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "type is too long");
         }
         snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);

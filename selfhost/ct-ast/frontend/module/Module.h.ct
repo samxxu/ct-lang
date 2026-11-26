@@ -1856,7 +1856,7 @@ impl ModuleOps for Module {
                        instead of copying them into a 17-row stack buffer. */
                     for (k = -1; k < self->sym->funcs[fi].nparams; k++) {
                         const char *tp = k < 0 ? self->sym->funcs[fi].ret
-                                               : self->sym->funcs[fi].ptype + (k) * MAX_TEXT;
+                                               : self->sym->funcs[fi].ptype[k];
                         const char *base = tp;
                         if (strncmp(base, "struct ", 7) == 0) base += 7;
                         else if (strncmp(base, "union ", 6) == 0) base += 6;

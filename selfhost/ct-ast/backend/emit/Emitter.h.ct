@@ -5281,8 +5281,7 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
        monomorphised function (`<Inst>_<method>`), so the call is a plain
        C call. `.` passes the address, `->` passes the pointer. */
     if (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10) {
-        char base[MAX_TEXT];
-        char msg2[MAX_TEXT];
+        const char *base;
         int si;
         /* Phase 31 O3: a chained subscript's inner `get` was named by
            `emit_hoists`, so every later emission prints the temporary
@@ -5291,9 +5290,8 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
             fputs(self->arena->nodes[n].text3, self->out);
             return 0;
         }
-        snprintf(base, sizeof base, "%s", self->arena->nodes[n].text);
-        if (strncmp(base, "struct ", 7) == 0)
-            snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
+        base = self->arena->nodes[n].text;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
         si = self->sym->find_struct(base);
         if (si < 0) {
             /* LANG-29 S3 / B2: an enum ADT is not in the struct table, but its
@@ -5302,9 +5300,9 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
             struct Adt *adts;
             int nadts;
             if (adi < 0) {
-                snprintf(msg2, sizeof msg2, "no method '%s' for type '%s'",
-                         self->arena->nodes[n].text2, self->arena->nodes[n].text);
-                return self->fail_from(n, msg2);
+                return self->fail_from(n, runtime::text::ct_internf(
+                         "no method '%s' for type '%s'",
+                         self->arena->nodes[n].text2, self->arena->nodes[n].text));
             }
             adts = frontend::sym::ct_adts(&nadts);
             if (!adts || adi >= nadts)
@@ -5354,21 +5352,19 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
        receiver, so the call is `<Inst>_<method>(<args>)` and the first
        argument is an ordinary one, not `self`. */
     if (self->arena->nodes[n].aux == 11) {
-        char base[MAX_TEXT];
-        char msg2[MAX_TEXT];
+        const char *base;
         int si;
-        snprintf(base, sizeof base, "%s", self->arena->nodes[n].text);
-        if (strncmp(base, "struct ", 7) == 0)
-            snprintf(base, sizeof base, "%s", self->arena->nodes[n].text + 7);
+        base = self->arena->nodes[n].text;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
         si = self->sym->find_struct(base);
         if (si < 0) {
             int adi = frontend::sym::ct_adt_from_type(self->arena->nodes[n].text);
             struct Adt *adts;
             int nadts;
             if (adi < 0) {
-                snprintf(msg2, sizeof msg2, "no static method '%s' for type '%s'",
-                         self->arena->nodes[n].text2, self->arena->nodes[n].text);
-                return self->fail_from(n, msg2);
+                return self->fail_from(n, runtime::text::ct_internf(
+                         "no static method '%s' for type '%s'",
+                         self->arena->nodes[n].text2, self->arena->nodes[n].text));
             }
             adts = frontend::sym::ct_adts(&nadts);
             if (!adts || adi >= nadts)
@@ -5643,7 +5639,7 @@ static int em_expr_call(struct Emitter *self, int n, int nk)
                        || self->sym->funcs[fi].pann[ai] == 3)) {
             if (self->emit_ref_arg(c) != 0) return -1;
         } else if (fi >= 0 && ai < self->sym->funcs[fi].nparams) {
-            if (self->emit_value_for(self->sym->funcs[fi].ptype + (ai) * MAX_TEXT, c) != 0)
+            if (self->emit_value_for(self->sym->funcs[fi].ptype[ai], c) != 0)
                 return -1;
         } else if (self->emit_expr(c) != 0) {
             return -1;
@@ -7556,11 +7552,11 @@ impl EmitOps for Emitter {
         } else {
             for (k = 0; k < self->sym->funcs[i].nparams; k++) {
                 if (k > 0) fputs(", ", self->out);
-                fputs(self->sym->funcs[i].ptype + (k) * MAX_TEXT, self->out);
+                fputs(self->sym->funcs[i].ptype[k], self->out);
                 if (self->sym->funcs[i].pann[k] == 2
                     || self->sym->funcs[i].pann[k] == 3)
                     fputs(" *", self->out);
-                fputs(self->sym->funcs[i].pdim + (k) * MAX_TEXT, self->out);
+                fputs(self->sym->funcs[i].pdim[k], self->out);
             }
             if (self->sym->funcs[i].variadic) fputs(", ...", self->out);
         }
@@ -9567,7 +9563,7 @@ impl EmitOps for Emitter {
             for (j = 0; j < self->sym->funcs[i].nparams; j++) {
                 if (j > 0) fputc(',', f);
                 fputs("{\"type\":\"", f);
-                self->emit_json_str(f, self->sym->funcs[i].ptype + (j) * MAX_TEXT);
+                self->emit_json_str(f, self->sym->funcs[i].ptype[j]);
                 fputs("\"}", f);
             }
             fputs("]}", f);
@@ -9856,7 +9852,7 @@ impl EmitOps for Emitter {
             int p;
             for (p = -1; p < self->sym->funcs[order[i]].nparams; p++) {
                 const char *tp = p < 0 ? self->sym->funcs[order[i]].ret
-                                       : self->sym->funcs[order[i]].ptype + (p) * MAX_TEXT;
+                                       : self->sym->funcs[order[i]].ptype[p];
                 char nm[MAX_TEXT];
                 int q = 0;
                 /* REQ-ABI-3/4: struct, union and enum parameters all need a
@@ -9895,7 +9891,7 @@ impl EmitOps for Emitter {
             if (self->sym->funcs[fi].nparams == 0) fputs("void", f);
             for (j = 0; j < self->sym->funcs[fi].nparams; j++) {
                 if (j > 0) fputs(", ", f);
-                fputs(self->sym->funcs[fi].ptype + (j) * MAX_TEXT, f);
+                fputs(self->sym->funcs[fi].ptype[j], f);
                 /* Phase 78 S2: the ABI surface spells a ref/out parameter as
                    the pointer the definition actually takes. */
                 if (self->sym->funcs[fi].pann[j] == 2

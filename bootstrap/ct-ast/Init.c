@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "Init.h"
 #include "Symbols.h"
+#include "Intern.h"
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Init.h.ct"
@@ -15,8 +16,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -34,7 +36,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -89,6 +90,7 @@ extern void U16String_Drop_drop(void *self);
 
 static void put_indent(FILE *, int);
 static const char * unqual(const char *);
+static const char * base_type_key(const char *, int);
 void backend_emit_ct_init_bind(void *, void * *);
 struct backend_emit_Init * backend_emit_init_get(void);
 static struct backend_emit_Init backend_emit_g_init = { .__backend_emit_initops_vptr = &backend_emit_Init_backend_emit_InitOps_vtable };
@@ -116,24 +118,13 @@ static int backend_emit_Init_backend_emit_InitOps_type_has_vptr(void *self, cons
 
 static int backend_emit_Init_backend_emit_InitOps_type_needs_init(void *self, const char * type) {
     struct backend_emit_Init *_self = (struct backend_emit_Init *)self;
-    const char * base;
-    char tb[MAX_TEXT];
-    size_t tl;
+    const char * tb;
     int si;
     int fi;
     (void)(_self);
-    base = unqual(type);
-    if (strncmp(base, "struct ", 7) == 0) {
-        base += 7;
-    }
-    while ((*base) == ' ') {
-        base++;
-    }
-    snprintf(tb, sizeof(tb), "%s", base);
-    tl = strlen(tb);
-    while (((tl > 0) && (tb[(tl - 1)] == ' '))) {
-        tl--;
-        tb[tl] = 0;
+    tb = base_type_key(type, 0);
+    if ((!tb)) {
+        return 0;
     }
     if (strchr(tb, '*') != 0) {
         return 0;
@@ -146,8 +137,7 @@ static int backend_emit_Init_backend_emit_InitOps_type_needs_init(void *self, co
         return 1;
     }
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        char ft[MAX_TEXT];
-        snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
+        const char * ft = _self->sym->structs[si].fields[fi].type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -197,27 +187,16 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_items(void *self, co
 
 static int backend_emit_Init_backend_emit_InitOps_emit_vptr_stmts(void *self, const char * recv, const char * type, int ind) {
     struct backend_emit_Init *_self = (struct backend_emit_Init *)self;
-    const char * base;
-    char tb[MAX_TEXT];
-    size_t tl;
+    const char * tb;
     FILE * f = (FILE *)((*_self->out));
     int si;
     int u;
     int i;
     int fi;
     (void)(_self);
-    base = unqual(type);
-    if (strncmp(base, "struct ", 7) == 0) {
-        base += 7;
-    }
-    while ((*base) == ' ') {
-        base++;
-    }
-    snprintf(tb, sizeof(tb), "%s", base);
-    tl = strlen(tb);
-    while (((tl > 0) && ((tb[(tl - 1)] == '*') || (tb[(tl - 1)] == ' ')))) {
-        tl--;
-        tb[tl] = 0;
+    tb = base_type_key(type, 1);
+    if ((!tb)) {
+        return 0;
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, tb);
     if (si < 0) {
@@ -237,9 +216,9 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_stmts(void *self, co
         fprintf(f, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, _self->sym->structs[si].use[u]);
     }
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        char ft[MAX_TEXT];
+        const char * ft;
         const char * sub;
-        snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
+        ft = _self->sym->structs[si].fields[fi].type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -268,9 +247,9 @@ static int backend_emit_Init_backend_emit_InitOps_emit_field_vptrs(void *self, i
     int skip;
     (void)(_self);
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        char ft[MAX_TEXT];
+        const char * ft;
         const char * prefix;
-        snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
+        ft = _self->sym->structs[si].fields[fi].type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -355,7 +334,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_array_field_vptrs(void *s
     int fi;
     (void)(_self);
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        char ft[MAX_TEXT];
+        const char * ft;
         const char * sub;
         const char * next;
         const char * d;
@@ -364,7 +343,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_array_field_vptrs(void *s
         if ((!_self->sym->structs[si].fields[fi].dims[0])) {
             continue;
         }
-        snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
+        ft = _self->sym->structs[si].fields[fi].type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -410,24 +389,13 @@ static int backend_emit_Init_backend_emit_InitOps_emit_array_field_vptrs(void *s
 
 static int backend_emit_Init_backend_emit_InitOps_type_needs_nested_init(void *self, const char * type) {
     struct backend_emit_Init *_self = (struct backend_emit_Init *)self;
-    const char * base;
-    char tb[MAX_TEXT];
-    size_t tl;
+    const char * tb;
     int si;
     int fi;
     (void)(_self);
-    base = unqual(type);
-    if (strncmp(base, "struct ", 7) == 0) {
-        base += 7;
-    }
-    while ((*base) == ' ') {
-        base++;
-    }
-    snprintf(tb, sizeof(tb), "%s", base);
-    tl = strlen(tb);
-    while (((tl > 0) && (tb[(tl - 1)] == ' '))) {
-        tl--;
-        tb[tl] = 0;
+    tb = base_type_key(type, 0);
+    if ((!tb)) {
+        return 0;
     }
     if (strchr(tb, '*') != 0) {
         return 0;
@@ -437,11 +405,11 @@ static int backend_emit_Init_backend_emit_InitOps_type_needs_nested_init(void *s
         return 0;
     }
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        char ft[MAX_TEXT];
+        const char * ft;
         if (_self->sym->structs[si].fields[fi].dims[0]) {
             continue;
         }
-        snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
+        ft = _self->sym->structs[si].fields[fi].type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -541,6 +509,22 @@ static const char * unqual(const char * type) {
         type++;
     }
     return type;
+}
+static const char * base_type_key(const char * type, int strip_stars) {
+    const char * b;
+    size_t tl;
+    b = unqual(type);
+    if (strncmp(b, "struct ", 7) == 0) {
+        b += 7;
+    }
+    while ((*b) == ' ') {
+        b++;
+    }
+    tl = strlen(b);
+    while (((tl > 0) && ((b[(tl - 1)] == ' ') || (strip_stars && (b[(tl - 1)] == '*'))))) {
+        tl--;
+    }
+    return runtime_text_ct_intern_len(b, (int)(tl));
 }
 void backend_emit_ct_init_bind(void * sym, void * * out) {
     backend_emit_g_init.sym = (struct frontend_sym_Symbols *)(sym);

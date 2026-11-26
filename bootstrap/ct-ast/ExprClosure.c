@@ -111,8 +111,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -130,7 +131,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -295,10 +295,10 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_check(void
             ok = 0;
             ft = "";
             if (((fi >= 0) && (pos < np))) {
-                ft = (_self->sym->funcs[fi].ptype + (pos * MAX_TEXT));
+                ft = _self->sym->funcs[fi].ptype[pos];
             }
             if (((fi >= 0) && ((pos + 1) < np))) {
-                ok = (_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprclosure_vptr->type_is_void_ptr(_self, (_self->sym->funcs[fi].ptype + ((pos + 1) * MAX_TEXT))));
+                ok = (_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprclosure_vptr->type_is_void_ptr(_self, _self->sym->funcs[fi].ptype[(pos + 1)]));
             }
             if ((!ok)) {
                 if ((_self->__frontend_parse_exprclosure_vptr->type_is_fnptr(_self, ft) && (!_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft)))) {

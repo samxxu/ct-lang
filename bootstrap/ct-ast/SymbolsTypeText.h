@@ -10,6 +10,9 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "Intern.h"
+#include "Sh.h"
+
 
 struct ct_buf;
 struct Str;
@@ -18,8 +21,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -37,7 +41,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -94,10 +97,14 @@ int frontend_sym_ct_generic_subst(const char *, const char *, const char *, char
 char * * frontend_sym_ct_rows_reserve(char * *, int, int, int *);
 int frontend_sym_ct_inst_arg_count(const char *);
 int frontend_sym_ct_inst_encode(const char *, int, char * *, char *, int);
+const char * frontend_sym_ct_inst_encode_text(const char *, int, char * *);
 int frontend_sym_ct_inst_split(const char *, char *, int *, char * *, int, char *, int);
 int frontend_sym_ct_is_container_type(const char *);
 int frontend_sym_ct_is_string_value_type(const char *);
 int frontend_sym_ct_type_canon(const char *, char *, int);
+const char * frontend_sym_ct_type_canon_text(const char *);
+const char * frontend_sym_ct_generic_subst_text(const char *, const char *, const char *);
+int frontend_sym_ct_row_set(char * *, int, const char *);
 int frontend_sym_generic_tag_prefix(const char *, const char *);
 int frontend_sym_generic_word_char(int);
 void frontend_sym_impl_arg_canon(const char *, char *, int);

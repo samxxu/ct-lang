@@ -102,8 +102,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -121,7 +122,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -349,7 +349,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     char ex[MAX_TEXT];
     char tr[MAX_TEXT];
     char iname[MAX_TEXT];
-    char enc[MAX_TEXT];
+    const char * enc;
     const char * p;
     const char * q;
     line = _self->lex->tokline;
@@ -427,7 +427,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
                 }
             }
             if (aux == 2) {
-                if (_self->ex->__frontend_parse_exprinstantiate_vptr->inst_make(_self->ex, "MapEntry", 2, ins[inst].carg, ins[inst].ctype, enc, MAX_TEXT, 0, 0, 0) != 0) {
+                if (_self->ex->__frontend_parse_exprinstantiate_vptr->inst_make(_self->ex, "MapEntry", 2, ins[inst].carg, ins[inst].ctype, (&enc), 0, 0, 0) != 0) {
                     return (-1);
                 }
                 snprintf(elem, sizeof(elem), "struct %s", enc);

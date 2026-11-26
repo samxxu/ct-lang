@@ -2,6 +2,8 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include <stdio.h>
 #include "SymbolsTypeText.h"
+#include "Intern.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/sym/SymbolsTypeText.h.ct"
 #include <stdlib.h>
@@ -17,8 +19,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -36,7 +39,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -93,16 +95,21 @@ int frontend_sym_ct_generic_subst(const char *, const char *, const char *, char
 char * * frontend_sym_ct_rows_reserve(char * *, int, int, int *);
 int frontend_sym_ct_inst_arg_count(const char *);
 int frontend_sym_ct_inst_encode(const char *, int, char * *, char *, int);
+const char * frontend_sym_ct_inst_encode_text(const char *, int, char * *);
 int frontend_sym_ct_inst_split(const char *, char *, int *, char * *, int, char *, int);
 int frontend_sym_ct_is_container_type(const char *);
 int frontend_sym_ct_is_string_value_type(const char *);
 int frontend_sym_ct_type_canon(const char *, char *, int);
+const char * frontend_sym_ct_type_canon_text(const char *);
+const char * frontend_sym_ct_generic_subst_text(const char *, const char *, const char *);
+int frontend_sym_ct_row_set(char * *, int, const char *);
 int frontend_sym_generic_tag_prefix(const char *, const char *);
 int frontend_sym_generic_word_char(int);
 void frontend_sym_impl_arg_canon(const char *, char *, int);
 int frontend_sym_impl_pat_split(const char *, char *, char * *, int, int *);
 int frontend_sym_inst_enc_one(const char *, char *, int);
 void frontend_sym_meth_host_key(const char *, char *, int);
+static const char * inst_enc_one_text(const char *);
 void frontend_sym_adt_strip_type(const char * in, char * out, int cap) {
     const char * b;
     size_t n;
@@ -281,47 +288,143 @@ int frontend_sym_ct_inst_arg_count(const char * in) {
     }
     return 0;
 }
-int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, char * * args, char * out, int cap) {
-    char buf[MAX_TEXT * 2];
-    char enc[MAX_TEXT];
-    int n;
+static const char * inst_enc_one_text(const char * arg) {
+    char * buf = 0;
+    int cap = 0;
+    const char * pooled;
+    const char * p = (arg ? arg : "");
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return (const char *)(0);
+    }
+    if (strncmp(p, "struct ", 7) == 0) {
+        p += 7;
+    }
+    else {
+        if (strncmp(p, "union ", 6) == 0) {
+            p += 6;
+            if (tool_sh_ct_text_cat((&buf), (&cap), "u_") != 0) {
+                goto fail;
+            }
+        }
+        else {
+            if (strncmp(p, "enum ", 5) == 0) {
+                p += 5;
+                if (tool_sh_ct_text_cat((&buf), (&cap), "e_") != 0) {
+                    goto fail;
+                }
+            }
+        }
+    }
+    while ((*p)) {
+        const char * rep = "";
+        if ((*p) == '*') {
+            rep = "_p";
+        }
+        else {
+            if ((*p) == ' ') {
+                rep = "_";
+            }
+            else {
+                if ((*p) == '_') {
+                    rep = "__";
+                }
+                else {
+                    if ((*p) == '<') {
+                        rep = "_l";
+                    }
+                    else {
+                        if ((*p) == '>') {
+                            rep = "_r";
+                        }
+                        else {
+                            if ((*p) == ',') {
+                                rep = "_c";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (rep[0]) {
+            if (tool_sh_ct_text_cat((&buf), (&cap), rep) != 0) {
+                goto fail;
+            }
+        }
+        else {
+            char one[2];
+            one[0] = (*p);
+            one[1] = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), one) != 0) {
+                goto fail;
+            }
+        }
+        p++;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+const char * frontend_sym_ct_inst_encode_text(const char * tmpl, int nargs, char * * args) {
+    char * buf = 0;
+    int cap = 0;
     int i;
-    int r;
-    int k;
+    int n;
     int h;
+    int k;
+    const char * enc;
+    const char * pooled;
     if (((nargs < 0) || (nargs > MAX_STRUCT_TPARAMS_MAX))) {
-        return (-1);
+        return (const char *)(0);
     }
-    r = snprintf(buf, sizeof(buf), "%s", tmpl);
-    if (((r < 0) || (r >= (int)(sizeof(buf))))) {
-        return (-1);
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
     }
-    n = r;
+    if (tool_sh_ct_text_cat((&buf), (&cap), (tmpl ? tmpl : "")) != 0) {
+        goto fail;
+    }
     for (i = 0; i < nargs; i++) {
-        if (frontend_sym_inst_enc_one(((args && args[i]) ? args[i] : ""), enc, MAX_TEXT) < 0) {
-            return (-1);
+        enc = inst_enc_one_text(((args && args[i]) ? args[i] : ""));
+        if ((!enc)) {
+            goto fail;
         }
-        r = snprintf((buf + n), (sizeof(buf) - (size_t)(n)), "_%s", enc);
-        if (((r < 0) || ((n + r) >= (int)(sizeof(buf))))) {
-            return (-1);
+        if (((tool_sh_ct_text_cat((&buf), (&cap), "_") != 0) || (tool_sh_ct_text_cat((&buf), (&cap), enc) != 0))) {
+            goto fail;
         }
-        n += r;
     }
+    n = (int)(strlen(buf));
     if (n >= 64) {
         h = 0;
         for (k = 0; k < n; k++) {
             h = (((h * 31) + (unsigned char)(buf[k])) & 2147483647);
         }
-        r = snprintf(out, (size_t)(cap), "%.40s_h%08x", buf, (unsigned int)(h));
-        if (((r < 0) || (r >= cap))) {
-            return (-1);
-        }
-        return 0;
+        pooled = runtime_text_ct_internf("%.40s_h%08x", buf, (unsigned int)(h));
     }
-    if ((n + 1) > cap) {
+    else {
+        pooled = runtime_text_ct_intern(buf);
+    }
+    tool_sh_ct_text_free((&buf), (&cap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, char * * args, char * out, int cap) {
+    const char * enc;
+    size_t n;
+    enc = frontend_sym_ct_inst_encode_text(tmpl, nargs, args);
+    if ((!enc)) {
         return (-1);
     }
-    snprintf(out, (size_t)(cap), "%s", buf);
+    n = strlen(enc);
+    if ((n + 1) > (size_t)(cap)) {
+        return (-1);
+    }
+    memcpy(out, enc, (n + 1));
     return 0;
 }
 int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char * * args, int argcap, char * tail, int cap) {
@@ -506,6 +609,114 @@ int frontend_sym_ct_type_canon(const char * in, char * out, int cap) {
         p++;
     }
     out[n] = 0;
+    return 0;
+}
+const char * frontend_sym_ct_type_canon_text(const char * in) {
+    char * buf = 0;
+    int cap = 0;
+    int sp = 0;
+    const char * p = (in ? in : "");
+    const char * pooled;
+    char one[2];
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return (const char *)(0);
+    }
+    while ((((*p) == ' ') || ((*p) == '\t'))) {
+        p++;
+    }
+    while ((*p)) {
+        if ((((*p) == ' ') || ((*p) == '\t'))) {
+            sp = 1;
+            p++;
+            continue;
+        }
+        if ((*p) == '*') {
+            sp = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), "*") != 0) {
+                goto fail;
+            }
+            p++;
+            continue;
+        }
+        if ((sp && (strlen(buf) > 0))) {
+            if (tool_sh_ct_text_cat((&buf), (&cap), " ") != 0) {
+                goto fail;
+            }
+        }
+        sp = 0;
+        one[0] = (*p);
+        one[1] = 0;
+        if (tool_sh_ct_text_cat((&buf), (&cap), one) != 0) {
+            goto fail;
+        }
+        p++;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+const char * frontend_sym_ct_generic_subst_text(const char * in, const char * word, const char * repl) {
+    char * buf = 0;
+    int cap = 0;
+    int wl;
+    const char * p = (in ? in : "");
+    const char * pooled;
+    char one[2];
+    if (((!word) || (!word[0]))) {
+        return runtime_text_ct_intern(p);
+    }
+    if ((!repl)) {
+        repl = "";
+    }
+    wl = (int)(strlen(word));
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return (const char *)(0);
+    }
+    while ((*p)) {
+        if ((((((p == in) || (!frontend_sym_generic_word_char((unsigned char)(p[(-1)])))) && (strncmp(p, word, (size_t)(wl)) == 0)) && (!frontend_sym_generic_word_char((unsigned char)(p[wl])))) && (!frontend_sym_generic_tag_prefix(in, p)))) {
+            if (tool_sh_ct_text_cat((&buf), (&cap), repl) != 0) {
+                goto fail;
+            }
+            p += wl;
+        }
+        else {
+            one[0] = (*p);
+            one[1] = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), one) != 0) {
+                goto fail;
+            }
+            p++;
+        }
+    }
+    pooled = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+int frontend_sym_ct_row_set(char * * rows, int i, const char * s) {
+    char * p;
+    size_t n;
+    if (((!rows) || (i < 0))) {
+        return (-1);
+    }
+    if ((!s)) {
+        s = "";
+    }
+    n = strlen(s);
+    p = (char *)(malloc((n + 1)));
+    if ((!p)) {
+        return (-1);
+    }
+    memcpy(p, s, (n + 1));
+    free(rows[i]);
+    rows[i] = p;
     return 0;
 }
 int frontend_sym_generic_tag_prefix(const char * in, const char * p) {

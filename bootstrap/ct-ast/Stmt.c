@@ -107,8 +107,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -126,7 +127,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -1561,8 +1561,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
     int slice_const;
     int slice_line;
     int slice_col;
-    char slice_elem[MAX_TEXT];
-    char typebuf[MAX_TEXT];
+    const char * slice_elem = "";
+    const char * typebuf;
+    const char * parsed;
     const char * name;
     (void)(_self);
     ap = (_self->decl_attr ? (_self->decl_attr - 1) : (-1));
@@ -1571,12 +1572,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
     dline = _self->lex->tokline;
     iline = dline;
     icol = dcol;
-    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, typebuf, sizeof(typebuf)) != 0) {
+    if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&parsed)) != 0) {
         return (-1);
     }
+    typebuf = parsed;
     is_slice = 0;
     slice_const = 0;
-    slice_elem[0] = 0;
     slice_line = _self->lex->tokline;
     slice_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
     if (_self->sup->__frontend_parse_supportops_vptr->slice_brackets_ahead(_self->sup, (&slice_line), (&slice_col))) {
@@ -1586,12 +1587,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         }
         is_slice = 1;
         _self->sup->__frontend_parse_supportops_vptr->note_slice(_self->sup);
-        snprintf(slice_elem, sizeof(slice_elem), "%s", typebuf);
+        slice_elem = typebuf;
         if (strncmp(slice_elem, "const ", 6) == 0) {
             slice_const = 1;
-            memmove(slice_elem, (slice_elem + 6), (strlen((slice_elem + 6)) + 1));
+            slice_elem += 6;
         }
-        snprintf(typebuf, sizeof(typebuf), "struct __ct_slice");
+        typebuf = "struct __ct_slice";
     }
     head = (-1);
     tail = (-1);
@@ -1602,7 +1603,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         int stars = 0;
         int si;
         size_t tl;
-        char t2[MAX_TEXT];
         is_fnptr = _self->ex->fnptr_state;
         if (is_fnptr) {
             if ((!first_decl)) {
@@ -1626,7 +1626,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                 }
                 tl--;
             }
-            typebuf[tl] = 0;
+            typebuf = runtime_text_ct_intern_len(typebuf, (int)(tl));
+            if ((!typebuf)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             if (first_decl) {
                 if ((!is_slice)) {
                     stars = base_stars;
@@ -1634,8 +1637,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                 first_decl = 0;
             }
             for (si = 0; si < stars; si++) {
-                snprintf(t2, sizeof(t2), "%s *", typebuf);
-                snprintf(typebuf, sizeof(typebuf), "%s", t2);
+                typebuf = runtime_text_ct_internf("%s *", typebuf);
+                if ((!typebuf)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a variable name");
@@ -1656,10 +1661,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         if (_self->static_decl) {
             _self->arena->nodes[n].aux = 1;
         }
-        _self->arena->nodes[n].text = runtime_text_ct_intern(typebuf);
-        if ((!_self->arena->nodes[n].text)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
+        _self->arena->nodes[n].text = typebuf;
         _self->arena->nodes[n].text2 = runtime_text_ct_intern(name);
         if ((!_self->arena->nodes[n].text2)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");

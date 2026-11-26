@@ -790,7 +790,7 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
     if (kind == 0 && a >= 0) {
         np = self->sym->funcs[a].nparams;
         for (k = 0; k < np && k < 16; k++) {
-            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype + (k) * MAX_TEXT);
+            snprintf(fts[k], MAX_TEXT, "%s", self->sym->funcs[a].ptype[k]);
             anns[k] = (int)(unsigned char)self->sym->funcs[a].pann[k];
         }
     } else if (kind == 1 && a >= 0 && b >= 0) {
@@ -1620,7 +1620,7 @@ impl ExprOps for Expr {
         if (self->lex->tok == T_ID && (self->lex->tok_is("sizeof")
                                        || self->lex->tok_is("_Alignof")
                                        || self->lex->tok_is("alignof"))) {
-            char tbuf[MAX_TEXT];
+            const char *tbuf;
             int kind, rc;
             /* 1 = sizeof, 2 = C11 `_Alignof`, 4 = `alignof` (stdalign.h) */
             kind = self->lex->tok_is("sizeof") ? 1
@@ -1629,12 +1629,11 @@ impl ExprOps for Expr {
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")
                 && self->next_is_type_name()) {
                 self->sup->lex_next();
-                if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+                if (self->parse_type_text(&tbuf) != 0) return -1;
                 if (self->sup->expect(")") != 0) return -1;
                 n = self->sup->new_node(N_SIZEOF);
                 if (n < 0) return -1;
-                self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
-                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+                self->arena->nodes[n].text = tbuf;
                 self->arena->nodes[n].aux = kind;
                 return n;
             }
@@ -1645,13 +1644,12 @@ impl ExprOps for Expr {
                to the surrounding multiplication. */
             if (self->tok_is_type_name()) {
                 self->type_no_ptr = 1;
-                rc = self->parse_type(tbuf, sizeof tbuf);
+                rc = self->parse_type_text(&tbuf);
                 self->type_no_ptr = 0;
                 if (rc != 0) return -1;
                 n = self->sup->new_node(N_SIZEOF);
                 if (n < 0) return -1;
-                self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
-                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+                self->arena->nodes[n].text = tbuf;
                 self->arena->nodes[n].aux = kind;
                 return n;
             }
@@ -1674,9 +1672,9 @@ impl ExprOps for Expr {
             return self->parse_closure();
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")
             && self->next_is_type_name()) {
-            char tbuf[MAX_TEXT];
+            const char *tbuf;
             self->sup->lex_next();
-            if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+            if (self->parse_type_text(&tbuf) != 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
             /* `(type){ … }` is a compound literal: the braces are captured like
                a declaration initialiser, and the emitter adds the vptr items a
@@ -1711,8 +1709,7 @@ impl ExprOps for Expr {
                 self->arena->nodes[rn].aux = 1;
                 cn = self->sup->new_node(N_COMPOUND);
                 if (cn < 0) return -1;
-                self->arena->nodes[cn].text = runtime::text::ct_intern(tbuf);
-                if (!self->arena->nodes[cn].text) return self->sup->fail("out of memory");
+                self->arena->nodes[cn].text = tbuf;
                 self->arena->nodes[cn].a = rn;
                 self->postfix_seed = cn;
                 return self->parse_postfix();
@@ -1721,8 +1718,7 @@ impl ExprOps for Expr {
             if (e < 0) return -1;
             n = self->sup->new_node(N_CAST);
             if (n < 0) return -1;
-            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
-            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text = tbuf;
             self->arena->nodes[n].a = e;
             return n;
         }
@@ -1859,7 +1855,8 @@ impl ExprOps for Expr {
     {
         int n, m, idx, args, mline, mcol;
         char fname[MAX_TEXT];
-        char rtype[MAX_TEXT];
+        const char *rtype;
+        const char *ibase;
         char trname[MAX_TEXT];
         (void)self;
 
@@ -2287,9 +2284,9 @@ impl ExprOps for Expr {
                    changes meaning. */
                 if ((strcmp(fname, "as") == 0 || strcmp(fname, "to") == 0)
                     && self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
-                    char targ[MAX_TEXT];
+                    const char *targ;
                     self->sup->lex_next();
-                    if (self->parse_type(targ, sizeof targ) != 0) return -1;
+                    if (self->parse_type_text(&targ) != 0) return -1;
                     if (self->sup->expect(">") != 0) return -1;
                     if (self->sup->expect("(") != 0) return -1;
                     if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")")))
@@ -2365,20 +2362,19 @@ impl ExprOps for Expr {
                            trait has been parsed. */
                         self->arena->nodes[m].text = runtime::text::ct_intern(self->sym->trait_default);
                         if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
-                    } else if (self->sup->expr_type(n, rtype, sizeof rtype) == 0) {
-                        char ibase[MAX_TEXT];
+                    } else if (self->sup->expr_type_text(n, &rtype) == 0) {
                         size_t il;
                         int piface = 0;
                         int inm = -1;
                         /* a pointer to an interface value dispatches through
                            `->vt` instead of `.vt` */
-                        snprintf(ibase, sizeof ibase, "%s", rtype);
-                        il = strlen(ibase);
-                        while (il > 0 && (ibase[il - 1] == ' ' || ibase[il - 1] == '*')) {
-                            if (ibase[il - 1] == '*') piface = 1;
+                        il = strlen(rtype);
+                        while (il > 0 && (rtype[il - 1] == ' ' || rtype[il - 1] == '*')) {
+                            if (rtype[il - 1] == '*') piface = 1;
                             il--;
-                            ibase[il] = 0;
                         }
+                        ibase = runtime::text::ct_intern_len(rtype, (int)il);
+                        if (!ibase) return self->sup->fail("out of memory");
                         /* Phase 28 (D28-2): inside a bounded template body the
                            receiver is the type parameter itself. The constraint
                            answers the method statically: record the trait and
@@ -2617,8 +2613,7 @@ impl ExprOps for Expr {
                                 self->arena->nodes[m].b = (args == 0) ? -1 : args;
                             }
                             self->arena->nodes[m].aux = arrow ? 10 : 9;
-                            self->arena->nodes[m].text = runtime::text::ct_intern(ibase);
-                            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                            self->arena->nodes[m].text = ibase;
                         } else if (self->sup->is_iface_type(ibase, trname, sizeof trname)) {
                             int t = self->sym->find_trait(trname);
                             int mi, ok = 0;
@@ -3387,17 +3382,16 @@ impl ExprOps for Expr {
            `.c` keeps the same call (D-8). */
         if (self->lex->tok == T_ID && self->lex->tok_is("offsetof")
             && self->offsetof_ahead()) {
-            char tbuf[MAX_TEXT];
+            const char *tbuf;
             const char *fname;
-            char base[MAX_TEXT];
-            char msg[MAX_TEXT];
-            char kw[16];
-            char *bp;
+            const char *base;
+            const char *kw;
+            const char *bp;
             size_t bl;
             int si, fi, known;
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
-            if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+            if (self->parse_type_text(&tbuf) != 0) return -1;
             if (self->sup->expect(",") != 0) return -1;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
             fname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
@@ -3410,28 +3404,26 @@ impl ExprOps for Expr {
                 if (self->sup->expect(")") != 0) return -1;
                 n = self->sup->new_node(N_OFFSETOF);
                 if (n < 0) return -1;
-                self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
-                if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+                self->arena->nodes[n].text = tbuf;
                 self->arena->nodes[n].text2 = fname;
                 return n;
             }
             /* Both checks run while the cursor is still on the field, so the
                diagnostic points at the argument the user has to fix. */
-            snprintf(base, sizeof base, "%s", tbuf);
+            base = tbuf;
             bp = base;
-            snprintf(kw, sizeof kw, "%s", "struct");
+            kw = "struct";
             if (strncmp(bp, "struct ", 7) == 0) {
                 bp += 7;
             } else if (strncmp(bp, "union ", 6) == 0) {
-                snprintf(kw, sizeof kw, "%s", "union");
+                kw = "union";
                 bp += 6;
             }
             while (*bp == ' ') bp++;
             bl = strlen(bp);
-            while (bl > 0 && (bp[bl - 1] == ' ' || bp[bl - 1] == '*')) {
-                bl--;
-                bp[bl] = 0;
-            }
+            while (bl > 0 && (bp[bl - 1] == ' ' || bp[bl - 1] == '*')) bl--;
+            bp = runtime::text::ct_intern_len(bp, (int)bl);
+            if (!bp) return self->sup->fail("out of memory");
             si = self->sym->find_struct(bp);
             if (si < 0) return self->sup->fail("offsetof needs a struct type");
             /* a forward declaration has no field list yet: leave it to C */
@@ -3439,17 +3431,14 @@ impl ExprOps for Expr {
             for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
                 if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0) known = 1;
             if (!known) {
-                if (snprintf(msg, sizeof msg, "%s '%s' has no field '%s'", kw, bp, fname)
-                    >= (int)sizeof msg)
-                    return self->sup->fail("offsetof field name is too long");
-                return self->sup->fail(msg);
+                return self->sup->fail(runtime::text::ct_internf(
+                    "%s '%s' has no field '%s'", kw, bp, fname));
             }
             self->sup->lex_next();
             if (self->sup->expect(")") != 0) return -1;
             n = self->sup->new_node(N_OFFSETOF);
             if (n < 0) return -1;
-            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
-            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text = tbuf;
             self->arena->nodes[n].text2 = fname;
             return n;
         }
@@ -3458,20 +3447,19 @@ impl ExprOps for Expr {
            generated `.c` keeps the same spelling (D-9). */
         if (self->lex->tok == T_ID && self->lex->tok_is("va_arg")
             && self->offsetof_ahead()) {
-            char tbuf[MAX_TEXT];
+            const char *tbuf;
             int ap;
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
             ap = self->parse_expr();
             if (ap < 0) return -1;
             if (self->sup->expect(",") != 0) return -1;
-            if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+            if (self->parse_type_text(&tbuf) != 0) return -1;
             if (self->sup->expect(")") != 0) return -1;
             n = self->sup->new_node(N_VAARG);
             if (n < 0) return -1;
             self->arena->nodes[n].a = ap;
-            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
-            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text = tbuf;
             return n;
         }
         /* Phase 24: the range index. `$` has no C spelling of its own -- the
@@ -3752,18 +3740,16 @@ impl ExprOps for Expr {
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
                 int gfi = self->sym->find_func(self->arena->nodes[n].text2);
                 if (gfi >= 0 && self->sym->funcs[gfi].ntparams == 1) {
-                    char targ[MAX_TEXT];
-                    char gmsg[MAX_TEXT + 64];
+                    const char *targ;
                     int gi;
                     if (self->in_generic)
                         return self->sup->fail("recursive generic calls are not supported");
                     self->sup->lex_next();
-                    if (self->parse_type(targ, sizeof targ) != 0) return -1;
+                    if (self->parse_type_text(&targ) != 0) return -1;
                     if (self->fnptr_state || strcmp(targ, "void") == 0
                         || strcmp(targ, self->sym->funcs[gfi].tparam) == 0) {
-                        snprintf(gmsg, sizeof gmsg,
-                                 "'%s' cannot be a generic type argument", targ);
-                        return self->sup->fail(gmsg);
+                        return self->sup->fail(runtime::text::ct_internf(
+                                 "'%s' cannot be a generic type argument", targ));
                     }
                     if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(">")))
                         return self->sup->fail("expected '>' after the generic type argument");
@@ -4258,7 +4244,7 @@ impl ExprOps for Expr {
                     while (lc > 0 && lk < self->sym->funcs[fi].nparams) {
                         int lcl = self->arg_is_closure(lc);
                         if (!lcl
-                            && self->lit_coerce(self->sym->funcs[fi].ptype + (lk) * MAX_TEXT, lc) != 0)
+                            && self->lit_coerce(self->sym->funcs[fi].ptype[lk], lc) != 0)
                             return -1;
                         lc = self->arena->nodes[lc].next;
                         lk += lcl ? 2 : 1;
@@ -4284,7 +4270,7 @@ impl ExprOps for Expr {
                                 && bind_conv_struct_like(self, at)
                                 && bind_conv_any(self, at, "as")) {
                                 bind_conv_key(at, ak, sizeof ak);
-                                bind_conv_key(self->sym->funcs[fi].ptype + (pk3) * MAX_TEXT, fk, sizeof fk);
+                                bind_conv_key(self->sym->funcs[fi].ptype[pk3], fk, sizeof fk);
                                 if (strcmp(ak, fk) != 0) {
                                     char pmsg[MAX_TEXT * 2];
                                     snprintf(pmsg, sizeof pmsg,
@@ -4325,7 +4311,7 @@ impl ExprOps for Expr {
                     while (ra > 0 && rai < self->sym->funcs[fi].nparams) {
                         if (check_refout_arg(self, ra,
                                 (int)(unsigned char)self->sym->funcs[fi].pann[rai],
-                                self->sym->funcs[fi].ptype + (rai) * MAX_TEXT) != 0)
+                                self->sym->funcs[fi].ptype[rai]) != 0)
                             return -1;
                         ra = self->arena->nodes[ra].next;
                         rai++;
@@ -4345,7 +4331,7 @@ impl ExprOps for Expr {
                     while (cur > 0 && k < self->sym->funcs[fi].nparams) {
                         char tr[MAX_TEXT];
                         int ip = 0;
-                        if (self->sup->iface_ref_type(self->sym->funcs[fi].ptype + (k) * MAX_TEXT, tr, sizeof tr, &ip)) {
+                        if (self->sup->iface_ref_type(self->sym->funcs[fi].ptype[k], tr, sizeof tr, &ip)) {
                             int boxed = self->sup->maybe_box(cur, tr, ip);
                             if (boxed < 0) return -1;
                             if (boxed != cur) {
@@ -4369,7 +4355,7 @@ impl ExprOps for Expr {
                     while (cur > 0 && k < self->sym->funcs[fi].nparams) {
                         int is_cl = self->arg_is_closure(cur);
                         if (!is_cl
-                            && strcmp(self->sym->funcs[fi].ptype + (k) * MAX_TEXT, "struct __ct_slice") == 0) {
+                            && strcmp(self->sym->funcs[fi].ptype[k], "struct __ct_slice") == 0) {
                             int view = self->slice_view_from_array(cur);
                             if (view < 0) return -1;
                             if (view != cur) {

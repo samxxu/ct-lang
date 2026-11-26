@@ -40,8 +40,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -59,7 +60,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -664,17 +664,25 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
         if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self->sym, i, (k + 1)) != 0) {
             return _self->__frontend_parse_supportops_vptr->fail(_self, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
         }
-        snprintf((_self->sym->funcs[i].ptype + ((size_t)(k) * MAX_TEXT)), MAX_TEXT, "%s", _self->arena->nodes[p].text);
-        snprintf((_self->sym->funcs[i].pdim + ((size_t)(k) * MAX_TEXT)), MAX_TEXT, "%s", _self->arena->nodes[p].text3);
+        _self->sym->funcs[i].ptype[k] = runtime_text_ct_intern(_self->arena->nodes[p].text);
+        if ((!_self->sym->funcs[i].ptype[k])) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
+        _self->sym->funcs[i].pdim[k] = runtime_text_ct_intern(_self->arena->nodes[p].text3);
+        if ((!_self->sym->funcs[i].pdim[k])) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
         if ((((!fresh) && (k < prev_nparams)) && (_self->sym->funcs[i].pann[k] != (char)(_self->arena->nodes[p].aux)))) {
             snprintf(msg, sizeof(msg), "redeclaration of '%s' changes the ref/out annotation of parameter %d", name, (k + 1));
             return _self->__frontend_parse_supportops_vptr->fail(_self, msg);
         }
         _self->sym->funcs[i].pann[k] = (char)(_self->arena->nodes[p].aux);
         if (_self->arena->nodes[p].attr >= 0) {
-            char * dim = (_self->sym->funcs[i].pdim + ((size_t)(k) * MAX_TEXT));
-            size_t dl = strlen(dim);
-            snprintf((dim + dl), (MAX_TEXT - dl), " %s", _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->arena->nodes[p].attr));
+            const char * dim = runtime_text_ct_internf("%s %s", _self->sym->funcs[i].pdim[k], _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->arena->nodes[p].attr));
+            if ((!dim)) {
+                return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+            }
+            _self->sym->funcs[i].pdim[k] = dim;
         }
         k++;
         p = _self->arena->nodes[p].next;
@@ -889,6 +897,16 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_type(void 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_ctype(void *self, int n, char * out, int cap) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     return _self->ty->__frontend_type_typeops_vptr->expr_ctype(_self->ty, n, out, cap);
+}
+
+static int frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_type_text(void *self, int n, const char * * out) {
+    struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
+    return _self->ty->__frontend_type_typeops_vptr->expr_type_text(_self->ty, n, out);
+}
+
+static int frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_ctype_text(void *self, int n, const char * * out) {
+    struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
+    return _self->ty->__frontend_type_typeops_vptr->expr_ctype_text(_self->ty, n, out);
 }
 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_maybe_box(void *self, int n, const char * trait, int addr) {
@@ -1222,6 +1240,8 @@ const struct frontend_parse_SupportOps_vtbl frontend_parse_ParseSupport_frontend
     .adopt_use = frontend_parse_ParseSupport_frontend_parse_SupportOps_adopt_use,
     .expr_type = frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_type,
     .expr_ctype = frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_ctype,
+    .expr_type_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_type_text,
+    .expr_ctype_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_ctype_text,
     .maybe_box = frontend_parse_ParseSupport_frontend_parse_SupportOps_maybe_box,
     .rewrite_init_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_rewrite_init_text,
     .skip_body = frontend_parse_ParseSupport_frontend_parse_SupportOps_skip_body,

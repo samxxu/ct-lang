@@ -164,12 +164,12 @@ impl ExprNew for Expr {
     emitter refuses it there because the construction is a call. */
     int parse_new_expr(void)
     {
-        char tbuf[MAX_TEXT];
-        char base[MAX_TEXT];
+        const char *tbuf;
+        const char *base;
         char *raw;
         char *fixed;
         int fixedcap;
-        char enc[MAX_TEXT];
+        const char *enc;
         int nline, ncol, off, k, si;
 
         nline = self->lex->tokline;
@@ -183,12 +183,12 @@ impl ExprNew for Expr {
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new' needs a named struct type before its initializer, as in 'new Point { 1, 2 }'",
                 self->sup->mem->path);
-        if (self->parse_type(tbuf, sizeof tbuf) != 0) return -1;
+        if (self->parse_type_text(&tbuf) != 0) return -1;
         if (strncmp(tbuf, "struct ", 7) != 0)
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new' only accepts a named struct type; scalars, pointers, arrays, unions, enums and built-in handles are not boxed",
                 self->sup->mem->path);
-        snprintf(base, sizeof base, "%s", tbuf + 7);
+        base = tbuf + 7;
         if (strchr(base, '*') || strchr(base, '[') || strchr(base, '<'))
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new' only accepts a plain named struct type; pointers, arrays and generic instances are not boxed",
@@ -217,9 +217,9 @@ impl ExprNew for Expr {
             return self->sup->fail(
                 "the built-in `Box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
-            char nmsg[MAX_TEXT * 2];
-            snprintf(nmsg, sizeof nmsg,
+            const char *nmsg = runtime::text::ct_internf(
                      "'new %s' needs a brace initializer; only 'new T { ... }' is supported", base);
+            if (!nmsg) return self->sup->fail("out of memory");
             return tool::diag::ct_sem_error(nline, ncol, nmsg, self->sup->mem->path);
         }
         {
@@ -241,9 +241,9 @@ impl ExprNew for Expr {
         {
             char *aa[1];
             char *cc[1];
-            aa[0] = tbuf;
-            cc[0] = tbuf;
-            if (self->inst_make("Box", 1, aa, cc, enc, sizeof enc, 0,
+            aa[0] = (char *)tbuf;
+            cc[0] = (char *)tbuf;
+            if (self->inst_make("Box", 1, aa, cc, &enc, 0,
                                 nline, ncol) != 0) {
                 free(fixed);
                 return -1;
@@ -274,16 +274,10 @@ impl ExprNew for Expr {
             self->arena->nodes[r].num = off;
             self->arena->nodes[r].aux = 1;
             self->arena->nodes[n].a = r;
-            self->arena->nodes[n].text = runtime::text::ct_intern(tbuf);
-            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
-            self->arena->nodes[n].text2 = runtime::text::ct_intern(enc);
-            if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
-            {
-                char ctype[MAX_TEXT];
-                snprintf(ctype, sizeof ctype, "struct %s", enc);
-                self->arena->nodes[n].text3 = runtime::text::ct_intern(ctype);
-                if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
-            }
+            self->arena->nodes[n].text = tbuf;
+            self->arena->nodes[n].text2 = enc;
+            self->arena->nodes[n].text3 = runtime::text::ct_internf("struct %s", enc);
+            if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
             self->arena->nodes[n].line = nline;
             self->arena->nodes[n].num = ncol;
             return n;

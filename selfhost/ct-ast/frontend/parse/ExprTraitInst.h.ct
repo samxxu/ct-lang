@@ -27,9 +27,11 @@ import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -123,6 +125,34 @@ pub struct ExprTraitInst {
     int unused;
 }
 
+/* S1a-0 C2p-3: `<trait><a[, b]>` as one pool text, so a long trait name is
+   not cut at the old 160-byte canon row. */
+static const char *trait_inst_spell(const char *tname, int nargs, char **args)
+{
+    char *buf = 0;
+    int cap = 0, i;
+    const char *pooled;
+
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    if (tool::sh::ct_text_cat(&buf, &cap, tname) != 0
+        || tool::sh::ct_text_cat(&buf, &cap, "<") != 0) {
+        tool::sh::ct_text_free(&buf, &cap);
+        return (const char *)0;
+    }
+    for (i = 0; i < nargs; i++) {
+        if (i > 0 && tool::sh::ct_text_cat(&buf, &cap, ",") != 0) break;
+        if (tool::sh::ct_text_cat(&buf, &cap, args && args[i] ? args[i] : "") != 0)
+            break;
+    }
+    if (i < nargs || tool::sh::ct_text_cat(&buf, &cap, ">") != 0) {
+        tool::sh::ct_text_free(&buf, &cap);
+        return (const char *)0;
+    }
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+}
+
 
 impl ExprTraitInst for Expr {
     /* Phase 35 S3a: one trait instance in a type position. Source-canonical
@@ -130,29 +160,32 @@ impl ExprTraitInst for Expr {
        signatures. Symbolic arguments belong to the later generic-impl slice. */
     int parse_trait_inst_type(char *out, int cap)
     {
-        char tname[MAX_TEXT];
+        const char *tname;
         char **carg = 0;
         char **ctype = 0;
-        char canon[MAX_TEXT];
-        char abuf[MAX_TEXT];
-        char tail[MAX_TEXT];
+        const char *canon;
+        const char *abuf;
         char symbolic[MAX_TEXT];
-        char iface[MAX_TEXT];
-        char msg[MAX_TEXT * 2];
+        const char *iface;
         size_t base_len;
         int ccap = 0, tccap = 0, gpi;
         int n, sti, ni, nargs;
 
         n = (int)strlen(out);
-        if (self->sup->resolve_type(self->lex->tok_cstr(), tname, sizeof tname) != 0) return -1;
+        {
+            const char *tok = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                          self->lex->tokstr.len);
+            if (!tok) return self->sup->fail("out of memory");
+            tname = self->sym->resolve_type_text(tok);
+        }
+        if (!tname) return self->sup->fail("out of memory");
         sti = self->sym->find_trait(tname);
         if (sti < 0 || self->sym->traits[sti].ntparams == 0)
             return self->sup->fail("internal: generic trait row vanished");
         self->sup->lex_next();
         if (self->lex->tok != T_PUNCT || !self->lex->tok_is("<")) {
-            snprintf(msg, sizeof msg,
-                     "generic trait '%s' needs type arguments in a type position", tname);
-            return self->sup->fail(msg);
+            return self->sup->fail(runtime::text::ct_internf(
+                     "generic trait '%s' needs type arguments in a type position", tname));
         }
         self->sup->lex_next();
         nargs = 0;
@@ -161,13 +194,13 @@ impl ExprTraitInst for Expr {
             ctype = frontend::sym::ct_rows_reserve(ctype, tccap, nargs + 1, &tccap);
             if (!carg || ccap < nargs + 1 || !ctype || tccap < nargs + 1)
                 return self->sup->fail("a generic trait has too many type arguments");
-            self->inst_canon[0] = 0;
+            self->inst_canon = "";
             self->type_depth++;
             if (self->type_depth > 4) {
                 self->type_depth--;
                 return self->sup->fail("generic type arguments nest deeper than 4");
             }
-            if (self->parse_type(abuf, sizeof abuf) != 0) {
+            if (self->parse_type_text(&abuf) != 0) {
                 self->type_depth--;
                 return -1;
             }
@@ -186,9 +219,8 @@ impl ExprTraitInst for Expr {
                 || strchr(abuf, '(') || strchr(abuf, ')')
                 || strncmp(abuf, "const ", 6) == 0
                 || strncmp(abuf, "volatile ", 9) == 0) {
-                snprintf(msg, sizeof msg,
-                         "type argument '%s' cannot instantiate a generic trait", abuf);
-                return self->sup->fail(msg);
+                return self->sup->fail(runtime::text::ct_internf(
+                         "type argument '%s' cannot instantiate a generic trait", abuf));
             }
             for (gpi = 0; gpi < self->in_generic_ntparam; gpi++) {
                 if (!self->in_generic_tparam[gpi]) continue;
@@ -198,19 +230,29 @@ impl ExprTraitInst for Expr {
                 if (strcmp(symbolic, abuf) != 0)
                     return self->sup->fail("symbolic trait type arguments are not supported yet");
             }
-            snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
-            tail[0] = 0;
-            if (self->inst_canon[0]) {
+            if (frontend::sym::ct_row_set(ctype, nargs, abuf) != 0)
+                return self->sup->fail("out of memory");
+            if (self->inst_canon && self->inst_canon[0]) {
                 /* Keep `Vec<int>` rather than its C tag; a pointer suffix still
                    belongs to the argument's canonical spelling. */
-                base_len = strlen(self->last_bare_tag);
-                if (base_len > 0 && strncmp(abuf, self->last_bare_tag, base_len) == 0
-                    && frontend::sym::ct_type_canon(abuf + base_len, tail, sizeof tail) != 0)
-                    return self->sup->fail("type is too long");
-                if (snprintf(carg[nargs], MAX_TEXT, "%s%s", self->inst_canon, tail) >= MAX_TEXT)
-                    return self->sup->fail("type is too long");
-            } else if (frontend::sym::ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
-                return self->sup->fail("type is too long");
+                const char *tailt = "";
+                base_len = strlen(self->last_bare_tag ? self->last_bare_tag : "");
+                if (base_len > 0 && strncmp(abuf, self->last_bare_tag, base_len) == 0) {
+                    tailt = frontend::sym::ct_type_canon_text(abuf + base_len);
+                    if (!tailt) return self->sup->fail("out of memory");
+                }
+                {
+                    const char *ct = runtime::text::ct_internf("%s%s",
+                                        self->inst_canon, tailt);
+                    if (!ct) return self->sup->fail("out of memory");
+                    if (frontend::sym::ct_row_set(carg, nargs, ct) != 0)
+                        return self->sup->fail("out of memory");
+                }
+            } else {
+                const char *cn = frontend::sym::ct_type_canon_text(abuf);
+                if (!cn) return self->sup->fail("out of memory");
+                if (frontend::sym::ct_row_set(carg, nargs, cn) != 0)
+                    return self->sup->fail("out of memory");
             }
             nargs++;
             if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
@@ -230,25 +272,13 @@ impl ExprTraitInst for Expr {
         self->sup->lex_next();
         ni = self->sym->trait_inst(tname, nargs, carg, ctype, self->cur_unit);
         if (ni < 0) return self->sup->fail(self->sym->last_error());
-        {
-            int cl = snprintf(canon, sizeof canon, "%s<", tname);
-            for (gpi = 0; gpi < nargs; gpi++) {
-                int wr = snprintf(canon + cl, sizeof canon - (size_t)cl,
-                                  "%s%s", gpi == 0 ? "" : ",", carg[gpi]);
-                if (cl < 0 || wr < 0 || cl + wr >= (int)sizeof canon)
-                    return self->sup->fail("type is too long");
-                cl += wr;
-            }
-            if (cl + 2 > (int)sizeof canon)
-                return self->sup->fail("type is too long");
-            canon[cl] = '>';
-            canon[cl + 1] = 0;
-        }
-        if (snprintf(iface, sizeof iface, "%s_iface", self->sym->traits[ni].name)
-            >= (int)sizeof iface)
-            return self->sup->fail("type name is too long");
-        snprintf(self->inst_canon, sizeof self->inst_canon, "%s", canon);
-        snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", iface);
+        canon = trait_inst_spell(tname, nargs, carg);
+        if (!canon) return self->sup->fail("out of memory");
+        iface = runtime::text::ct_internf("%s_iface", self->sym->traits[ni].name);
+        if (!iface) return self->sup->fail("out of memory");
+        self->inst_canon = canon;
+        self->last_bare_tag = runtime::text::ct_internf("struct %s", iface);
+        if (!self->last_bare_tag) return self->sup->fail("out of memory");
         self->saw_trait = 1;
         if (self->type_append(out, cap, &n, "struct") != 0) return -1;
         if (self->type_append(out, cap, &n, iface) != 0) return -1;

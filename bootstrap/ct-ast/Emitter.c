@@ -142,8 +142,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -161,7 +162,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -600,11 +600,11 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_proto(void *self, int 
             if (k > 0) {
                 fputs(", ", _self->out);
             }
-            fputs((_self->sym->funcs[i].ptype + (k * MAX_TEXT)), _self->out);
+            fputs(_self->sym->funcs[i].ptype[k], _self->out);
             if (((_self->sym->funcs[i].pann[k] == 2) || (_self->sym->funcs[i].pann[k] == 3))) {
                 fputs(" *", _self->out);
             }
-            fputs((_self->sym->funcs[i].pdim + (k * MAX_TEXT)), _self->out);
+            fputs(_self->sym->funcs[i].pdim[k], _self->out);
         }
         if (_self->sym->funcs[i].variadic) {
             fputs(", ...", _self->out);
@@ -3405,7 +3405,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_model(void *self, con
                 fputc(',', f);
             }
             fputs("{\"type\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (_self->sym->funcs[i].ptype + (j * MAX_TEXT)));
+            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ptype[j]);
             fputs("\"}", f);
         }
         fputs("]}", f);
@@ -3750,7 +3750,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_abi_header(void *self
     for (i = 0; i < n; i++) {
         int p;
         for (p = (-1); p < _self->sym->funcs[order[i]].nparams; p++) {
-            const char * tp = ((p < 0) ? _self->sym->funcs[order[i]].ret : (_self->sym->funcs[order[i]].ptype + (p * MAX_TEXT)));
+            const char * tp = ((p < 0) ? _self->sym->funcs[order[i]].ret : _self->sym->funcs[order[i]].ptype[p]);
             char nm[MAX_TEXT];
             int q = 0;
             if (strncmp(tp, "struct ", 7) == 0) {
@@ -3814,7 +3814,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_abi_header(void *self
             if (j > 0) {
                 fputs(", ", f);
             }
-            fputs((_self->sym->funcs[fi].ptype + (j * MAX_TEXT)), f);
+            fputs(_self->sym->funcs[fi].ptype[j], f);
             if (((_self->sym->funcs[fi].pann[j] == 2) || (_self->sym->funcs[fi].pann[j] == 3))) {
                 fputs(" *", f);
             }
@@ -9122,16 +9122,15 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         return 0;
     }
     if (((self->arena->nodes[n].aux == 9) || (self->arena->nodes[n].aux == 10))) {
-        char base[MAX_TEXT];
-        char msg2[MAX_TEXT];
+        const char * base;
         int si;
         if ((self->arena->nodes[n].text3[0] && (n != self->raw_call))) {
             fputs(self->arena->nodes[n].text3, self->out);
             return 0;
         }
-        snprintf(base, sizeof(base), "%s", self->arena->nodes[n].text);
+        base = self->arena->nodes[n].text;
         if (strncmp(base, "struct ", 7) == 0) {
-            snprintf(base, sizeof(base), "%s", (self->arena->nodes[n].text + 7));
+            base += 7;
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
         if (si < 0) {
@@ -9139,8 +9138,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
             struct frontend_sym_Adt * adts;
             int nadts;
             if (adi < 0) {
-                snprintf(msg2, sizeof(msg2), "no method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text);
-                return self->__backend_emit_emitops_vptr->fail_from(self, n, msg2);
+                return self->__backend_emit_emitops_vptr->fail_from(self, n, runtime_text_ct_internf("no method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text));
             }
             adts = frontend_sym_ct_adts((&nadts));
             if (((!adts) || (adi >= nadts))) {
@@ -9194,12 +9192,11 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
         return 0;
     }
     if (self->arena->nodes[n].aux == 11) {
-        char base[MAX_TEXT];
-        char msg2[MAX_TEXT];
+        const char * base;
         int si;
-        snprintf(base, sizeof(base), "%s", self->arena->nodes[n].text);
+        base = self->arena->nodes[n].text;
         if (strncmp(base, "struct ", 7) == 0) {
-            snprintf(base, sizeof(base), "%s", (self->arena->nodes[n].text + 7));
+            base += 7;
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
         if (si < 0) {
@@ -9207,8 +9204,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
             struct frontend_sym_Adt * adts;
             int nadts;
             if (adi < 0) {
-                snprintf(msg2, sizeof(msg2), "no static method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text);
-                return self->__backend_emit_emitops_vptr->fail_from(self, n, msg2);
+                return self->__backend_emit_emitops_vptr->fail_from(self, n, runtime_text_ct_internf("no static method '%s' for type '%s'", self->arena->nodes[n].text2, self->arena->nodes[n].text));
             }
             adts = frontend_sym_ct_adts((&nadts));
             if (((!adts) || (adi >= nadts))) {
@@ -9555,7 +9551,7 @@ static int em_expr_call(struct backend_emit_Emitter * self, int n, int nk) {
                 }
                 else {
                     if (((fi >= 0) && (ai < self->sym->funcs[fi].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, (self->sym->funcs[fi].ptype + (ai * MAX_TEXT)), c) != 0) {
+                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->funcs[fi].ptype[ai], c) != 0) {
                             return (-1);
                         }
                     }

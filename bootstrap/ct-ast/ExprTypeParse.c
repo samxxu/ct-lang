@@ -9,7 +9,9 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -57,6 +59,7 @@
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define N_ADDR 27
 #define N_ARROW 25
 #define N_ASSIGN 13
@@ -113,8 +116,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -132,7 +136,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -185,8 +188,11 @@ const struct frontend_parse_ExprTypeParse_vtbl frontend_parse_Expr_frontend_pars
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+static const char * inst_spell(const char *, int, char * *);
+static const char * type_resolve_name(struct frontend_parse_Expr *, const char *);
+static const char * type_resolve_token(struct frontend_parse_Expr *);
 int frontend_parse_type_only_qualifiers(const char *);
-static char frontend_parse_g_expr_inst_override[160];
+static const char * frontend_parse_g_expr_inst_override = 0;
 static int frontend_parse_Expr_frontend_parse_ExprTypeParse_is_type_word(void *self, const char * w) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     (void)(_self);
@@ -230,7 +236,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
     _self->saw_trait = 0;
     _self->fnptr_name[0] = 0;
     _self->fnptr_dims[0] = 0;
-    _self->last_bare_tag[0] = 0;
+    _self->last_bare_tag = "";
     for (; ; ) {
         if ((((n == 0) && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "atomic"))) {
             _self->saw_atomic = 1;
@@ -324,7 +330,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
         }
         if (((_self->lex->tok == T_ID) && _self->__frontend_parse_exprtypeparse_vptr->is_type_word(_self, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)))) {
             if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "struct")) {
-                char sname[MAX_TEXT];
+                const char * sname;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 if (((_self->lex->tok == T_ID) && (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0))) {
                     if (_self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, out, cap) != 0) {
@@ -339,7 +345,8 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a struct name");
                 }
-                if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), sname, sizeof(sname)) != 0) {
+                sname = type_resolve_token(_self);
+                if ((!sname)) {
                     return (-1);
                 }
                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), sname) != 0) {
@@ -355,12 +362,13 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 return (-1);
             }
             if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "enum")) {
-                char sname[MAX_TEXT];
+                const char * sname;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 if (_self->lex->tok != T_ID) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an enum name");
                 }
-                if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), sname, sizeof(sname)) != 0) {
+                sname = type_resolve_token(_self);
+                if ((!sname)) {
                     return (-1);
                 }
                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), sname) != 0) {
@@ -372,12 +380,13 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             }
             else {
                 if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "union")) {
-                    char sname[MAX_TEXT];
+                    const char * sname;
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                     if (_self->lex->tok != T_ID) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a union name");
                     }
-                    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), sname, sizeof(sname)) != 0) {
+                    sname = type_resolve_token(_self);
+                    if ((!sname)) {
                         return (-1);
                     }
                     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), sname) != 0) {
@@ -393,18 +402,20 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
         }
         if (_self->lex->tok == T_ID) {
             int ti;
-            char rname[MAX_TEXT];
-            char iface[MAX_TEXT];
+            const char * rname;
+            const char * iface;
 {
                 const char * qp = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
                 while ((((*qp) == ' ') || ((*qp) == '\t'))) {
                     qp++;
                 }
                 if (((qp[0] == ':') && (qp[1] == ':'))) {
-                    char qn[MAX_TEXT];
-                    int qw;
+                    const char * qn;
                     int qti;
-                    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, qn, sizeof(qn));
+                    qn = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                    if ((!qn)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                     for (; ; ) {
                         if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::")))) {
@@ -414,39 +425,41 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                         if (_self->lex->tok != T_ID) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type name after '::'");
                         }
-                        qw = (int)(strlen(qn));
-                        if (((qw + 1) + (int)(_self->lex->tokstr.len)) >= (int)(sizeof(qn))) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "qualified type name is too long");
+                        qn = runtime_text_ct_intern_join(qn, "_");
+                        if (qn) {
+                            qn = runtime_text_ct_intern_join(qn, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex));
                         }
-                        qn[qw] = '_';
-                        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, ((qn + qw) + 1), ((sizeof(qn) - (size_t)(qw)) - 1));
+                        if ((!qn)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
                         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                     }
 {
                         const char * resq = qn;
-                        char bare[MAX_TEXT];
                         if (strncmp(qn, "core_utf16_", 11) == 0) {
-                            snprintf(bare, sizeof(bare), "%s", (qn + 11));
-                            resq = bare;
+                            resq = (qn + 11);
                         }
                         else {
                             if (strncmp(qn, "core_", 5) == 0) {
-                                snprintf(bare, sizeof(bare), "%s", (qn + 5));
-                                if (strcmp(bare, "box") == 0) {
+                                resq = (qn + 5);
+                                if (strcmp(resq, "box") == 0) {
                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'box<T>' is no longer supported; write 'Box<T>'");
                                 }
-                                if (frontend_sym_ct_tmpl_find(bare) >= 0) {
-                                    snprintf(frontend_parse_g_expr_inst_override, sizeof(frontend_parse_g_expr_inst_override), "%s", bare);
+                                if (frontend_sym_ct_tmpl_find(resq) >= 0) {
+                                    frontend_parse_g_expr_inst_override = runtime_text_ct_intern(resq);
+                                    if ((!frontend_parse_g_expr_inst_override)) {
+                                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                                    }
                                     if (_self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, out, cap) != 0) {
                                         return (-1);
                                     }
                                     n = (int)(strlen(out));
                                     continue;
                                 }
-                                resq = bare;
                             }
                         }
-                        if (_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, resq, rname, sizeof(rname)) != 0) {
+                        rname = type_resolve_name(_self, resq);
+                        if ((!rname)) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown qualified type name");
                         }
                     }
@@ -555,14 +568,10 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     qp++;
                 }
                 if ((((*qp) == '<') && (((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Vec") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Map")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Option")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Result")))) {
-                    char gmsg[MAX_TEXT];
-                    snprintf(gmsg, sizeof(gmsg), "unresolved generic type '%.*s' (is the builtin layer missing? set CT_CORE_DIR, or the legacy CT_STD_DIR)", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, gmsg);
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("unresolved generic type '%.*s' (is the builtin layer missing? set CT_CORE_DIR, or the legacy CT_STD_DIR)", _self->lex->tokstr.len, _self->lex->tokstr.ptr));
                 }
                 if ((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Vec") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Map")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Option")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Result"))) {
-                    char gmsg[MAX_TEXT];
-                    snprintf(gmsg, sizeof(gmsg), "generic struct '%.*s' needs type arguments in a type position", _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, gmsg);
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("generic struct '%.*s' needs type arguments in a type position", _self->lex->tokstr.len, _self->lex->tokstr.ptr));
                 }
             }
             if (_self->sym->__frontend_sym_typealiasops_vptr->find_type_alias(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
@@ -582,7 +591,8 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             if (((n > 0) && (_self->lex->tokstr.len >= MAX_TEXT))) {
                 break;
             }
-            if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rname, sizeof(rname)) != 0) {
+            rname = type_resolve_token(_self);
+            if ((!rname)) {
                 return (-1);
             }
             ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rname);
@@ -591,15 +601,15 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     char apath[1024];
                     int aline = 0;
                     if (_self->sym->__frontend_sym_typealiasops_vptr->find_global_type_alias(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), apath, sizeof(apath), (&aline)) == 0) {
-                        char amsg[1400];
-                        snprintf(amsg, sizeof(amsg), "type alias '%s' is declared in %s:%d but this unit does not import it", _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), apath, aline);
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, amsg);
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("type alias '%s' is declared in %s:%d but this unit does not import it", _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), apath, aline));
                     }
                 }
                 if ((_self->sup->map_sig && ((n == 0) || frontend_parse_type_only_qualifiers(out)))) {
                     if ((!_self->sup->__frontend_parse_supportops_vptr->map_std_typedef(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)))) {
-                        char umsg[MAX_TEXT * 3];
-                        snprintf(umsg, sizeof(umsg), "unknown type '%s' in a .m.ct trait signature; ""declare 'pub type %s = <C spelling>;' in this unit ""or include the header that typedefs it", _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex));
+                        const char * umsg = runtime_text_ct_internf("unknown type '%s' in a .m.ct trait signature; ""declare 'pub type %s = <C spelling>;' in this unit ""or include the header that typedefs it", _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex));
+                        if ((!umsg)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
                         return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), umsg, _self->sup->mem->path);
                     }
                     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
@@ -621,28 +631,40 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                     return (-1);
                 }
-                snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", rname);
+                _self->last_bare_tag = runtime_text_ct_internf("struct %s", rname);
+                if ((!_self->last_bare_tag)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
             else {
                 if (_self->sym->type_kind[ti] == 5) {
                     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
                         return (-1);
                     }
-                    snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "enum %s", rname);
+                    _self->last_bare_tag = runtime_text_ct_internf("enum %s", rname);
+                    if ((!_self->last_bare_tag)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                 }
                 else {
                     if (_self->sym->type_kind[ti] == 6) {
                         if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
                             return (-1);
                         }
-                        snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "union %s", rname);
+                        _self->last_bare_tag = runtime_text_ct_internf("union %s", rname);
+                        if ((!_self->last_bare_tag)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
                     }
                     else {
                         if (_self->sym->type_kind[ti] == 7) {
                             if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                                 return (-1);
                             }
-                            snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", rname);
+                            _self->last_bare_tag = runtime_text_ct_internf("struct %s", rname);
+                            if ((!_self->last_bare_tag)) {
+                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                            }
                         }
                         else {
                             if (_self->sym->type_kind[ti] == 3) {
@@ -661,8 +683,9 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                                     return (-1);
                                 }
-                                if (snprintf(iface, sizeof(iface), "%s_iface", rname) >= (int)(sizeof(iface))) {
-                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type name is too long");
+                                iface = runtime_text_ct_internf("%s_iface", rname);
+                                if ((!iface)) {
+                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                                 }
                                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), iface) != 0) {
                                     return (-1);
@@ -831,21 +854,46 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
         }
     }
     if (n == 0) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "expected a type (tok %d '%.*s')", _self->lex->tok, _self->lex->tokstr.len, _self->lex->tokstr.ptr);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("expected a type (tok %d '%.*s')", _self->lex->tok, _self->lex->tokstr.len, _self->lex->tokstr.ptr));
     }
+    return 0;
+}
+
+static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type_text(void *self, const char * * out) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    char * buf;
+    const char * pooled;
+    int rc;
+    if ((!out)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "internal: parse_type_text without an output");
+    }
+    (*out) = "";
+    buf = (char *)(malloc(TEXT_LIMIT));
+    if ((!buf)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    rc = _self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, buf, TEXT_LIMIT);
+    if (rc != 0) {
+        free(buf);
+        return rc;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    free(buf);
+    if ((!pooled)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    (*out) = pooled;
     return 0;
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void *self, char * out, int cap) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char tname[MAX_TEXT];
-    char enc[MAX_TEXT];
+    const char * tname;
+    const char * enc;
     char * * carg = 0;
     char * * ctype = 0;
-    char canon[MAX_TEXT];
-    char abuf[MAX_TEXT];
+    const char * canon;
+    const char * abuf;
     struct frontend_sym_StructTmpl * tp;
     int ccap = 0;
     int tccap = 0;
@@ -857,13 +905,19 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     int pline;
     int pcol;
     n = (int)(strlen(out));
-    if (frontend_parse_g_expr_inst_override[0]) {
-        snprintf(tname, sizeof(tname), "%s", frontend_parse_g_expr_inst_override);
-        frontend_parse_g_expr_inst_override[0] = 0;
+    if (frontend_parse_g_expr_inst_override) {
+        tname = frontend_parse_g_expr_inst_override;
+        frontend_parse_g_expr_inst_override = 0;
     }
     else {
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tname, sizeof(tname));
+        tname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!tname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+    }
+    if ((!tname[0])) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a generic type name");
     }
     if (strcmp(tname, "box") == 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'box<T>' is no longer supported; write 'Box<T>'");
@@ -875,9 +929,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     }
     nt2 = tp[ti2].ntparams;
     if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<")))) {
-        char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "generic struct '%s' needs type arguments in a type position", tname);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("generic struct '%s' needs type arguments in a type position", tname));
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     nargs = 0;
@@ -893,13 +945,13 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
             pline = _self->lex->tokline;
             pcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
         }
-        _self->inst_canon[0] = 0;
+        _self->inst_canon = "";
         _self->type_depth++;
         if (_self->type_depth > 4) {
             _self->type_depth--;
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "generic type arguments nest deeper than 4");
         }
-        if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, abuf, sizeof(abuf)) != 0) {
+        if (_self->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self, (&abuf)) != 0) {
             _self->type_depth--;
             return (-1);
         }
@@ -914,19 +966,23 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '>' after the type arguments");
         }
         if ((((((((!abuf[0]) || (strcmp(abuf, "void") == 0)) || strchr(abuf, '[')) || strchr(abuf, '(')) || strchr(abuf, ')')) || (strncmp(abuf, "const ", 6) == 0)) || (strncmp(abuf, "volatile ", 9) == 0))) {
-            char msg[MAX_TEXT * 2];
-            snprintf(msg, sizeof(msg), "type argument '%s' cannot instantiate a generic struct", abuf);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("type argument '%s' cannot instantiate a generic struct", abuf));
         }
-        snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
-        if (_self->inst_canon[0]) {
-            if (snprintf(carg[nargs], MAX_TEXT, "%s", abuf) >= MAX_TEXT) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
+        if (frontend_sym_ct_row_set(ctype, nargs, abuf) != 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if ((_self->inst_canon && _self->inst_canon[0])) {
+            if (frontend_sym_ct_row_set(carg, nargs, abuf) != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
         }
         else {
-            if (frontend_sym_ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
+            const char * cn = frontend_sym_ct_type_canon_text(abuf);
+            if ((!cn)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            if (frontend_sym_ct_row_set(carg, nargs, cn) != 0) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
         }
         nargs++;
@@ -947,36 +1003,23 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (nargs != nt2) {
-        char msg[MAX_TEXT * 2];
-        snprintf(msg, sizeof(msg), "generic struct '%s' takes %d type arguments, %d given", tname, nt2, nargs);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("generic struct '%s' takes %d type arguments, %d given", tname, nt2, nargs));
     }
 {
         int gi;
         int sym = 0;
-        int rl;
-        char raw[MAX_TEXT];
         for (gi = 0; gi < nargs; gi++) {
             if (frontend_parse_expr_generic_param(_self, carg[gi])) {
                 sym = 1;
             }
         }
         if (sym) {
-            rl = snprintf(raw, sizeof(raw), "%s<", tname);
-            for (gi = 0; gi < nargs; gi++) {
-                int wr = snprintf((raw + rl), (sizeof(raw) - (size_t)(rl)), "%s%s", ((gi == 0) ? "" : ","), carg[gi]);
-                if ((((rl < 0) || (wr < 0)) || ((rl + wr) >= (int)(sizeof(raw))))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-                }
-                rl += wr;
+            const char * raw = inst_spell(tname, nargs, carg);
+            if ((!raw)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            if ((rl + 2) > (int)(sizeof(raw))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
-            }
-            raw[rl] = '>';
-            raw[(rl + 1)] = 0;
-            snprintf(_self->inst_canon, sizeof(_self->inst_canon), "%s", raw);
-            snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "%s", raw);
+            _self->inst_canon = raw;
+            _self->last_bare_tag = raw;
             if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), raw) != 0) {
                 return (-1);
             }
@@ -987,35 +1030,24 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "Map key type 'Str' is a borrowed view; use 'String' (owning)");
     }
     if (((((((strcmp(tname, "Map") == 0) && (nargs >= 1)) && (strcmp(carg[0], "int") != 0)) && (strcmp(carg[0], "long") != 0)) && (strcmp(carg[0], "char*") != 0)) && (strcmp(carg[0], "struct String") != 0))) {
-        char kmsg[MAX_TEXT * 2];
-        snprintf(kmsg, sizeof(kmsg), "Map does not support key type '%s' (key types: int, long, char *, String)", carg[0]);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, kmsg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("Map does not support key type '%s' (key types: int, long, char *, String)", carg[0]));
     }
-    if (frontend_sym_ct_inst_encode(tname, nargs, carg, enc, MAX_TEXT) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+    enc = frontend_sym_ct_inst_encode_text(tname, nargs, carg);
+    if ((!enc)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    if (_self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, tname, nargs, carg, ctype, enc, MAX_TEXT, 0, pline, pcol) != 0) {
+    if (_self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, tname, nargs, carg, ctype, (&enc), 0, pline, pcol) != 0) {
         return (-1);
     }
-    snprintf(_self->last_bare_tag, sizeof(_self->last_bare_tag), "struct %s", enc);
-{
-        int gi;
-        int cl;
-        cl = snprintf(canon, sizeof(canon), "%s<", tname);
-        for (gi = 0; gi < nargs; gi++) {
-            int wr = snprintf((canon + cl), (sizeof(canon) - (size_t)(cl)), "%s%s", ((gi == 0) ? "" : ","), carg[gi]);
-            if ((((cl < 0) || (wr < 0)) || ((cl + wr) >= (int)(sizeof(canon))))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type name is too long");
-            }
-            cl += wr;
-        }
-        if ((cl + 2) > (int)(sizeof(canon))) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type name is too long");
-        }
-        canon[cl] = '>';
-        canon[(cl + 1)] = 0;
+    _self->last_bare_tag = runtime_text_ct_internf("struct %s", enc);
+    if ((!_self->last_bare_tag)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    snprintf(_self->inst_canon, sizeof(_self->inst_canon), "%s", canon);
+    canon = inst_spell(tname, nargs, carg);
+    if ((!canon)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->inst_canon = canon;
     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
         return (-1);
     }
@@ -1025,13 +1057,89 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     return 0;
 }
 
+static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type_text(void *self, const char * * out) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    char * buf;
+    const char * pooled;
+    int rc;
+    if ((!out)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "internal: parse_inst_type_text without an output");
+    }
+    (*out) = "";
+    buf = (char *)(malloc(TEXT_LIMIT));
+    if ((!buf)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    rc = _self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, buf, TEXT_LIMIT);
+    if (rc != 0) {
+        free(buf);
+        return rc;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    free(buf);
+    if ((!pooled)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    (*out) = pooled;
+    return 0;
+}
+
 const struct frontend_parse_ExprTypeParse_vtbl frontend_parse_Expr_frontend_parse_ExprTypeParse_vtable = {
     .is_type_word = frontend_parse_Expr_frontend_parse_ExprTypeParse_is_type_word,
     .type_append = frontend_parse_Expr_frontend_parse_ExprTypeParse_type_append,
     .parse_type = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type,
-    .parse_inst_type = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type
+    .parse_type_text = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type_text,
+    .parse_inst_type = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type,
+    .parse_inst_type_text = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type_text
 };
 
+static const char * inst_spell(const char * tname, int nargs, char * * args) {
+    char * buf = 0;
+    int cap = 0;
+    int i;
+    const char * pooled;
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
+    }
+    if (((tool_sh_ct_text_cat((&buf), (&cap), tname) != 0) || (tool_sh_ct_text_cat((&buf), (&cap), "<") != 0))) {
+        goto fail;
+    }
+    for (i = 0; i < nargs; i++) {
+        if (((i > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ",") != 0))) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), ((args && args[i]) ? args[i] : "")) != 0) {
+            goto fail;
+        }
+    }
+    if (tool_sh_ct_text_cat((&buf), (&cap), ">") != 0) {
+        goto fail;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+static const char * type_resolve_name(struct frontend_parse_Expr * self, const char * name) {
+    char buf[MAX_TEXT];
+    if (strlen(name) < MAX_TEXT) {
+        if (self->sup->__frontend_parse_supportops_vptr->resolve_type(self->sup, name, buf, sizeof(buf)) != 0) {
+            return (const char *)(0);
+        }
+        return runtime_text_ct_intern(buf);
+    }
+    return self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(self->sym, name);
+}
+static const char * type_resolve_token(struct frontend_parse_Expr * self) {
+    const char * tok = runtime_text_ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len);
+    if ((!tok)) {
+        return (const char *)(0);
+    }
+    return type_resolve_name(self, tok);
+}
 int frontend_parse_type_only_qualifiers(const char * spell) {
     const char * p;
     int n;

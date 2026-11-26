@@ -319,8 +319,9 @@ Intern（随输出增长），改用 `ct_scratch_*` builder。已迁：`Emitter.
 `check-seed` 两轮逐字节；`check-ast` 全量见交付报告。
 
 **剩余（C2p）**：见 §5.6；C2p-1 已把 `qpath`/`cname` 按需化，C2p-2 已把
-诊断文本按需化，`Expr/Stmt`/发射器的一次性 scratch 与 `parse_type` 的类型缓冲
-仍在后续批次。
+诊断文本按需化，C2p-3 已把类型拼写/实例名的 160 总闸解除（`parse_type`、
+`expr_type`/`expr_ctype`、实例编码与类型表），`Expr/Stmt`/发射器其余一次性
+scratch 仍在后续批次。
 
 ## 5.6 C2p 合批（进行中）
 
@@ -340,19 +341,29 @@ C2p 按 4–6 个单元一批迁移剩余的 160/159/128 scratch；每批重生�
 300 字节 callee 的 arity 警告不再截断。证据：`c2p_limits.sh` 5/5，baseline
 `772d7611` 为 1/5。
 
-**剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 480 处
-（`Expr.h.ct` 107、`Parser.h.ct` 83、`Stmt.h.ct` 46、`ExprTypes.h.ct` 37、
-`MapBuild.h.ct` 26、`ExprTypeParse.h.ct` 24、`ExprStaticType.h.ct` 23 …）、
-`backend/emit` 128 处（`Emitter.h.ct` 110、`Init.h.ct` 10、
+**C2p-3 类型拼写/实例名（已落）**：`parse_type`/`parse_inst_type` 新增
+pool-text 入口（`parse_type_text`/`parse_inst_type_text`），内部
+`rname`/`qn`/`iface`/`enc`/`canon`/`last_bare_tag`/`inst_canon` 改 pool 文本；
+`type_append` 的输出上限只剩 `TEXT_LIMIT`。`ExprTypeParse`/`ExprInstantiate`/
+`Symbols` 的实例名拼接改 `ct_inst_encode_text`/`ct_type_canon_text`/
+`ct_generic_subst_text`，实例参数行按需 `ct_row_set`；`Fn.ptype`/`pdim`、
+`GenericInst.targ`/`cname` 与 `Symbols.types`/`type_target` 改指针行。
+`expr_type`/`expr_ctype` 新增 pool-text 入口并在 `parse_postfix` 使用。
+2000 字节 struct 名的声明/字段/参数/返回/方法接收者/调用与
+`Holder<struct 2000>`、2000 字节模板名实例、trait 接收者/vptr 初始化/接口
+装箱均可用。证据：`c2p_limits.sh` 9/9，baseline `f2233e7a` 为 5/9。
+
+**剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 414 处
+（`Expr.h.ct` 95、`Parser.h.ct` 58、`Stmt.h.ct` 43、`ExprTypes.h.ct` 33、
+`MapBuild.h.ct` 26、`ExprStaticType.h.ct` 23、`ExprBinding.h.ct` 17 …）、
+`backend/emit` 124 处（`Emitter.h.ct` 106、`Init.h.ct` 10、
 `EmitterText.h.ct` 3、`EmitHoist.h.ct` 2、`EmitInit.h.ct` 2、
 `EmitterMapText.h.ct` 1）、`tool/pkg` 55 处、`frontend/type` 31 处、
-`frontend/sym` 21 处、`frontend/module` 20 处、`backend/mem` 7 处。另有
+`frontend/sym` 17 处、`frontend/module` 20 处、`backend/mem` 7 处。另有
 8 处 `[128]` 计数行（`Emitter` 的路径/字段数组等），它们是行数容量而非文本
-scratch；实例名 159 的诊断仍在 `ExprTypeParse`。下一批优先级：`ExprTypeParse.parse_type` 的
-`rname`/`enc`/`canon` 与实例名 159（须同批改 `inst_make`/`ct_inst_encode`
-的调用方缓冲）及 `Symbols` 的 `type is too long` 系列；其后是
-`Emitter.h.ct` 的局部与 `EmitterText`/`MapBuild`/`EmitHoist`/`EmitInit`/`Init`
-（依赖 `expr_type`/`expr_ctype` 的调用方缓冲一起改）。
+scratch。下一批优先级：`MethodSig.ptype`、闭包/`MapBuild`/ADT payload 的参数
+行（类型读取入口已可用 pool，剩余是行存储）与 `Emitter.h.ct` 的局部及
+`EmitterText`/`EmitHoist`/`EmitInit`/`Init` 的一次性 scratch。
 
 ## 6 关联
 

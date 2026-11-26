@@ -111,8 +111,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -130,7 +131,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -242,12 +242,12 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_mismatch(voi
     while (((cur > 0) && (k < np))) {
         skip = 0;
         if (fi >= 0) {
-            ft = (_self->sym->funcs[fi].ptype + (k * MAX_TEXT));
+            ft = _self->sym->funcs[fi].ptype[k];
         }
         else {
             ft = (_self->sym->traits[ti].m[mi].ptype + (k * MAX_TEXT));
         }
-        if (((fi >= 0) && (_self->sym->funcs[fi].pdim + ((size_t)(k) * MAX_TEXT))[0])) {
+        if (((fi >= 0) && _self->sym->funcs[fi].pdim[k][0])) {
             skip = 1;
         }
         if (((!skip) && strchr(ft, '['))) {

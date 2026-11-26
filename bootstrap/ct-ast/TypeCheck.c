@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define MAX_INIT_ITEM 4096
 #define MAX_INIT_ITEM_MAX 65536
 #define MAX_INIT_TEXT 16384
@@ -46,8 +47,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -65,7 +67,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -416,6 +417,60 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_type(void *self, i
     return (-1);
 }
 
+static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_type_text(void *self, int n, const char * * out) {
+    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
+    char * buf;
+    const char * pooled;
+    int rc;
+    if ((!out)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "internal: expr_type_text without an output");
+    }
+    (*out) = "";
+    buf = (char *)(malloc(TEXT_LIMIT));
+    if ((!buf)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    rc = _self->__frontend_type_typeops_vptr->expr_type(_self, n, buf, TEXT_LIMIT);
+    if (rc != 0) {
+        free(buf);
+        return rc;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    free(buf);
+    if ((!pooled)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    (*out) = pooled;
+    return 0;
+}
+
+static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype_text(void *self, int n, const char * * out) {
+    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
+    char * buf;
+    const char * pooled;
+    int rc;
+    if ((!out)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "internal: expr_ctype_text without an output");
+    }
+    (*out) = "";
+    buf = (char *)(malloc(TEXT_LIMIT));
+    if ((!buf)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    rc = _self->__frontend_type_typeops_vptr->expr_ctype(_self, n, buf, TEXT_LIMIT);
+    if (rc != 0) {
+        free(buf);
+        return rc;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    free(buf);
+    if ((!pooled)) {
+        return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+    }
+    (*out) = pooled;
+    return 0;
+}
+
 static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, int n, char * out, int cap) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     int k;
@@ -718,9 +773,9 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, 
 
 static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, int n, const char * trait, int addr) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
-    char t[MAX_TEXT];
+    const char * t;
     char tname[MAX_TEXT];
-    char sname[MAX_TEXT];
+    const char * sname;
     char iname[MAX_TEXT];
     int is_ptr;
     int si;
@@ -949,7 +1004,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
             }
         }
     }
-    if (_self->__frontend_type_typeops_vptr->expr_type(_self, n, t, sizeof(t)) != 0) {
+    if (_self->__frontend_type_typeops_vptr->expr_type_text(_self, n, (&t)) != 0) {
         return _self->__frontend_type_typeops_vptr->fail(_self, "cannot infer the type to box");
     }
     ip = 0;
@@ -1136,7 +1191,29 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
         }
         return _self->__frontend_type_typeops_vptr->fail(_self, "interface type mismatch");
     }
-    if ((!_self->__frontend_type_typeops_vptr->concrete_struct(_self, t, sname, sizeof(sname), (&is_ptr)))) {
+{
+        const char * base = t;
+        size_t bn;
+        if (strncmp(base, "struct ", 7) == 0) {
+            base += 7;
+        }
+        while ((*base) == ' ') {
+            base++;
+        }
+        bn = strlen(base);
+        is_ptr = 0;
+        while (((bn > 0) && ((base[(bn - 1)] == ' ') || (base[(bn - 1)] == '*')))) {
+            if (base[(bn - 1)] == '*') {
+                is_ptr = 1;
+            }
+            bn--;
+        }
+        sname = runtime_text_ct_intern_len(base, (int)(bn));
+        if ((!sname)) {
+            return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
+        }
+    }
+    if (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sname) < 0) {
         return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box this expression");
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sname);
@@ -1983,6 +2060,8 @@ const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_Ty
     .iface_ref_type = frontend_type_TypeCheck_frontend_type_TypeOps_iface_ref_type,
     .concrete_struct = frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct,
     .expr_type = frontend_type_TypeCheck_frontend_type_TypeOps_expr_type,
+    .expr_type_text = frontend_type_TypeCheck_frontend_type_TypeOps_expr_type_text,
+    .expr_ctype_text = frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype_text,
     .expr_ctype = frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype,
     .maybe_box = frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box,
     .type_has_array_init = frontend_type_TypeCheck_frontend_type_TypeOps_type_has_array_init,

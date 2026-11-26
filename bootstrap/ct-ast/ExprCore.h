@@ -19,8 +19,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -38,7 +39,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -138,7 +138,9 @@ struct frontend_parse_ExprTypeParse_vtbl {
     int (*is_type_word)(void *, const char *);
     int (*type_append)(void *, char *, int, int *, const char *);
     int (*parse_type)(void *, char *, int);
+    int (*parse_type_text)(void *, const char * *);
     int (*parse_inst_type)(void *, char *, int);
+    int (*parse_inst_type_text)(void *, const char * *);
 };
 struct frontend_parse_ExprTypeParse_iface {
     void *self;
@@ -146,7 +148,7 @@ struct frontend_parse_ExprTypeParse_iface {
 };
 
 struct frontend_parse_ExprInstantiate_vtbl {
-    int (*inst_make)(void *, const char *, int, char * *, char * *, char *, int, int, int, int);
+    int (*inst_make)(void *, const char *, int, char * *, char * *, const char * *, int, int, int);
     int (*inst_register_nested)(void *, const char *, int);
     int (*generic_instance)(void *, int, const char *, int, int);
     int (*inst_inherent_method)(void *, const char *, const char *);
@@ -307,7 +309,7 @@ struct frontend_parse_Expr {
     int in_generic;
     char * * in_generic_tparam;
     int in_generic_ntparam;
-    char inst_canon[160];
+    const char * inst_canon;
     const char * * qseg;
     int qsegcap;
     int type_depth;
@@ -325,7 +327,7 @@ struct frontend_parse_Expr {
     int narg_pos;
     int arg_base;
     char in_generic_bound[160];
-    char last_bare_tag[160];
+    const char * last_bare_tag;
     int type_no_ptr;
     int assign_ok;
     int dollar_ok;

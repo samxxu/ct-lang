@@ -2348,8 +2348,9 @@ impl StmtOps for Stmt {
         int dcol, dline;
         int iline, icol;
         int is_slice, slice_const, slice_line, slice_col;
-        char slice_elem[MAX_TEXT];
-        char typebuf[MAX_TEXT];
+        const char *slice_elem = "";
+        const char *typebuf;
+        const char *parsed;
         const char *name;
         (void)self;
 
@@ -2361,14 +2362,18 @@ impl StmtOps for Stmt {
         dline = self->lex->tokline;
         iline = dline;
         icol = dcol;
-        if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+        /* S1a-0 C2p-3: the type spelling is a pool text, so a 2000-byte struct
+           name is not cut at the old 160-byte caller row. The mutable steps
+           below (star suffix, slice erasure) re-intern instead of writing into
+           a fixed block. */
+        if (self->ex->parse_type_text(&parsed) != 0) return -1;
+        typebuf = parsed;
         /* P-7.2: `T[] name` declares a slice local. The `[]` sits between the
            element type and the name, so it is consumed here; the C storage is
            the erased `struct __ct_slice` and the element spelling lives in
            the symbol row. */
         is_slice = 0;
         slice_const = 0;
-        slice_elem[0] = 0;
         slice_line = self->lex->tokline;
         slice_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->sup->slice_brackets_ahead(&slice_line, &slice_col)) {
@@ -2376,12 +2381,12 @@ impl StmtOps for Stmt {
             if (self->sup->expect("]") != 0) return -1;
             is_slice = 1;
             self->sup->note_slice();
-            snprintf(slice_elem, sizeof slice_elem, "%s", typebuf);
+            slice_elem = typebuf;
             if (strncmp(slice_elem, "const ", 6) == 0) {
                 slice_const = 1;
-                memmove(slice_elem, slice_elem + 6, strlen(slice_elem + 6) + 1);
+                slice_elem += 6;
             }
-            snprintf(typebuf, sizeof typebuf, "struct __ct_slice");
+            typebuf = "struct __ct_slice";
         }
         head = -1;
         tail = -1;
@@ -2391,7 +2396,6 @@ impl StmtOps for Stmt {
         for (;;) {
             int stars = 0, si;
             size_t tl;
-            char t2[MAX_TEXT];
 
             is_fnptr = self->ex->fnptr_state;
             if (is_fnptr) {
@@ -2415,7 +2419,8 @@ impl StmtOps for Stmt {
                 if (first_decl && typebuf[tl - 1] == '*') base_stars++;
                 tl--;
             }
-            typebuf[tl] = 0;
+            typebuf = runtime::text::ct_intern_len(typebuf, (int)tl);
+            if (!typebuf) return self->sup->fail("out of memory");
             if (first_decl) {
                 /* P-7.2: `int[] *p` puts the star after the slice brackets,
                    so `parse_type` never folded it and `stars` already holds
@@ -2424,8 +2429,8 @@ impl StmtOps for Stmt {
                 first_decl = 0;
             }
             for (si = 0; si < stars; si++) {
-                snprintf(t2, sizeof t2, "%s *", typebuf);
-                snprintf(typebuf, sizeof typebuf, "%s", t2);
+                typebuf = runtime::text::ct_internf("%s *", typebuf);
+                if (!typebuf) return self->sup->fail("out of memory");
             }
             if (self->lex->tok != T_ID) return self->sup->fail("expected a variable name");
             name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
@@ -2442,8 +2447,7 @@ impl StmtOps for Stmt {
             n = self->sup->new_node(N_DECL);
             if (n < 0) return -1;
             if (self->static_decl) self->arena->nodes[n].aux = 1;
-            self->arena->nodes[n].text = runtime::text::ct_intern(typebuf);
-            if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
+            self->arena->nodes[n].text = typebuf;
             self->arena->nodes[n].text2 = runtime::text::ct_intern(name);
             if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
             if (self->sup->declare_var(name, typebuf) != 0) return -1;

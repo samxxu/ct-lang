@@ -28,6 +28,7 @@ import frontend::sym::SymbolsTypeText;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 /* one item of a `{ … }` list, and the text it rewrites to (boxing a struct
    operand appends to it); a long string literal makes an item large */
 #define MAX_INIT_ITEM 4096
@@ -71,6 +72,10 @@ pub trait TypeOps {
     int  concrete_struct(const char *type, char *sout, int scap, int *is_ptr);
     int  expr_type(int n, char *out, int cap);
     int  expr_ctype(int n, char *out, int cap);
+    /* S1a-0 C2p-3: pool-text forms. The caller gets an interned spelling, so
+       a type name longer than the old 160-byte caller row survives. */
+    int  expr_type_text(int n, const char **out);
+    int  expr_ctype_text(int n, const char **out);
     int  maybe_box(int n, const char *trait, int addr);
     /* Phase 31: the C return type of an inherent method of an instantiated
        struct, with the template's type parameters bound to the instance's
@@ -690,6 +695,50 @@ impl TypeOps for TypeCheck {
         return -1;
     }
 
+    /* S1a-0 C2p-3: the pool-text form of `expr_type`. */
+    int expr_type_text(int n, const char **out)
+    {
+        char *buf;
+        const char *pooled;
+        int rc;
+        if (!out) return self->fail("internal: expr_type_text without an output");
+        *out = "";
+        buf = (char *)malloc(TEXT_LIMIT);
+        if (!buf) return self->fail("out of memory");
+        rc = self->expr_type(n, buf, TEXT_LIMIT);
+        if (rc != 0) {
+            free(buf);
+            return rc;
+        }
+        pooled = runtime::text::ct_intern(buf);
+        free(buf);
+        if (!pooled) return self->fail("out of memory");
+        *out = pooled;
+        return 0;
+    }
+
+    /* S1a-0 C2p-3: the pool-text form of `expr_ctype`. */
+    int expr_ctype_text(int n, const char **out)
+    {
+        char *buf;
+        const char *pooled;
+        int rc;
+        if (!out) return self->fail("internal: expr_ctype_text without an output");
+        *out = "";
+        buf = (char *)malloc(TEXT_LIMIT);
+        if (!buf) return self->fail("out of memory");
+        rc = self->expr_ctype(n, buf, TEXT_LIMIT);
+        if (rc != 0) {
+            free(buf);
+            return rc;
+        }
+        pooled = runtime::text::ct_intern(buf);
+        free(buf);
+        if (!pooled) return self->fail("out of memory");
+        *out = pooled;
+        return 0;
+    }
+
     /* 19.2: the expression's type with its array dimensions kept (`char[64]`).
        `expr_type` drops them (boxing only needs the class), but the coarse
        argument-type check needs to see a decayed array so it can leave it
@@ -836,9 +885,9 @@ impl TypeOps for TypeCheck {
        when its struct never `use`d the trait. */
     int maybe_box(int n, const char *trait, int addr)
     {
-        char t[MAX_TEXT];
+        const char *t;
         char tname[MAX_TEXT];
-        char sname[MAX_TEXT];
+        const char *sname;
         char iname[MAX_TEXT];
         int is_ptr, si, u, bnode, found, i, mptr, ip, nk;
         (void)self;
@@ -978,7 +1027,7 @@ impl TypeOps for TypeCheck {
                     return bnode;
                 }
         }
-        if (self->expr_type(n, t, sizeof t) != 0)
+        if (self->expr_type_text(n, &t) != 0)
             return self->fail("cannot infer the type to box");
         ip = 0;
         if (self->iface_ref_type(t, tname, sizeof tname, &ip)) {
@@ -1079,7 +1128,23 @@ impl TypeOps for TypeCheck {
             }
             return self->fail("interface type mismatch");
         }
-        if (!self->concrete_struct(t, sname, sizeof sname, &is_ptr))
+        /* S1a-0 C2p-3: derive the concrete struct name as a pool text, not a
+           160-byte row, so a 2000-byte struct name can be boxed. */
+        {
+            const char *base = t;
+            size_t bn;
+            if (strncmp(base, "struct ", 7) == 0) base += 7;
+            while (*base == ' ') base++;
+            bn = strlen(base);
+            is_ptr = 0;
+            while (bn > 0 && (base[bn - 1] == ' ' || base[bn - 1] == '*')) {
+                if (base[bn - 1] == '*') is_ptr = 1;
+                bn--;
+            }
+            sname = runtime::text::ct_intern_len(base, (int)bn);
+            if (!sname) return self->fail("out of memory");
+        }
+        if (self->sym->find_struct(sname) < 0)
             return self->fail("cannot box this expression");
         si = self->sym->find_struct(sname);
         if (si < 0) return self->fail("cannot box an unknown struct");

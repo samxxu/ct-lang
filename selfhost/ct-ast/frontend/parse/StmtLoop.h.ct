@@ -404,7 +404,7 @@ impl StmtLoop for Stmt {
         char ex[MAX_TEXT];
         char tr[MAX_TEXT];
         char iname[MAX_TEXT];
-        char enc[MAX_TEXT];
+        const char *enc;
         const char *p;
         const char *q;
 
@@ -503,7 +503,7 @@ impl StmtLoop for Stmt {
                        when the user never wrote `MapEntry<...>` themselves. */
                     if (self->ex->inst_make("MapEntry", 2,
                                             ins[inst].carg, ins[inst].ctype,
-                                            enc, MAX_TEXT, 0, 0, 0) != 0)
+                                            &enc, 0, 0, 0) != 0)
                         return -1;
                     snprintf(elem, sizeof elem, "struct %s", enc);
                 }

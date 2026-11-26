@@ -124,15 +124,16 @@ pub struct Fn {
        prefix, a static helper keeps the plain name */
     const char *cname;
     const char *ret;
-    /* S1a-0 C1: the parameter rows are three parallel heap blocks owned by
-       this row, grown on demand (`ptype`/`pdim`: MAX_TEXT bytes per position,
-       `pann`: one byte). `pcap` is their common capacity; a row reused after
-       the per-unit reset keeps its blocks. */
-    char *ptype;
+    /* S1a-0 C1/C2p-3: the parameter rows are three parallel heap blocks owned
+       by this row, grown on demand. `ptype`/`pdim` are pointer rows (each an
+       interned text), so a 2000-byte parameter type is not cut at a MAX_TEXT
+       stride; `pann` is one byte per position. `pcap` is their common
+       capacity; a row reused after the per-unit reset keeps its blocks. */
+    const char **ptype;
     /* array dims are kept apart from the type: the prototype must spell them
        (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
        call side still compares bare types for boxing */
-    char *pdim;
+    const char **pdim;
     /* Phase 78 (S2): 0 = plain, 2 = `ref`, 3 = `out`. The stored type stays
        the caller's base type (type checking compares it), and the emitter adds
        the C pointer at the declaration/call boundary. */
@@ -510,8 +511,9 @@ pub trait SymbolOps {
 pub struct GenericInst {
     int  func;
     int  row;
-    char targ[160];
-    char cname[160];
+    /* S1a-0 C2p-3: pool texts, so a 2000-byte type argument survives. */
+    const char *targ;
+    const char *cname;
     /* Phase 34 (D34-1): the unit that asked for the instance. A `pub` template
        lives in a `.h.ct` header, so `func` points at the template owner's row;
        only the asking unit may emit the `static` copy, otherwise the header
@@ -720,15 +722,16 @@ pub struct Symbols {
     int  nscope;
     int  scopecap;
     /* S1a-0 C1: three parallel blocks grown together by
-       `ensure_type_capacity`; `types`/`type_target` are flat rows of MAX_TEXT
-       bytes, so a realloc moves both the names and their kind/target. */
-    char *types;
+       `ensure_type_capacity`. S1a-0 C2p-3: `types`/`type_target` are pointer
+       rows (each an interned text), so a 2000-byte struct name is not cut at
+       the old MAX_TEXT stride. */
+    const char **types;
     int  *type_kind;            /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
                                    5 = enum tag, 6 = union tag */
     /* V29-4: the spelling a C typedef stands for (`typedef Vec<int> (*VecFn)(void)`
        keeps `struct Vec_int (*)(void)`), so the subscript checker resolves the
        alias by name instead of inferring it from the use site. */
-    char *type_target;
+    const char **type_target;
     int  ntype;
     int  typecap;
     struct Trait *traits;
@@ -862,22 +865,25 @@ impl SymbolOps for Symbols {
     int ensure_fn_param_capacity(int fi, int need)
     {
         int cap;
-        char *types, *dims, *anns;
+        const char **types, **dims;
+        char *anns;
         if (fi < 0 || fi >= self->nfunc) return self->fail("function table out of range");
         if (need <= self->funcs[fi].pcap) return 0;
         cap = self->funcs[fi].pcap > 0 ? self->funcs[fi].pcap : MAX_PARAMS;
         while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
         if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
         if (need > cap) return self->fail("out of memory");
-        types = (char *)realloc(self->funcs[fi].ptype, (size_t)cap * MAX_TEXT);
+        types = (const char **)realloc(self->funcs[fi].ptype,
+                                       (size_t)cap * sizeof(*types));
         if (!types) return self->fail("out of memory");
-        memset(types + (size_t)self->funcs[fi].pcap * MAX_TEXT, 0,
-               (size_t)(cap - self->funcs[fi].pcap) * MAX_TEXT);
+        memset(types + self->funcs[fi].pcap, 0,
+               (size_t)(cap - self->funcs[fi].pcap) * sizeof(*types));
         self->funcs[fi].ptype = types;
-        dims = (char *)realloc(self->funcs[fi].pdim, (size_t)cap * MAX_TEXT);
+        dims = (const char **)realloc(self->funcs[fi].pdim,
+                                      (size_t)cap * sizeof(*dims));
         if (!dims) return self->fail("out of memory");
-        memset(dims + (size_t)self->funcs[fi].pcap * MAX_TEXT, 0,
-               (size_t)(cap - self->funcs[fi].pcap) * MAX_TEXT);
+        memset(dims + self->funcs[fi].pcap, 0,
+               (size_t)(cap - self->funcs[fi].pcap) * sizeof(*dims));
         self->funcs[fi].pdim = dims;
         anns = (char *)realloc(self->funcs[fi].pann, (size_t)cap);
         if (!anns) return self->fail("out of memory");
@@ -934,29 +940,30 @@ impl SymbolOps for Symbols {
     int ensure_type_capacity(int need)
     {
         int cap;
-        char *names;
+        const char **names;
         int *kinds;
-        char *targets;
+        const char **targets;
         (void)self;
         if (need <= self->typecap) return 0;
         cap = self->typecap > 0 ? self->typecap : MAX_TYPES;
         while (cap < need && cap < MAX_TYPES_MAX) cap *= 2;
         if (cap > MAX_TYPES_MAX) cap = MAX_TYPES_MAX;
         if (need > cap) return self->fail("out of memory");
-        names = (char *)realloc(self->types, (size_t)cap * MAX_TEXT);
+        names = (const char **)realloc(self->types, (size_t)cap * sizeof(*names));
         if (!names) return self->fail("out of memory");
-        memset(names + (size_t)self->typecap * MAX_TEXT, 0,
-               (size_t)(cap - self->typecap) * MAX_TEXT);
+        memset(names + self->typecap, 0,
+               (size_t)(cap - self->typecap) * sizeof(*names));
         self->types = names;
         kinds = (int *)realloc(self->type_kind, (size_t)cap * sizeof(*kinds));
         if (!kinds) return self->fail("out of memory");
         memset(kinds + self->typecap, 0,
                (size_t)(cap - self->typecap) * sizeof(*kinds));
         self->type_kind = kinds;
-        targets = (char *)realloc(self->type_target, (size_t)cap * MAX_TEXT);
+        targets = (const char **)realloc(self->type_target,
+                                         (size_t)cap * sizeof(*targets));
         if (!targets) return self->fail("out of memory");
-        memset(targets + (size_t)self->typecap * MAX_TEXT, 0,
-               (size_t)(cap - self->typecap) * MAX_TEXT);
+        memset(targets + self->typecap, 0,
+               (size_t)(cap - self->typecap) * sizeof(*targets));
         self->type_target = targets;
         self->typecap = cap;
         return 0;
@@ -1385,7 +1392,7 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         for (i = 0; i < self->ntype; i++)
-            if (strcmp(self->types + (size_t)i * MAX_TEXT, name) == 0) return i;
+            if (self->types[i] && strcmp(self->types[i], name) == 0) return i;
         return -1;
     }
 
@@ -1416,7 +1423,8 @@ impl SymbolOps for Symbols {
             return self->fail(msg);
         }
         if (self->ensure_type_capacity(self->ntype + 1) != 0) return -1;
-        snprintf(self->types + (size_t)self->ntype * MAX_TEXT, MAX_TEXT, "%s", name);
+        self->types[self->ntype] = runtime::text::ct_intern(name);
+        if (!self->types[self->ntype]) return self->fail("out of memory");
         self->type_kind[self->ntype] = kind;
         self->ntype++;
         return 0;
@@ -1430,7 +1438,8 @@ impl SymbolOps for Symbols {
         int i;
         i = self->find_type(name);
         if (i < 0) return 0;
-        snprintf(self->type_target + (size_t)i * MAX_TEXT, MAX_TEXT, "%s", target);
+        self->type_target[i] = runtime::text::ct_intern(target);
+        if (!self->type_target[i]) return self->fail("out of memory");
         return 1;
     }
 
@@ -1438,8 +1447,8 @@ impl SymbolOps for Symbols {
     {
         int i;
         i = self->find_type(name);
-        if (i < 0 || !self->type_target[(size_t)i * MAX_TEXT]) return 0;
-        snprintf(out, (size_t)cap, "%s", self->type_target + (size_t)i * MAX_TEXT);
+        if (i < 0 || !self->type_target[i] || !self->type_target[i][0]) return 0;
+        snprintf(out, (size_t)cap, "%s", self->type_target[i]);
         return 1;
     }
 
@@ -1712,7 +1721,7 @@ impl SymbolOps for Symbols {
     int trait_inst(const char *tname, int nargs, char **args, char **cargs,
                    int owner)
     {
-        char enc[MAX_TEXT];
+        const char *enc;
         char msg[MAX_TEXT * 2];
         char tmp[MAX_TEXT];
         int ti, ni, mi, pi, pk;
@@ -1739,9 +1748,8 @@ impl SymbolOps for Symbols {
             return self->fail("a generic trait instance must be created in its owner unit");
         /* `Iter<char *>` and `Iter<char*>` must land on the same row. Nested
            instances keep their source-canonical spelling (`Vec<int>`). */
-        if (ct_inst_encode(tname, nargs, args, enc, MAX_TEXT) != 0)
-            return self->fail(
-                "the instantiated trait name exceeds 159 characters; shorten the trait or its arguments");
+        enc = ct_inst_encode_text(tname, nargs, args);
+        if (!enc) return self->fail("out of memory");
         ni = self->find_trait(enc);
         if (ni >= 0) {
             /* S7 (L35-6): a user-declared trait that happens to carry the
@@ -1756,18 +1764,18 @@ impl SymbolOps for Symbols {
         {
             /* The generated products are the vtable and iface structs; a user
                declaration of either leaves no room for the instance. */
-            char gname[MAX_TEXT + 8];
-            snprintf(gname, sizeof gname, "%s_vtbl", enc);
+            const char *gname;
+            gname = runtime::text::ct_internf("%s_vtbl", enc);
+            if (!gname) return self->fail("out of memory");
             if (self->find_struct(gname) >= 0) {
-                snprintf(msg, sizeof msg,
-                         "trait instance name '%s' collides with a declared type", enc);
-                return self->fail(msg);
+                return self->fail(runtime::text::ct_internf(
+                         "trait instance name '%s' collides with a declared type", enc));
             }
-            snprintf(gname, sizeof gname, "%s_iface", enc);
+            gname = runtime::text::ct_internf("%s_iface", enc);
+            if (!gname) return self->fail("out of memory");
             if (self->find_struct(gname) >= 0) {
-                snprintf(msg, sizeof msg,
-                         "trait instance name '%s' collides with a declared type", enc);
-                return self->fail(msg);
+                return self->fail(runtime::text::ct_internf(
+                         "trait instance name '%s' collides with a declared type", enc));
             }
         }
         ni = self->add_trait(enc);
@@ -1782,8 +1790,9 @@ impl SymbolOps for Symbols {
             || self->traits[ni].cacap < nargs)
             return self->fail("out of memory");
         for (pi = 0; pi < nargs; pi++)
-            snprintf(self->traits[ni].carg[pi], MAX_TEXT, "%s",
-                     args && args[pi] ? args[pi] : "");
+            if (ct_row_set(self->traits[ni].carg, pi,
+                           args && args[pi] ? args[pi] : "") != 0)
+                return self->fail("out of memory");
         /* The instance owns its signatures: grow its own block and copy the
            values. `MethodSig`'s `name`/`ret` are pool pointers now, so the row
            copy shares them; the substitution below replaces `ret` with a fresh
@@ -1871,22 +1880,23 @@ impl SymbolOps for Symbols {
        trailing `*` (a pointer receiver). */
     int method_trait(const char *stype, const char *method, char *tout, int tcap)
     {
-        char buf[MAX_TEXT];
-        char *base;
+        const char *base;
+        const char *key;
         size_t n;
         int s, ti, mi, w;
         (void)self;
 
-        if (snprintf(buf, sizeof buf, "%s", stype) >= (int)sizeof buf) return -1;
-        base = buf;
+        /* S1a-0 C2p-3: the receiver spelling is a pool text; stripping the
+           `struct ` prefix and the trailing `*` is a view, not a copy, so a
+           2000-byte struct name is not cut at the old 160-byte row. */
+        base = stype;
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         n = strlen(base);
-        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
-            base[n - 1] = 0;
-            n--;
-        }
-        s = self->find_struct(base);
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) n--;
+        key = runtime::text::ct_intern_len(base, (int)n);
+        if (!key) return self->fail("out of memory");
+        s = self->find_struct(key);
         if (s < 0) return -1;
         for (ti = 0; ti < self->structs[s].nuse; ti++) {
             int t = self->find_trait(self->structs[s].use[ti]);
@@ -1911,22 +1921,20 @@ impl SymbolOps for Symbols {
     int method_trait_amb(const char *stype, const char *method, const char *first,
                          char *other, int ocap)
     {
-        char buf[MAX_TEXT];
-        char *base;
+        const char *base;
+        const char *key;
         size_t n;
         int s, ti, mi, w;
         (void)self;
 
-        if (snprintf(buf, sizeof buf, "%s", stype) >= (int)sizeof buf) return -1;
-        base = buf;
+        base = stype;
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         n = strlen(base);
-        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
-            base[n - 1] = 0;
-            n--;
-        }
-        s = self->find_struct(base);
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) n--;
+        key = runtime::text::ct_intern_len(base, (int)n);
+        if (!key) return self->fail("out of memory");
+        s = self->find_struct(key);
         if (s < 0) return -1;
         for (ti = 0; ti < self->structs[s].nuse; ti++) {
             int t = self->find_trait(self->structs[s].use[ti]);
@@ -2516,11 +2524,11 @@ static int symbols_grow(struct Symbols *self)
         self->gtaliascap = MAX_GLOBAL_TYPE_ALIASES;
     }
     if (!self->types) {
-        self->types = calloc(MAX_TYPES, MAX_TEXT);
+        self->types = (const char **)calloc(MAX_TYPES, sizeof(*self->types));
         if (!self->types) return -1;
         self->type_kind = calloc(MAX_TYPES, sizeof(*self->type_kind));
         if (!self->type_kind) return -1;
-        self->type_target = calloc(MAX_TYPES, MAX_TEXT);
+        self->type_target = (const char **)calloc(MAX_TYPES, sizeof(*self->type_target));
         if (!self->type_target) return -1;
         self->typecap = MAX_TYPES;
     }
@@ -2710,8 +2718,10 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
     t[n].ctype = ct_rows_reserve(t[n].ctype, t[n].ccap, nargs, &t[n].ccap);
     if (nargs > 0 && (!t[n].ctype || t[n].ccap < nargs)) return -1;
     for (k = 0; k < nargs; k++) {
-        snprintf(t[n].carg[k], MAX_TEXT, "%s", args && args[k] ? args[k] : "");
-        snprintf(t[n].ctype[k], MAX_TEXT, "%s", cargs && cargs[k] ? cargs[k] : "");
+        if (ct_row_set(t[n].carg, k, args && args[k] ? args[k] : "") != 0)
+            return -1;
+        if (ct_row_set(t[n].ctype, k, cargs && cargs[k] ? cargs[k] : "") != 0)
+            return -1;
     }
     t[n].owner = owner;
     t[n].carried = carried;

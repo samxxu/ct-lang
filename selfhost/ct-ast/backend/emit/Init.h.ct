@@ -17,6 +17,7 @@
 #include <string.h>
 
 import frontend::sym::Symbols;
+import runtime::text::Intern;
 import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
@@ -55,6 +56,23 @@ static const char *unqual(const char *type)
     return type;
 }
 
+/* S1a-0 C2p-3: the base struct key as one pool text. The old `ft`/`tb`
+   MAX_TEXT copies cut a 2000-byte struct name, so `type_needs_init` answered
+   0 and the locals of a trait-carrying long-named struct never got their vptr
+   initialiser. */
+static const char *base_type_key(const char *type, int strip_stars)
+{
+    const char *b;
+    size_t tl;
+
+    b = unqual(type);
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    while (*b == ' ') b++;
+    tl = strlen(b);
+    while (tl > 0 && (b[tl - 1] == ' ' || (strip_stars && b[tl - 1] == '*'))) tl--;
+    return runtime::text::ct_intern_len(b, (int)tl);
+}
+
 impl InitOps for Init {
     const char *strip_quals(const char *type)
     {
@@ -80,28 +98,18 @@ impl InitOps for Init {
        no trait of its own. Pointer types are not initialised this way. */
     int type_needs_init(const char *type)
     {
-        const char *base;
-        char tb[MAX_TEXT];
-        size_t tl;
+        const char *tb;
         int si, fi;
         (void)self;
 
-        base = unqual(type);
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        snprintf(tb, sizeof tb, "%s", base);
-        tl = strlen(tb);
-        while (tl > 0 && (tb[tl - 1] == ' ')) {
-            tl--;
-            tb[tl] = 0;
-        }
+        tb = base_type_key(type, 0);
+        if (!tb) return 0;
         if (strchr(tb, '*') != 0) return 0;
         si = self->sym->find_struct(tb);
         if (si < 0) return 0;
         if (self->sym->structs[si].nuse > 0) return 1;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            const char *ft = self->sym->structs[si].fields[fi].type;
             if (strchr(ft, '*') != 0) continue;
             if (self->type_needs_init(ft)) return 1;
         }
@@ -139,22 +147,13 @@ impl InitOps for Init {
        initialiser -- an array element, or a heap object after malloc. */
     int emit_vptr_stmts(const char *recv, const char *type, int ind)
     {
-        const char *base;
-        char tb[MAX_TEXT];
-        size_t tl;
+        const char *tb;
         FILE *f = (FILE *)(*self->out);
         int si, u, i, fi;
         (void)self;
 
-        base = unqual(type);
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        snprintf(tb, sizeof tb, "%s", base);
-        tl = strlen(tb);
-        while (tl > 0 && (tb[tl - 1] == '*' || tb[tl - 1] == ' ')) {
-            tl--;
-            tb[tl] = 0;
-        }
+        tb = base_type_key(type, 1);
+        if (!tb) return 0;
         si = self->sym->find_struct(tb);
         if (si < 0) return 0;
         for (u = 0; u < self->sym->structs[si].nuse; u++) {
@@ -169,9 +168,9 @@ impl InitOps for Init {
             fprintf(f, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, self->sym->structs[si].use[u]);
         }
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
+            const char *ft;
             const char *sub;
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            ft = self->sym->structs[si].fields[fi].type;
             if (strchr(ft, '*') != 0) continue;
             if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
             if (!self->type_needs_init(ft)) continue;
@@ -202,9 +201,9 @@ impl InitOps for Init {
         int fi, i, j, n, depth, skip;
         (void)self;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
+            const char *ft;
             const char *prefix;
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            ft = self->sym->structs[si].fields[fi].type;
             if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
             if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
             if (!self->type_needs_init(ft)) continue;
@@ -266,13 +265,13 @@ impl InitOps for Init {
         int fi;
         (void)self;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
+            const char *ft;
             const char *sub;
             const char *next;
             const char *d;
             int depth, started;
             if (!self->sym->structs[si].fields[fi].dims[0]) continue;
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            ft = self->sym->structs[si].fields[fi].type;
             if (strchr(ft, '*') != 0) continue;
             if (!self->type_needs_init(ft)) continue;
             /* S1a-0 C2n-3: the member path is generated text. Keep it in the
@@ -318,28 +317,19 @@ impl InitOps for Init {
        designator for its nested fields. */
     int type_needs_nested_init(const char *type)
     {
-        const char *base;
-        char tb[MAX_TEXT];
-        size_t tl;
+        const char *tb;
         int si, fi;
         (void)self;
 
-        base = unqual(type);
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        snprintf(tb, sizeof tb, "%s", base);
-        tl = strlen(tb);
-        while (tl > 0 && tb[tl - 1] == ' ') {
-            tl--;
-            tb[tl] = 0;
-        }
+        tb = base_type_key(type, 0);
+        if (!tb) return 0;
         if (strchr(tb, '*') != 0) return 0;
         si = self->sym->find_struct(tb);
         if (si < 0) return 0;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            char ft[MAX_TEXT];
+            const char *ft;
             if (self->sym->structs[si].fields[fi].dims[0]) continue;
-            snprintf(ft, sizeof ft, "%s", self->sym->structs[si].fields[fi].type);
+            ft = self->sym->structs[si].fields[fi].type;
             if (strchr(ft, '*') != 0) continue;
             if (self->type_needs_init(ft)) return 1;
         }

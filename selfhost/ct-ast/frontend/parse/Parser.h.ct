@@ -596,7 +596,7 @@ impl ParseDeclOps for Parser {
     {
         int line, col;
         char name[MAX_TEXT];
-        char target[MAX_TEXT];
+        const char *target;
         (void)self;
 
         line = self->lex->tokline;
@@ -619,7 +619,7 @@ impl ParseDeclOps for Parser {
         self->sup->lex_next();                       /* consume `=` */
         self->sym->alias_decl++;
         self->ex->saw_atomic = 0;
-        if (self->ex->parse_type(target, sizeof target) != 0) {
+        if (self->ex->parse_type_text(&target) != 0) {
             self->sym->alias_decl--;
             self->sym->abort_type_alias();
             return -1;
@@ -1214,22 +1214,21 @@ static int check_generic_bounds(struct Parser *self)
     base = tool::diag::ct_diag_nsem();
     for (i = 0; i < self->sym->nginsts; i++) {
         int f = self->sym->ginsts[i].func;
-        char targ[MAX_TEXT];
-        char tbase[MAX_TEXT];
+        const char *targ;
+        const char *tbase;
         size_t tl;
         int ok;
         if (self->sym->ginsts[i].checked) continue;
         self->sym->ginsts[i].checked = 1;
         if (!self->sym->funcs[f].bound[0]) continue;
-        snprintf(targ, sizeof targ, "%s", self->sym->ginsts[i].targ);
+        targ = self->sym->ginsts[i].targ ? self->sym->ginsts[i].targ : "";
         tl = strlen(targ);
-        while (tl > 0 && (targ[tl - 1] == ' ' || targ[tl - 1] == '*')) {
-            tl--;
-            targ[tl] = 0;
-        }
-        if (strncmp(targ, "struct ", 7) == 0) snprintf(tbase, sizeof tbase, "%s", targ + 7);
-        else if (strncmp(targ, "union ", 6) == 0) snprintf(tbase, sizeof tbase, "%s", targ + 6);
-        else snprintf(tbase, sizeof tbase, "%s", targ);
+        while (tl > 0 && (targ[tl - 1] == ' ' || targ[tl - 1] == '*')) tl--;
+        targ = runtime::text::ct_intern_len(targ, (int)tl);
+        if (!targ) return -1;
+        if (strncmp(targ, "struct ", 7) == 0) tbase = targ + 7;
+        else if (strncmp(targ, "union ", 6) == 0) tbase = targ + 6;
+        else tbase = targ;
         si = self->sym->find_struct(tbase);
         if (si < 0) {
             snprintf(msg, sizeof msg,
@@ -1379,7 +1378,7 @@ static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
 {
     char **arg = 0;
     char **ctype = 0;
-    char abuf[MAX_TEXT];
+    const char *abuf;
     int acap = 0, ccap = 0, nargs = 0, ti;
 
     if (self->sup->expect("<") != 0) return -1;
@@ -1388,9 +1387,10 @@ static int parse_trait_inst_args(struct Parser *self, char *tname, int cap)
         ctype = frontend::sym::ct_rows_reserve(ctype, ccap, nargs + 1, &ccap);
         if (!arg || acap < nargs + 1 || !ctype || ccap < nargs + 1)
             return self->sup->fail("a generic trait has too many type arguments");
-        self->ex->inst_canon[0] = 0;
-        if (self->ex->parse_type(abuf, sizeof abuf) != 0) return -1;
-        if (frontend::sym::ct_type_canon(self->ex->inst_canon[0]
+        self->ex->inst_canon = "";
+        if (self->ex->parse_type_text(&abuf) != 0) return -1;
+        if (frontend::sym::ct_type_canon(self->ex->inst_canon
+                                             && self->ex->inst_canon[0]
                                              ? self->ex->inst_canon : abuf,
                                          arg[nargs], MAX_TEXT) != 0)
             return self->sup->fail("type is too long");
@@ -1771,7 +1771,7 @@ impl ParseOps for Parser {
     int parse_func(int is_static, int is_pub, int is_extern)
     {
         int f, b, params, fi, func_line, func_col, ar, attr, lead;
-        char ret[MAX_TEXT];
+        const char *ret;
         const char *name;
         const char *cname;
         const char *gns = "";
@@ -1792,7 +1792,7 @@ impl ParseOps for Parser {
         func_line = self->lex->tokline;
         func_col = self->lex->tokstart - self->lex->lstart + 1;
         self->ex->saw_atomic = 0;
-        if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+        if (self->ex->parse_type_text(&ret) != 0) return -1;
         /* P-7.2: `T[] name(` is a function returning a slice (a view the
            caller must not outlive); `T[] name =` / `T[] name;` is a
            file-scope variable, refused below. The return position is legal
@@ -1806,7 +1806,7 @@ impl ParseOps for Parser {
                 if (self->sup->expect("]") != 0) return -1;
                 ret_slice = 1;
                 self->sup->note_slice();
-                snprintf(ret, sizeof ret, "struct __ct_slice");
+                ret = "struct __ct_slice";
             }
         }
         if (self->ex->fnptr_state) {
@@ -1895,9 +1895,8 @@ impl ParseOps for Parser {
                 if (ll > tl && self->ex->last_bare_tag[ll - tl - 1] == ' '
                     && strcmp(self->ex->last_bare_tag + ll - tl, tparam) == 0
                     && strncmp(ret, self->ex->last_bare_tag, (size_t)ll) == 0) {
-                    char fixed[MAX_TEXT];
-                    snprintf(fixed, sizeof fixed, "%s%s", tparam, ret + ll);
-                    snprintf(ret, sizeof ret, "%s", fixed);
+                    ret = runtime::text::ct_internf("%s%s", tparam, ret + ll);
+                    if (!ret) return self->sup->fail("out of memory");
                 }
             }
         }
@@ -1931,8 +1930,7 @@ impl ParseOps for Parser {
             if (!cname) return self->sup->fail("out of memory");
             g = self->sup->new_node(N_GLOBAL);
             if (g < 0) return -1;
-            self->arena->nodes[g].text = runtime::text::ct_intern(ret);
-            if (!self->arena->nodes[g].text) return self->sup->fail("out of memory");
+            self->arena->nodes[g].text = ret;
             self->arena->nodes[g].text2 = runtime::text::ct_intern(name);
             if (!self->arena->nodes[g].text2) return self->sup->fail("out of memory");
             self->arena->nodes[g].aux = is_static;
@@ -2385,8 +2383,9 @@ impl ParseOps for Parser {
         int first, tail, p, ar, ao;
         int seen_borrow, seen_ref, seen_out, bline, bcol;
         int is_slice, slice_const, slice_line, slice_col;
-        char slice_elem[MAX_TEXT];
-        char typebuf[MAX_TEXT];
+        const char *slice_elem = "";
+        const char *typebuf;
+        const char *parsed;
         char name[MAX_TEXT];
         (void)self;
 
@@ -2429,13 +2428,13 @@ impl ParseOps for Parser {
                 seen_out = 1;
                 self->sup->lex_next();
             }
-            if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+            if (self->ex->parse_type_text(&parsed) != 0) return -1;
+            typebuf = parsed;
             /* P-7.2: `T[] name` is a slice parameter. Its C storage is the
                erased `struct __ct_slice`; the element spelling travels in the
                symbol row. Parameters are allowed placements (A.4). */
             is_slice = 0;
             slice_const = 0;
-            slice_elem[0] = 0;
             slice_line = self->lex->tokline;
             slice_col = self->lex->tokstart - self->lex->lstart + 1;
             if (self->sup->slice_brackets_ahead(&slice_line, &slice_col)) {
@@ -2443,12 +2442,12 @@ impl ParseOps for Parser {
                 if (self->sup->expect("]") != 0) return -1;
                 is_slice = 1;
                 self->sup->note_slice();
-                snprintf(slice_elem, sizeof slice_elem, "%s", typebuf);
+                slice_elem = typebuf;
                 if (strncmp(slice_elem, "const ", 6) == 0) {
                     slice_const = 1;
-                    memmove(slice_elem, slice_elem + 6, strlen(slice_elem + 6) + 1);
+                    slice_elem += 6;
                 }
-                snprintf(typebuf, sizeof typebuf, "struct __ct_slice");
+                typebuf = "struct __ct_slice";
             }
             if (self->ex->fnptr_state) {
                 /* the declarator name came with the type (`int (*cb)(void *)`) */
@@ -2469,8 +2468,7 @@ impl ParseOps for Parser {
                 return self->sup->fail("function-pointer arrays are not supported as parameters");
             p = self->sup->new_node(N_PARAM);
             if (p < 0) return -1;
-            self->arena->nodes[p].text = runtime::text::ct_intern(typebuf);
-            if (!self->arena->nodes[p].text) return self->sup->fail("out of memory");
+            self->arena->nodes[p].text = typebuf;
             self->arena->nodes[p].text2 = runtime::text::ct_intern(name);
             if (!self->arena->nodes[p].text2) return self->sup->fail("out of memory");
             if (seen_ref) self->arena->nodes[p].aux = 2;
@@ -2745,9 +2743,9 @@ impl ParseOps for Parser {
     int parse_field_def(void)
     {
         int m, w, head, tail, count, ar, ao;
-        char typebuf[MAX_TEXT];
-        char base[MAX_TEXT];
-        char firsttype[MAX_TEXT];
+        const char *typebuf;
+        const char *base;
+        const char *firsttype;
         const char *name;
         size_t bl;
         (void)self;
@@ -2759,7 +2757,7 @@ impl ParseOps for Parser {
                 fpub = 1;
                 self->sup->lex_next();
             }
-            if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+            if (self->ex->parse_type_text(&typebuf) != 0) return -1;
             self->field_pub = fpub;
             /* P-7.2 (P-4.1): a struct field would outlive the view it stores,
                so `T[]` is a hard error here rather than a silent C struct. */
@@ -2785,13 +2783,11 @@ impl ParseOps for Parser {
         /* the first declarator's stars are part of `typebuf`; later ones bring
            their own, so the base type is kept once (`int *a, b;` makes `b` an
            `int`, the same rule a local declaration follows) */
-        snprintf(firsttype, sizeof firsttype, "%s", typebuf);
-        snprintf(base, sizeof base, "%s", typebuf);
-        bl = strlen(base);
-        while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
-            bl--;
-            base[bl] = 0;
-        }
+        firsttype = typebuf;
+        bl = strlen(typebuf);
+        while (bl > 0 && (typebuf[bl - 1] == '*' || typebuf[bl - 1] == ' ')) bl--;
+        base = runtime::text::ct_intern_len(typebuf, (int)bl);
+        if (!base) return self->sup->fail("out of memory");
         head = -1;
         tail = -1;
         count = 0;
@@ -2804,18 +2800,18 @@ impl ParseOps for Parser {
                 name = "";
             } else {
                 if (count > 0) {
-                    char t2[MAX_TEXT];
+                    const char *t2;
                     while (self->lex->tok == T_PUNCT && self->lex->tok_is("*")) {
                         stars++;
                         self->sup->lex_next();
                     }
-                    snprintf(t2, sizeof t2, "%s", base);
+                    t2 = base;
                     while (stars > 0) {
-                        snprintf(typebuf, sizeof typebuf, "%s *", t2);
-                        snprintf(t2, sizeof t2, "%s", typebuf);
+                        t2 = runtime::text::ct_internf("%s *", t2);
+                        if (!t2) return self->sup->fail("out of memory");
                         stars--;
                     }
-                    snprintf(typebuf, sizeof typebuf, "%s", t2);
+                    typebuf = t2;
                 }
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a field name");
                 name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
@@ -2826,8 +2822,7 @@ impl ParseOps for Parser {
             }
             m = self->sup->new_node(N_FIELD);
             if (m < 0) return -1;
-            self->arena->nodes[m].text = runtime::text::ct_intern(typebuf);
-            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+            self->arena->nodes[m].text = typebuf;
             self->arena->nodes[m].text2 = name;
             self->arena->nodes[m].d = self->field_pub;
             self->arena->nodes[m].num = self->field_col;
@@ -2877,8 +2872,7 @@ impl ParseOps for Parser {
         w = self->sup->new_node(N_FIELDS);
         if (w < 0) return -1;
         /* the wrapper carries the first declarator's spelling, stars included */
-        self->arena->nodes[w].text = runtime::text::ct_intern(firsttype);
-        if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
+        self->arena->nodes[w].text = firsttype;
         self->arena->nodes[w].a = head;
         return w;
     }
@@ -3442,7 +3436,7 @@ impl ParseOps for Parser {
     int parse_typedef(int is_pub)
     {
         int t, td_line, ar, ao;
-        char typebuf[MAX_TEXT];
+        const char *typebuf;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
         (void)self;
@@ -3588,7 +3582,7 @@ impl ParseOps for Parser {
             return t;
         }
         self->ex->saw_atomic = 0;
-        if (self->ex->parse_type(typebuf, sizeof typebuf) != 0) return -1;
+        if (self->ex->parse_type_text(&typebuf) != 0) return -1;
         if (self->ex->saw_atomic)
             return tool::diag::ct_sem_error(td_line, 1,
                 "an atomic value cannot be a typedef target", self->mem->path);
@@ -3608,8 +3602,7 @@ impl ParseOps for Parser {
         t = self->sup->new_node(N_TYPEDEF);
         if (t < 0) return -1;
         if (ao >= 0) self->arena->nodes[t].attr = ao;
-        self->arena->nodes[t].text = runtime::text::ct_intern(typebuf);
-        if (!self->arena->nodes[t].text) return self->sup->fail("out of memory");
+        self->arena->nodes[t].text = typebuf;
         self->arena->nodes[t].text2 = runtime::text::ct_intern(qname);
         if (!self->arena->nodes[t].text2) return self->sup->fail("out of memory");
         self->arena->nodes[t].text3 = runtime::text::ct_intern(self->ex->fnptr_dims);
@@ -3686,7 +3679,7 @@ impl ParseOps for Parser {
         int tcap = 0, bcap = 0;
         char name[MAX_TEXT];
         char qname[MAX_TEXT];
-        char ret[MAX_TEXT];
+        const char *ret;
         char ptype[MAX_TEXT];
         char pname[MAX_TEXT];
         char *edge;
@@ -3837,7 +3830,7 @@ impl ParseOps for Parser {
                spelling -- the recipe cannot verify it and there is no C
                header in the unit to correct it. */
             self->sup->map_sig = self->unit_is_map;
-            rty = self->ex->parse_type(ret, sizeof ret);
+            rty = self->ex->parse_type_text(&ret);
             self->sup->map_sig = 0;
             if (rty != 0) return -1;
             if (self->ex->fnptr_state)
@@ -3852,9 +3845,7 @@ impl ParseOps for Parser {
                 self->lex->tokstr.ptr, self->lex->tokstr.len);
             if (!self->sym->traits[ti].m[mi].name)
                 return self->sup->fail("out of memory");
-            self->sym->traits[ti].m[mi].ret = runtime::text::ct_intern(ret);
-            if (!self->sym->traits[ti].m[mi].ret)
-                return self->sup->fail("out of memory");
+            self->sym->traits[ti].m[mi].ret = ret;
             self->sym->traits[ti].m[mi].nparams = 0;
             self->sym->traits[ti].m[mi].body = -1;
             self->sym->traits[ti].m[mi].pnode = -1;
@@ -4084,13 +4075,13 @@ impl ParseOps for Parser {
     {
         int ti, si, node, mnode, params, body, tail, impl_line;
         int mline, mcol, nimpl, tm_i, k2, brace_line, brace_col, found, dup_i;
-        char tname[MAX_TEXT];
-        char sname[MAX_TEXT];
-        char rtrait[MAX_TEXT];
-        char rstruct[MAX_TEXT];
-        char ret[MAX_TEXT];
+        const char *tname;
+        const char *sname;
+        const char *rtrait;
+        const char *rstruct;
+        const char *ret;
         char mname[MAX_TEXT];
-        char stype[MAX_TEXT];
+        const char *stype;
         int type_index;
         (void)self;
 
@@ -4107,27 +4098,41 @@ impl ParseOps for Parser {
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("<"))
             return self->parse_impl_inst("", 1);
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
-        self->lex->tok_copy(tname, sizeof tname);
+        tname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                             self->lex->tokstr.len);
+        if (!tname) return self->sup->fail("out of memory");
         self->sup->lex_next();
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
-            if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
+            /* S1a-0 C2p-3: the receiver spelling is a pool text, so a
+               2000-byte struct/trait name survives the resolver. The encoded
+               generic-trait name still uses the trait helper's own row. */
+            rtrait = self->sym->resolve_type_text(tname);
+            if (!rtrait) return -1;
             ti = self->sym->find_trait(rtrait);
             if (ti < 0 || self->sym->traits[ti].ntparams == 0)
                 return self->parse_impl_inst(tname, 0);
-            ti = parse_trait_inst_args(self, rtrait, sizeof rtrait);
-            if (ti < 0) return -1;
+            {
+                char rb[MAX_TEXT];
+                snprintf(rb, sizeof rb, "%s", rtrait);
+                ti = parse_trait_inst_args(self, rb, sizeof rb);
+                if (ti < 0) return -1;
+                rtrait = runtime::text::ct_intern(rb);
+                if (!rtrait) return self->sup->fail("out of memory");
+            }
         } else {
-            if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
+            rtrait = self->sym->resolve_type_text(tname);
+            if (!rtrait) return -1;
             ti = self->sym->find_trait(rtrait);
         }
         /* Phase 34 S4: `impl Counter { … }` writes inherent methods on a
            non-generic struct. Only a `{` that follows a known struct takes
            this path; anything else keeps the trait-impl wording below. */
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
-            char rinh[MAX_TEXT];
+            const char *rinh;
             int si_inh;
 
-            if (self->sup->resolve_type(tname, rinh, sizeof rinh) != 0) return -1;
+            rinh = self->sym->resolve_type_text(tname);
+            if (!rinh) return -1;
             si_inh = self->sym->find_struct(rinh);
             if (si_inh >= 0) return self->parse_impl_inherent(rinh, si_inh, impl_line);
             /* LANG-29 S3 / B2: an enum ADT is a nominal type too, so
@@ -4158,36 +4163,42 @@ impl ParseOps for Parser {
             return self->sup->fail("expected 'for' after the trait name");
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a struct name");
-        self->lex->tok_copy(sname, sizeof sname);
-        if (self->sup->resolve_type(sname, rstruct, sizeof rstruct) != 0) return -1;
+        sname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                             self->lex->tokstr.len);
+        if (!sname) return self->sup->fail("out of memory");
+        rstruct = self->sym->resolve_type_text(sname);
+        if (!rstruct) return -1;
         /* the struct must exist (a forward declaration is enough); an undefined
            one is reported at the body's `{`, like L2, and the body is skipped so
            the declarations after it are still parsed (Phase 10.4 recovery) */
         si = self->sym->find_struct(rstruct);
         self->sup->lex_next();
         if (si < 0) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "impl for undefined struct '%s'", sname);
+            const char *msg = runtime::text::ct_internf(
+                "impl for undefined struct '%s'", sname);
+            if (!msg) return self->sup->fail("out of memory");
             if (tool::diag::ct_sem_error(self->lex->tokline, self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path) != 0)
                 return -1;
             if (self->sup->skip_body() != 0) return -1;
             return NO_NODE;
         }
         type_index = self->sym->find_type(rstruct);
-        if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
-            snprintf(stype, sizeof stype, "struct %s", rstruct);
-        else
-            snprintf(stype, sizeof stype, "%s", rstruct);
+        if (type_index >= 0 && self->sym->type_kind[type_index] == 1) {
+            stype = runtime::text::ct_internf("struct %s", rstruct);
+            if (!stype) return self->sup->fail("out of memory");
+        } else {
+            stype = rstruct;
+        }
         /* A second impl of the same (struct, trait) would emit the vtable and the
            methods twice; with external linkage that is a duplicate symbol, so the
            duplicate is refused and the first definition is named by its unit. */
         for (dup_i = 0; dup_i < self->arena->nnode; dup_i++)
             if (self->arena->nodes[dup_i].kind == N_IMPL && self->arena->nodes[dup_i].aux == si
                 && strcmp(self->arena->nodes[dup_i].text2, rtrait) == 0) {
-                char dmsg[512];
-                snprintf(dmsg, sizeof dmsg,
+                const char *dmsg = runtime::text::ct_internf(
                          "duplicate impl of trait '%s' for struct '%s' (first at %s:%d)",
                          tname, sname, self->arena->nodes[dup_i].text3, self->arena->nodes[dup_i].line);
+                if (!dmsg) return self->sup->fail("out of memory");
                 if (tool::diag::ct_sem_error(impl_line, 1, dmsg, self->mem->path) != 0) return -1;
                 if (self->sup->skip_body() != 0) return -1;
                 return NO_NODE;
@@ -4207,11 +4218,9 @@ impl ParseOps for Parser {
         node = self->sup->new_node(N_IMPL);
         if (node < 0) return -1;
         self->arena->nodes[node].line = impl_line;
-        self->arena->nodes[node].text2 = runtime::text::ct_intern(rtrait);
-        if (!self->arena->nodes[node].text2) return self->sup->fail("out of memory");
+        self->arena->nodes[node].text2 = rtrait;
         self->arena->nodes[node].aux = si;
-        self->arena->nodes[node].text = runtime::text::ct_intern(stype);
-        if (!self->arena->nodes[node].text) return self->sup->fail("out of memory");
+        self->arena->nodes[node].text = stype;
         self->arena->nodes[node].text3 = runtime::text::ct_intern(self->mem->path);
         if (!self->arena->nodes[node].text3) return self->sup->fail("out of memory");
         tail = -1;
@@ -4229,7 +4238,7 @@ impl ParseOps for Parser {
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
                     "a static method cannot implement a trait", self->mem->path);
-            if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            if (self->ex->parse_type_text(&ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
@@ -4262,17 +4271,21 @@ impl ParseOps for Parser {
                 for (tm_i = 0; tm_i < self->sym->traits[ti].nm; tm_i++)
                     if (strcmp(self->sym->traits[ti].m[tm_i].name, mname) == 0) break;
             if (ti >= 0 && tm_i < self->sym->traits[ti].nm) {
-                char wmsg[MAX_TEXT];
+                const char *wmsg;
                 if (ret[0] && strcmp(ret, self->sym->traits[ti].m[tm_i].ret) != 0) {
-                    snprintf(wmsg, sizeof wmsg, "return type '%s' does not match the trait's '%s'",
+                    wmsg = runtime::text::ct_internf(
+                             "return type '%s' does not match the trait's '%s'",
                              ret, self->sym->traits[ti].m[tm_i].ret);
+                    if (!wmsg) return self->sup->fail("out of memory");
                     if (tool::diag::ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
                         self->sup->pop_scope();
                         return -1;
                     }
                 } else if (nimpl != self->sym->traits[ti].m[tm_i].nparams) {
-                    snprintf(wmsg, sizeof wmsg, "takes %d parameter(s), the trait declares %d",
+                    wmsg = runtime::text::ct_internf(
+                             "takes %d parameter(s), the trait declares %d",
                              nimpl, self->sym->traits[ti].m[tm_i].nparams);
+                    if (!wmsg) return self->sup->fail("out of memory");
                     if (tool::diag::ct_sig_warn(mline, mcol, mname, rtrait, rstruct, wmsg, self->mem->path) != 0) {
                         self->sup->pop_scope();
                         return -1;
@@ -4289,9 +4302,10 @@ impl ParseOps for Parser {
                         const char *ft = self->sym->traits[ti].m[tm_i].ptype + (pk) * MAX_TEXT;
                         if (!strchr(ft, '[') && !self->arena->nodes[k2].text3[0]
                             && self->ex->decl_type_compat(ft, self->arena->nodes[k2].text) == 1) {
-                            snprintf(wmsg, sizeof wmsg,
+                            wmsg = runtime::text::ct_internf(
                                      "parameter %d type '%s' does not match the trait's '%s'",
                                      pk + 1, self->arena->nodes[k2].text, ft);
+                            if (!wmsg) return self->sup->fail("out of memory");
                             if (tool::diag::ct_sig_warn(mline, mcol, mname, rtrait, rstruct,
                                                         wmsg, self->mem->path) != 0) {
                                 self->sup->pop_scope();
@@ -4326,7 +4340,9 @@ impl ParseOps for Parser {
                     }
                 }
             }
-            snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+            if (snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret)
+                >= (int)sizeof self->sym->ret_type)
+                return self->sup->fail("return type is too long");
             self->cur_func = runtime::text::ct_internf("%s_%s_%s",
                      self->sym->structs[si].name, rtrait, mname);
             if (!self->cur_func) return self->sup->fail("out of memory");
@@ -4429,9 +4445,9 @@ impl ParseOps for Parser {
     int parse_impl_inherent(const char *rname, int si, int impl_line)
     {
         int node, mnode, params, body, tail, mline, is_static, is_pub;
-        char ret[MAX_TEXT];
+        const char *ret;
         char mname[MAX_TEXT];
-        char stype[MAX_TEXT];
+        const char *stype;
         int type_index;
         /* LANG-29 S3 / B2: `si <= -2` encodes an enum ADT row (`-2 - adt`),
            because an ADT has no struct row of its own. Its C spelling is the
@@ -4446,22 +4462,24 @@ impl ParseOps for Parser {
             adts = frontend::sym::ct_adts(&nadts);
             if (!adts || adt >= nadts)
                 return self->sup->fail("the ADT row is missing");
-            snprintf(stype, sizeof stype, "struct %s", adts[adt].full);
+            stype = runtime::text::ct_internf("struct %s", adts[adt].full);
+            if (!stype) return self->sup->fail("out of memory");
             type_is_pub = adts[adt].is_pub;
         } else {
             type_index = self->sym->find_type(rname);
-            if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
-                snprintf(stype, sizeof stype, "struct %s", rname);
-            else
-                snprintf(stype, sizeof stype, "%s", rname);
+            if (type_index >= 0 && self->sym->type_kind[type_index] == 1) {
+                stype = runtime::text::ct_internf("struct %s", rname);
+                if (!stype) return self->sup->fail("out of memory");
+            } else {
+                stype = rname;
+            }
             type_is_pub = self->sym->structs[si].is_pub;
         }
         if (self->sup->expect("{") != 0) return -1;
         node = self->sup->new_node(N_IMPL);
         if (node < 0) return -1;
         self->arena->nodes[node].line = impl_line;
-        self->arena->nodes[node].text = runtime::text::ct_intern(stype);
-        if (!self->arena->nodes[node].text) return self->sup->fail("out of memory");
+        self->arena->nodes[node].text = stype;
         self->arena->nodes[node].text2 = runtime::text::ct_intern("");   /* inherent: no trait */
         if (!self->arena->nodes[node].text2) return self->sup->fail("out of memory");
         self->arena->nodes[node].aux = si;
@@ -4496,7 +4514,7 @@ impl ParseOps for Parser {
                         ? "a pub method needs a pub ADT in a .h.ct unit"
                         : "a pub method needs a pub struct in a .h.ct unit",
                     self->mem->path);
-            if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            if (self->ex->parse_type_text(&ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
@@ -4536,7 +4554,9 @@ impl ParseOps for Parser {
                 }
                 free(pa);
             }
-            snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+            if (snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret)
+                >= (int)sizeof self->sym->ret_type)
+                return self->sup->fail("return type is too long");
             self->cur_func = runtime::text::ct_internf("%s_%s", rname, mname);
             if (!self->cur_func) return self->sup->fail("out of memory");
             self->mem->leak_active = 1;
@@ -4599,7 +4619,7 @@ impl ParseOps for Parser {
         int tcap = 0, pcap = 0;
         char use[MAX_TEXT];
         char ruse[MAX_TEXT];
-        char ret[MAX_TEXT];
+        const char *ret;
         char mname[MAX_TEXT];
         char htype[MAX_TEXT];
         int nt, nargs, line, node, tail, mnode, params, body, ti, mline, is_static, is_pub;
@@ -4863,7 +4883,7 @@ impl ParseOps for Parser {
         while (self->lex->tok != T_EOF
                && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             mline = self->lex->tokline;
-            ret[0] = 0;
+            ret = "";
             /* P29-2: `static Vec<T> from(T *items, int n)` -- an inherent
                method with no receiver. It is emitted as `<Inst>_<method>` with
                no `self` parameter, so a container can be built from an array
@@ -4899,7 +4919,7 @@ impl ParseOps for Parser {
                         "a pub method needs a pub struct in a .h.ct unit",
                         self->mem->path);
             }
-            if (self->ex->parse_type(ret, sizeof ret) != 0) return -1;
+            if (self->ex->parse_type_text(&ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
@@ -4939,7 +4959,9 @@ impl ParseOps for Parser {
                 }
                 free(pa);
             }
-            snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret);
+            if (snprintf(self->sym->ret_type, sizeof self->sym->ret_type, "%s", ret)
+                >= (int)sizeof self->sym->ret_type)
+                return self->sup->fail("return type is too long");
             self->cur_func = runtime::text::ct_internf("%s_%s", tmpl, mname);
             if (!self->cur_func) return self->sup->fail("out of memory");
             self->mem->leak_active = 1;

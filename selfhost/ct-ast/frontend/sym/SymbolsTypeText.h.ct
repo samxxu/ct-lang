@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+import runtime::text::Intern;
+import tool::sh::Sh;
 
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
@@ -37,10 +39,24 @@ pub char **ct_rows_reserve(char **rows, int have, int need, int *got);
    before calling `ct_inst_split`, so the splitter never truncates. */
 pub int ct_inst_arg_count(const char *in);
 pub int ct_inst_encode(const char *tmpl, int nargs, char **args, char *out, int cap);
+/* S1a-0 C2p-3: the pool-text encoder. The old `buf[MAX_TEXT * 2]` cut the
+   template/argument spelling before hashing, and the fixed output row turned a
+   long instance identity into "the instantiated name exceeds 159 characters".
+   The whole spelling is built and then, past 63 characters, hashed exactly as
+   before; the result is one interned text. NULL is OOM / over TEXT_LIMIT. */
+pub const char *ct_inst_encode_text(const char *tmpl, int nargs, char **args);
 pub int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argcap, char *tail, int cap);
 pub int ct_is_container_type(const char *type);
 pub int ct_is_string_value_type(const char *type);
 pub int ct_type_canon(const char *in, char *out, int cap);
+/* S1a-0 C2p-3: the pool-text canonicaliser and substitution, so a 2000-byte
+   type argument is not cut at a 160-byte instance row. */
+pub const char *ct_type_canon_text(const char *in);
+pub const char *ct_generic_subst_text(const char *in, const char *word,
+                                      const char *repl);
+/* Replace one preallocated row with an exact copy of `s` (freeing the old
+   MAX_TEXT block). Returns -1 on OOM. */
+pub int ct_row_set(char **rows, int i, const char *s);
 pub int generic_tag_prefix(const char *in, const char *p);
 pub int generic_word_char(int c);
 pub void impl_arg_canon(const char *arg, char *out, int cap);
@@ -179,34 +195,94 @@ int ct_inst_arg_count(const char *in)
     return 0;
 }
 
-int ct_inst_encode(const char *tmpl, int nargs, char **args, char *out, int cap)
+/* S1a-0 C2p-3: one argument's encoded spelling as a pool text. */
+static const char *inst_enc_one_text(const char *arg)
 {
-    char buf[MAX_TEXT * 2];
-    char enc[MAX_TEXT];
-    int n, i, r, k;
-    int h;
+    char *buf = 0;
+    int cap = 0;
+    const char *pooled;
+    const char *p = arg ? arg : "";
 
-    if (nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return -1;
-    r = snprintf(buf, sizeof buf, "%s", tmpl);
-    if (r < 0 || r >= (int)sizeof buf) return -1;
-    n = r;
-    for (i = 0; i < nargs; i++) {
-        if (inst_enc_one(args && args[i] ? args[i] : "", enc, MAX_TEXT) < 0) return -1;
-        r = snprintf(buf + n, sizeof buf - (size_t)n, "_%s", enc);
-        if (r < 0 || n + r >= (int)sizeof buf) return -1;
-        n += r;
+    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
+    if (strncmp(p, "struct ", 7) == 0) {
+        p += 7;
+    } else if (strncmp(p, "union ", 6) == 0) {
+        p += 6;
+        if (tool::sh::ct_text_cat(&buf, &cap, "u_") != 0) goto fail;
+    } else if (strncmp(p, "enum ", 5) == 0) {
+        p += 5;
+        if (tool::sh::ct_text_cat(&buf, &cap, "e_") != 0) goto fail;
     }
+    while (*p) {
+        const char *rep = "";
+        if (*p == '*') rep = "_p";
+        else if (*p == ' ') rep = "_";
+        else if (*p == '_') rep = "__";
+        else if (*p == '<') rep = "_l";
+        else if (*p == '>') rep = "_r";
+        else if (*p == ',') rep = "_c";
+        if (rep[0]) {
+            if (tool::sh::ct_text_cat(&buf, &cap, rep) != 0) goto fail;
+        } else {
+            char one[2];
+            one[0] = *p;
+            one[1] = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto fail;
+        }
+        p++;
+    }
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+const char *ct_inst_encode_text(const char *tmpl, int nargs, char **args)
+{
+    char *buf = 0;
+    int cap = 0, i, n;
+    int h, k;
+    const char *enc;
+    const char *pooled;
+
+    if (nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return (const char *)0;
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    if (tool::sh::ct_text_cat(&buf, &cap, tmpl ? tmpl : "") != 0) goto fail;
+    for (i = 0; i < nargs; i++) {
+        enc = inst_enc_one_text(args && args[i] ? args[i] : "");
+        if (!enc) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, "_") != 0
+            || tool::sh::ct_text_cat(&buf, &cap, enc) != 0) goto fail;
+    }
+    n = (int)strlen(buf);
     /* Beyond 63 characters the spelling stops being readable in C, so keep a
        prefix and a digest of the whole thing (§2.2 step 5). */
     if (n >= 64) {
         h = 0;
         for (k = 0; k < n; k++) h = (h * 31 + (unsigned char)buf[k]) & 0x7fffffff;
-        r = snprintf(out, (size_t)cap, "%.40s_h%08x", buf, (unsigned int)h);
-        if (r < 0 || r >= cap) return -1;
-        return 0;
+        pooled = runtime::text::ct_internf("%.40s_h%08x", buf, (unsigned int)h);
+    } else {
+        pooled = runtime::text::ct_intern(buf);
     }
-    if (n + 1 > cap) return -1;
-    snprintf(out, (size_t)cap, "%s", buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+int ct_inst_encode(const char *tmpl, int nargs, char **args, char *out, int cap)
+{
+    const char *enc;
+    size_t n;
+
+    enc = ct_inst_encode_text(tmpl, nargs, args);
+    if (!enc) return -1;
+    n = strlen(enc);
+    if (n + 1 > (size_t)cap) return -1;
+    memcpy(out, enc, n + 1);
     return 0;
 }
 
@@ -346,6 +422,98 @@ int ct_type_canon(const char *in, char *out, int cap)
         p++;
     }
     out[n] = 0;
+    return 0;
+}
+
+/* S1a-0 C2p-3: the same normalisation into one interned text. */
+const char *ct_type_canon_text(const char *in)
+{
+    char *buf = 0;
+    int cap = 0, sp = 0;
+    const char *p = in ? in : "";
+    const char *pooled;
+    char one[2];
+
+    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
+    while (*p == ' ' || *p == '\t') p++;
+    while (*p) {
+        if (*p == ' ' || *p == '\t') {
+            sp = 1;
+            p++;
+            continue;
+        }
+        if (*p == '*') {
+            sp = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, "*") != 0) goto fail;
+            p++;
+            continue;
+        }
+        if (sp && strlen(buf) > 0) {
+            if (tool::sh::ct_text_cat(&buf, &cap, " ") != 0) goto fail;
+        }
+        sp = 0;
+        one[0] = *p;
+        one[1] = 0;
+        if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto fail;
+        p++;
+    }
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+/* S1a-0 C2p-3: whole-word substitution into one interned text. */
+const char *ct_generic_subst_text(const char *in, const char *word,
+                                  const char *repl)
+{
+    char *buf = 0;
+    int cap = 0, wl;
+    const char *p = in ? in : "";
+    const char *pooled;
+    char one[2];
+
+    if (!word || !word[0]) return runtime::text::ct_intern(p);
+    if (!repl) repl = "";
+    wl = (int)strlen(word);
+    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
+    while (*p) {
+        if ((p == in || !generic_word_char((unsigned char)p[-1]))
+            && strncmp(p, word, (size_t)wl) == 0
+            && !generic_word_char((unsigned char)p[wl])
+            && !generic_tag_prefix(in, p)) {
+            if (tool::sh::ct_text_cat(&buf, &cap, repl) != 0) goto fail;
+            p += wl;
+        } else {
+            one[0] = *p;
+            one[1] = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto fail;
+            p++;
+        }
+    }
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+int ct_row_set(char **rows, int i, const char *s)
+{
+    char *p;
+    size_t n;
+
+    if (!rows || i < 0) return -1;
+    if (!s) s = "";
+    n = strlen(s);
+    p = (char *)malloc(n + 1);
+    if (!p) return -1;
+    memcpy(p, s, n + 1);
+    free(rows[i]);
+    rows[i] = p;
     return 0;
 }
 

@@ -28,8 +28,9 @@ struct String;
 struct U16Str;
 struct U16String;
 struct Vec_U16String;
-struct frontend_sym_SymbolsTypeText;
 struct runtime_text_Intern;
+struct tool_sh_Sh;
+struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
 struct frontend_sym_Var;
@@ -47,7 +48,6 @@ struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
 struct frontend_sym_Symbols;
-struct tool_sh_Sh;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
 struct frontend_lex_Lexer;
@@ -255,12 +255,12 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_new_ahead(void *self) {
 
 static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char tbuf[MAX_TEXT];
-    char base[MAX_TEXT];
+    const char * tbuf;
+    const char * base;
     char * raw;
     char * fixed;
     int fixedcap;
-    char enc[MAX_TEXT];
+    const char * enc;
     int nline;
     int ncol;
     int off;
@@ -275,13 +275,13 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
         return tool_diag_ct_sem_error(nline, ncol, "'new' needs a named struct type before its initializer, as in 'new Point { 1, 2 }'", _self->sup->mem->path);
     }
-    if (_self->__frontend_parse_exprtypeparse_vptr->parse_type(_self, tbuf, sizeof(tbuf)) != 0) {
+    if (_self->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self, (&tbuf)) != 0) {
         return (-1);
     }
     if (strncmp(tbuf, "struct ", 7) != 0) {
         return tool_diag_ct_sem_error(nline, ncol, "'new' only accepts a named struct type; scalars, pointers, arrays, unions, enums and built-in handles are not boxed", _self->sup->mem->path);
     }
-    snprintf(base, sizeof(base), "%s", (tbuf + 7));
+    base = (tbuf + 7);
     if (((strchr(base, '*') || strchr(base, '[')) || strchr(base, '<'))) {
         return tool_diag_ct_sem_error(nline, ncol, "'new' only accepts a plain named struct type; pointers, arrays and generic instances are not boxed", _self->sup->mem->path);
     }
@@ -302,8 +302,10 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the built-in `Box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
     }
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
-        char nmsg[MAX_TEXT * 2];
-        snprintf(nmsg, sizeof(nmsg), "'new %s' needs a brace initializer; only 'new T { ... }' is supported", base);
+        const char * nmsg = runtime_text_ct_internf("'new %s' needs a brace initializer; only 'new T { ... }' is supported", base);
+        if ((!nmsg)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         return tool_diag_ct_sem_error(nline, ncol, nmsg, _self->sup->mem->path);
     }
 {
@@ -325,9 +327,9 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
 {
         char * aa[1];
         char * cc[1];
-        aa[0] = tbuf;
-        cc[0] = tbuf;
-        if (_self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, "Box", 1, aa, cc, enc, sizeof(enc), 0, nline, ncol) != 0) {
+        aa[0] = (char *)(tbuf);
+        cc[0] = (char *)(tbuf);
+        if (_self->__frontend_parse_exprinstantiate_vptr->inst_make(_self, "Box", 1, aa, cc, (&enc), 0, nline, ncol) != 0) {
             free(fixed);
             return (-1);
         }
@@ -357,21 +359,11 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
         _self->arena->nodes[r].num = off;
         _self->arena->nodes[r].aux = 1;
         _self->arena->nodes[n].a = r;
-        _self->arena->nodes[n].text = runtime_text_ct_intern(tbuf);
-        if ((!_self->arena->nodes[n].text)) {
+        _self->arena->nodes[n].text = tbuf;
+        _self->arena->nodes[n].text2 = enc;
+        _self->arena->nodes[n].text3 = runtime_text_ct_internf("struct %s", enc);
+        if ((!_self->arena->nodes[n].text3)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
-        _self->arena->nodes[n].text2 = runtime_text_ct_intern(enc);
-        if ((!_self->arena->nodes[n].text2)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
-{
-            char ctype[MAX_TEXT];
-            snprintf(ctype, sizeof(ctype), "struct %s", enc);
-            _self->arena->nodes[n].text3 = runtime_text_ct_intern(ctype);
-            if ((!_self->arena->nodes[n].text3)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
         }
         _self->arena->nodes[n].line = nline;
         _self->arena->nodes[n].num = ncol;

@@ -383,10 +383,10 @@ impl ExprClosure for Expr {
             if (self->arg_is_closure(cur)) {
                 ok = 0;
                 ft = "";
-                if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype + (pos) * MAX_TEXT;
+                if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype[pos];
                 if (fi >= 0 && pos + 1 < np)
                     ok = self->formal_is_env_fn(ft)
-                         && self->type_is_void_ptr(self->sym->funcs[fi].ptype + (pos + 1) * MAX_TEXT);
+                         && self->type_is_void_ptr(self->sym->funcs[fi].ptype[pos + 1]);
                 if (!ok) {
                     if (self->type_is_fnptr(ft) && !self->formal_is_env_fn(ft)) {
                         tool::diag::ct_sem_error(line, col,

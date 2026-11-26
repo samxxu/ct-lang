@@ -27,9 +27,11 @@ import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
+import runtime::text::Intern;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -74,6 +76,7 @@ import frontend::parse::ExprInstantiate;
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define N_ADDR 27
 #define N_ARROW 25
 #define N_ASSIGN 13
@@ -128,10 +131,66 @@ namespace frontend::parse;
 /* A stateless unit: the type exists only because a unit file is
    named after its main type. Nothing instantiates it. */
 
-static char g_expr_inst_override[160];
+/* S1a-0 C2p-3: a `My::Type` redirect for the generic reader (`core::Vec`).
+   The target spelling is a pool text now, so a long qualifier is not cut at
+   the old 160-byte static row. NULL means "no redirect pending". */
+static const char *g_expr_inst_override = 0;
 pub struct ExprTypeParse {
     int unused;
 }
+
+/* S1a-0 C2p-3: `<tname><a[, b]>` as one pool text. The old canon/raw rows
+   were 160 bytes, so a long template name was cut before it could become an
+   instance identity. */
+static const char *inst_spell(const char *tname, int nargs, char **args)
+{
+    char *buf = 0;
+    int cap = 0, i;
+    const char *pooled;
+
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    if (tool::sh::ct_text_cat(&buf, &cap, tname) != 0
+        || tool::sh::ct_text_cat(&buf, &cap, "<") != 0) goto fail;
+    for (i = 0; i < nargs; i++) {
+        if (i > 0 && tool::sh::ct_text_cat(&buf, &cap, ",") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap,
+                args && args[i] ? args[i] : "") != 0) goto fail;
+    }
+    if (tool::sh::ct_text_cat(&buf, &cap, ">") != 0) goto fail;
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+/* S1a-0 C2p-3: the name a type token resolves to. The buffer form keeps its
+   exact diagnostics (an ambiguous export is still a hard stop) for every name
+   that fits the old row; a name past it uses the pool form, whose result is a
+   whole interned spelling instead of "name is too long". */
+static const char *type_resolve_name(struct Expr *self, const char *name)
+{
+    char buf[MAX_TEXT];
+    if (strlen(name) < MAX_TEXT) {
+        if (self->sup->resolve_type(name, buf, sizeof buf) != 0)
+            return (const char *)0;
+        return runtime::text::ct_intern(buf);
+    }
+    return self->sym->resolve_type_text(name);
+}
+
+/* S1a-0 C2p-3: intern the current token first, then resolve it. Keeping
+   `tok_cstr()` out of a stored value also satisfies the p86 capi rule: the
+   lexer scratch is valid only until the next token. */
+static const char *type_resolve_token(struct Expr *self)
+{
+    const char *tok = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                  self->lex->tokstr.len);
+    if (!tok) return (const char *)0;
+    return type_resolve_name(self, tok);
+}
+
 
 pub int type_only_qualifiers(const char *spell)
 {
@@ -210,7 +269,7 @@ impl ExprTypeParse for Expr {
         self->saw_trait = 0;
         self->fnptr_name[0] = 0;
         self->fnptr_dims[0] = 0;
-        self->last_bare_tag[0] = 0;
+        self->last_bare_tag = "";
         for (;;) {
             /* Phase 41 B′: `atomic` is a contextual modifier, not a reserved
                keyword. It only enters the type when one of the four supported
@@ -301,7 +360,7 @@ impl ExprTypeParse for Expr {
             }
             if (self->lex->tok == T_ID && self->is_type_word(self->lex->tok_cstr())) {
                 if (self->lex->tok_is("struct")) {
-                    char sname[MAX_TEXT];
+                    const char *sname;
                     self->sup->lex_next();
                     /* Phase 29: `struct Stack<int>` is the same type as
                        `Stack<int>`; the instance reader owns the spelling. */
@@ -312,7 +371,8 @@ impl ExprTypeParse for Expr {
                     }
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a struct name");
-                    if (self->sup->resolve_type(self->lex->tok_cstr(), sname, sizeof sname) != 0) return -1;
+                    sname = type_resolve_token(self);
+                    if (!sname) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 1) != 0) return -1;
                     self->sup->lex_next();
@@ -322,19 +382,21 @@ impl ExprTypeParse for Expr {
                 if (self->lex->tok_is("enum")) {
                     /* `enum Tag` keeps its keyword the way `struct Tag` does; the
                        tag joins the table under kind 5 (D-2) */
-                    char sname[MAX_TEXT];
+                    const char *sname;
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID) return self->sup->fail("expected an enum name");
-                    if (self->sup->resolve_type(self->lex->tok_cstr(), sname, sizeof sname) != 0) return -1;
+                    sname = type_resolve_token(self);
+                    if (!sname) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 5) != 0) return -1;
                 } else if (self->lex->tok_is("union")) {
                     /* a union tag is mangled like a struct tag and joins the table
                        under kind 6 */
-                    char sname[MAX_TEXT];
+                    const char *sname;
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a union name");
-                    if (self->sup->resolve_type(self->lex->tok_cstr(), sname, sizeof sname) != 0) return -1;
+                    sname = type_resolve_token(self);
+                    if (!sname) return -1;
                     if (self->type_append(out, cap, &n, sname) != 0) return -1;
                     if (self->sup->add_type(sname, 6) != 0) return -1;
                 }
@@ -343,8 +405,8 @@ impl ExprTypeParse for Expr {
             }
             if (self->lex->tok == T_ID) {
                 int ti;
-                char rname[MAX_TEXT];
-                char iface[MAX_TEXT];
+                const char *rname;
+                const char *iface;
                 /* PH-57: `ns::Type` in a type position. The first segment is
                    still the current token; peek past it before consuming so a
                    plain name keeps the existing path below. */
@@ -352,9 +414,11 @@ impl ExprTypeParse for Expr {
                     const char *qp = self->lex->src + self->lex->tokstart + self->lex->tokstr.len;
                     while (*qp == ' ' || *qp == '\t') qp++;
                     if (qp[0] == ':' && qp[1] == ':') {
-                        char qn[MAX_TEXT];
-                        int qw, qti;
-                        self->lex->tok_copy(qn, sizeof qn);
+                        const char *qn;
+                        int qti;
+                        qn = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                         self->lex->tokstr.len);
+                        if (!qn) return self->sup->fail("out of memory");
                         self->sup->lex_next();
                         for (;;) {
                             if (self->lex->tok != T_PUNCT
@@ -362,11 +426,10 @@ impl ExprTypeParse for Expr {
                             self->sup->lex_next();
                             if (self->lex->tok != T_ID)
                                 return self->sup->fail("expected a type name after '::'");
-                            qw = (int)strlen(qn);
-                            if (qw + 1 + (int)self->lex->tokstr.len >= (int)sizeof qn)
-                                return self->sup->fail("qualified type name is too long");
-                            qn[qw] = '_';
-                            self->lex->tok_copy(qn + qw + 1, sizeof qn - (size_t)qw - 1);
+                            qn = runtime::text::ct_intern_join(qn, "_");
+                            if (qn) qn = runtime::text::ct_intern_join(
+                                             qn, self->lex->tok_cstr());
+                            if (!qn) return self->sup->fail("out of memory");
                             self->sup->lex_next();
                         }
                         /* DOC-87 Stage 2: `core::Vec` / `core::String` /
@@ -379,32 +442,31 @@ impl ExprTypeParse for Expr {
                            bare spelling. */
                         {
                             const char *resq = qn;
-                            char bare[MAX_TEXT];
                             /* SH-120: `core::utf16::U16String` / `U16Str`.
                                The built-in layer's C symbols stay in the root
                                namespace (lib/core is namespace-elided), so
                                the nested qualifier maps to the bare spelling
                                exactly like `core::String` does. */
                             if (strncmp(qn, "core_utf16_", 11) == 0) {
-                                snprintf(bare, sizeof bare, "%s", qn + 11);
-                                resq = bare;
+                                resq = qn + 11;
                             } else if (strncmp(qn, "core_", 5) == 0) {
-                                snprintf(bare, sizeof bare, "%s", qn + 5);
+                                resq = qn + 5;
                                 /* LANG-24 Stage A: `core::box<T>` is the same
                                    deprecated alias as the root spelling. */
-                                if (strcmp(bare, "box") == 0)
+                                if (strcmp(resq, "box") == 0)
                                     return self->sup->fail("'box<T>' is no longer supported; write 'Box<T>'");
-                                if (frontend::sym::ct_tmpl_find(bare) >= 0) {
-                                    snprintf(g_expr_inst_override,
-                                             sizeof g_expr_inst_override, "%s", bare);
+                                if (frontend::sym::ct_tmpl_find(resq) >= 0) {
+                                    g_expr_inst_override = runtime::text::ct_intern(resq);
+                                    if (!g_expr_inst_override)
+                                        return self->sup->fail("out of memory");
                                     if (self->parse_inst_type(out, cap) != 0)
                                         return -1;
                                     n = (int)strlen(out);
                                     continue;
                                 }
-                                resq = bare;
                             }
-                            if (self->sym->resolve_type(resq, rname, sizeof rname) != 0)
+                            rname = type_resolve_name(self, resq);
+                            if (!rname)
                                 return self->sup->fail("unknown qualified type name");
                         }
                         qti = self->sym->find_type(rname);
@@ -483,21 +545,17 @@ impl ExprTypeParse for Expr {
                                        || self->lex->tok_is("Map")
                                        || self->lex->tok_is("Option")
                                        || self->lex->tok_is("Result"))) {
-                        char gmsg[MAX_TEXT];
-                        snprintf(gmsg, sizeof gmsg,
+                        return self->sup->fail(runtime::text::ct_internf(
                                  "unresolved generic type '%.*s' (is the builtin layer missing? set CT_CORE_DIR, or the legacy CT_STD_DIR)",
-                                 self->lex->tokstr.len, self->lex->tokstr.ptr);
-                        return self->sup->fail(gmsg);
+                                 self->lex->tokstr.len, self->lex->tokstr.ptr));
                     }
                     if (self->lex->tok_is("Vec")
                         || self->lex->tok_is("Map")
                         || self->lex->tok_is("Option")
                         || self->lex->tok_is("Result")) {
-                        char gmsg[MAX_TEXT];
-                        snprintf(gmsg, sizeof gmsg,
+                        return self->sup->fail(runtime::text::ct_internf(
                                  "generic struct '%.*s' needs type arguments in a type position",
-                                 self->lex->tokstr.len, self->lex->tokstr.ptr);
-                        return self->sup->fail(gmsg);
+                                 self->lex->tokstr.len, self->lex->tokstr.ptr));
                     }
                 }
                 /* A visible type alias expands before any name resolution: the
@@ -523,7 +581,8 @@ impl ExprTypeParse for Expr {
                    report "name is too long": the caller reads the whole token
                    into the symbol table. */
                 if (n > 0 && self->lex->tokstr.len >= MAX_TEXT) break;
-                if (self->sup->resolve_type(self->lex->tok_cstr(), rname, sizeof rname) != 0) return -1;
+                rname = type_resolve_token(self);
+                if (!rname) return -1;
                 ti = self->sym->find_type(rname);
                 if (ti < 0) {
                     /* A declared-but-not-imported alias must not fall through to
@@ -534,11 +593,9 @@ impl ExprTypeParse for Expr {
                         int aline = 0;
                         if (self->sym->find_global_type_alias(self->lex->tok_cstr(), apath,
                                                               sizeof apath, &aline) == 0) {
-                            char amsg[1400];
-                            snprintf(amsg, sizeof amsg,
+                            return self->sup->fail(runtime::text::ct_internf(
                                      "type alias '%s' is declared in %s:%d but this unit does not import it",
-                                     self->lex->tok_cstr(), apath, aline);
-                            return self->sup->fail(amsg);
+                                     self->lex->tok_cstr(), apath, aline));
                         }
                     }
                     /* A type name the unit has never seen (a typedef from a
@@ -557,12 +614,12 @@ impl ExprTypeParse for Expr {
                     if (self->sup->map_sig
                         && (n == 0 || type_only_qualifiers(out))) {
                         if (!self->sup->map_std_typedef(self->lex->tok_cstr())) {
-                            char umsg[MAX_TEXT * 3];
-                            snprintf(umsg, sizeof umsg,
+                            const char *umsg = runtime::text::ct_internf(
                                      "unknown type '%s' in a .m.ct trait signature; "
                                      "declare 'pub type %s = <C spelling>;' in this unit "
                                      "or include the header that typedefs it",
                                      self->lex->tok_cstr(), self->lex->tok_cstr());
+                            if (!umsg) return self->sup->fail("out of memory");
                             return tool::diag::ct_sem_error(self->lex->tokline,
                                 self->lex->tokstart - self->lex->lstart + 1,
                                 umsg, self->sup->mem->path);
@@ -582,18 +639,22 @@ impl ExprTypeParse for Expr {
                    its iface */
                 if (self->sym->type_kind[ti] == 1) {
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
-                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", rname);
+                    self->last_bare_tag = runtime::text::ct_internf("struct %s", rname);
+                    if (!self->last_bare_tag) return self->sup->fail("out of memory");
                 } else if (self->sym->type_kind[ti] == 5) {
                     if (self->type_append(out, cap, &n, "enum") != 0) return -1;
-                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "enum %s", rname);
+                    self->last_bare_tag = runtime::text::ct_internf("enum %s", rname);
+                    if (!self->last_bare_tag) return self->sup->fail("out of memory");
                 } else if (self->sym->type_kind[ti] == 6) {
                     if (self->type_append(out, cap, &n, "union") != 0) return -1;
-                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "union %s", rname);
+                    self->last_bare_tag = runtime::text::ct_internf("union %s", rname);
+                    if (!self->last_bare_tag) return self->sup->fail("out of memory");
                 } else if (self->sym->type_kind[ti] == 7) {
                     /* Phase 84: an ADT is emitted as `struct <tag>`; the tag is
                        the same one the ADT registry records. */
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
-                    snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", rname);
+                    self->last_bare_tag = runtime::text::ct_internf("struct %s", rname);
+                    if (!self->last_bare_tag) return self->sup->fail("out of memory");
                 } else if (self->sym->type_kind[ti] == 3) {
                     int sti = self->sym->find_trait(rname);
                     self->saw_trait = 1;
@@ -605,8 +666,8 @@ impl ExprTypeParse for Expr {
                         continue;
                     }
                     if (self->type_append(out, cap, &n, "struct") != 0) return -1;
-                    if (snprintf(iface, sizeof iface, "%s_iface", rname) >= (int)sizeof iface)
-                        return self->sup->fail("type name is too long");
+                    iface = runtime::text::ct_internf("%s_iface", rname);
+                    if (!iface) return self->sup->fail("out of memory");
                     if (self->type_append(out, cap, &n, iface) != 0) return -1;
                     self->sup->lex_next();
                     continue;
@@ -745,34 +806,62 @@ impl ExprTypeParse for Expr {
             }
         }
         if (n == 0) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg, "expected a type (tok %d '%.*s')", self->lex->tok, self->lex->tokstr.len, self->lex->tokstr.ptr);
-            return self->sup->fail(msg);
+            return self->sup->fail(runtime::text::ct_internf(
+                "expected a type (tok %d '%.*s')", self->lex->tok,
+                self->lex->tokstr.len, self->lex->tokstr.ptr));
         }
+        return 0;
+    }
+
+    /* S1a-0 C2p-3: the pool-text form. The old caller buffer was 160 bytes, so
+       a 300-byte struct name stopped at "name is too long" before the symbol
+       lookup ran. Here the reader writes into one formal-bound block, interns
+       the finished spelling and hands back a pointer that outlives the call. */
+    int parse_type_text(const char **out)
+    {
+        char *buf;
+        const char *pooled;
+        int rc;
+        if (!out) return self->sup->fail("internal: parse_type_text without an output");
+        *out = "";
+        buf = (char *)malloc(TEXT_LIMIT);
+        if (!buf) return self->sup->fail("out of memory");
+        rc = self->parse_type(buf, TEXT_LIMIT);
+        if (rc != 0) {
+            free(buf);
+            return rc;
+        }
+        pooled = runtime::text::ct_intern(buf);
+        free(buf);
+        if (!pooled) return self->sup->fail("out of memory");
+        *out = pooled;
         return 0;
     }
 
     int parse_inst_type(char *out, int cap)
     {
-        char tname[MAX_TEXT];
-        char enc[MAX_TEXT];
+        const char *tname;
+        const char *enc;
         char **carg = 0;
         char **ctype = 0;
-        char canon[MAX_TEXT];
-        char abuf[MAX_TEXT];
+        const char *canon;
+        const char *abuf;
         struct StructTmpl *tp;
         int ccap = 0, tccap = 0;
         int n, ti2, tn, nargs, nt2, pline, pcol;
 
         n = (int)strlen(out);
         /* LANG-24 Stage B: `box<T>` is a hard error; write `Box<T>`. */
-        if (g_expr_inst_override[0]) {
-            snprintf(tname, sizeof tname, "%s", g_expr_inst_override);
-            g_expr_inst_override[0] = 0;
+        if (g_expr_inst_override) {
+            tname = g_expr_inst_override;
+            g_expr_inst_override = 0;
         } else {
-            self->lex->tok_copy(tname, sizeof tname);
+            tname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!tname) return self->sup->fail("out of memory");
             self->sup->lex_next();
         }
+        if (!tname[0]) return self->sup->fail("expected a generic type name");
         if (strcmp(tname, "box") == 0)
             return self->sup->fail("'box<T>' is no longer supported; write 'Box<T>'");
         ti2 = frontend::sym::ct_tmpl_find(tname);
@@ -780,10 +869,8 @@ impl ExprTypeParse for Expr {
         if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");
         nt2 = tp[ti2].ntparams;
         if (self->lex->tok != T_PUNCT || !self->lex->tok_is("<")) {
-            char msg[MAX_TEXT * 2];
-            snprintf(msg, sizeof msg,
-                     "generic struct '%s' needs type arguments in a type position", tname);
-            return self->sup->fail(msg);
+            return self->sup->fail(runtime::text::ct_internf(
+                     "generic struct '%s' needs type arguments in a type position", tname));
         }
         self->sup->lex_next();
         nargs = 0;
@@ -798,13 +885,13 @@ impl ExprTypeParse for Expr {
                 pline = self->lex->tokline;
                 pcol = self->lex->tokstart - self->lex->lstart + 1;
             }
-            self->inst_canon[0] = 0;
+            self->inst_canon = "";
             self->type_depth++;
             if (self->type_depth > 4) {
                 self->type_depth--;
                 return self->sup->fail("generic type arguments nest deeper than 4");
             }
-            if (self->parse_type(abuf, sizeof abuf) != 0) {
+            if (self->parse_type_text(&abuf) != 0) {
                 self->type_depth--;
                 return -1;
             }
@@ -830,23 +917,27 @@ impl ExprTypeParse for Expr {
                 || strchr(abuf, '(') || strchr(abuf, ')')
                 || strncmp(abuf, "const ", 6) == 0
                 || strncmp(abuf, "volatile ", 9) == 0) {
-                char msg[MAX_TEXT * 2];
-                snprintf(msg, sizeof msg,
-                         "type argument '%s' cannot instantiate a generic struct", abuf);
-                return self->sup->fail(msg);
+                return self->sup->fail(runtime::text::ct_internf(
+                         "type argument '%s' cannot instantiate a generic struct", abuf));
             }
-            snprintf(ctype[nargs], MAX_TEXT, "%s", abuf);
-            if (self->inst_canon[0]) {
+            /* S1a-0 C2p-3: exact rows, not 160-byte strides, so a 2000-byte
+               type argument instantiates. */
+            if (frontend::sym::ct_row_set(ctype, nargs, abuf) != 0)
+                return self->sup->fail("out of memory");
+            if (self->inst_canon && self->inst_canon[0]) {
                 /* S20b: the argument is itself an instance (`Vec<int>` inside
                    `Map<char *, Vec<int>>`). Its identity is the C spelling the
                    nested instance was just given (`struct Vec_int`), so the
                    encoder sees one form here and in the nested `MapEntry`
                    registration -- encoding the source spelling would spell the
                    same type two ways (`Vec_lint_r` vs `Vec__int`). */
-                if (snprintf(carg[nargs], MAX_TEXT, "%s", abuf) >= MAX_TEXT)
-                    return self->sup->fail("type is too long");
-            } else if (frontend::sym::ct_type_canon(abuf, carg[nargs], MAX_TEXT) != 0) {
-                return self->sup->fail("type is too long");
+                if (frontend::sym::ct_row_set(carg, nargs, abuf) != 0)
+                    return self->sup->fail("out of memory");
+            } else {
+                const char *cn = frontend::sym::ct_type_canon_text(abuf);
+                if (!cn) return self->sup->fail("out of memory");
+                if (frontend::sym::ct_row_set(carg, nargs, cn) != 0)
+                    return self->sup->fail("out of memory");
             }
             nargs++;
             if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
@@ -870,38 +961,25 @@ impl ExprTypeParse for Expr {
             return self->sup->fail("expected '>' after the type arguments");
         self->sup->lex_next();
         if (nargs != nt2) {
-            char msg[MAX_TEXT * 2];
             /* S1a-0 C3: the arity is now the template's own count; over- and
                under-arity share one message so a user template and a built-in
                container are still judged by the same rule. */
-            snprintf(msg, sizeof msg,
+            return self->sup->fail(runtime::text::ct_internf(
                      "generic struct '%s' takes %d type arguments, %d given",
-                     tname, nt2, nargs);
-            return self->sup->fail(msg);
+                     tname, nt2, nargs));
         }
         /* A type parameter used as a type argument stays symbolic: the instance
            is created when the surrounding template is itself instantiated, and
            the emitter resolves the substituted spelling then (D29-3). */
         {
-            int gi, sym = 0, rl;
-            char raw[MAX_TEXT];
+            int gi, sym = 0;
             for (gi = 0; gi < nargs; gi++)
                 if (expr_generic_param(self, carg[gi])) sym = 1;
             if (sym) {
-                rl = snprintf(raw, sizeof raw, "%s<", tname);
-                for (gi = 0; gi < nargs; gi++) {
-                    int wr = snprintf(raw + rl, sizeof raw - (size_t)rl,
-                                      "%s%s", gi == 0 ? "" : ",", carg[gi]);
-                    if (rl < 0 || wr < 0 || rl + wr >= (int)sizeof raw)
-                        return self->sup->fail("type is too long");
-                    rl += wr;
-                }
-                if (rl + 2 > (int)sizeof raw)
-                    return self->sup->fail("type is too long");
-                raw[rl] = '>';
-                raw[rl + 1] = 0;
-                snprintf(self->inst_canon, sizeof self->inst_canon, "%s", raw);
-                snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "%s", raw);
+                const char *raw = inst_spell(tname, nargs, carg);
+                if (!raw) return self->sup->fail("out of memory");
+                self->inst_canon = raw;
+                self->last_bare_tag = raw;
                 if (self->type_append(out, cap, &n, raw) != 0) return -1;
                 return 0;
             }
@@ -926,37 +1004,44 @@ impl ExprTypeParse for Expr {
         if (strcmp(tname, "Map") == 0 && nargs >= 1
             && strcmp(carg[0], "int") != 0 && strcmp(carg[0], "long") != 0
             && strcmp(carg[0], "char*") != 0 && strcmp(carg[0], "struct String") != 0) {
-            char kmsg[MAX_TEXT * 2];
-            snprintf(kmsg, sizeof kmsg,
+            return self->sup->fail(runtime::text::ct_internf(
                      "Map does not support key type '%s' (key types: int, long, char *, String)",
-                     carg[0]);
-            return self->sup->fail(kmsg);
+                     carg[0]));
         }
-        if (frontend::sym::ct_inst_encode(tname, nargs, carg, enc, MAX_TEXT) != 0)
-            return self->sup->fail(
-                "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+        enc = frontend::sym::ct_inst_encode_text(tname, nargs, carg);
+        if (!enc) return self->sup->fail("out of memory");
         if (self->inst_make(tname, nargs, carg, ctype,
-                            enc, MAX_TEXT, 0, pline, pcol) != 0)
+                            &enc, 0, pline, pcol) != 0)
             return -1;
-        snprintf(self->last_bare_tag, sizeof self->last_bare_tag, "struct %s", enc);
-        {
-            int gi, cl;
-            cl = snprintf(canon, sizeof canon, "%s<", tname);
-            for (gi = 0; gi < nargs; gi++) {
-                int wr = snprintf(canon + cl, sizeof canon - (size_t)cl,
-                                  "%s%s", gi == 0 ? "" : ",", carg[gi]);
-                if (cl < 0 || wr < 0 || cl + wr >= (int)sizeof canon)
-                    return self->sup->fail("type name is too long");
-                cl += wr;
-            }
-            if (cl + 2 > (int)sizeof canon)
-                return self->sup->fail("type name is too long");
-            canon[cl] = '>';
-            canon[cl + 1] = 0;
-        }
-        snprintf(self->inst_canon, sizeof self->inst_canon, "%s", canon);
+        self->last_bare_tag = runtime::text::ct_internf("struct %s", enc);
+        if (!self->last_bare_tag) return self->sup->fail("out of memory");
+        canon = inst_spell(tname, nargs, carg);
+        if (!canon) return self->sup->fail("out of memory");
+        self->inst_canon = canon;
         if (self->type_append(out, cap, &n, "struct") != 0) return -1;
         if (self->type_append(out, cap, &n, enc) != 0) return -1;
+        return 0;
+    }
+
+    /* S1a-0 C2p-3: the pool-text form of the generic instance reader. */
+    int parse_inst_type_text(const char **out)
+    {
+        char *buf;
+        const char *pooled;
+        int rc;
+        if (!out) return self->sup->fail("internal: parse_inst_type_text without an output");
+        *out = "";
+        buf = (char *)malloc(TEXT_LIMIT);
+        if (!buf) return self->sup->fail("out of memory");
+        rc = self->parse_inst_type(buf, TEXT_LIMIT);
+        if (rc != 0) {
+            free(buf);
+            return rc;
+        }
+        pooled = runtime::text::ct_intern(buf);
+        free(buf);
+        if (!pooled) return self->sup->fail("out of memory");
+        *out = pooled;
         return 0;
     }
 }

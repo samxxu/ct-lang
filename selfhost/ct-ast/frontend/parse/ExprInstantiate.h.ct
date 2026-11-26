@@ -197,9 +197,9 @@ impl ExprInstantiate for Expr {
             if (self->sym->ensure_fn_param_capacity(ni, self->sym->funcs[gfi].nparams) != 0)
                 return -1;
             memcpy(self->sym->funcs[ni].ptype, self->sym->funcs[gfi].ptype,
-                   (size_t)self->sym->funcs[gfi].nparams * MAX_TEXT);
+                   (size_t)self->sym->funcs[gfi].nparams * sizeof(char *));
             memcpy(self->sym->funcs[ni].pdim, self->sym->funcs[gfi].pdim,
-                   (size_t)self->sym->funcs[gfi].nparams * MAX_TEXT);
+                   (size_t)self->sym->funcs[gfi].nparams * sizeof(char *));
             memcpy(self->sym->funcs[ni].pann, self->sym->funcs[gfi].pann,
                    (size_t)self->sym->funcs[gfi].nparams);
         }
@@ -217,17 +217,20 @@ impl ExprInstantiate for Expr {
                    ? tmp : self->sym->funcs[gfi].ret;
         self->sym->funcs[ni].ret = runtime::text::ct_intern(itxt);
         if (!self->sym->funcs[ni].ret) return self->sup->fail("out of memory");
-        for (k = 0; k < self->sym->funcs[gfi].nparams; k++)
-            if (frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ptype + (k) * MAX_TEXT,
-                                                self->sym->funcs[gfi].tparam, targ,
-                                                tmp, sizeof tmp) == 0)
-                snprintf(self->sym->funcs[ni].ptype + (k) * MAX_TEXT, MAX_TEXT, "%s", tmp);
+        for (k = 0; k < self->sym->funcs[gfi].nparams; k++) {
+            const char *sub = frontend::sym::ct_generic_subst_text(
+                                  self->sym->funcs[gfi].ptype[k],
+                                  self->sym->funcs[gfi].tparam, targ);
+            if (!sub) return self->sup->fail("out of memory");
+            self->sym->funcs[ni].ptype[k] = sub;
+        }
         i = self->sym->nginsts;
         self->sym->ginsts[i].func = gfi;
         self->sym->ginsts[i].row = ni;
         self->sym->ginsts[i].owner = self->cur_unit;
-        snprintf(self->sym->ginsts[i].targ, MAX_TEXT, "%s", targ);
-        snprintf(self->sym->ginsts[i].cname, MAX_TEXT, "%s", cname);
+        self->sym->ginsts[i].targ = runtime::text::ct_intern(targ);
+        if (!self->sym->ginsts[i].targ) return self->sup->fail("out of memory");
+        self->sym->ginsts[i].cname = self->sym->funcs[ni].cname;
         self->sym->ginsts[i].line = line;
         self->sym->ginsts[i].col = col;
         self->sym->nginsts++;
@@ -347,12 +350,11 @@ impl ExprInstantiate for Expr {
     }
 
     int inst_make(const char *tname, int nargs, char **args, char **cargs,
-                  char *enc, int enc_cap, int depth, int line, int col)
+                  const char **enc_out, int depth, int line, int col)
     {
         struct StructTmpl *tp;
+        const char *enc;
         int tn, ti2, k, si2, fi2, pi2, nt2, carried2;
-        char sub1[MAX_TEXT];
-        char sub2[MAX_TEXT];
 
         ti2 = frontend::sym::ct_tmpl_find(tname);
         tp = frontend::sym::ct_tmpls(&tn);
@@ -393,29 +395,24 @@ impl ExprInstantiate for Expr {
                     return self->sup->fail(
                         "a container of interface pointers is not supported; store the interface value itself");
         }
-        if (frontend::sym::ct_inst_encode(tname, nargs, args, enc, enc_cap) != 0)
-            return self->sup->fail(
-                "the instantiated name exceeds 159 characters; shorten the template or its arguments");
+        enc = frontend::sym::ct_inst_encode_text(tname, nargs, args);
+        if (!enc) return self->sup->fail("out of memory");
         /* S20b follow-up: the encoded tag is a C struct name, so it may not
            name a struct the user declared. Without this the two definitions
            collide and only cc notices, after the layouts have been merged. */
         {
             int cx = self->sym->find_struct(enc);
             if (cx >= 0 && !self->sym->structs[cx].is_inst) {
-                char cmsg[MAX_TEXT * 2];
-                snprintf(cmsg, sizeof cmsg,
-                         "the instance name '%s' collides with a declared struct", enc);
-                return self->sup->fail(cmsg);
+                return self->sup->fail(runtime::text::ct_internf(
+                         "the instance name '%s' collides with a declared struct", enc));
             }
         }
         carried2 = (tp[ti2].is_pub && tp[ti2].owner == self->cur_unit) ? 1 : 0;
         k = frontend::sym::ct_inst_add(enc, tname, nargs, args, cargs,
                                        self->cur_unit, carried2, line, col);
         if (k == -2) {
-            char msg[MAX_TEXT * 2];
-            snprintf(msg, sizeof msg,
-                     "two type arguments encode to the same C name '%s'", enc);
-            return self->sup->fail(msg);
+            return self->sup->fail(runtime::text::ct_internf(
+                     "two type arguments encode to the same C name '%s'", enc));
         }
         if (k < 0) return self->sup->fail("out of memory");
         si2 = self->sym->add_struct_inst(enc);
@@ -424,19 +421,17 @@ impl ExprInstantiate for Expr {
             if (self->sym->ensure_struct_field_capacity(si2, tp[ti2].nfields) != 0)
                 return -1;
             for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
-                snprintf(sub2, sizeof sub2, "%s", tp[ti2].fields[fi2].type);
+                const char *sub2 = tp[ti2].fields[fi2].type;
+                /* S1a-0 C2p-3: substitution is a pool operation, so a field
+                   whose parameter binds a 2000-byte type is kept whole. */
                 for (pi2 = 0; pi2 < nt2; pi2++) {
-                    snprintf(sub1, sizeof sub1, "%s", sub2);
-                    if (frontend::sym::ct_generic_subst(sub1, tp[ti2].tparam[pi2],
-                                            cargs[pi2], sub2, MAX_TEXT) != 0)
-                        return self->sup->fail("type is too long");
+                    sub2 = frontend::sym::ct_generic_subst_text(
+                               sub2, tp[ti2].tparam[pi2], cargs[pi2]);
+                    if (!sub2) return self->sup->fail("out of memory");
                 }
                 self->sym->structs[si2].fields[fi2].name =
                     tp[ti2].fields[fi2].name;
-                self->sym->structs[si2].fields[fi2].type =
-                    runtime::text::ct_intern(sub2);
-                if (!self->sym->structs[si2].fields[fi2].type)
-                    return self->sup->fail("out of memory");
+                self->sym->structs[si2].fields[fi2].type = sub2;
                 self->sym->structs[si2].fields[fi2].dims =
                     tp[ti2].fields[fi2].dims;
                 self->sym->structs[si2].fields[fi2].is_bitfield =
@@ -485,6 +480,7 @@ impl ExprInstantiate for Expr {
                 }
         }
         if (self->sup->add_type(enc, 1) != 0) return -1;
+        *enc_out = enc;
         /* H-A (Phase 31): `Map` keeps its entries behind `h->data`, so the
            `MapEntry<K, V>` instance is no longer implied by an `entries`
            field. Both Map impl blocks spell `MapEntry<K, V>` in their method
@@ -502,7 +498,7 @@ impl ExprInstantiate for Expr {
     {
         char name[MAX_TEXT];
         char tail[MAX_TEXT];
-        char enc[MAX_TEXT];
+        const char *enc;
         char **args = 0;
         char **cargs = 0;
         int acap = 0, ccap = 0, need, nargs, ti2, k, bad;
@@ -530,21 +526,21 @@ impl ExprInstantiate for Expr {
                 return 0;
         ti2 = frontend::sym::ct_tmpl_find(name);
         if (ti2 < 0) return 0;
-        if (frontend::sym::ct_inst_encode(name, nargs, cargs, enc, sizeof enc) != 0)
-            return 0;
+        enc = frontend::sym::ct_inst_encode_text(name, nargs, cargs);
+        if (!enc) return 0;
         if (frontend::sym::ct_inst_find(enc) >= 0) return 0;
-        return self->inst_make(name, nargs, cargs, cargs, enc, sizeof enc, depth,
+        return self->inst_make(name, nargs, cargs, cargs, &enc, depth,
                                0, 0);
     }
 
     int inst_inherent_method(const char *ibase, const char *fname)
     {
         int ii, nimpls, inst, m, ni;
-        char base[MAX_TEXT];
+        const char *base;
         struct StructImpl *im;
 
         if (strncmp(ibase, "struct ", 7) != 0) return -1;
-        snprintf(base, sizeof base, "%s", ibase + 7);
+        base = ibase + 7;
         inst = frontend::sym::ct_inst_find(base);
         if (inst >= 0) {
             int best = -1, bestscore = -1;
