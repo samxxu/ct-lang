@@ -44,6 +44,13 @@
 #          and suffix, the closure owner mangling and the Drop-glue field type
 #          are pool texts or growable blocks rather than 160-byte rows.
 #
+#   C2p-11 the last fixed rows: a 2000-byte package name survives the manifest
+#          reader (the index row is written whole), a 2000-byte struct boxes
+#          correctly in an interface initialiser (the initialiser rewrite used
+#          a 160-byte field-type row), a 2000-byte namespace maps to its
+#          directory and mangles an exported global whole, and the `own`
+#          diagnostic quotes a 2000-byte struct name whole.
+#
 # Usage: bash test/ast/c2p_limits.sh <ct-ast>
 set -u
 CT=${1:?usage: c2p_limits.sh <ct-ast>}
@@ -1394,6 +1401,95 @@ elif grep -qF "'$tm10'" "$work/c2p10_dupstruct.log"; then
     ok; printf '  2000-byte duplicate struct tag: the diagnostic quotes it whole\n'
 else
     bad "the duplicate-struct diagnostic cut the 2000-byte tag"
+fi
+
+
+# ---- C2p-11.1) a 2000-byte package name through the manifest reader -------
+# `ct index refresh` reads one ct.pkg per package-list row and writes the
+# refreshed row back. The name comes from the manifest, so a 2000-byte name
+# proves `read_manifest` (and the row that receives it) kept it whole.
+pn11=$(printf '%*s' 2000 '' | tr ' ' p)
+mkdir -p "$work/c211pkg/deep" || exit 1
+printf 'name = %s\npublisher = ct\nversion = 0.1.0\nns-root = .\n' "$pn11" \
+    >"$work/c211pkg/deep/ct.pkg"
+printf 'pub int c211_val(void);\nint c211_val(void) { return 3; }\n' \
+    >"$work/c211pkg/deep/deep.h.ct"
+printf '%s https://example.invalid/c211 v0.1.0\n' "$work/c211pkg/deep" \
+    >"$work/c211_packages.list"
+if "$CT" index refresh --packages "$work/c211_packages.list" \
+        --out "$work/c211.index" >"$work/c211_idx.log" 2>&1; then
+    if grep -qF "$pn11" "$work/c211.index"; then
+        ok; printf '  2000-byte package name: the index row carries it whole\n'
+    else
+        bad "c211_pkg: the refreshed index row cut the 2000-byte package name"
+    fi
+else
+    bad "c211_pkg: index refresh rejected the 2000-byte package name: $(head -2 "$work/c211_idx.log" | tr '\n' ' ')"
+fi
+
+# ---- C2p-11.2) a 2000-byte struct in an interface initialiser -------------
+# The initialiser rewrite used fixed field-type / struct-name rows, so the
+# boxing test failed to see the value type and left `.t = v` unboxed; the
+# emitted C then did not compile. The whole pipeline (emit + cc + run) is the
+# assertion.
+tm11=$(printf '%*s' 2000 '' | tr ' ' s)
+cat >"$work/c211_iface.ct" <<CT
+trait C211T { int c211_get(); }
+struct $tm11 { int x; } use C211T;
+impl C211T for $tm11 { int c211_get() { return 7; } }
+struct C211Holder { C211T *t; }
+int main(void) { struct $tm11 v; struct C211Holder h = { .t = &v }; return h.t->c211_get() == 7 ? 0 : 1; }
+CT
+if run_product c211_iface "$work/c211_iface.ct"; then
+    if grep -qF 'C211T_iface){ (void *)&v' "$work/c211_iface.c"; then
+        ok; printf '  2000-byte struct: interface initialiser boxes and runs\n'
+    else
+        bad "c211_iface: the initialiser was not boxed (the 2000-byte value type was cut)"
+    fi
+fi
+
+# ---- C2p-11.3) a long module path (namespace + nested directories) -------
+# A module path is a filesystem path, and the host caps one at 1024 bytes, so
+# the fixture is as long as the platform allows (~800 bytes): eight 100-byte
+# segments, six times the old 160-byte row. The namespace matches the
+# directories (`-I` root), so the ns-dir check, the `::`/`/` candidate walk and
+# the import resolver all have to carry the whole spelling.
+mdir="$work/c211moddeep"
+mns=""
+md="$mdir"
+for _ in 1 2 3 4 5 6 7 8; do
+    mseg=$(printf '%*s' 100 '' | tr ' ' m)
+    md="$md/$mseg"
+    if [ -n "$mns" ]; then mns="$mns::$mseg"; else mns="$mseg"; fi
+done
+mkdir -p "$md" || exit 1
+printf 'namespace %s;\npub int c211_g = 5;\n' "$mns" >"$md/c211ns.h.ct"
+printf 'import %s::c211ns;\nint main(void) { return c211_g - 5; }\n' "$mns" \
+    >"$mdir/main.ct"
+if "$CT" build -I "$mdir" "$mdir/main.ct" -o "$work/c211mod.bin" \
+        >"$work/c211_mod.log" 2>&1; then
+    if "$work/c211mod.bin"; then
+        ok; printf '  %s-byte module path: resolved, built and run\n' "${#mns}"
+    else
+        bad "c211_mod: the program built from the long module path returned non-zero"
+    fi
+else
+    bad "c211_mod: a long module path was rejected: $(head -2 "$work/c211_mod.log" | tr '\n' ' ')"
+fi
+
+# ---- C2p-11.4) the `own` diagnostic quotes a 2000-byte struct whole ------
+cat >"$work/c211_own.ct" <<CT
+#include <stdlib.h>
+struct $tm11 { int x; };
+int main(void) { own struct $tm11 *p = malloc(sizeof(struct $tm11)); p->x = 1; return 0; }
+CT
+"$CT" "$work/c211_own.ct" -o "$work/c211_own.c" >"$work/c211_own.log" 2>&1
+if [ $? -eq 0 ]; then
+    bad "c211_own: a struct that does not use Drop was accepted as 'own'"
+elif grep -qF "'$tm11'" "$work/c211_own.log"; then
+    ok; printf '  2000-byte struct: the own diagnostic quotes it whole\n'
+else
+    bad "the own diagnostic cut the 2000-byte struct name"
 fi
 
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"

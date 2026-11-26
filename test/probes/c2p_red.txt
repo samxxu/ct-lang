@@ -251,3 +251,23 @@ output:
   2000-byte Drop field type: the field Drop call is whole
   long namespace closure: owner join kept whole
 c2p: 39 passed, 0 failed
+
+C2p-11 the last fixed rows (baseline b2f18cb6, frozen-seed compiler):
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+FAIL c2p: c211_pkg: index refresh rejected the 2000-byte package name: ... cannot read '.../ct.pkg' or it lacks 'name'/'version'
+FAIL c2p: c211_iface: the initialiser was not boxed (the 2000-byte value type was cut)
+FAIL c2p: c211_mod: a long module path was rejected: ctc: cannot resolve import 'mmm...'
+FAIL c2p: the own diagnostic cut the 2000-byte struct name
+c2p: 54 passed, 4 failed
+
+green (C2p-11 implementation, ct-ast built from the new seed):
+command: bash test/ast/c2p_limits.sh <ct-ast>
+exit: 0
+output:
+  2000-byte package name: the index row carries it whole
+  2000-byte struct: interface initialiser boxes and runs
+  810-byte module path: resolved, built and run
+  2000-byte struct: the own diagnostic quotes it whole
+c2p: 58 passed, 0 failed
