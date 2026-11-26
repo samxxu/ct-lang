@@ -68,7 +68,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | B-2 | ~~`match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例~~ | **已补**（2026-11-26）：`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup`、`63_ref_out_places`、`64_match_expr`、`65_generic_trait_instances`；defer / errdefer 升「有」，其余仍「薄」，S8c 再按需加反例 | 无 |
 | B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 已改（去 `cstr`+`free`，改 `as_str()`）；`48_string_steps` 判定为 C 类型宿主例外并注明理由；其余见 B-4 | 无 |
 | B-4 | 非 C 互操作用例的指针 | **判定已完成**（2026-11-27）：101 个文件分五类，见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写，E3 的 26 个文件阻塞于缺 print API | B-3 |
-| B-5 | 文档可执行片段偏少 | **已补 0.7 泛型 / 0.8 可选链+自定义下标**（2026-11-27），README 现有 7 个 `// source:` 片段（0.3 / 0.5 / 0.6 / 0.7 / 0.8 + 两处 example 链接）；tutorial / guide / idioms 的片段改写留 S8c | 无 |
+| B-5 | 文档可执行片段偏少 | **已补 0.7 泛型 / 0.8 可选链+自定义下标**（2026-11-27），README 现有 7 个 `// source:` 片段；tutorial / guide / idioms 与其余片段的改写**已交接 TEST/REVIEW**（[TEST-27 §8](../../issues/testing/test27-feature-examples-pointer-free.md) 的 H1–H4） | 无 |
 | B-6 | S2 下标协议、S3 函子、S4–S6 模式 | S3 函子已有 `examples/66_functor`（2026-11-27）；S2 按键分派已进 `examples/59_custom_subscript`；S4–S6 模式在实现落地时同批补样例（先负例后正例） | S4–S6 |
 
 ## 3 保留的 C 互操作例外（不要求去指针）

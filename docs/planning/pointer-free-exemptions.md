@@ -109,7 +109,8 @@ Ct 目前没有「结构体引用」这一形态，`ref struct` 只在形参位�
 ## 6 建议的下一步
 
 1. **先定 print API**（`Str.print()` / `ct_print(Str)` 之类），否则 E3 的 26 个文件无法真正去指针；
-   这是一条 REQ，应与 TEST-27 一起排；
+   已立 [REQ-PRINT-1](requirements-pool.md) / [LANG-30](../../issues/lang/lang-30-str-print-api.md)，提案见
+   [str-print-api](../proposals/str-print-api.md)；
 2. E1/E2/E4 的 64 个文件在 S8c 只需加「为什么必须指针」注释，不改代码——成本低、可一次提交；
 3. E4 的长期解是「结构体引用」形态；在那之前不要为去指针而把样例改成 `self` 方法（会改变教学点）。
 

@@ -373,6 +373,19 @@ v0-PH-52 的 D52-6 指向本条。
 | `last-touched` | 2026-11-25 |
 | `block` | 无；依赖 S1 的 LIR（迁移在 LIR 上）与 S7 的类型检查证据。**现数输入**见 [strict-include-audit](strict-include-audit.md)（2026-11-26：819 文件 / 1,078 行，M1–M5） |
 
+## REQ-PRINT-1 — `Str` / `String` 的直接打印入口
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-PRINT-1` |
+| `what` | 给借用视图加零分配输出入口：`Str.print()` / `Str.println()`，`String` 同名转发到 `as_str()`；按字节写 stdout，不调用 `cstr()`、不分配；`cstr()` 保留为 C 互操作出口。 |
+| `why` | `Str` / `String` 目前没有直接输出入口，`cstr()` 会分配并要求调用方 `free`。于是 examples 里 26 个文件（[pointer-free-exemptions](pointer-free-exemptions.md) 的 E3 类）只能用 `printf("%s", s.cstr())`，「去指针」变成「多一次分配」，S8c 的指针清零目标无法达成。 |
+| `priority` | `P2` |
+| `status` | `planned`（未占 stage；建议作为 S8c 前置） |
+| `owner` | REQ（提案）；实施 DEV |
+| `last-touched` | 2026-11-27 |
+| `block` | 需一条 ADR（方法 vs 内建函数）与 spec 新节；`fwrite` 声明走 `.m.ct` / shim（与 S9 同方向）。不依赖 IR，可在 S1b 之后任意窗口做 |
+
 ## REQ-POINTERFREE-1 — 日常代码的指针退场
 
 | 字段 | 值 |

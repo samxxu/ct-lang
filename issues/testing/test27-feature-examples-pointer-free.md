@@ -9,7 +9,7 @@
 | 依据 | 所有者 2026-11-26 要求；[dogfooding](../../docs/planning/dogfooding.md)；[pointer-free-phase-plan](../../docs/planning/pointer-free-phase-plan.md) |
 | 状态 | open |
 | 负责人 | TEST / REVIEW（REQ 跟踪） |
-| 处置证据 | 排入 [`v1-PH-2` S8c](../../docs/phases/v1-PH-2/card.md)；2026-11-26 已交首版矩阵 [feature-examples-matrix](../../docs/planning/feature-examples-matrix.md)（23 行），缺口清单 B-1…B-6；样例改写与文档同步仍待 S8c。 |
+| 处置证据 | 排入 [`v1-PH-2` S8c](../../docs/phases/v1-PH-2/card.md)；2026-11-26 已交首版矩阵 [feature-examples-matrix](../../docs/planning/feature-examples-matrix.md)（23 行）与逐文件判定 [pointer-free-exemptions](../../docs/planning/pointer-free-exemptions.md)。**2026-11-27 交接给 TEST/REVIEW**，施工范围与分片见 §8。 |
 
 ## 1 现象（2026-11-26 实测）
 
@@ -95,3 +95,49 @@ README 的快速开始与实际用法示例仍以 `char *` / `->` 为主，与�
 - [dogfooding](../../docs/planning/dogfooding.md)（源码压缩，S8b）
 - [pointer-free-v2](../../docs/proposals/pointer-free-v2.md)（指针退场方向）
 - [DOC-94](../docs/doc-94-ct-spelling.md) / [DOC-98](../docs/doc-98-ct-language-name.md)（文档口径先例）
+
+## 8 交接单（2026-11-27，REQ → TEST/REVIEW）
+
+REQ 已把样例与文档面的剩余工作交给 **TEST/REVIEW**。以下是可直接施工的范围、分片与验收；
+`selfhost/**` 不在其内（仍归 A 轨道单写者）。
+
+### 8.1 职责边界
+
+| 可改 | 不可改 |
+| --- | --- |
+| `examples/**`、`docs/tutorial.md`、`docs/guide-for-c-programmers.md`、`docs/idioms.md`、`docs/snippets/**`、`README.md` 的样例段 | `selfhost/**`、`bootstrap/**`、`spec`（spec 改动由 REQ/DEV 同批）、`docs/decisions/**` |
+
+文件集与 `docs/planning/**`、`issues/**` 不重叠；一次只做一片，一片一提交。
+
+### 8.2 分片
+
+| 片 | 范围 | 验收 |
+| --- | --- | --- |
+| **H1 tutorial 片段改写** | `docs/tutorial.md` §15（ref/out）、§17（Box/new）、§18（match）、§22（String/Str）、§23（切片）里的可执行片段：能跑的改成 `// source:` + `docs/snippets/README/` 片段；不能跑的把指针写法改为值类型写法 | `check-docs` 绿（片段字节一致、锚点可解析）；`char *` 只剩 C 互操作段 |
+| **H2 C 程序员指南** | `docs/guide-for-c-programmers.md`：加一节「同样的东西用 Ct 写」；原有的 `char *` 段保留但标注“等价写法见下” | 目标文档 `grep 'char \*'` 只出现在 C 互操作对照表 |
+| **H3 idioms** | `docs/idioms.md`：每条 idiom 给 `String` / `Str` / `Vec` / `Box` 版本；指针版标为「C 互操作」 | `check-docs` 的 briefing 断言仍绿（§N 引用有效） |
+| **H4 片段补齐** | 按 [feature-examples-matrix](../../docs/planning/feature-examples-matrix.md) 的「有」档逐行补 `docs/snippets/README/` 片段（现有 7 个，目标每行至少 1 个） | 片段可编译、`.expected.out` 是实测输出、README 引用一致 |
+
+### 8.3 每片流程
+
+1. 先写预期（片段/文档的改动），跑 `python3 test/docs/check-docs.py` 看到失败；
+2. 改文档/片段，直到 `check-docs` 绿；
+3. 改了 `examples/**`：**同一提交**重生成语料 pin
+   ```sh
+   python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> > test/probes/p85_corpus_sha.tsv
+   ```
+4. 本地门禁：`bash selfhost/check-warnings.sh`、`bash test/ast/p85_m0.sh <ct>`、`bash test/ast/p88_emit.sh <ct>`；
+5. 提交正文写前后计数（如 `grep -c 'char \*' docs/tutorial.md: 64 → N`）。
+
+### 8.4 指针政策（不要重新判定）
+
+逐文件判定已经完成，见 [pointer-free-exemptions](../../docs/planning/pointer-free-exemptions.md)：
+
+- E1（C 互操作 41）/ E2（生命周期演示 11）/ E4（结构体指针 15）：**保留**，只补「为什么必须指针」的说明；
+- E3（打印受阻 26）：**等 [REQ-PRINT-1](../../docs/planning/requirements-pool.md) / [LANG-30](../lang/lang-30-str-print-api.md) 落地**再改，不要用 `cstr()` + `free` 假装去指针；
+- 需要新判定的文件先在本 issue 里追加一行，不要直接改清单。
+
+### 8.5 报告
+
+每片收口在本 issue 追加一行：`H<n> | 提交 | 文件数 | 前后 char*/->/malloc 计数 | 门禁结果`。
+全部完成后把本 issue 转 `open` → 待 S8c 收口时由 REQ 复核再转 `verified`。
