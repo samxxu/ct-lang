@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10467 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=83529 io_cap=1024
+     emitted_before=48223 emitted_after=84025 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -245,6 +245,11 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   54712 → 54792（+80：内建层拆分后的四个字符串单元、单元归属与前置声明）。上面 PH-88
   的历史数字保持不变；本文件头部的 `emitter_after` / `emitted_after` 是 p88_metrics 的
   live pin，随每次 emitter 变更同步。
+- **v1-PH-2 S3（D-029 函子签名糖）后的 live 校准**：`Emitter.h.ct` 10467 → 10467 行
+  （发射器未改；糖在类型解析/声明检查与 LIR 打印层，见 `ExprTypeParse.h.ct`、
+  `ExprStaticType.h.ct`、`Lower.h.ct`），发射 C 83529 → 84025（+496：新增解析、
+  签名检查与诊断代码）。切片清单仍为 76；旧语料 314 个可编译源文件的生成 C 与
+  基线逐字节相同（D-029 §11）。
 - **v1-PH-2 S2（D-028 下标协议）后的 live 校准**：`Emitter.h.ct` 10414 → 10467 行
   （+53：重载方法的 `$<enc(key)>` 符号后缀与 body seam 键，解析/类型匹配在
   `frontend/parse/ExprSubscript.h.ct`、`ExprTypeText.h.ct`），发射 C 82754 → 83529
