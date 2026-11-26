@@ -128,10 +128,11 @@ scope outlives the borrow)`。矩阵 P1 的“放行”与该规则不可同时�
 
 FP=0（2026-11-27，冻结 seed 构建的编译器）：
 
-- `examples/[0-9][0-9]_*/*.ct` + `test/cases/*.ct` + `test/ast/*/prog.ct` 共 407 个文件，
+- `examples/[0-9][0-9]_*/*.ct` + `test/cases/*.ct` + `test/ast/*/prog.ct` 共 412 个文件（含新增 5 个正例），
   `check` 退出码与基线逐文件相同（0 差异）；
-- 全 `examples/**` + `test/**` 共 1508 个 `.ct`，`compile` 退出码逐文件相同（0 差异）；
-- 同一 407 个文件的 `build` 默认与 `--check-level=off` 退出码相同（0 差异）。
+- 全 `examples/**` + `test/**` 共 1513 个 `.ct`（不含 5 个新增 mem2 负例），
+  `compile` 退出码逐文件相同（0 差异）；
+- 同一 407 个基线语料的 `build` 默认与 `--check-level=off` 退出码相同（0 差异）。
 
 ## 6 S7 切片顺序（每片一提交、可回滚）
 
