@@ -558,6 +558,11 @@ pub struct StructTmpl {
     int  uses_handback;          /* P36 S2a2: built-in Handback flag, copied to instances */
     int  is_pub;
     int  owner;                 /* unit index; -1 outside `build` */
+    /* v1-PH-2 S6: a generic ADT template shares this table with the struct
+       templates so `Name<args>` in a type position finds it. `is_adt` says
+       which half owns the body; `adt` is the template's ADT registry row. */
+    int  is_adt;
+    int  adt;
     char path[1024];
     int  line;
 }
@@ -670,7 +675,7 @@ pub struct AdtVariant {
     int  col;
 }
 pub struct Adt {
-    const char *name;           /* the source name, `Shape` */
+    const char *name;           /* the source name, `Shape`; the encoded tag on an instance */
     const char *full;           /* the namespace-mangled C tag, `lib_Shape` */
     int  nvariants;
     int  vcap;
@@ -679,6 +684,17 @@ pub struct Adt {
     int  owner;                 /* the unit that declared it; -1 in compile mode */
     char path[1024];
     int  line;
+    /* v1-PH-2 S6: `enum Opt<T>` is a template row. It has no C layout of its
+       own; every `(template, type arguments)` pair gets an instance row whose
+       payload fields are the template's with the parameters replaced. The
+       instance keeps `tmpl` = the template row and uses its encoded name as
+       both `name` and `full`, so `ct_adt_find` resolves the C tag directly. */
+    int  is_template;
+    int  ntparams;
+    const char **tparams;
+    int  tcap;
+    int  tmpl;                  /* template ADT row for an instance, -1 otherwise */
+    int  emitted;               /* the layout writer already printed this row */
 }
 pub struct Adt *ct_adts(int *n);
 /* The row whose C tag (or, as a fallback, source name) is `name`; -1 otherwise. */
@@ -697,6 +713,17 @@ pub int ct_adt_add_field(int adt, int v, const char *name, const char *type);
 pub int ct_adt_variant(int adt, const char *name);
 /* 1 when the ADT has a variant with this name. */
 pub int ct_adt_has_variant(int adt, const char *name);
+/* v1-PH-2 S6: mark a row as the generic template of `ntparams` parameters and
+   append one parameter name. `ct_adt_add` always starts a row concrete; the
+   parser calls these after the body tells it the declaration is an ADT. */
+pub int ct_adt_set_template(int adt, int ntparams);
+pub int ct_adt_add_tparam(int adt, const char *name);
+/* Create (or reuse) the concrete instance of `tmpl` whose encoded C tag is
+   `full`. The payload field types are substituted with `cargs` (the same C
+   spellings `ct_inst_add` stores), so every downstream reader -- the type
+   pass, the matcher, the layout writer -- sees a concrete ADT row and needs no
+   generic branch. -1 on a cap overflow or a malformed argument list. */
+pub int ct_adt_inst_add(int tmpl, const char *full, int nargs, char **cargs);
 
 pub struct Symbols {
     /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
@@ -2778,6 +2805,8 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
     t[n].uses_handback = 0;
     t[n].is_pub = is_pub;
     t[n].owner = owner;
+    t[n].is_adt = 0;
+    t[n].adt = -1;
     snprintf(t[n].path, 1024, "%s", path);
     t[n].line = line;
     g_ntmpls++;
@@ -3251,6 +3280,12 @@ int ct_adt_add(const char *name, const char *full, int is_pub, int owner,
     a[i].owner = owner;
     snprintf(a[i].path, 1024, "%s", path ? path : "");
     a[i].line = line;
+    a[i].is_template = 0;
+    a[i].ntparams = 0;
+    a[i].tparams = 0;
+    a[i].tcap = 0;
+    a[i].tmpl = -1;
+    a[i].emitted = 0;
     g_nadts++;
     return i;
 }
@@ -3309,6 +3344,104 @@ int ct_adt_add_field(int adt, int v, const char *name, const char *type)
     if (!a[adt].variants[v].fields[f].type) return -1;
     a[adt].variants[v].nfields++;
     return f;
+}
+
+/* v1-PH-2 S6: the generic-ADT half of the registry. A template row keeps the
+   declared payload spellings (`T`, `T *`, `Vec<T>`) and is never laid out; an
+   instance row copies the variants with the parameters substituted, so the
+   matcher and the layout writer keep their single concrete path. */
+int ct_adt_set_template(int adt, int ntparams)
+{
+    int n;
+    struct Adt *a = ct_adts(&n);
+
+    if (!a || adt < 0 || adt >= n) return -1;
+    if (ntparams < 0 || ntparams > CAP_LIMIT) return -1;
+    a[adt].is_template = 1;
+    a[adt].ntparams = ntparams;
+    return 0;
+}
+
+int ct_adt_add_tparam(int adt, const char *name)
+{
+    int n, k;
+    struct Adt *a = ct_adts(&n);
+    const char **grown;
+
+    if (!a || adt < 0 || adt >= n) return -1;
+    if (a[adt].ntparams < 0 || a[adt].ntparams >= CAP_LIMIT) return -1;
+    if (a[adt].ntparams + 1 > a[adt].tcap) {
+        int cap = a[adt].tcap > 0 ? a[adt].tcap : 2;
+        while (cap < a[adt].ntparams + 1 && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
+        if (a[adt].ntparams + 1 > cap) return -1;
+        grown = (const char **)realloc(a[adt].tparams, (size_t)cap * sizeof(*grown));
+        if (!grown) return -1;
+        a = g_adts;
+        a[adt].tparams = grown;
+        a[adt].tcap = cap;
+    }
+    a = g_adts;
+    k = a[adt].ntparams;
+    a[adt].tparams[k] = runtime::text::ct_intern(name ? name : "");
+    if (!a[adt].tparams[k]) return -1;
+    a[adt].ntparams = k + 1;
+    return k;
+}
+
+/* The concrete instance of a generic ADT. Variants and payload fields are
+   copied in declaration order (a match arm indexes the tag by position), and
+   each field type is rewritten with `cargs`. Returns the existing row when the
+   encoded tag is already present, so `Opt<int>` named twice is one layout. */
+int ct_adt_inst_add(int tmpl, const char *full, int nargs, char **cargs)
+{
+    int n, v, f, k, arow, vrow;
+    struct Adt *a = ct_adts(&n);
+    int ti;
+    const char *sub;
+
+    if (!a || tmpl < 0 || tmpl >= n || !full || !full[0]) return -1;
+    ti = ct_adt_find(full);
+    if (ti >= 0) return ti;
+    if (!a[tmpl].is_template) return -1;
+    if (nargs != a[tmpl].ntparams) return -1;
+    arow = ct_adt_add(full, full, a[tmpl].is_pub, a[tmpl].owner,
+                      a[tmpl].path, a[tmpl].line);
+    if (arow < 0) return arow;
+    a = g_adts;
+    a[arow].tmpl = tmpl;
+    for (v = 0; v < a[tmpl].nvariants; v++) {
+        vrow = ct_adt_add_variant(arow, a[tmpl].variants[v].name,
+                                  a[tmpl].variants[v].cname,
+                                  a[tmpl].variants[v].line,
+                                  a[tmpl].variants[v].col);
+        if (vrow < 0) return -1;
+        a = g_adts;
+        for (f = 0; f < a[tmpl].variants[v].nfields; f++) {
+            sub = a[tmpl].variants[v].fields[f].type;
+            for (k = 0; k < nargs; k++) {
+                sub = ct_generic_subst_text(sub, a[tmpl].tparams[k],
+                                            cargs && cargs[k] ? cargs[k] : "");
+                if (!sub) return -1;
+            }
+            /* A nested instance (`List<T> next` -> `List<int>`) becomes the C
+               tag its struct row already has, so the layout walk and the
+               printer see one concrete spelling. */
+            if (sub && strchr(sub, '<')) {
+                char *rbuf = tool::sh::ct_scratch_alloc(CAP_LIMIT);
+                if (rbuf && ct_inst_resolve(sub, rbuf, CAP_LIMIT) == 0) {
+                    const char *pooled = runtime::text::ct_intern(rbuf);
+                    if (!pooled) return -1;
+                    sub = pooled;
+                }
+            }
+            if (ct_adt_add_field(arow, vrow, a[tmpl].variants[v].fields[f].name,
+                                 sub) < 0)
+                return -1;
+            a = g_adts;
+        }
+    }
+    return arow;
 }
 
 

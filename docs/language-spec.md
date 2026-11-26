@@ -3249,8 +3249,8 @@ weak / 跨过程分析（D-012）。
 ### 4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）
 
 最小名义和类型，为 ct-ast 重写提供穷尽判别（D3 / LANG-21）。本轮只做名义和类型、
-构造器负载、穷尽 `match` 与变量绑定；泛型 ADT 仍是**非目标**（S6）；or / 守卫自
-`v1-PH-2` S5 起补齐（见「S5 模式扩展」）。表达式形式的 `match` 由 LANG-29 S4 / B5 补齐（见下），语句形式与其拼写
+构造器负载、穷尽 `match` 与变量绑定；泛型 ADT 自 `v1-PH-2` S6 起支持（见「S6 泛型
+ADT」）；or / 守卫自 `v1-PH-2` S5 起补齐（见「S5 模式扩展」）。表达式形式的 `match` 由 LANG-29 S4 / B5 补齐（见下），语句形式与其拼写
 不变。字面量、嵌套与结构体模式自 `v1-PH-2` S4 起补齐，口径见「S4 模式扩展」小节与
 [adt-patterns](design/adt-patterns.md)。
 
@@ -3395,6 +3395,51 @@ arm          := pattern ('if' expr)? '=>' block | pattern ('if' expr)? '=>' expr
   arm 都 `return`，需在 match 之后补一条 `return` 来满足 C 的 `-Wreturn-type`
   （表达式 `match` 不受影响）。
 
+#### S6 泛型 ADT（`v1-PH-2` S6）
+
+`enum` 的 tag 可以带类型参数；声明、实例化、构造与模式都走同一条具体 ADT 路径，
+下游（穷尽、`match` 发射、布局）不引入第二套判别。
+
+```
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+enum Res<T, E> {
+    Ok(T v),
+    Err(E e),
+}
+
+Opt<int> a = Opt<int>.Some(7);
+Opt<char *> b = Opt<char *>.None();
+Res<int, char *> r = Res<int, char *>.Err("bad");
+```
+
+- **声明**：`enum Name<T[, U]> { … }`，参数可带一个 trait bound（规则同泛型 struct）；
+  任一成员带括号负载即为 ADT，否则仍是 C enum —— 泛型 C enum 保持 L34-3 的硬错
+  `generic enums are not supported`。
+- **实例化**：`Name<int>` 在类型位实例化，每个 `(模板, 类型实参)` 只有一份实例行；
+  同一实参重复书写不重复布局。类型实参的合法性与泛型 struct 相同（`void` / 切片 /
+  未知元数被拒）。
+- **构造**：`Name<int>.Variant(args)`。在 `impl<T> Name<T>` 体内可写
+  `Name<T>.Variant(args)`；实参类型按替换后的负载字段检查。
+- **模式**：`Name.Variant(pat)` 从主语类型推断实例（`match (a)` 中 `a: Opt<int>`）；
+  也可显式写 `Name<int>.Variant(pat)`。变体序号、绑定顺序与模板声明一致。
+- **布局**：实例的 C 标签是编码名（`Opt_int`、`Res_int_char_p`），布局仍是
+  `int tag; union { … } u;` 加四条 `_Static_assert`；嵌套实例（`Opt<Opt<int>>`）的
+  内层布局先于外层写出。`impl<T> Name<T>` 的固有方法/下标与非泛型 ADT 相同。
+- **递归**：按值自引用或互引用（`Cons(T v, List<T> next)`）是布局硬错
+  `ADT '…' is recursive by value; store a pointer or a container instead`；指针或容器
+  可以递归。
+- **容器互操作**：`Box<Opt<int>>`、`Vec<Opt<int>>` 直接可用；元素的 retain/release
+  按具体实例的负载判定。
+- **上限**：ADT 表、模板表、实例表都倍增到 `CAP_LIMIT`（65536），旧 64/128 初始容量
+  不再是硬错。
+- **边界（诚实登记）**：内置 `Option` / `Result` 已经是泛型 **struct**（`has`/`value`
+  字段、`{1, v}` 初始化），同名泛型 ADT 重声明会与既有泛型类型冲突而硬错
+  `generic ADT '<N>' conflicts with an existing generic type of the same name`；
+  泛型 typedef ADT 与非泛型一样只支持具体别名。
+
 #### 布局与 ABI（冻结）
 
 ```c
@@ -3444,7 +3489,7 @@ struct Shape {
 - **payload 生命周期（LANG-29 S2 / B3 起）**：ADT 的 owning payload 由编译器生成的
   `<T>_retain` / `<T>_release` 持有与释放；裸 `Str` 不能作 payload（存 `String`，取视图用
   `as_str()`），声明处即硬错。
-- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；字符串字面量模式不支持；
+- **简化（诚实登记）**：ADT 不能带显式枚举值；泛型 ADT 自 S6 起支持（见上）；字符串字面量模式不支持；
   模式不穿透指针负载；非 ADT 主语只在语句 `match` 开放。or / 守卫自 S5 起支持，
   S5 自身的三条边界见「S5 模式扩展」末尾。
   `offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。

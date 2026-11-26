@@ -351,7 +351,7 @@ int area(Shape s)
   花括号，没有 fallthrough。表达式形式写 `Pattern => expr` 或块内 `yield expr;`（LANG-29 S4 / B5）。
 - **绑定是副本**：`Shape.Circle(r)` 里的 `r` 是该臂块内的普通局部量，改它不影响被 match 的值。
 - **计数**：ADT / 变体 / 负载字段都从初始值倍增到形式上限 `CAP_LIMIT`=65536（旧的固定语义上限已退役）；
-  无泛型 ADT；or / 守卫与嵌套 / 结构体模式自 `v1-PH-2` S4–S5 起支持。
+  泛型 ADT 自 `v1-PH-2` S6 起支持（`enum Opt<T>`）；or / 守卫与嵌套 / 结构体模式自 S4–S5 起支持。
 
 **重要的一条：ADT 的 owning payload 有 retain/release。** 负载里如果是 `String` /
 `Box<T>` / `Vec<T>`，编译器在构造、拷贝、按值实参和 `match` 绑定时 retain，作用域出口

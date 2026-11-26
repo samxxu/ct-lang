@@ -3210,6 +3210,12 @@ impl ParseOps for Parser {
         int mem_first, mem_last, has_payload, has_value, all_payload;
         int first_nopay_line, first_nopay_col, first_val_line, first_val_col;
         int adt, tn, tline, tcol, is_adt, pre_adt;
+        /* v1-PH-2 S6: `enum Opt<T>` is a generic ADT template. Its parameters
+           are grown rows, mirroring a generic struct's. */
+        char **tparam = 0;
+        char **bound = 0;
+        int tcap = 0, bcap = 0, nt = 0, templ = 0;
+        int ltline = 0, ltcol = 0, early_ti = -1;
         const char *name;
         const char *qname;
         const char *mname;
@@ -3254,9 +3260,55 @@ impl ParseOps for Parser {
         } else if (tag_required) {
             return self->sup->fail("expected an enum name");
         }
-        /* Phase 34 (L34-3): enums have no monomorphisation axis. */
-        if (self->lex->tok == T_PUNCT && self->lex->tok_is("<"))
-            return self->sup->fail("generic enums are not supported");
+        /* v1-PH-2 S6: `enum Opt<T[, U]>` declares a generic ADT template. The
+           members still decide whether the declaration is an ADT at all; a
+           generic C enum has no monomorphisation axis and keeps the L34-3
+           rejection, reported at the `<`. */
+        if (name[0] && self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
+            ltline = self->lex->tokline;
+            ltcol = self->lex->tokstart - self->lex->lstart + 1;
+            self->sup->lex_next();
+            for (;;) {
+                tparam = frontend::sym::ct_rows_reserve(tparam, tcap, nt + 1, &tcap);
+                bound = frontend::sym::ct_rows_reserve(bound, bcap, nt + 1, &bcap);
+                if (!tparam || tcap < nt + 1 || !bound || bcap < nt + 1)
+                    return self->sup->fail("a generic ADT has too many type parameters");
+                if (self->lex->tok != T_ID)
+                    return self->sup->fail("expected a type parameter name");
+                self->lex->tok_copy(tparam[nt], MAX_TEXT);
+                nt++;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(":")) {
+                    const char *raw;
+                    int bi;
+                    self->sup->lex_next();
+                    if (self->lex->tok != T_ID)
+                        return self->sup->fail("expected a trait name after ':'");
+                    raw = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                       self->lex->tokstr.len);
+                    if (!raw) return self->sup->fail("out of memory");
+                    self->sup->lex_next();
+                    bi = self->sym->find_trait(raw);
+                    if ((bi >= 0 && self->sym->traits[bi].is_static)
+                        || strcmp(raw, "Drop") == 0 || strcmp(raw, "Handback") == 0)
+                        return tool::diag::ct_sem_error(self->lex->tokline,
+                            self->lex->tokstart - self->lex->lstart + 1,
+                            tool::sh::ct_scratch_fmt(
+                                "trait '%s' cannot bound a type parameter", raw),
+                            self->mem->path);
+                    snprintf(bound[nt - 1], MAX_TEXT, "%s", raw);
+                }
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
+                    self->sup->lex_next();
+                    continue;
+                }
+                break;
+            }
+            if (self->lex->tok != T_PUNCT || !self->lex->tok_is(">"))
+                return self->sup->fail("expected '>' after the type parameters");
+            self->sup->lex_next();
+            templ = 1;
+        }
         pre_adt = 0;
         if (name[0] && self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
             pre_adt = enum_adt_ahead(self);
@@ -3264,6 +3316,36 @@ impl ParseOps for Parser {
         /* the tag joins the table before its members are read: a payload may
            name the ADT itself, and its C spelling differs between the forms */
         if (name[0] && self->sup->add_type(qname, pre_adt ? 7 : 5) != 0) return -1;
+        /* A template's own payload may name the template (`List<T> next`), so
+           the generic row has to exist before the member list is read. The
+           ADT row itself follows the body (its variants are not known yet);
+           `adt` is patched below. */
+        if (templ && pre_adt && name[0]) {
+            struct StructTmpl *tps_e;
+            int tn_e;
+            if (frontend::sym::ct_tmpl_find(name) >= 0)
+                return tool::diag::ct_sem_error(ltline, ltcol,
+                    tool::sh::ct_scratch_fmt(
+                        "generic ADT '%s' conflicts with an existing generic type of the same name",
+                        name),
+                    self->mem->path);
+            early_ti = frontend::sym::ct_tmpl_add(name, qname, nt, tparam, bound,
+                                                  is_pub, self->cur_unit,
+                                                  self->mem->path, tline);
+            if (early_ti < 0) return self->sup->fail("out of memory");
+            tps_e = frontend::sym::ct_tmpls(&tn_e);
+            if (!tps_e) return self->sup->fail("out of memory");
+            tps_e[early_ti].is_adt = 1;
+            tps_e[early_ti].adt = -1;
+            tps_e[early_ti].is_pub = is_pub;
+            tps_e[early_ti].owner = self->cur_unit;
+        }
+        /* inside the member list the declared parameters are types, exactly as
+           they are inside a generic struct body (D26-4) */
+        if (templ) {
+            self->ex->in_generic_tparam = tparam;
+            self->ex->in_generic_ntparam = nt;
+        }
         /* the member rows are temporary: they become N_ENUMVAL constants (C
            enum) or ADT registry rows, never emitted AST nodes of their own */
         while (self->lex->tok != T_EOF
@@ -3350,10 +3432,19 @@ impl ParseOps for Parser {
             if (!self->sup->accept(",")) break;
         }
         if (self->sup->expect("}") != 0) return -1;
+        if (templ) {
+            self->ex->in_generic_tparam = 0;
+            self->ex->in_generic_ntparam = 0;
+        }
         is_adt = has_payload;
         if (is_adt && !name[0])
             return tool::diag::ct_sem_error(tline, tcol,
                 "an ADT needs a tag name (write `enum Shape { ... }`)", self->mem->path);
+        /* Phase 34 (L34-3): a generic C enum still has no monomorphisation
+           axis; only a payload-bearing declaration is an ADT template. */
+        if (templ && !is_adt)
+            return tool::diag::ct_sem_error(ltline, ltcol,
+                "generic enums are not supported", self->mem->path);
         s = self->sup->new_node(N_ENUM);
         if (s < 0) return -1;
         self->arena->nodes[s].text = runtime::text::ct_intern(name);
@@ -3436,6 +3527,42 @@ impl ParseOps for Parser {
                             self->arena->nodes[fld].num, msg, self->mem->path);
                     }
                 }
+            }
+            /* v1-PH-2 S6: a parameterised declaration is a template. Record
+               the parameter names on the ADT row (the instance substitution
+               reads them) and register a struct-template row so `Opt<int>` in
+               a type position reaches the ordinary instance reader. */
+            if (templ) {
+                int ti5, tn5, pi5;
+                struct StructTmpl *tps5;
+                if (frontend::sym::ct_adt_set_template(adt, 0) != 0)
+                    return self->sup->fail("out of memory");
+                for (pi5 = 0; pi5 < nt; pi5++)
+                    if (frontend::sym::ct_adt_add_tparam(adt, tparam[pi5]) < 0)
+                        return self->sup->fail("out of memory");
+                /* The row was registered before the body when the pre-scan
+                   saw an ADT; only its ADT index was unknown. A declaration
+                   the scan missed still gets its row here. */
+                if (early_ti < 0 && frontend::sym::ct_tmpl_find(name) >= 0)
+                    return tool::diag::ct_sem_error(tline, tcol,
+                        tool::sh::ct_scratch_fmt(
+                            "generic ADT '%s' conflicts with an existing generic type of the same name",
+                            name),
+                        self->mem->path);
+                if (early_ti < 0) {
+                    ti5 = frontend::sym::ct_tmpl_add(name, qname, nt, tparam, bound,
+                                                     is_pub, self->cur_unit,
+                                                     self->mem->path, tline);
+                    if (ti5 < 0) return self->sup->fail("out of memory");
+                } else {
+                    ti5 = early_ti;
+                }
+                tps5 = frontend::sym::ct_tmpls(&tn5);
+                if (!tps5) return self->sup->fail("out of memory");
+                tps5[ti5].is_adt = 1;
+                tps5[ti5].adt = adt;
+                tps5[ti5].is_pub = is_pub;
+                tps5[ti5].owner = self->cur_unit;
             }
             ao = -1;
             ar = self->sup->attr_pool(&ao);
@@ -4974,6 +5101,25 @@ impl ParseOps for Parser {
                     }
             }
         }
+        /* v1-PH-2 S6: a generic ADT impl types `self` as the template's C tag
+           (the ADT's `full`), so `match (self)` sees an ADT subject and can
+           name the template's variants. The emitted C still spells the
+           receiver `void *` and casts, exactly like the bounded-struct path. */
+        {
+            int tbi2 = frontend::sym::ct_tmpl_find(tmpl);
+            int tbn2;
+            struct StructTmpl *tps2 = frontend::sym::ct_tmpls(&tbn2);
+            (void)tbn2;
+            if (tbi2 >= 0 && tps2 && tps2[tbi2].is_adt) {
+                int adn2;
+                struct Adt *ad2 = frontend::sym::ct_adts(&adn2);
+                int ai2 = tps2[tbi2].adt;
+                if (!ad2 || ai2 < 0 || ai2 >= adn2)
+                    return self->sup->fail("the ADT row is missing");
+                htype = runtime::text::ct_internf("struct %s", ad2[ai2].full);
+                if (!htype) return self->sup->fail("out of memory");
+            }
+        }
         while (self->lex->tok != T_EOF
                && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             mline = self->lex->tokline;
@@ -5008,9 +5154,31 @@ impl ParseOps for Parser {
             }
             if (is_pub) {
                 int tsi = self->sym->find_struct(tmpl);
-                if (!self->unit_is_hdr || tsi < 0 || !self->sym->structs[tsi].is_pub)
+                int tpub = 0;
+                int is_adt_t = 0;
+                if (tsi >= 0) {
+                    tpub = self->sym->structs[tsi].is_pub;
+                } else {
+                    /* v1-PH-2 S6: a generic ADT template has no struct row;
+                       its ADT row carries the `pub` flag. */
+                    int tbi3 = frontend::sym::ct_tmpl_find(tmpl);
+                    int tbn3;
+                    struct StructTmpl *tps3 = frontend::sym::ct_tmpls(&tbn3);
+                    if (tbi3 >= 0 && tps3 && tps3[tbi3].is_adt) {
+                        int adn3;
+                        struct Adt *ad3 = frontend::sym::ct_adts(&adn3);
+                        int ai3 = tps3[tbi3].adt;
+                        if (ad3 && ai3 >= 0 && ai3 < adn3) {
+                            tpub = ad3[ai3].is_pub;
+                            is_adt_t = 1;
+                        }
+                    }
+                }
+                if (!self->unit_is_hdr || !tpub)
                     return tool::diag::ct_sem_error(mline, 1,
-                        "a pub method needs a pub struct in a .h.ct unit",
+                        is_adt_t
+                            ? "a pub method needs a pub ADT in a .h.ct unit"
+                            : "a pub method needs a pub struct in a .h.ct unit",
                         self->mem->path);
             }
             if (self->ex->parse_type_text(&ret) != 0) return -1;

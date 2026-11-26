@@ -49,7 +49,7 @@ impl ExprAdt for Expr {
     {
         const char *p;
         const char *rn;
-        int i;
+        int i, depth;
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
@@ -59,6 +59,25 @@ impl ExprAdt for Expr {
         if (frontend::sym::ct_adt_from_type(rn) < 0) return 0;
         p = self->lex->src + self->lex->tokstart + self->lex->tokstr.len;
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        /* v1-PH-2 S6: `Opt<int>.Some(...)` / `Opt<T>.Some(...)` -- skip the
+           type-argument list before looking for the variant. The scan is raw
+           source, so it must balance nested `<...>` itself; `>>` is just two
+           closing brackets here. */
+        if (*p == '<') {
+            depth = 0;
+            for (;;) {
+                if (!*p) return 0;
+                if (*p == '<') depth++;
+                else if (*p == '>') {
+                    depth--;
+                    p++;
+                    if (depth == 0) break;
+                    continue;
+                }
+                p++;
+            }
+            while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        }
         if (*p != '.') return 0;
         p++;
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
@@ -80,15 +99,17 @@ impl ExprAdt for Expr {
     {
         int tline, tcol, vline, vcol, args, nargs, adt, v, nfields, n, k, a;
         const char *rn;
+        const char *tb;
         const char *vname;
         struct Adt *adts;
         int nadts;
 
         tline = self->lex->tokline;
         tcol = self->lex->tokstart - self->lex->lstart + 1;
-        rn = self->sym->resolve_type_text(runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len));
-        if (!rn) return self->sup->fail("out of memory");
-        self->sup->lex_next();                     /* the type name */
+        /* The type reader consumes `Opt<int>` (registering the instance) or
+           leaves a symbolic `Opt<T>` alone inside a generic impl body. */
+        if (self->parse_type_text(&tb) != 0) return -1;
+        rn = tb;
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
             return self->sup->fail("expected '.' after an ADT type name");
         self->sup->lex_next();
@@ -100,6 +121,16 @@ impl ExprAdt for Expr {
         if (!vname) return self->sup->fail("out of memory");
         self->sup->lex_next();
         adt = frontend::sym::ct_adt_from_type(rn);
+        if (adt < 0) {
+            /* a symbolic template spelling (`Opt<T>`) has no instance row yet;
+               the emitter substitutes the block's arguments */
+            const char *lt = strchr(rn, '<');
+            if (lt) {
+                rn = runtime::text::ct_intern_len(rn, (int)(lt - rn));
+                if (!rn) return self->sup->fail("out of memory");
+                adt = frontend::sym::ct_adt_find(rn);
+            }
+        }
         if (adt < 0) {
             return tool::diag::ct_sem_error(tline, tcol,
                 tool::sh::ct_scratch_fmt("'%s' is not an ADT", rn),
@@ -168,7 +199,8 @@ impl ExprAdt for Expr {
         }
         n = self->sup->new_node(N_ADTCTOR);
         if (n < 0) return -1;
-        self->arena->nodes[n].text = runtime::text::ct_intern(adts[adt].full);
+        self->arena->nodes[n].text = runtime::text::ct_intern(
+            adts[adt].is_template ? tb : adts[adt].full);
         if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
         self->arena->nodes[n].text2 = runtime::text::ct_intern(adts[adt].variants[v].cname);
         if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");

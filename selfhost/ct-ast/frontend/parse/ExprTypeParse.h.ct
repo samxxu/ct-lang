@@ -1091,7 +1091,10 @@ impl ExprTypeParse for Expr {
         nt2 = tp[ti2].ntparams;
         if (self->lex->tok != T_PUNCT || !self->lex->tok_is("<")) {
             return self->sup->fail(runtime::text::ct_internf(
-                     "generic struct '%s' needs type arguments in a type position", tname));
+                     tp[ti2].is_adt
+                         ? "generic ADT '%s' needs type arguments in a type position"
+                         : "generic struct '%s' needs type arguments in a type position",
+                     tname));
         }
         self->sup->lex_next();
         nargs = 0;
@@ -1186,7 +1189,9 @@ impl ExprTypeParse for Expr {
                under-arity share one message so a user template and a built-in
                container are still judged by the same rule. */
             return self->sup->fail(runtime::text::ct_internf(
-                     "generic struct '%s' takes %d type arguments, %d given",
+                     tp[ti2].is_adt
+                         ? "generic ADT '%s' takes %d type arguments, %d given"
+                         : "generic struct '%s' takes %d type arguments, %d given",
                      tname, nt2, nargs));
         }
         /* A type parameter used as a type argument stays symbolic: the instance

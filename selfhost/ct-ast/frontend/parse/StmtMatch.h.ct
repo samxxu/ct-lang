@@ -924,7 +924,9 @@ impl StmtMatch for Stmt {
     int pat_parse_atom(const char *type, const char *path)
     {
         int line, col, kind, adt, si, ptr, id, first, last, i, rc;
+        int gpat, adt_override;
         const char *bname;
+        const char *gtb;
         char msgbuf[3 * MAX_TEXT];
         char lit[64];
 
@@ -1014,10 +1016,61 @@ impl StmtMatch for Stmt {
         if (self->lex->tok != T_ID)
             return tool::diag::ct_sem_error(line, col, "expected a pattern",
                                             self->mem->path);
-        bname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                             self->lex->tokstr.len);
-        if (!bname) return self->sup->fail("out of memory");
-        self->sup->lex_next();
+        /* v1-PH-2 S6: `Opt<int>.Some(v)` names the instance explicitly. The
+           raw source decides before the token is consumed, because the type
+           reader starts at the identifier; `Opt.Some(v)` (the inferred form)
+           keeps the old path. */
+        gpat = 0;
+        adt_override = -1;
+        {
+            const char *gp = self->lex->src + self->lex->tokstart
+                             + self->lex->tokstr.len;
+            while (*gp == ' ' || *gp == '\t' || *gp == '\n' || *gp == '\r') gp++;
+            if (*gp == '<') {
+                int gd = 0;
+                for (;;) {
+                    if (!*gp) break;
+                    if (*gp == '<') gd++;
+                    else if (*gp == '>') {
+                        gd--;
+                        gp++;
+                        if (gd == 0) break;
+                        continue;
+                    }
+                    gp++;
+                }
+                while (*gp == ' ' || *gp == '\t' || *gp == '\n' || *gp == '\r')
+                    gp++;
+                if (*gp == '.') gpat = 1;
+            }
+        }
+        if (gpat) {
+            int nadts2;
+            struct Adt *adts2;
+            if (self->ex->parse_type_text(&gtb) != 0) return -1;
+            adt_override = frontend::sym::ct_adt_from_type(gtb);
+            if (adt_override < 0) {
+                const char *lt = strchr(gtb, '<');
+                if (lt) {
+                    gtb = runtime::text::ct_intern_len(gtb, (int)(lt - gtb));
+                    if (!gtb) return self->sup->fail("out of memory");
+                    adt_override = frontend::sym::ct_adt_find(gtb);
+                }
+            }
+            if (adt_override < 0)
+                return tool::diag::ct_sem_error(line, col,
+                    tool::sh::ct_scratch_fmt("'%s' is not an ADT", gtb),
+                    self->mem->path);
+            adts2 = frontend::sym::ct_adts(&nadts2);
+            if (!adts2 || adt_override >= nadts2)
+                return self->sup->fail("the ADT row is missing");
+            bname = adts2[adt_override].full;
+        } else {
+            bname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!bname) return self->sup->fail("out of memory");
+            self->sup->lex_next();
+        }
         if (self->lex->tok == T_PUNCT && self->lex->tok_is(".")) {
             /* a variant pattern */
             const char *vname;
@@ -1048,6 +1101,24 @@ impl StmtMatch for Stmt {
                              "match arm names '%s', which is not an ADT", bname);
                     return tool::diag::ct_sem_error(line, col, msgbuf,
                                                     self->mem->path);
+                }
+                if (other != adt) {
+                    adts = frontend::sym::ct_adts(&nadts);
+                    /* v1-PH-2 S6: `Opt.Some(v)` names the template while the
+                       subject is `Opt<int>`. The pattern is about the same
+                       declared sum type, so it reads the subject's concrete
+                       variant rows (the variant order is the template's). */
+                    if (adts && other >= 0 && other < nadts
+                        && adt >= 0 && adt < nadts
+                        && adts[other].is_template
+                        && adts[adt].tmpl == other) {
+                        other = adt;
+                    } else if (adts && other >= 0 && other < nadts
+                               && adt >= 0 && adt < nadts
+                               && adts[adt].is_template
+                               && adts[other].tmpl == adt) {
+                        other = adt;
+                    }
                 }
                 if (other != adt) {
                     adts = frontend::sym::ct_adts(&nadts);

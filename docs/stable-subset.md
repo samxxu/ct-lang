@@ -38,7 +38,7 @@
 | `String` / `Str` 的布局、存放位置与释放分层 | 已冻结 | REQ + ADR 或 battle；破坏性改动 MINOR + 一个 MINOR 回退 | v1.1.0 起 | spec §4.70；[LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
 | 切片 `T[]` 的拼写、位置白名单与边界行为 | 已冻结 | 同上 | v1.1.0 起 | spec §4.69；[SH-108](../issues/selfhost/sh108-p87-dogfood-t-a-fp.md) |
 | `ref` / `out` 参数语义与 `out` 定值分析 | 已冻结 | 同上；逃逸契约已写入 spec §4.68（J-4b） | v1.1.0 起 | spec §4.68；D-011 J-4b |
-| ADT 与 `match` 的形态（无泛型 ADT、无 or 模式）；ADT/变体/负载计数从初始值倍增到形式上限 `CAP_LIMIT`=65536，不再有 64/96/8 语义上限（S1a-0 C3/C4） | 已冻结 | 同上 | v1.1.0 起 | spec §4.73、§7 |
+| ADT 与 `match` 的形态（泛型 ADT 自 S6 起支持；or 模式自 S5 起；泛型 C enum 仍不支持）；ADT/变体/负载计数从初始值倍增到形式上限 `CAP_LIMIT`=65536，不再有 64/96/8 语义上限（S1a-0 C3/C4） | 已冻结 | 同上 | v1.1.0 起（泛型 ADT：v1.2.0 起） | spec §4.73、§7 |
 | 泛型元数（struct / trait 的类型参数个数）：初始 2、倍增到形式上限 `CAP_LIMIT`=65536，不再有“最多两个”语义上限（S1a-0 C3/C4） | 已冻结 | 同上 | v1.1.0 起 | spec §7、§4.51、§4.55 |
 | `Box<T>` / `new` 的语义与规范拼写 | 已冻结 | REQ + ADR；`box<T>` 别名已于 v1.1.0 删除（硬错） | v1.1.0 起 | [D-016](decisions/D-016.md)；LANG-24 |
 | `MAX_FUNCS` 动态增长（初始 512、倍增、`CAP_LIMIT`=65536 安全阀） | 冻结中 | REQ + ADR；只允许扩大形式上限，不收紧 | **当前 pre 窗口（v1.1 前；2026-11-23 提前）** | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |

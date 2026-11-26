@@ -415,6 +415,9 @@ static int adt_owns(struct Emitter *self, int adi, int depth)
     struct Adt *adts;
     adts = frontend::sym::ct_adts(&n);
     if (!adts || adi < 0 || adi >= n || depth > 16) return 0;
+    /* v1-PH-2 S6: a template's payloads are symbolic (`T`) and it has no C
+       value of its own, so it never owns anything. */
+    if (adts[adi].is_template) return 0;
     for (v = 0; v < adts[adi].nvariants; v++)
         for (f = 0; f < adts[adi].variants[v].nfields; f++)
             if (adt_own_kind(self, adts[adi].variants[v].fields[f].type, depth))
@@ -2220,6 +2223,8 @@ static int emit_closure_arg(struct Emitter *self, int n)
 
 /* Phase 84: the ADT layout writer, the match-arm writer and the include test. */
 static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi);
+static int adt_emit_instance(struct Emitter *self, int adi);
+static int adt_row_for_emit(struct Emitter *self, const char *tag);
 static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr);
 
 static int emit_struct_insts(struct Emitter *self, int u, int header);
@@ -2677,6 +2682,7 @@ static int emit_adt_life_defs(struct Emitter *self, int u)
     if (!adts) return 0;
     for (i = 0; i < n; i++) {
         if (u >= 0 && adts[i].owner != u) continue;
+        if (adts[i].is_template) continue;
         if (!adt_owns(self, i, 0)) continue;
         d = (u >= 0 && adts[i].is_pub) ? 0 : 1;
         if (d)
@@ -3062,6 +3068,18 @@ static int inst_emit_one(struct Emitter *self, int ii)
     insts = frontend::sym::ct_insts(&n);
     if (!insts || ii < 0 || ii >= n) return 0;
     if (insts[ii].emitted) return 0;
+    /* v1-PH-2 S6: the instance of a generic ADT is a concrete ADT row, so its
+       definition is the ADT layout (tag + union), not the empty struct row the
+       generic-instance bookkeeping created. */
+    {
+        int adi = frontend::sym::ct_adt_find(insts[ii].name);
+        int nadts = 0;
+        struct Adt *adts = frontend::sym::ct_adts(&nadts);
+        if (adts && adi >= 0 && adi < nadts && adts[adi].tmpl >= 0) {
+            insts[ii].emitted = 1;
+            return adt_emit_instance(self, adi);
+        }
+    }
     ti = self->sym->find_struct(insts[ii].name);
     if (ti < 0) return 0;
     insts[ii].emitted = 1;
@@ -4164,46 +4182,46 @@ static int preemit_adt_payload(struct Emitter *self, int adi)
     if (ensure_shell_emit_state(n) != 0) return self->fail("out of memory");
     for (i = 0; i < n; i++) g_shell_emit_state[i] = 0;
     for (v = 0; v < adts[adi].nvariants; v++)
-        for (f = 0; f < adts[adi].variants[v].nfields; f++)
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            /* v1-PH-2 S6: a payload that names another generic ADT instance
+               *by value* needs that instance's layout first (`Opt<Opt<int>>`).
+               A pointer / array payload is not a layout dependency, exactly as
+               in `type_layout_closure`; skipping it also keeps mutually
+               recursive pointer ADTs from recursing here. */
+            const char *ft = adts[adi].variants[v].fields[f].type;
+            if (ft && !strchr(ft, '*') && !strchr(ft, '[')) {
+                int dep = frontend::sym::ct_adt_from_type(ft);
+                if (dep >= 0 && dep != adi && dep < nadts
+                    && adts[dep].tmpl >= 0 && !adts[dep].emitted)
+                    if (adt_emit_instance(self, dep) != 0) return -1;
+            }
+            adts = frontend::sym::ct_adts(&nadts);
             for (i = 0; i < n; i++) {
                 if (!type_needs_layout(adts[adi].variants[v].fields[f].type,
                                        ins[i].name))
                     continue;
                 if (shell_preemit(self, i, 0) != 0) return -1;
             }
+        }
     return 0;
 }
 
 /* `with_semi` is accepted for signature parity with the type writer. */
-static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
+/* Write one ADT layout: the tag, the union with one member per payload-bearing
+   variant, the four ABI assertions and (for an owning ADT) the retain/release
+   protocol. `n` is the declaration node when a `typedef`/attribute applies;
+   an instance row passes -1 and has neither. */
+static int emit_adt_layout_body(struct Emitter *self, int adi, int n,
+                                const char *tag, const char *alias,
+                                int is_typedef, int ind)
 {
-    int adi, v, f, i, n_inst;
+    int v, f;
     struct Adt *adts;
     int nadts;
-    const char *tag;
-    const char *alias;
-    int is_typedef;
-    (void)with_semi;
 
-    adi = (int)self->arena->nodes[n].num - 1;
     adts = frontend::sym::ct_adts(&nadts);
     if (!adts || adi < 0 || adi >= nadts)
-        return self->fail_from(n, "the ADT row is missing");
-    /* LANG-29 S1 / B1: refuse a layout that cannot close, then write the
-       instance shells its payload holds before the union. The state arrays
-       grow to the actual counts; only the live prefix is reset. */
-    n_inst = 0;
-    (void)frontend::sym::ct_insts(&n_inst);
-    if (ensure_adt_layout_state(nadts) != 0
-        || ensure_inst_layout_state(n_inst) != 0)
-        return self->fail("out of memory");
-    for (i = 0; i < nadts; i++) g_adt_layout_state[i] = 0;
-    for (i = 0; i < n_inst; i++) g_inst_layout_state[i] = 0;
-    if (adt_layout_closure(self, adi, 0) != 0) return -1;
-    if (preemit_adt_payload(self, adi) != 0) return -1;
-    is_typedef = (self->arena->nodes[n].aux & 1) ? 1 : 0;
-    tag = adts[adi].full;
-    alias = self->arena->nodes[n].text2;
+        return self->fail("the ADT row is missing");
     if (is_typedef) {
         fprintf(self->out, "typedef struct %s {\n", tag);
     } else {
@@ -4230,7 +4248,7 @@ static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
     self->emit_indent(ind);
     fputs("}", self->out);
     if (is_typedef) fprintf(self->out, " %s", alias);
-    if (self->arena->nodes[n].attr >= 0)
+    if (n >= 0 && self->arena->nodes[n].attr >= 0)
         fprintf(self->out, " %s", self->arena->str_at(self->arena->nodes[n].attr));
     fputs(";\n", self->out);
     /* E84-5: the ABI promises exactly two facts about the layout, and both are
@@ -4258,6 +4276,68 @@ static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
         fprintf(self->out, "void %s_release(struct %s *);\n", tag, tag);
     }
     return 0;
+}
+
+static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
+{
+    int adi, i, n_inst;
+    struct Adt *adts;
+    int nadts;
+    const char *tag;
+    const char *alias;
+    int is_typedef;
+    (void)with_semi;
+
+    adi = (int)self->arena->nodes[n].num - 1;
+    adts = frontend::sym::ct_adts(&nadts);
+    if (!adts || adi < 0 || adi >= nadts)
+        return self->fail_from(n, "the ADT row is missing");
+    /* v1-PH-2 S6: a generic template has no C layout of its own; every
+       `Opt<int>` instance is written by the instance writer. */
+    if (adts[adi].is_template) return 0;
+    /* LANG-29 S1 / B1: refuse a layout that cannot close, then write the
+       instance shells its payload holds before the union. The state arrays
+       grow to the actual counts; only the live prefix is reset. */
+    n_inst = 0;
+    (void)frontend::sym::ct_insts(&n_inst);
+    if (ensure_adt_layout_state(nadts) != 0
+        || ensure_inst_layout_state(n_inst) != 0)
+        return self->fail("out of memory");
+    for (i = 0; i < nadts; i++) g_adt_layout_state[i] = 0;
+    for (i = 0; i < n_inst; i++) g_inst_layout_state[i] = 0;
+    if (adt_layout_closure(self, adi, 0) != 0) return -1;
+    if (preemit_adt_payload(self, adi) != 0) return -1;
+    is_typedef = (self->arena->nodes[n].aux & 1) ? 1 : 0;
+    tag = adts[adi].full;
+    alias = self->arena->nodes[n].text2;
+    return emit_adt_layout_body(self, adi, n, tag, alias, is_typedef, ind);
+}
+
+/* v1-PH-2 S6: write the layout of one concrete ADT instance. The instance row
+   is an ordinary ADT (substituted payloads), so the same closure checks and the
+   same writer serve it; `emitted` keeps the definition single when two units
+   name it or the payload walk reaches it first. */
+static int adt_emit_instance(struct Emitter *self, int adi)
+{
+    int i, n_inst, n;
+    struct Adt *adts;
+
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || adi < 0 || adi >= n) return 0;
+    if (adts[adi].is_template || adts[adi].tmpl < 0) return 0;
+    if (adts[adi].emitted) return 0;
+    n_inst = 0;
+    (void)frontend::sym::ct_insts(&n_inst);
+    if (ensure_adt_layout_state(n) != 0 || ensure_inst_layout_state(n_inst) != 0)
+        return self->fail("out of memory");
+    for (i = 0; i < n; i++) g_adt_layout_state[i] = 0;
+    for (i = 0; i < n_inst; i++) g_inst_layout_state[i] = 0;
+    if (adt_layout_closure(self, adi, 0) != 0) return -1;
+    if (preemit_adt_payload(self, adi) != 0) return -1;
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || adi >= n) return -1;
+    adts[adi].emitted = 1;
+    return emit_adt_layout_body(self, adi, -1, adts[adi].full, "", 0, 0);
 }
 
 /* One arm of a `match`. The bindings belong to the arm's own block, so the
@@ -4731,6 +4811,40 @@ static int fail_unknown_statement(struct Emitter *self, int nk)
     return self->fail(msg);
 }
 
+/* v1-PH-2 S6: the ADT row a tag names during emission. A concrete instance tag
+   resolves directly; a template tag written inside a generic impl body resolves
+   to the instance the block is currently being monomorphised for (`ginst`), so
+   `match (self)` and `Opt<T>.Some(...)` print the concrete layout. */
+static int adt_row_for_emit(struct Emitter *self, const char *tag)
+{
+    int a, n, ii, nn, b;
+    struct Adt *adts;
+    struct StructInst *ins;
+
+    if (!tag) return -1;
+    if (strncmp(tag, "struct ", 7) == 0) tag += 7;
+    {
+        /* a symbolic template spelling (`Opt<T>`) names the template row */
+        const char *lt = strchr(tag, '<');
+        if (lt) {
+            const char *base = runtime::text::ct_intern_len(tag, (int)(lt - tag));
+            if (!base) return -1;
+            tag = base;
+        }
+    }
+    a = frontend::sym::ct_adt_find(tag);
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || a < 0 || a >= n) return a;
+    if (!adts[a].is_template) return a;
+    if (!self->ginst[0]) return a;
+    ii = frontend::sym::ct_inst_find(self->ginst);
+    ins = frontend::sym::ct_insts(&nn);
+    if (ii < 0 || !ins) return a;
+    b = frontend::sym::ct_adt_find(ins[ii].name);
+    if (b >= 0 && b < n) return b;
+    return a;
+}
+
 /* PH-88: one node kind; the dispatcher read `kind` once. */
 static int em_expr_adtctor(struct Emitter *self, int n, int nk)
 {
@@ -4741,7 +4855,7 @@ static int em_expr_adtctor(struct Emitter *self, int n, int nk)
     const char *pfx;
     struct Adt *adts2;
     int nadts2;
-    adi2 = frontend::sym::ct_adt_find(self->arena->nodes[n].text);
+    adi2 = adt_row_for_emit(self, self->arena->nodes[n].text);
     adts2 = frontend::sym::ct_adts(&nadts2);
     if (!adts2 || adi2 < 0 || adi2 >= nadts2)
         return self->fail_from(n, "the ADT row is missing");
@@ -7192,7 +7306,7 @@ static int match_expr_emit(struct Emitter *self, int n)
     if ((self->arena->nodes[n].sflags & 8) == 0)
         return self->fail_from(n, "a statement match is not an expression");
     adts = frontend::sym::ct_adts(&nadts);
-    tagi = frontend::sym::ct_adt_find(self->arena->nodes[n].text);
+    tagi = adt_row_for_emit(self, self->arena->nodes[n].text);
     if (!adts || tagi < 0 || tagi >= nadts)
         return self->fail_from(n, "the ADT row is missing");
     k = self->ntmp;
@@ -7201,6 +7315,13 @@ static int match_expr_emit(struct Emitter *self, int n)
     /* S1a-0 C2p-6: the result type is a pool text; the old 160-byte rows cut
        a 2000-byte struct name into an incomplete type in `__ct_mresN`. */
     rtype = self->arena->nodes[n].text2;
+    /* v1-PH-2 S6: inside a generic impl body the arm type may still be the
+       block's parameter (`T`); substitute it before normalising, or the
+       temporary would be declared as the literal name `T`. */
+    {
+        const char *rsub = emit_gsub_type_text(self, rtype);
+        if (rsub) rtype = rsub;
+    }
     rnorm = sb_norm_own_type_text(self, rtype);
     if (!rnorm) rnorm = rtype;
     fputs("({ ", self->out);
@@ -7290,7 +7411,7 @@ static int em_node_match(struct Emitter *self, int n, int ind, int nk)
     tagi = -1;
     nonadt = self->arena->nodes[n].aux & 4;
     if (!nonadt) {
-        tagi = frontend::sym::ct_adt_find(self->arena->nodes[n].text);
+        tagi = adt_row_for_emit(self, self->arena->nodes[n].text);
         if (!adts || tagi < 0 || tagi >= nadts)
             return self->fail_from(n, "the ADT row is missing");
     }

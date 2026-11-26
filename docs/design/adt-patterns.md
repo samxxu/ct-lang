@@ -1,8 +1,8 @@
 # ADT 模式 A/B：字面量 / 嵌套 / 结构体 / or / 守卫（v1-PH-2 S4–S5）
 
-> 状态：**S4–S5 已实现（2026-11-27）；S6（泛型 ADT）为设计草案（§10），未实施**。
-> 对应 [REQ-ADT-PATTERN-1](../planning/requirements-pool.md#req-adt-pattern-1--adt-模式扩展字面量--嵌套--结构体--or--守卫--泛型-adt)、
-> [v1-PH-2](../phases/v1-PH-2/card.md) 的 S4–S6。
+> 状态：**实现设计（2026-11-27）**。对应 [REQ-ADT-PATTERN-1](../planning/requirements-pool.md#req-adt-pattern-1--adt-模式扩展字面量--嵌套--结构体--or--守卫--泛型-adt) 的前两段、
+> [v1-PH-2](../phases/v1-PH-2/card.md) 的 S4–S5。S6（泛型 ADT）见
+> [adt-generic](adt-generic.md)。
 > 语言口径落在 [spec §4.73](../language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast)。
 
 ## 1 范围
@@ -194,7 +194,8 @@ arm          := pattern ('if' expr)? '=>' block        // statement match
    `match on '…' needs a final unguarded '_ => { … }' arm (a guarded arm does not count as coverage)`。
 4. **嵌套仍是保守判定**：嵌套的变体/结构体/字面量子模式（含 `Some(X(n) | Y(n))`）
    即使覆盖了内部全部变体，也不使根变成不可反驳；仍要 `_` 或根兜底。这是 S4 口径
-   的延续，S6 的泛型 ADT 也不改它。
+   的延续，S6 的泛型 ADT 也不改它（实例行沿用同一套穷尽规则，见
+   [adt-generic](adt-generic.md)）。
 5. **重复模式**：带守卫的 arm 之间允许逐字相同的模式（不同守卫）；`_` 末位规则与
    `_` 唯一规则不变。守卫 arm 不参与“完整模式重复”的比较。
 
