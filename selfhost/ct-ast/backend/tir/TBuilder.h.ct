@@ -1381,6 +1381,10 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
             break;
         case N_VAR:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
+            /* a namespaced global's emitted symbol lives in `text3` */
+            m->exprs[eid - 1].member =
+                runtime::text::ct_intern(ar->nodes[n].text3
+                                             ? ar->nodes[n].text3 : "");
             break;
         case N_MEMBER:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
@@ -1538,6 +1542,14 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
             break;
     }
     if (tb_target(tb, eid, n) != 0) return -1;
+    if (tk == TK_NAME_GLOBAL && m->exprs[eid - 1].target_kind == RT_DIRECT
+        && m->exprs[eid - 1].target_a > 0
+        && m->exprs[eid - 1].target_a <= m->ndecls) {
+        /* a global reads through its emitted C symbol (a namespaced global's
+           `cname` is the mangled one the product declares). */
+        struct ct_tdecl *gd = &m->decls[m->exprs[eid - 1].target_a - 1];
+        if (gd->cname && gd->cname[0]) m->exprs[eid - 1].text = gd->cname;
+    }
     if (tb_expr_children(tb, eid, n) != 0) return -1;
     return eid;
 }

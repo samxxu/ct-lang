@@ -144,6 +144,7 @@ namespace backend::lir;
 #define LS_MATCH           24
 #define LS_MATCHBIND       25
 #define LS_MATCHYIELD      26
+#define LS_RETBLOCK        27
 
 /* Jump kinds. */
 #define LJ_BREAK            1

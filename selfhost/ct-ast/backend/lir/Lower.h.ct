@@ -246,6 +246,7 @@ import backend::verify::Verifier;
 #define LS_MATCH           24
 #define LS_MATCHBIND       25
 #define LS_MATCHYIELD      26
+#define LS_RETBLOCK        27
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -296,6 +297,7 @@ pub struct Lower {
                            (generated products move one and not the other) */
     int func_scope;     /* TScope id of the function being lowered */
     int func_has_self;  /* an impl method: the C spelling of `self` is `_self` */
+    int stmt_is_last;   /* the statement being lowered ends its block */
     int tmp_start_temps; /* LTemp count at function entry (rollback on abort) */
     int bypass_te;      /* the hoisted root whose own initialiser is lowering */
     int hoist_block;    /* the block the current statement-head hoists live in */
@@ -1097,6 +1099,8 @@ static int lw_expr(struct Lower *w, int teid)
             e = lmod_new_expr(w->l, LE_NAME, t->span.file, t->span.line, t->span.col);
             if (e <= 0) { w->hard = 1; return 0; }
             w->l->exprs[e - 1].text = t->text;
+            if (t->member && t->member[0])
+                w->l->exprs[e - 1].text = t->member;
             if (t->kind == TK_NAME_LOCAL && t->text
                 && strcmp(t->text, "self") == 0 && w->func_has_self)
                 w->l->exprs[e - 1].text = "_self";
@@ -2516,6 +2520,17 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             if (s->nkids > 1) { lw_abort(w, "L784"); return 0; }
             if (s->nkids == 1 && lw_hoist_for(w, block, s->kids[0], 1) != 0)
                 return 0;
+            if (!w->stmt_is_last) {
+                /* dead code follows this return (a label or a branch the
+                   emitter still prints); keep the source order by making the
+                   exit a statement on its own brace-less block. */
+                int rb = lmod_new_block(w->l, LB_BLOCK, s->scope, block);
+                if (rb <= 0) { w->hard = 1; return 0; }
+                b = &w->l->blocks[rb - 1];
+                b->span.file = s->span.file;
+                b->span.line = s->span.line;
+                b->span.col = s->span.col;
+            }
             b->term = LT_RETURN;
             b->term_err = s->err_edge;
             b->span.file = s->span.file;
@@ -2573,7 +2588,16 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
                     b->ret_temp = t;
                 }
             }
-            /* consumed by the block terminator, no separate statement */
+            /* consumed by the block terminator, no separate statement --
+               unless the exit got a brace-less block of its own. */
+            if (!w->stmt_is_last) {
+                sid = lmod_new_stmt(w->l, LS_RETBLOCK, s->span.file,
+                                    s->span.line, s->span.col);
+                if (sid <= 0) { w->hard = 1; return 0; }
+                w->l->stmts[sid - 1].body_blk = (int)(b - w->l->blocks) + 1;
+                *out = sid;
+                return 0;
+            }
             *out = 0;
             return 0;
         }
@@ -2806,10 +2830,28 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             return 0;
         }
         case TS_LABEL: {
+            int k;
             if (!s->text || !s->text[0]) { lw_abort(w, "L907"); return 0; }
             sid = lmod_new_stmt(w->l, LS_LABEL, s->span.file, s->span.line, s->span.col);
             if (sid <= 0) { w->hard = 1; return 0; }
             w->l->stmts[sid - 1].name = s->text;
+            /* The statements a label owns print one indentation level deeper
+               (C99 forbids a declaration directly after a label, so the
+               emitter writes an empty statement first). They live in a
+               brace-less child block. */
+            {
+                int lk = lmod_new_block(w->l, LB_BLOCK, s->scope, block);
+                if (lk <= 0) { w->hard = 1; return 0; }
+                for (k = 0; k < s->nkids; k++) {
+                    int sub = 0;
+                    if (lw_one_stmt(w, s->kids[k], lk, &sub) != 0) return 0;
+                    if (sub > 0 && lmod_block_add_stmt(w->l, lk, sub) != 0) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                }
+                w->l->stmts[sid - 1].body_blk = lk;
+            }
             *out = sid;
             return 0;
         }
@@ -2841,6 +2883,7 @@ static int lw_fill_block(struct Lower *w, int tsid, int blk)
     for (i = 0; i < s->nkids; i++) {
         int sid;
         if (w->aborted) return 0;
+        w->stmt_is_last = (i == s->nkids - 1);
         if (lw_one_stmt(w, s->kids[i], blk, &sid) != 0) return -1;
         if (sid > 0) {
             if (lmod_block_add_stmt(w->l, blk, sid) != 0) { w->hard = 1; return -1; }
@@ -2878,7 +2921,10 @@ static int lw_block_stmt(struct Lower *w, int tsid, int kind, int parent)
         if (lw_sb_tail(w, blk) != 0) return 0;
         /* the fall-out terminator for condition blocks: a CondJump back to
            the loop header / to the join, recorded for the S8 CFG pass */
-        if (kind == LB_WHILE_BODY || kind == LB_FOR_BODY) {
+        if ((kind == LB_WHILE_BODY || kind == LB_FOR_BODY)
+            && w->l->blocks[blk - 1].term == LT_NONE) {
+            /* a body that ends in `return` keeps its terminator: the C loop
+               already supplies the back edge, and the return must print. */
             w->l->blocks[blk - 1].term = LT_CONDJUMP;
         }
     }
@@ -2966,7 +3012,8 @@ static int lw_lower_func(struct Lower *w, int decl)
                 w->hard = 1;
                 return 0;
             }
-            if (v->name && strcmp(v->name, "self") == 0) w->func_has_self = 1;
+            if (d->is_method && v->name && strcmp(v->name, "self") == 0)
+                w->func_has_self = 1;
         }
     }
     if (!w->aborted) {
@@ -3072,6 +3119,9 @@ pub int ct_lir_build_program(int prog, const char *path, const char *base,
 
     if (!ct_lir_on()) return 0;
     lmod_reset(l);
+    /* the reset clears `enabled`; the switch is on (just checked) and the
+       body seam reads this flag when the emitter asks for a body. */
+    l->enabled = 1;
     w->l = l;
     w->m = backend::tir::tmod_get();
     m = w->m;
@@ -3129,6 +3179,9 @@ pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base)
 
     if (!ct_lir_on()) return 0;
     lmod_reset(l);
+    /* the reset clears `enabled`; the switch is on (just checked) and the
+       body seam reads this flag when the emitter asks for a body. */
+    l->enabled = 1;
     w->l = l;
     w->m = backend::tir::tmod_get();
     m = w->m;
@@ -3560,6 +3613,14 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
             fputs(e->op == LP_INC ? "++" : "--", g_lir_out);
             return lw_pw_kid(w, e, 0, PW_EXPR);
         case LE_BINARY:
+            if (e->op == LB_COMMA) {
+                fputs("(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_INLINE) != 0) return -1;
+                fputs(", ", g_lir_out);
+                if (lw_pw_kid(w, e, 1, PW_INLINE) != 0) return -1;
+                fputs(")", g_lir_out);
+                return 0;
+            }
             if (ctx == PW_COND && e->op >= LB_LT && e->op <= LB_NE) {
                 if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
                 fprintf(g_lir_out, " %s ", lw_bin_op(e->op));
@@ -3801,10 +3862,20 @@ static int lw_pw_decl(struct Lower *w, struct ct_lstmt *s, int ind, int inline_f
 {
     if (!inline_form) lw_ind(ind);
     if (!inline_form && s->aux == 1) fputs("static ", g_lir_out);
-    fprintf(g_lir_out, "%s %s%s",
-            (s->spelling && s->spelling[0]) ? s->spelling
-                                            : lmod_cspell(w->l, s->type),
-            s->name ? s->name : "", s->dims ? s->dims : "");
+    {
+        const char *sp = (s->spelling && s->spelling[0])
+                             ? s->spelling : lmod_cspell(w->l, s->type);
+        const char *star = sp ? strstr(sp, "(*)") : 0;
+        if (star) {
+            /* `int (*)(…)` takes the name inside the parentheses, the same
+               position the emitter's declarator writer uses. */
+            fprintf(g_lir_out, "%.*s(*%s)%s", (int)(star - sp), sp,
+                    s->name ? s->name : "", star + 3);
+        } else {
+            fprintf(g_lir_out, "%s %s%s", sp, s->name ? s->name : "",
+                    s->dims ? s->dims : "");
+        }
+    }
     if (!inline_form && s->err_edge) fputs(" __attribute__((unused))", g_lir_out);
     if (s->zero_init && s->expr <= 0) fputs(" = { 0 }", g_lir_out);
     if (s->expr > 0) {
@@ -3940,6 +4011,9 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             fputs(";\n", g_lir_out);
             return 0;
         }
+        case LS_RETBLOCK:
+            if (s->body_blk <= 0 || s->body_blk > w->l->nblocks) return -1;
+            return lw_pw_return(w, &w->l->blocks[s->body_blk - 1], ind);
         case LS_RELEASE:
             lw_ind(ind);
             fprintf(g_lir_out, "%s_release(&", s->name ? s->name : "String");
@@ -4155,6 +4229,8 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             fprintf(g_lir_out, "%s:\n", s->name ? s->name : "");
             lw_ind(ind + 1);
             fputs(";\n", g_lir_out);
+            if (s->body_blk > 0)
+                return lw_pw_stmts_only(w, s->body_blk, ind + 1);
             return 0;
         default:
             if (getenv("CT_LIR_DEBUG"))
