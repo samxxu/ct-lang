@@ -1,0 +1,11 @@
+pub int legacy_option(int x)
+{
+    Option<int> o = { 1, x };
+    return o.unwrap_or(-1) + o.is_some();
+}
+
+pub int legacy_result(int x)
+{
+    Result<int, char *> r = { 1, x, 0 };
+    return r.is_ok() + r.unwrap();
+}

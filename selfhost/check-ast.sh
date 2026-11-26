@@ -2199,6 +2199,37 @@ n="$(grep -c '^struct Option_Point {$' "$mod-optp/Option.h" 2>/dev/null)"
 [ "$n" = 0 ] && ok "p34_option_point_layer (the layer header keeps only the forward declaration)" \
     || bad "p34_option_point_layer" "the layer header defines the instance layout"
 
+# v1-PH-2 S6b: unit-scoped shadowing of the built-in `Option` / `Result`.
+# `optlib.h.ct` declares `pub enum Option<T>` and `legacy.h.ct` keeps the
+# built-in `Option<int>` / `Result<int, char *>`; both live in one program.
+# The C tags must stay apart (`ct_adt_Option_int` vs `Option_int`) and the run
+# must see the user's constructor/pattern/method in `main` and the built-in
+# layout in `legacy`.
+rm -rf "$mod-s6bshadow"
+mkdir -p "$mod-s6bshadow"
+if "$work/ct-ast" build --emit-c test/modules/s6b_shadow/main.ct -o "$mod-s6bshadow" \
+        >"$work/m6bs.out" 2>"$work/m6bs.err" \
+   && "$CC" -Wall -Wextra -std=c99 -I "$mod-s6bshadow" "$mod-s6bshadow"/*.c \
+        -o "$work/m6bs.bin" 2>"$work/m6bs.cc" \
+   && "$work/m6bs.bin" >"$work/m6bs.stdout" 2>&1 \
+   && cmp -s "$work/m6bs.stdout" test/modules/s6b_shadow/expected.out; then
+    ok "s6b_shadow (unit-scoped Option/Result shadowing, cross-unit)"
+else
+    bad "s6b_shadow" "$(cat "$work/m6bs.err" "$work/m6bs.cc" "$work/m6bs.stdout" 2>/dev/null)"
+fi
+n="$(grep -c '^struct ct_adt_Option_int {$' "$mod-s6bshadow/optlib.h" 2>/dev/null)"
+[ "$n" = 1 ] && ok "s6b_shadow_user_tag (user ADT layout is ct_adt_Option_int)" \
+    || bad "s6b_shadow_user_tag" "$(grep 'ct_adt_Option_int' "$mod-s6bshadow"/*.h 2>/dev/null | head -3)"
+n="$(grep -c '^struct Option_int {$' "$mod-s6bshadow/Option.h" 2>/dev/null)"
+[ "$n" = 1 ] && ok "s6b_shadow_builtin_tag (built-in layout keeps Option_int)" \
+    || bad "s6b_shadow_builtin_tag" "$(grep 'struct Option_int' "$mod-s6bshadow"/Option.h 2>/dev/null | head -3)"
+n="$(grep -c 'ct_adt_Option_int_get_or' "$mod-s6bshadow/main.c" 2>/dev/null)"
+[ "$n" = 1 ] && ok "s6b_shadow_user_method (main calls the user ADT method)" \
+    || bad "s6b_shadow_user_method" "$(grep 'get_or' "$mod-s6bshadow/main.c" 2>/dev/null | head -3)"
+n="$(grep -c '^struct ct_adt_Option_int {' "$mod-s6bshadow/legacy.c" 2>/dev/null)"
+[ "$n" = 0 ] && ok "s6b_shadow_legacy_builtin (legacy.c stays on the built-in layout)" \
+    || bad "s6b_shadow_legacy_builtin" "legacy.c defined the user ADT layout"
+
 # E34-11 (P34 S6): the generated header carries types and declarations only, a
 # generic instance is defined once per object, and the cache key is
 # directional -- two clean builds of the same source agree byte for byte, while

@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # v1-PH-2 S6 probe: generic ADTs (`enum Opt<T> { Some(T v), None() }`).
 #
-# The positive fixtures live under test/ast/308..312; this probe pins the
-# rejection half and the *instance* identity promises the fixtures cannot see
-# from their stdout:
+# The positive fixtures live under test/ast/308..314 (and the cross-unit case
+# under test/modules/s6b_shadow); this probe pins the rejection half, the
+# *instance* identity, and the S6b shadowing rule the fixtures cannot see from
+# their stdout:
 #   - two `Opt<int>` spellings are one layout (one `struct Opt_int {`), while
 #     `Opt<char *>` is a second one;
 #   - a bare generic ADT in a type position, a wrong arity, `void` as a type
-#     argument, a recursive-by-value instance, a generic C enum and a name that
-#     already belongs to a built-in generic struct are all refused;
+#     argument, a recursive-by-value instance and a generic C enum are refused;
+#   - `enum Option<T>` / `enum Result<T, E>` shadow the built-in generic
+#     structs in their unit (`ct_adt_*` tags, built-in `Option_int` untouched),
+#     while `enum Vec<T>` and the other built-ins stay a hard conflict;
 #   - boxing / vector storage of an instance builds and runs (the fixtures cover
 #     the behaviour; this probe only needs the compile to succeed).
 #
@@ -188,11 +191,98 @@ int main(void)
 CT
 bad_case genericenum "$tmp/genericenum.ct" "generic enums are not supported"
 
-# ---- a built-in generic struct already owns `Option` ---------------------
-cat >"$tmp/collision.ct" <<'CT'
+# ---- `Option` / `Result` shadow the built-in generic structs --------------
+# v1-PH-2 S6b: a unit's own `enum Option<T>` / `enum Result<T, E>` wins over
+# the built-in layer for every spelling in that unit, and its C tag is the
+# compiler-generated `ct_adt_*` spelling the built-in `Option_int` cannot
+# collide with.
+cat >"$tmp/shadow.ct" <<'CT'
 enum Option<T> {
     Some(T v),
     None(),
+}
+
+enum Result<T, E> {
+    Ok(T v),
+    Err(E e),
+}
+
+int main(void)
+{
+    Option<int> a = Option<int>.Some(1);
+    Option<int> b = Option<int>.None();
+    Result<int, char *> r = Result<int, char *>.Err("x");
+    match (a) {
+        Option.Some(v) => { if (v != 1) return 1; }
+        Option.None() => { return 1; }
+    }
+    match (b) {
+        Option.Some(v) => { return 1; }
+        Option.None() => { }
+    }
+    match (r) {
+        Result.Ok(v) => { return 1; }
+        Result.Err(e) => { }
+    }
+    return 0;
+}
+CT
+compile_ok shadow_option "$tmp/shadow.ct"
+n_adtopt=$(grep -c '^struct ct_adt_Option_int {' "$tmp/shadow_option.c" 2>/dev/null || true)
+n_adtres=$(grep -c '^struct ct_adt_Result_int_char_p {' "$tmp/shadow_option.c" 2>/dev/null || true)
+n_bopt=$(grep -c '^struct Option_int {' "$tmp/shadow_option.c" 2>/dev/null || true)
+n_bres=$(grep -c '^struct Result_int_char_p {' "$tmp/shadow_option.c" 2>/dev/null || true)
+if [ "${n_adtopt:-0}" -eq 1 ] && [ "${n_adtres:-0}" -eq 1 ] \
+   && [ "${n_bopt:-0}" -eq 0 ] && [ "${n_bres:-0}" -eq 0 ]; then
+    ok
+else
+    bad "shadow_option tags: expected ct_adt_* layouts only (Option=$n_adtopt Result=$n_adtres builtin-opt=$n_bopt builtin-res=$n_bres)"
+fi
+
+# ---- a unit without the declaration keeps the built-in layouts ------------
+cat >"$tmp/builtin.ct" <<'CT'
+int main(void)
+{
+    Option<int> a = { 1, 3 };
+    Result<int, char *> r = { 1, 4, 0 };
+    return a.unwrap() + r.unwrap();
+}
+CT
+compile_ok builtin_unchanged "$tmp/builtin.ct"
+n_bopt=$(grep -c '^struct Option_int {' "$tmp/builtin_unchanged.c" 2>/dev/null || true)
+n_bres=$(grep -c '^struct Result_int_char_p {' "$tmp/builtin_unchanged.c" 2>/dev/null || true)
+if [ "${n_bopt:-0}" -eq 1 ] && [ "${n_bres:-0}" -eq 1 ]; then
+    ok
+else
+    bad "builtin_unchanged: the built-in layouts changed (Option=$n_bopt Result=$n_bres)"
+fi
+
+# ---- `?` still reads the built-in Result only -----------------------------
+cat >"$tmp/qshadow.ct" <<'CT'
+enum Result<T, E> {
+    Ok(T v),
+    Err(E e),
+}
+
+Result<int, char *> f(void)
+{
+    return Result<int, char *>.Ok(1);
+}
+
+int main(void)
+{
+    Result<int, char *> r = f();
+    Result<int, char *> s = r?;
+    (void)s;
+    return 0;
+}
+CT
+bad_case qshadow "$tmp/qshadow.ct" "'?' needs a Result operand"
+
+# ---- only Option / Result are shadowable; another built-in stays a conflict
+cat >"$tmp/vecshadow.ct" <<'CT'
+enum Vec<T> {
+    V(T v),
 }
 
 int main(void)
@@ -200,8 +290,8 @@ int main(void)
     return 0;
 }
 CT
-bad_case collision "$tmp/collision.ct" \
-    "generic ADT 'Option' conflicts with an existing generic type of the same name"
+bad_case vecshadow "$tmp/vecshadow.ct" \
+    "generic ADT 'Vec' conflicts with an existing generic type of the same name"
 
 echo "p86adtg: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -1,0 +1,17 @@
+#include <stdio.h>
+import optlib;
+import legacy;
+
+int main(void)
+{
+    Option<int> a = Option<int>.Some(5);
+    Option<int> b = Option<int>.None();
+    int x;
+    match (a) {
+        Option.Some(v) => { x = v; }
+        Option.None() => { x = 0; }
+    }
+    printf("%d %d %d %d %d\n", x, a.get_or(-1), b.get_or(-1),
+           legacy_option(9), legacy_result(4));
+    return 0;
+}

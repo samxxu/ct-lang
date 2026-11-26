@@ -1,0 +1,85 @@
+/* v1-PH-2 S6b: the same shadowing rule for `Result<T, E>` -- declaration,
+   two-parameter substitution, constructors, patterns, inherent methods and
+   Box/Vec storage all resolve to the user ADT, while the built-in `Option`
+   stays in scope. */
+#include <stdio.h>
+
+enum Result<T, E> {
+    Ok(T v),
+    Err(E e),
+}
+
+impl<T, E> Result<T, E> {
+    int is_ok() {
+        match (self) {
+            Result.Ok(v) => { return 1; }
+            Result.Err(e) => { return 0; }
+        }
+        return 0;
+    }
+
+    T unwrap_or(T d) {
+        match (self) {
+            Result.Ok(v) => { return v; }
+            Result.Err(e) => { }
+        }
+        return d;
+    }
+}
+
+int main(void)
+{
+    Result<int, char *> a = Result<int, char *>.Ok(5);
+    Result<int, char *> b = Result<int, char *>.Err("bad");
+    Result<int, int> c = Result<int, int>.Err(-2);
+    Box<Result<int, int>> box = Box<Result<int, int>>::of(Result<int, int>.Ok(11));
+
+    Vec<Result<int, char *>> v;
+    v.h = 0;
+    v.push(Result<int, char *>.Ok(1));
+    v.push(Result<int, char *>.Err("x"));
+    v.push(Result<int, char *>.Ok(2));
+
+    int x;
+    int y;
+    int z;
+    match (a) {
+        Result.Ok(q) => { x = q; }
+        Result.Err(e) => { x = -1; }
+    }
+    match (b) {
+        Result.Ok(q) => { y = 0; }
+        Result.Err(e) => { y = -2; }
+    }
+    match (c) {
+        Result.Ok(q) => { z = 0; }
+        Result.Err(e) => { z = e; }
+    }
+    int boxed;
+    Result<int, int> *bp = box.at();
+    Result<int, int> boxedv = *bp;
+    match (boxedv) {
+        Result.Ok(q) => { boxed = q; }
+        Result.Err(e) => { boxed = -3; }
+    }
+    int sum;
+    sum = 0;
+    int i;
+    for (i = 0; i < v.len(); i = i + 1) {
+        match (v.get(i)) {
+            Result.Ok(q) => { sum = sum + q; }
+            Result.Err(e) => { }
+        }
+    }
+
+    /* the built-in Option is not shadowed here */
+    Option<int> o = { 1, 8 };
+    int ov = o.unwrap();
+
+    printf("%d %d %d %d %d %d %d %d %d %d\n", x, y, z, boxed, sum,
+           a.unwrap_or(-1), b.unwrap_or(-1), ov, a.is_ok(), b.is_ok());
+    box.release();
+    (void)v.release();
+    o.release();
+    return 0;
+}

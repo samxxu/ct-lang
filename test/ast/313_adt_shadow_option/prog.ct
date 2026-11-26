@@ -1,0 +1,93 @@
+/* v1-PH-2 S6b: a unit may shadow the built-in `Option<T>` with its own generic
+   ADT. Every `Option` spelling in this unit resolves to the ADT -- the type,
+   the constructor, the patterns and the `impl<T>` methods -- while the C tag
+   stays distinct from the built-in `Option_int` (`ct_adt_Option_int`). The
+   unshadowed built-in `Result` keeps working in the same unit. */
+#include <stdio.h>
+
+enum Option<T> {
+    Some(T v),
+    None(),
+}
+
+impl<T> Option<T> {
+    int is_some() {
+        match (self) {
+            Option.Some(v) => { return 1; }
+            Option.None() => { return 0; }
+        }
+        return 0;
+    }
+
+    T or_else(T d) {
+        match (self) {
+            Option.Some(v) => { return v; }
+            Option.None() => { }
+        }
+        return d;
+    }
+}
+
+int main(void)
+{
+    Option<int> a = Option<int>.Some(7);
+    Option<int> b = Option<int>.None();
+    Option<Option<int>> nest = Option<Option<int>>.Some(Option<int>.Some(3));
+    Box<Option<int>> box = Box<Option<int>>::of(Option<int>.Some(9));
+
+    Vec<Option<int>> v;
+    v.h = 0;
+    v.push(Option<int>.Some(1));
+    v.push(Option<int>.None());
+    v.push(Option<int>.Some(2));
+
+    int x;
+    int y;
+    int w;
+    int boxed;
+    match (a) {
+        Option.Some(q) => { x = q; }
+        Option.None() => { x = -1; }
+    }
+    match (b) {
+        Option.Some(q) => { y = q; }
+        Option.None() => { y = -1; }
+    }
+    match (nest) {
+        Option.Some(inner) => {
+            match (inner) {
+                Option.Some(q) => { w = q; }
+                Option.None() => { w = -3; }
+            }
+        }
+        Option.None() => { w = -4; }
+    }
+    Option<int> *bp = box.at();
+    Option<int> boxedv = *bp;
+    match (boxedv) {
+        Option.Some(q) => { boxed = q; }
+        Option.None() => { boxed = -5; }
+    }
+
+    int sum;
+    sum = 0;
+    int i;
+    for (i = 0; i < v.len(); i = i + 1) {
+        match (v.get(i)) {
+            Option.Some(q) => { sum = sum + q; }
+            Option.None() => { }
+        }
+    }
+
+    /* the built-in Result is not shadowed here: `{ 1, v, err }` and its methods
+       keep their old meaning */
+    Result<int, char *> r = { 1, 4, 0 };
+    int okv = r.unwrap();
+
+    printf("%d %d %d %d %d %d %d %d %d %d\n", x, y, w, boxed, sum,
+           a.or_else(-1), b.or_else(-1), okv, a.is_some(), b.is_some());
+    box.release();
+    (void)v.release();
+    r.release();
+    return 0;
+}
