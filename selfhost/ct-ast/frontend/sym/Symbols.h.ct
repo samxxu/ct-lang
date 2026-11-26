@@ -496,6 +496,9 @@ pub trait SymbolOps {
     const char *method_trait_text(const char *stype, const char *method);
     int  method_trait_amb(const char *stype, const char *method, const char *first,
                           char *other, int ocap);
+    /* S1a-0 C2p-6: the pool-text form; NULL when no second trait declares it. */
+    const char *method_trait_amb_text(const char *stype, const char *method,
+                                      const char *first);
     int  ns_decl_name(const char *name, char *out, int cap);
     /* S1a-0 C2o: the same mapping, returned as a pool text so a declaration
        name of any length up to TEXT_LIMIT needs no fixed `out` buffer. */
@@ -1989,13 +1992,13 @@ impl SymbolOps for Symbols {
        declares `method` -- the call is then ambiguous and the caller names
        both traits in a warning. `first` is the trait `method_trait` already
        named; the same struct `use`ing one trait twice is not ambiguous. */
-    int method_trait_amb(const char *stype, const char *method, const char *first,
-                         char *other, int ocap)
+    const char *method_trait_amb_text(const char *stype, const char *method,
+                                      const char *first)
     {
         const char *base;
         const char *key;
         size_t n;
-        int s, ti, mi, w;
+        int s, ti, mi;
         (void)self;
 
         base = stype;
@@ -2004,22 +2007,30 @@ impl SymbolOps for Symbols {
         n = strlen(base);
         while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) n--;
         key = runtime::text::ct_intern_len(base, (int)n);
-        if (!key) return self->fail("out of memory");
+        if (!key) return (const char *)0;
         s = self->find_struct(key);
-        if (s < 0) return -1;
+        if (s < 0) return (const char *)0;
         for (ti = 0; ti < self->structs[s].nuse; ti++) {
             int t = self->find_trait(self->structs[s].use[ti]);
             if (t < 0) continue;
             if (strcmp(self->traits[t].name, first) == 0) continue;
-            for (mi = 0; mi < self->traits[t].nm; mi++) {
-                if (strcmp(self->traits[t].m[mi].name, method) == 0) {
-                    w = snprintf(other, (size_t)ocap, "%s", self->traits[t].name);
-                    if (w < 0 || w >= ocap) return -1;
-                    return 0;
-                }
-            }
+            for (mi = 0; mi < self->traits[t].nm; mi++)
+                if (strcmp(self->traits[t].m[mi].name, method) == 0)
+                    return self->traits[t].name;
         }
-        return -1;
+        return (const char *)0;
+    }
+
+    int method_trait_amb(const char *stype, const char *method, const char *first,
+                         char *other, int ocap)
+    {
+        const char *o;
+        int w;
+        o = self->method_trait_amb_text(stype, method, first);
+        if (!o) return -1;
+        w = snprintf(other, (size_t)ocap, "%s", o);
+        if (w < 0 || w >= ocap) return -1;
+        return 0;
     }
 
     /* A declaration inside `namespace A::B` is stored under its C name,

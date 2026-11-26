@@ -37,6 +37,10 @@ pub int ct_generic_subst(const char *in, const char *word, const char *repl, cha
    zeroed on allocation, and an existing row keeps its buffer across a grow, so
    a caller can reserve once and keep appending. */
 pub char **ct_rows_reserve(char **rows, int have, int need, int *got);
+/* S1a-0 C2p-6: the same growable block for rows that hold a pool text each
+   (`Emitter.gtparam` / `.gtarg`) instead of a fixed MAX_TEXT buffer. No per-row
+   buffer is allocated; a new slot is NULL until the caller stores a text. */
+pub const char **ct_text_rows_reserve(const char **rows, int have, int need, int *got);
 /* The number of top-level type arguments in `Name<a[, b[, …]]>`; 0 when the
    spelling carries no argument list. The parser grows its row block from this
    before calling `ct_inst_split`, so the splitter never truncates. */
@@ -190,6 +194,40 @@ char **ct_rows_reserve(char **rows, int have, int need, int *got)
             return grown;
         }
     }
+    if (got) *got = cap;
+    return grown;
+}
+
+/* S1a-0 C2p-6: the pool-text variant. The block is the same geometric grow;
+   the rows are references, so nothing past `have` is allocated and a new slot
+   is NULL until it is bound. */
+const char **ct_text_rows_reserve(const char **rows, int have, int need, int *got)
+{
+    const char **grown;
+    int cap, i;
+
+    if (have < 0) have = 0;
+    if (need <= have) {
+        if (got) *got = have;
+        return rows;
+    }
+    if (need > MAX_STRUCT_TPARAMS_MAX) {
+        if (got) *got = have;
+        return rows;
+    }
+    cap = have > 0 ? have : MAX_STRUCT_TPARAMS;
+    while (cap < need && cap < MAX_STRUCT_TPARAMS_MAX) cap *= 2;
+    if (cap > MAX_STRUCT_TPARAMS_MAX) cap = MAX_STRUCT_TPARAMS_MAX;
+    if (need > cap) {
+        if (got) *got = have;
+        return rows;
+    }
+    grown = (const char **)realloc((void *)rows, (size_t)cap * sizeof(*grown));
+    if (!grown) {
+        if (got) *got = have;
+        return rows;
+    }
+    for (i = have; i < cap; i++) grown[i] = (const char *)0;
     if (got) *got = cap;
     return grown;
 }

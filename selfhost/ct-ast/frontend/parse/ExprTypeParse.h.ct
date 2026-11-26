@@ -335,17 +335,22 @@ impl ExprTypeParse for Expr {
                 }
                 depth = 0;
                 for (;;) {
-                    char tbuf[MAX_TEXT];
+                    char nbuf[64];
                     if (self->lex->tok == T_EOF) {
                         if (need_paren) return self->sup->fail("unterminated _Alignas");
                         return self->sup->fail("unterminated _Atomic");
                     }
-                    /* an integer token keeps its value, not its spelling */
-                    if (self->lex->tok == T_NUM && !self->lex->tokfloat)
-                        snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
-                    else
-                        self->lex->tok_copy(tbuf, sizeof tbuf);
-                    if (self->type_append(out, cap, &n, tbuf) != 0) return -1;
+                    /* an integer token keeps its value, not its spelling;
+                       S1a-0 C2p-6: any other token is passed through as its
+                       growable C string (never stored), so a type name between
+                       the parentheses is not cut by the old 160-byte `tbuf`. */
+                    if (self->lex->tok == T_NUM && !self->lex->tokfloat) {
+                        snprintf(nbuf, sizeof nbuf, "%ld", self->lex->toknum);
+                        if (self->type_append(out, cap, &n, nbuf) != 0) return -1;
+                    } else if (self->type_append(out, cap, &n,
+                                                 self->lex->tok_cstr()) != 0) {
+                        return -1;
+                    }
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                         depth--;

@@ -304,9 +304,11 @@ pub struct Emitter {
        substitute `gtparam` with `gtarg`, and `N_FUNC` prints `gtname` in place
        of the template's own C name. No AST field is touched (D26-7).
        S1a-0 C3: `gtparam`/`gtarg` are row blocks of `gtntparam` entries, grown
-       on demand; `gtcap` is their shared capacity. */
-    char **gtparam;
-    char **gtarg;
+       on demand; `gtcap` is their shared capacity.
+       S1a-0 C2p-6: each row is a pool text reference, not a MAX_TEXT buffer,
+       so a 2000-byte type argument is substituted whole. */
+    const char **gtparam;
+    const char **gtarg;
     int  gtntparam;
     int  gtcap;
     int  gtacap;

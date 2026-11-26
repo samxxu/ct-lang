@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define MAX_ADT_FIELDS_MAX 65536
 #define MAX_LABELS 64
 #define MAX_LABELS_MAX 65536
@@ -1388,33 +1389,44 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         int r;
         int np;
         int depth;
-        char tbuf[MAX_TEXT];
-        char dpx[MAX_TEXT];
+        char nbuf[64];
+        char * dpx;
         if (_self->ex->decl_prefix[0]) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate _Alignas on one declaration");
         }
-        dpx[0] = 0;
+        dpx = (char *)(malloc(TEXT_LIMIT));
+        if ((!dpx)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         np = 0;
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), "_Alignas") != 0) {
+        dpx[0] = 0;
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, TEXT_LIMIT, (&np), "_Alignas") != 0) {
+            free(dpx);
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
+            free(dpx);
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '(' after _Alignas");
         }
         depth = 0;
         for (; ; ) {
             if (_self->lex->tok == T_EOF) {
+                free(dpx);
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated _Alignas");
             }
             if (((_self->lex->tok == T_NUM) && (!_self->lex->tokfloat))) {
-                snprintf(tbuf, sizeof(tbuf), "%ld", _self->lex->toknum);
+                snprintf(nbuf, sizeof(nbuf), "%ld", _self->lex->toknum);
+                if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, TEXT_LIMIT, (&np), nbuf) != 0) {
+                    free(dpx);
+                    return (-1);
+                }
             }
             else {
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
-            }
-            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), tbuf) != 0) {
-                return (-1);
+                if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, TEXT_LIMIT, (&np), _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) != 0) {
+                    free(dpx);
+                    return (-1);
+                }
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
                 depth++;
@@ -1429,6 +1441,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
         _self->ex->decl_prefix = runtime_text_ct_intern(dpx);
+        free(dpx);
         if ((!_self->ex->decl_prefix)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }

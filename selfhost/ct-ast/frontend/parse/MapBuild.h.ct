@@ -744,23 +744,26 @@ impl MapBuildOps for MapBuild {
 
     int parse(int unit)
     {
-        char tname[MAX_TEXT];
-        char rtrait[MAX_TEXT];
-        char inst[MAX_TEXT];
-        char icn[MAX_TEXT];
-        char prefix[MAX_TEXT];
-        char vt[MAX_TEXT];
-        char hostpath[MAX_TEXT];
-        char hostcn[MAX_TEXT];
-        char host_type[MAX_TEXT];
+        /* S1a-0 C2p-6: the host spellings outlive the read and can be far past
+           160 bytes (a `map trait T for type struct <2000-byte name>`), so they
+           are pool texts. Only the recipe tail (`wname`/`callbuf`) and the
+           diagnostic row stay caller-sized. */
+        const char *tname;
+        const char *rtrait;
+        const char *inst;
+        const char *icn;
+        const char *prefix;
+        const char *vt;
+        const char *hostpath;
+        const char *hostcn;
+        const char *host_type;
         char wname[MAX_TEXT];
         char callbuf[MAX_TEXT];
         char msg[MAX_TEXT];
         struct MapTable *m;
         struct MapBind *b;
-        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident, ns_host, hl, cl;
+        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident, ns_host;
         int is_static, type_host, want;
-        size_t wl;
         (void)self;
 
         line = self->lex->tokline;
@@ -773,20 +776,25 @@ impl MapBuildOps for MapBuild {
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
         {
-            const char *tname_t = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                              self->lex->tokstr.len);
             const char *rtrait_t;
-            if (!tname_t) return self->sup->fail("out of memory");
-            rtrait_t = self->sym->resolve_type_text(tname_t);
+            tname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!tname) return self->sup->fail("out of memory");
+            rtrait_t = self->sym->resolve_type_text(tname);
             if (!rtrait_t) return -1;
-            snprintf(rtrait, sizeof rtrait, "%s", rtrait_t);
-            snprintf(tname, sizeof tname, "%s", tname_t);
+            rtrait = rtrait_t;
         }
         ti = self->sym->find_trait(rtrait);
         if (ti < 0) return self->sup->fail("map of an unknown trait");
         is_static = *self->unit_is_map;
         type_host = 0;
-        host_type[0] = 0;
+        host_type = "";
+        prefix = "";
+        vt = "";
+        inst = "";
+        icn = "";
+        hostpath = "";
+        hostcn = "";
         self->sup->lex_next();
         if (!(self->lex->tok == T_ID && self->lex->tok_is("for")))
             return self->sup->fail("expected 'for'");
@@ -801,7 +809,9 @@ impl MapBuildOps for MapBuild {
                The declared name is the last segment; the C spelling is the one the
                global was emitted under (mangled by its namespace). */
             for (;;) {
-                self->lex->tok_copy(inst, sizeof inst);
+                inst = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                    self->lex->tokstr.len);
+                if (!inst) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
                     self->sup->lex_next();
@@ -810,7 +820,8 @@ impl MapBuildOps for MapBuild {
                 }
                 break;
             }
-            if (self->sym->find_var(inst) < 0) {
+            k = self->sym->find_var(inst);
+            if (k < 0) {
                 /* Nothing is synthesised: a typo would become a silent host. A
                    `void *name;` placeholder is the documented workaround, and a
                    namespace host (SH-20) is the object-free form. */
@@ -819,8 +830,9 @@ impl MapBuildOps for MapBuild {
                          inst, inst);
                 return self->sup->fail(msg);
             }
-            if (self->sym->var_cname(inst, icn, sizeof icn) != 0)
-                snprintf(icn, sizeof icn, "%s", inst);
+            /* `Var.cname` is already a pool text (S1a-0 C2p-5), so the C
+               spelling is copied by pointer, never cut by a caller row. */
+            icn = self->sym->vars[k].cname;
         } else if (self->lex->tok == T_ID && self->lex->tok_is("namespace")) {
             /* SH-20: the host is a namespace, not an object. Nothing is declared,
                so the binding names its symbols after the namespace path and the
@@ -828,33 +840,22 @@ impl MapBuildOps for MapBuild {
             self->sup->lex_next();
             if (self->lex->tok != T_ID) return self->sup->fail("expected a namespace name");
             ns_host = 1;
-            hl = 0;
-            cl = 0;
-            hostpath[0] = 0;
-            hostcn[0] = 0;
+            /* S1a-0 C2p-6: both spellings are built with the pool join, so a
+               namespace path longer than the old 160-byte row is kept whole. */
             for (;;) {
-                wl = self->lex->tokstr.len;
-                if (hl > 0) {
-                    if (hl + 3 >= (int)sizeof hostpath)
-                        return self->sup->fail("namespace path is too long");
-                    hostpath[hl] = ':';
-                    hostpath[hl + 1] = ':';
-                    hl += 2;
-                    hostpath[hl] = 0;
-                    if (cl + 2 >= (int)sizeof hostcn)
-                        return self->sup->fail("namespace path is too long");
-                    hostcn[cl] = '_';
-                    cl++;
-                    hostcn[cl] = 0;
+                const char *seg = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                               self->lex->tokstr.len);
+                if (!seg) return self->sup->fail("out of memory");
+                if (hostpath[0]) {
+                    hostpath = runtime::text::ct_intern_join(hostpath, "::");
+                    if (!hostpath) return self->sup->fail("out of memory");
+                    hostcn = runtime::text::ct_intern_join(hostcn, "_");
+                    if (!hostcn) return self->sup->fail("out of memory");
                 }
-                if (hl + (int)wl >= (int)sizeof hostpath)
-                    return self->sup->fail("namespace path is too long");
-                self->lex->tok_copy(hostpath + hl, (int)sizeof hostpath - hl);
-                hl += (int)wl;
-                if (cl + (int)wl >= (int)sizeof hostcn)
-                    return self->sup->fail("namespace path is too long");
-                self->lex->tok_copy(hostcn + cl, (int)sizeof hostcn - cl);
-                cl += (int)wl;
+                hostpath = runtime::text::ct_intern_join(hostpath, seg);
+                if (!hostpath) return self->sup->fail("out of memory");
+                hostcn = runtime::text::ct_intern_join(hostcn, seg);
+                if (!hostcn) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("::")) {
                     self->sup->lex_next();
@@ -863,8 +864,8 @@ impl MapBuildOps for MapBuild {
                 }
                 break;
             }
-            snprintf(inst, sizeof inst, "%s", hostpath);
-            snprintf(icn, sizeof icn, "%s", hostcn);
+            inst = hostpath;
+            icn = hostcn;
             if (is_static && strcmp(self->sym->traits[ti].ns, icn) != 0)
                 return tool::diag::ct_sem_error(line, col,
                     "a static trait for a namespace host must be declared in that namespace",
@@ -884,13 +885,14 @@ impl MapBuildOps for MapBuild {
                 return self->sup->fail("expected a type after 'for type'");
             /* The host spelling goes through the same reader as a trait
                signature or a declaration, so a type alias expands and the key
-               is computed on the underlying spelling. */
-            if (self->ex->parse_type(host_type, sizeof host_type) != 0) return -1;
+               is computed on the underlying spelling. The pool-text reader
+               keeps a 2000-byte type whole (S1a-0 C2p-6). */
+            if (self->ex->parse_type_text(&host_type) != 0) return -1;
             if (!host_type[0]
                 || (self->lex->tok == T_PUNCT && self->lex->tok_is("[")))
                 return self->sup->fail("expected a type after 'for type'");
-            snprintf(inst, sizeof inst, "%s", host_type);
-            snprintf(icn, sizeof icn, "%s", host_type);
+            inst = host_type;
+            icn = host_type;
         } else {
             return self->sup->fail("expected 'instance', 'namespace' or 'type'");
         }
@@ -899,16 +901,18 @@ impl MapBuildOps for MapBuild {
            keeps the trait's spelling; otherwise the host prefix leads. A static
            mapping has neither a wrapper nor a vtable. */
         if (is_static) {
-            prefix[0] = 0;
-            vt[0] = 0;
+            prefix = "";
+            vt = "";
         } else if (ns_host && strncmp(rtrait, icn, strlen(icn)) == 0 && rtrait[strlen(icn)] == '_') {
-            snprintf(prefix, sizeof prefix, "%s", rtrait);
+            prefix = rtrait;
         } else {
-            if (snprintf(prefix, sizeof prefix, "%s_%s", icn, rtrait) >= (int)sizeof prefix)
-                return self->sup->fail("map symbol name is too long");
+            prefix = runtime::text::ct_internf("%s_%s", icn, rtrait);
+            if (!prefix) return self->sup->fail("map symbol name is too long");
         }
-        if (!is_static && snprintf(vt, sizeof vt, "%s_vtable", prefix) >= (int)sizeof vt)
-            return self->sup->fail("map symbol name is too long");
+        if (!is_static) {
+            vt = runtime::text::ct_internf("%s_vtable", prefix);
+            if (!vt) return self->sup->fail("map symbol name is too long");
+        }
         /* One map per prefix, across units: two declarations would emit the same
            wrappers and the same vtable twice. (A static map has no prefix; the
            type-host ambiguity check at the call site covers its duplicates.) */

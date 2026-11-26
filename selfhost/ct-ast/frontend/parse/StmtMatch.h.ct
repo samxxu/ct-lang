@@ -114,15 +114,19 @@ pub struct StmtMatch {
     int unused;
 }
 
-pub void match_expr_type_key(const char *in, char *out, int cap)
+/* S1a-0 C2p-6: the comparison key as a pool text. The old `char k[MAX_TEXT]`
+   cut two arm types that differ after byte 159 down to one key; the growable
+   `type_key_text` keeps them apart. */
+pub const char *match_expr_type_key_text(const char *in)
 {
-    char k[MAX_TEXT];
+    const char *k;
 
-    frontend::type::type_key(in, k, sizeof k);
-    if (strncmp(k, "struct", 6) == 0) memmove(k, k + 6, strlen(k + 6) + 1);
-    else if (strncmp(k, "union", 5) == 0) memmove(k, k + 5, strlen(k + 5) + 1);
-    else if (strncmp(k, "enum", 4) == 0) memmove(k, k + 4, strlen(k + 4) + 1);
-    snprintf(out, (size_t)cap, "%s", k);
+    k = frontend::type::type_key_text(in);
+    if (!k) return (const char *)0;
+    if (strncmp(k, "struct", 6) == 0) k += 6;
+    else if (strncmp(k, "union", 5) == 0) k += 5;
+    else if (strncmp(k, "enum", 4) == 0) k += 4;
+    return runtime::text::ct_intern(k);
 }
 
 impl StmtMatch for Stmt {
@@ -524,11 +528,11 @@ impl StmtMatch for Stmt {
         const char *rn = "";
         const char *vname;
         char msg[3 * MAX_TEXT];
-        char rtype[MAX_TEXT];
-        char rkey[MAX_TEXT];
+        const char *rtype = "";
+        const char *rkey = "";
         const char *ytype = "";
         char ybuf[MAX_TEXT];
-        char ykey[MAX_TEXT];
+        const char *ykey = "";
         struct Adt *adts;
         int nadts;
 
@@ -581,7 +585,7 @@ impl StmtMatch for Stmt {
         wild = -1;
         seen_wild = 0;
         have_type = 0;
-        rtype[0] = 0;
+        rtype = "";
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
             return self->sup->fail("expected a block after match (...)");
         self->sup->lex_next();
@@ -848,10 +852,14 @@ impl StmtMatch for Stmt {
                         "cannot determine the type yielded by this match arm",
                         self->mem->path);
                 }
-                match_expr_type_key(ytype, ykey, sizeof ykey);
+                ykey = match_expr_type_key_text(ytype);
+                if (!ykey) return self->sup->fail("out of memory");
                 if (!have_type) {
-                    snprintf(rtype, sizeof rtype, "%s", ytype);
-                    snprintf(rkey, sizeof rkey, "%s", ykey);
+                    /* `ytype` may still point at the arm's `ybuf` fallback;
+                       intern it so the node's row outlives the frame. */
+                    rtype = runtime::text::ct_intern(ytype);
+                    if (!rtype) return self->sup->fail("out of memory");
+                    rkey = ykey;
                     have_type = 1;
                 } else if (strcmp(ykey, rkey) != 0) {
                     if (variant >= 0) self->sup->pop_scope();
@@ -930,7 +938,7 @@ impl StmtMatch for Stmt {
                 "an expression match needs at least one arm that yields a value",
                 self->mem->path);
         }
-        self->arena->nodes[s].text2 = runtime::text::ct_intern(rtype);
+        self->arena->nodes[s].text2 = rtype;
         if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
         if (wild < 0) {
             for (i = 0; i < adts[adt].nvariants; i++) {

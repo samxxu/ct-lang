@@ -189,7 +189,6 @@ int frontend_parse_expr_generic_param(struct frontend_parse_Expr *, const char *
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(void *self, int gfi, const char * targ, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     char cname[MAX_TEXT];
-    char tmp[MAX_TEXT];
     char msg[MAX_TEXT];
     const char * itxt;
     int i;
@@ -262,11 +261,11 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
     if ((!_self->sym->funcs[ni].tparam)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    itxt = ((frontend_sym_ct_generic_subst(_self->sym->funcs[gfi].ret, _self->sym->funcs[gfi].tparam, targ, tmp, sizeof(tmp)) == 0) ? tmp : _self->sym->funcs[gfi].ret);
-    _self->sym->funcs[ni].ret = runtime_text_ct_intern(itxt);
-    if ((!_self->sym->funcs[ni].ret)) {
+    itxt = frontend_sym_ct_generic_subst_text(_self->sym->funcs[gfi].ret, _self->sym->funcs[gfi].tparam, targ);
+    if ((!itxt)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
+    _self->sym->funcs[ni].ret = itxt;
     for (k = 0; k < _self->sym->funcs[gfi].nparams; k++) {
         const char * sub = frontend_sym_ct_generic_subst_text(_self->sym->funcs[gfi].ptype[k], _self->sym->funcs[gfi].tparam, targ);
         if ((!sub)) {

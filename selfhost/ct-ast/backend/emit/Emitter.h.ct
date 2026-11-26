@@ -450,22 +450,9 @@ static int sb_value_type_owns(struct Emitter *self, const char *type)
     return ai >= 0 && adt_owns(self, ai, 0);
 }
 
-/* Normalise an owning value type to its C spelling for a temporary declaration:
-   an ADT reached through a bare field spelling (`Msg`) needs `struct Msg`. */
-static void sb_norm_own_type(struct Emitter *self, char *t, int cap)
-{
-    int ai, n;
-    struct Adt *adts;
-    (void)self;
-    if (strncmp(t, "struct ", 7) == 0) return;
-    ai = frontend::sym::ct_adt_from_type(t);
-    if (ai < 0) return;
-    adts = frontend::sym::ct_adts(&n);
-    if (!adts || ai >= n) return;
-    snprintf(t, (size_t)cap, "struct %s", adts[ai].full);
-}
-
-/* S1a-0 C2p-5: the pool-text form of `sb_norm_own_type`. */
+/* S1a-0 C2p-5: normalise an owning value type to its C spelling for a
+   temporary declaration: an ADT reached through a bare field spelling (`Msg`)
+   needs `struct Msg`. The pool-text form replaced the 160-byte buffer. */
 static const char *sb_norm_own_type_text(struct Emitter *self, const char *t)
 {
     int ai, n;
@@ -1322,31 +1309,41 @@ static int unit_init_needed(struct Emitter *e, int n)
    every unit's nodes. */
 /* Phase 26: the type spelling with the active template's parameter replaced.
    Returns 0 when `buf` holds the substituted spelling, -1 when no instance is
-   active or the result does not fit (the caller keeps the original). */
+   active or the result does not fit (the caller keeps the original).
+   S1a-0 C2p-6: the three scratch rows this used to keep (`cur`/`nxt`/`res`,
+   each 160 bytes) are gone; substitution and instance resolution run on pool
+   texts, so a 2000-byte argument is not cut before `buf` sees it. */
 static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap)
 {
-    char cur[160];
-    char nxt[160];
-    char res[160];
-    int i;
+    const char *cur;
+    char *res;
+    int i, n;
     if (self->gtntparam <= 0) return -1;
-    snprintf(cur, sizeof cur, "%s", type ? type : "");
+    cur = type ? type : "";
     for (i = 0; i < self->gtntparam; i++) {
         if (!self->gtparam[i] || !self->gtparam[i][0]) continue;
         if (!self->gtarg[i]) continue;
-        if (frontend::sym::ct_generic_subst(cur, self->gtparam[i], self->gtarg[i],
-                                            nxt, sizeof nxt) != 0)
-            return -1;
-        snprintf(cur, sizeof cur, "%s", nxt);
+        cur = frontend::sym::ct_generic_subst_text(cur, self->gtparam[i],
+                                                    self->gtarg[i]);
+        if (!cur) return -1;
     }
     /* A substituted spelling may still name an instance (`Vec<T>` -> `Vec<int>`).
        The variable that made it concrete already registered the row, so print
        its monomorphised C spelling instead of a template-shaped type. */
-    if (strchr(cur, '<') && frontend::sym::ct_inst_resolve(cur, res, sizeof res) == 0) {
-        snprintf(buf, (size_t)cap, "%s", res);
-        return 0;
+    if (strchr(cur, '<')) {
+        res = (char *)malloc(TEXT_LIMIT);
+        if (res) {
+            if (frontend::sym::ct_inst_resolve(cur, res, TEXT_LIMIT) == 0) {
+                n = snprintf(buf, (size_t)cap, "%s", res);
+                free(res);
+                if (n < 0) return -1;
+                return 0;
+            }
+            free(res);
+        }
     }
-    snprintf(buf, (size_t)cap, "%s", cur);
+    n = snprintf(buf, (size_t)cap, "%s", cur);
+    if (n < 0) return -1;
     return 0;
 }
 
@@ -2281,15 +2278,16 @@ static int emit_generic_defs(struct Emitter *self, int u)
             continue;
         t = self->sym->funcs[self->sym->ginsts[i].func].body;
         if (t < 0) continue;
-        self->gtparam = frontend::sym::ct_rows_reserve(self->gtparam, self->gtcap,
-                                                       1, &self->gtcap);
-        self->gtarg = frontend::sym::ct_rows_reserve(self->gtarg, self->gtacap,
-                                                     1, &self->gtacap);
+        self->gtparam = frontend::sym::ct_text_rows_reserve(self->gtparam, self->gtcap,
+                                                            1, &self->gtcap);
+        self->gtarg = frontend::sym::ct_text_rows_reserve(self->gtarg, self->gtacap,
+                                                          1, &self->gtacap);
         if (!self->gtparam || self->gtcap < 1 || !self->gtarg || self->gtacap < 1)
             return self->fail("out of memory");
-        snprintf(self->gtparam[0], MAX_TEXT, "%s",
-                 self->sym->funcs[self->sym->ginsts[i].func].tparam);
-        snprintf(self->gtarg[0], MAX_TEXT, "%s", self->sym->ginsts[i].targ);
+        /* S1a-0 C2p-6: `Func.tparam` / `GenericInst.targ` are pool texts, so
+           the row is a reference and the whole 2000-byte argument survives. */
+        self->gtparam[0] = self->sym->funcs[self->sym->ginsts[i].func].tparam;
+        self->gtarg[0] = self->sym->ginsts[i].targ;
         self->gtntparam = 1;
         self->gtname = runtime::text::ct_intern(self->sym->ginsts[i].cname);
         if (!self->gtname) return self->fail("out of memory");
@@ -3172,10 +3170,10 @@ static void impl_inst_bind(struct Emitter *self, int ki, int ii)
     self->ginst = "";
     if (!im || !ins || ki < 0 || ki >= n || ii < 0 || ii >= nins) return;
     nt = im[ki].ntparams;
-    self->gtparam = frontend::sym::ct_rows_reserve(self->gtparam, self->gtcap,
-                                                   nt, &self->gtcap);
-    self->gtarg = frontend::sym::ct_rows_reserve(self->gtarg, self->gtacap,
-                                                 nt, &self->gtacap);
+    self->gtparam = frontend::sym::ct_text_rows_reserve(self->gtparam, self->gtcap,
+                                                        nt, &self->gtcap);
+    self->gtarg = frontend::sym::ct_text_rows_reserve(self->gtarg, self->gtacap,
+                                                      nt, &self->gtacap);
     if (nt > 0 && (!self->gtparam || self->gtcap < nt
                    || !self->gtarg || self->gtacap < nt)) return;
     {
@@ -3194,11 +3192,11 @@ static void impl_inst_bind(struct Emitter *self, int ki, int ii)
                 break;
             }
         if (at >= 0 && ins[ii].ctype[at]) {
-            snprintf(self->gtparam[pi], MAX_TEXT, "%s", im[ki].tparam[pi]);
-            snprintf(self->gtarg[pi], MAX_TEXT, "%s", ins[ii].ctype[at]);
+            self->gtparam[pi] = im[ki].tparam[pi];
+            self->gtarg[pi] = ins[ii].ctype[at];
         } else {
-            self->gtparam[pi][0] = 0;
-            self->gtarg[pi][0] = 0;
+            self->gtparam[pi] = (const char *)0;
+            self->gtarg[pi] = (const char *)0;
         }
     }
 }
@@ -5303,22 +5301,25 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
        the recorded trait names the vtable, so the slot call is a plain
        C call -- no vptr read, no boxing, no layout change. */
     if (self->arena->nodes[n].aux == 7 || self->arena->nodes[n].aux == 8) {
-        char base[MAX_TEXT];
-        char tg[MAX_TEXT];
+        const char *base;
+        const char *tg;
         char msgb[MAX_TEXT];
         size_t tl;
         int si;
         if (self->gtntparam <= 0 || !self->gtarg[0])
             return self->fail_from(n, "a constrained call needs an instance");
-        snprintf(tg, sizeof tg, "%s", self->gtarg[0]);
+        /* S1a-0 C2p-6: `gtarg` is a pool text, so the base name is a slice of
+           it rather than a copy through a 160-byte row. */
+        tg = self->gtarg[0];
         tl = strlen(tg);
-        while (tl > 0 && (tg[tl - 1] == ' ' || tg[tl - 1] == '*')) {
-            tl--;
-            tg[tl] = 0;
-        }
-        if (strncmp(tg, "struct ", 7) == 0) snprintf(base, sizeof base, "%s", tg + 7);
-        else if (strncmp(tg, "union ", 6) == 0) snprintf(base, sizeof base, "%s", tg + 6);
-        else snprintf(base, sizeof base, "%s", tg);
+        while (tl > 0 && (tg[tl - 1] == ' ' || tg[tl - 1] == '*')) tl--;
+        if (tl > 7 && strncmp(tg, "struct ", 7) == 0)
+            base = runtime::text::ct_intern_len(tg + 7, (int)tl - 7);
+        else if (tl > 6 && strncmp(tg, "union ", 6) == 0)
+            base = runtime::text::ct_intern_len(tg + 6, (int)tl - 6);
+        else
+            base = runtime::text::ct_intern_len(tg, (int)tl);
+        if (!base) return self->fail_from(n, "out of memory");
         si = self->sym->find_struct(base);
         if (si < 0) {
             snprintf(msgb, sizeof msgb,
@@ -6717,8 +6718,8 @@ static int em_node_foreach(struct Emitter *self, int n, int ind, int nk)
 static int match_expr_emit(struct Emitter *self, int n)
 {
     int k, arm, narm, idx, ptr, tagi, self_deref;
-    char rtype[MAX_TEXT];
-    char rnorm[MAX_TEXT];
+    const char *rtype;
+    const char *rnorm;
     struct Adt *adts;
     int nadts;
 
@@ -6731,9 +6732,11 @@ static int match_expr_emit(struct Emitter *self, int n)
     k = self->ntmp;
     self->ntmp++;
     ptr = self->arena->nodes[n].aux;
-    snprintf(rtype, sizeof rtype, "%s", self->arena->nodes[n].text2);
-    snprintf(rnorm, sizeof rnorm, "%s", rtype);
-    sb_norm_own_type(self, rnorm, sizeof rnorm);
+    /* S1a-0 C2p-6: the result type is a pool text; the old 160-byte rows cut
+       a 2000-byte struct name into an incomplete type in `__ct_mresN`. */
+    rtype = self->arena->nodes[n].text2;
+    rnorm = sb_norm_own_type_text(self, rtype);
+    if (!rnorm) rnorm = rtype;
     fputs("({ ", self->out);
     fprintf(self->out, "struct %s%s__ct_match%d = (", adts[tagi].full,
             ptr ? " *" : " ", k);

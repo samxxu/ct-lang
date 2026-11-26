@@ -156,6 +156,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*method_trait)(void *, const char *, const char *, char *, int);
     const char * (*method_trait_text)(void *, const char *, const char *);
     int (*method_trait_amb)(void *, const char *, const char *, const char *, char *, int);
+    const char * (*method_trait_amb_text)(void *, const char *, const char *, const char *);
     int (*ns_decl_name)(void *, const char *, char *, int);
     const char * (*ns_decl_text)(void *, const char *);
     int (*resolve_type)(void *, const char *, char *, int);

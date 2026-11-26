@@ -347,10 +347,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     int inst;
     int nargs;
     char msg[MAX_TEXT];
-    char elem[MAX_TEXT];
+    const char * elem;
     const char * ex;
-    char tr[MAX_TEXT];
-    char iname[MAX_TEXT];
+    const char * tr;
+    const char * iname;
     const char * enc;
     const char * p;
     const char * q;
@@ -390,21 +390,20 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
         return tool_diag_ct_sem_error(line, col, "foreach needs a declared array", _self->mem->path);
     }
     aux = 0;
-    iname[0] = 0;
-    snprintf(iname, sizeof(iname), "%s", _self->sym->vars[vi].type);
+    iname = _self->sym->vars[vi].type;
     if (strncmp(iname, "struct ", 7) == 0) {
-        memmove(iname, (iname + 7), (strlen((iname + 7)) + 1));
+        iname += 7;
     }
     if (_self->sym->vars[vi].is_slice) {
         aux = 3;
-        snprintf(elem, sizeof(elem), "%s", _self->sym->vars[vi].slice_elem);
+        elem = _self->sym->vars[vi].slice_elem;
     }
     inst = frontend_sym_ct_inst_find(iname);
     if (inst >= 0) {
         struct frontend_sym_StructInst * ins = frontend_sym_ct_insts((&nargs));
         if (strcmp(ins[inst].tmpl, "Vec") == 0) {
             aux = 1;
-            snprintf(elem, sizeof(elem), "%s", ins[inst].ctype[0]);
+            elem = ins[inst].ctype[0];
         }
         else {
             if (strcmp(ins[inst].tmpl, "Map") == 0) {
@@ -432,7 +431,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
                 if (_self->ex->__frontend_parse_exprinstantiate_vptr->inst_make(_self->ex, "MapEntry", 2, ins[inst].carg, ins[inst].ctype, (&enc), 0, 0, 0) != 0) {
                     return (-1);
                 }
-                snprintf(elem, sizeof(elem), "struct %s", enc);
+                elem = runtime_text_ct_internf("struct %s", enc);
+                if ((!elem)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
             }
         }
     }
@@ -445,7 +447,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
             snprintf(msg, sizeof(msg), "foreach needs an array or a Vec/Map; '%s' is not iterable", _self->sym->vars[vi].name);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
-        snprintf(elem, sizeof(elem), "%s", _self->sym->vars[vi].type);
+        elem = _self->sym->vars[vi].type;
         if (((_self->sym->vars[vi].dims[0] != '[') || strchr(elem, '('))) {
             snprintf(msg, sizeof(msg), "foreach cannot iterate '%s'; its declarator is not a plain array", _self->sym->vars[vi].name);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
@@ -474,7 +476,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
             snprintf(msg, sizeof(msg), "foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
-        if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, elem, tr, sizeof(tr), (&ip)) && (!ip))) {
+        if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, elem, (&tr), (&ip)) && (!ip))) {
             snprintf(msg, sizeof(msg), "foreach cannot copy interface values ('%s')", _self->sym->vars[vi].name);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
@@ -539,7 +541,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
         return tool_diag_ct_sem_error(_self->arena->nodes[nd].line, 1, msg, _self->mem->path);
     }
     _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-    _self->arena->nodes[s].text = runtime_text_ct_intern(elem);
+    _self->arena->nodes[s].text = elem;
     if ((!_self->arena->nodes[s].text)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
@@ -552,9 +554,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     }
     else {
         _self->arena->nodes[s].text2 = runtime_text_ct_intern((aux ? iname : ""));
-    }
-    if ((!_self->arena->nodes[s].text2)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        if ((!_self->arena->nodes[s].text2)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     _self->arena->nodes[s].a = c;
     _self->arena->nodes[s].d = body;

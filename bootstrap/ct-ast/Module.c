@@ -708,7 +708,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     }
     _self->p->unit_is_map = is_map;
     _self->p->c_strict = (((!is_map) && _self->__frontend_module_moduleops_vptr->c_boundary_for(_self, path)) ? 1 : 0);
-    snprintf(_self->p->c_base, sizeof(_self->p->c_base), "%s", _self->units[u].base);
+    _self->p->c_base = _self->units[u].base;
     _self->units[u].has_shim = 0;
     _self->units[u].shim_dir = (char *)(0);
     _self->units[u].shim_h = (char *)(0);
@@ -956,7 +956,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->p->unit_is_map = _self->units[u].is_map;
     _self->p->unit_is_hdr = _self->units[u].is_hdr;
     _self->p->c_strict = (((!_self->units[u].is_map) && _self->__frontend_module_moduleops_vptr->c_boundary_for(_self, _self->units[u].path)) ? 1 : 0);
-    snprintf(_self->p->c_base, sizeof(_self->p->c_base), "%s", _self->units[u].base);
+    _self->p->c_base = _self->units[u].base;
     if (_self->__frontend_module_moduleops_vptr->register_visible_type_aliases(_self, u) != 0) {
         return (-1);
     }

@@ -797,6 +797,11 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait(vo
     return 0;
 }
 
+static const char * frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait_amb_text(void *self, const char * stype, const char * method, const char * first) {
+    struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
+    return _self->sym->__frontend_sym_symbolops_vptr->method_trait_amb_text(_self->sym, stype, method, first);
+}
+
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait_amb(void *self, const char * stype, const char * method, const char * first, char * other, int ocap) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * why;
@@ -859,6 +864,16 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_is_iface_type(v
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_iface_ref_type(void *self, const char * type, char * tout, int tcap, int * is_ptr) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     return _self->ty->__frontend_type_typeops_vptr->iface_ref_type(_self->ty, type, tout, (int)(tcap), is_ptr);
+}
+
+static int frontend_parse_ParseSupport_frontend_parse_SupportOps_is_iface_type_text(void *self, const char * type, const char * * tout) {
+    struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
+    return _self->ty->__frontend_type_typeops_vptr->is_iface_type_text(_self->ty, type, tout);
+}
+
+static int frontend_parse_ParseSupport_frontend_parse_SupportOps_iface_ref_type_text(void *self, const char * type, const char * * tout, int * is_ptr) {
+    struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
+    return _self->ty->__frontend_type_typeops_vptr->iface_ref_type_text(_self->ty, type, tout, is_ptr);
 }
 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_adopt_use(void *self, const char * name, const char * trait) {
@@ -1227,6 +1242,7 @@ const struct frontend_parse_SupportOps_vtbl frontend_parse_ParseSupport_frontend
     .add_struct = frontend_parse_ParseSupport_frontend_parse_SupportOps_add_struct,
     .add_trait = frontend_parse_ParseSupport_frontend_parse_SupportOps_add_trait,
     .method_trait = frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait,
+    .method_trait_amb_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait_amb_text,
     .method_trait_amb = frontend_parse_ParseSupport_frontend_parse_SupportOps_method_trait_amb,
     .arity_warn = frontend_parse_ParseSupport_frontend_parse_SupportOps_arity_warn,
     .type_warn = frontend_parse_ParseSupport_frontend_parse_SupportOps_type_warn,
@@ -1236,6 +1252,8 @@ const struct frontend_parse_SupportOps_vtbl frontend_parse_ParseSupport_frontend
     .resolve_type = frontend_parse_ParseSupport_frontend_parse_SupportOps_resolve_type,
     .is_iface_type = frontend_parse_ParseSupport_frontend_parse_SupportOps_is_iface_type,
     .iface_ref_type = frontend_parse_ParseSupport_frontend_parse_SupportOps_iface_ref_type,
+    .is_iface_type_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_is_iface_type_text,
+    .iface_ref_type_text = frontend_parse_ParseSupport_frontend_parse_SupportOps_iface_ref_type_text,
     .adopt_use = frontend_parse_ParseSupport_frontend_parse_SupportOps_adopt_use,
     .expr_type = frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_type,
     .expr_ctype = frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_ctype,

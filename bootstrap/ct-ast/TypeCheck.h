@@ -96,6 +96,9 @@ struct frontend_type_TypeOps_vtbl {
     int (*is_iface_type)(void *, const char *, char *, int);
     int (*iface_ref_type)(void *, const char *, char *, int, int *);
     int (*concrete_struct)(void *, const char *, char *, int, int *);
+    int (*is_iface_type_text)(void *, const char *, const char * *);
+    int (*iface_ref_type_text)(void *, const char *, const char * *, int *);
+    int (*concrete_struct_text)(void *, const char *, const char * *, int *);
     int (*expr_type)(void *, int, char *, int);
     int (*expr_ctype)(void *, int, char *, int);
     int (*expr_type_text)(void *, int, const char * *);

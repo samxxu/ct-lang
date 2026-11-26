@@ -385,6 +385,17 @@ pool 文本入口（`expr_type_text`/`expr_ctype_text`），`ParseSupport` 内�
 相同的长类型不再同键（旧行为报 "ambiguous map binding"）。
 证据：`c2p_limits.sh` 22/22，baseline `86ae58db` 为 16/22；发射 C 67620 ->
 68180 行（仅 .c），`Emitter.h.ct` 10215 -> 10315 行，切片清单仍为 76。
+S1a-0 C2p-6（map type host / 泛型实参 / match / foreach / `_Atomic` /
+`_Alignas` 的 160 行）：`c2p_limits.sh` 28/28，baseline `cef14798` 为
+22/28；发射 C 68188 -> 68338 行（仅 .c），`Emitter.h.ct` 10315 -> 10318
+行，切片清单仍为 76。
+
+C2p-6 后剩余（`grep -c '\[MAX_TEXT\]'`）：`frontend/parse` 284 处
+（`Expr.h.ct` 63、`Parser.h.ct` 44、`Stmt.h.ct` 32、`ExprTypes.h.ct` 32、
+`ExprStaticType.h.ct` 22、`MapBuild.h.ct` 15、`ExprInstantiate.h.ct` 14 …）、
+`backend/emit` 93 处（`Emitter.h.ct` 83、`EmitterText.h.ct` 3、
+`Init.h.ct` 2 …）。下一批按单元簇（Expr / Parser / Stmt / Emit）继续，
+每批 4–6 单元、生成物逐字节。
 
 **剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 390 处
 （`Expr.h.ct` 94、`Parser.h.ct` 53、`Stmt.h.ct` 42、`ExprTypes.h.ct` 33、

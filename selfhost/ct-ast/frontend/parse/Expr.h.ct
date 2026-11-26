@@ -2639,7 +2639,7 @@ impl ExprOps for Expr {
                                 if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                             }
                         } else if ((trtext = self->sym->method_trait_text(rtype, fname)) != 0) {
-                            char tr2[MAX_TEXT];
+                            const char *tr2;
                             /* PH-51 D51-1: the same pointer-receiver defect on
                                the trait dispatch path; an interface pointer
                                ('.vt' dispatch) was handled above and keeps its
@@ -2660,8 +2660,8 @@ impl ExprOps for Expr {
                                A static type host and a `map` binding resolve
                                below, outside `method_trait`, so they never
                                reach this check. */
-                            if (self->sup->method_trait_amb(rtype, fname, trtext,
-                                                            tr2, sizeof tr2) == 0) {
+                            tr2 = self->sup->method_trait_amb_text(rtype, fname, trtext);
+                            if (tr2 != 0) {
                                 char amsg[MAX_TEXT];
                                 snprintf(amsg, sizeof amsg,
                                          "declared by '%s' and '%s'; '%s' is used",

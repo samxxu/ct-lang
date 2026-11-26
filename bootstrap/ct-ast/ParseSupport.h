@@ -112,6 +112,7 @@ struct frontend_parse_SupportOps_vtbl {
     int (*add_trait)(void *, const char *);
     int (*method_trait)(void *, const char *, const char *, char *, int);
     int (*method_trait_amb)(void *, const char *, const char *, const char *, char *, int);
+    const char * (*method_trait_amb_text)(void *, const char *, const char *, const char *);
     int (*arity_warn)(void *, int, int, const char *, const char *);
     int (*type_warn)(void *, int, int, const char *, const char *);
     int (*amb_warn)(void *, int, int, const char *, const char *);
@@ -120,6 +121,8 @@ struct frontend_parse_SupportOps_vtbl {
     int (*resolve_type)(void *, const char *, char *, int);
     int (*is_iface_type)(void *, const char *, char *, int);
     int (*iface_ref_type)(void *, const char *, char *, int, int *);
+    int (*is_iface_type_text)(void *, const char *, const char * *);
+    int (*iface_ref_type_text)(void *, const char *, const char * *, int *);
     int (*adopt_use)(void *, const char *, const char *);
     int (*expr_type)(void *, int, char *, int);
     int (*expr_ctype)(void *, int, char *, int);

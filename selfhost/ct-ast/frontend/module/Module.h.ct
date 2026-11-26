@@ -1123,7 +1123,7 @@ impl ModuleOps for Module {
         }
         self->p->unit_is_map = is_map;
         self->p->c_strict = (!is_map && self->c_boundary_for(path)) ? 1 : 0;
-        snprintf(self->p->c_base, sizeof self->p->c_base, "%s", self->units[u].base);
+        self->p->c_base = self->units[u].base;
         /* A shim belongs to a mapping/header unit (batch 39, PH-65 R5): `<base>.shim.h` is
            an include root for the consumer, `<base>.shim.c` joins the program.
            Header-only shims are the normal case; a source without its header
@@ -1395,7 +1395,7 @@ impl ModuleOps for Module {
         self->p->unit_is_hdr = self->units[u].is_hdr;
         self->p->c_strict = (!self->units[u].is_map
                              && self->c_boundary_for(self->units[u].path)) ? 1 : 0;
-        snprintf(self->p->c_base, sizeof self->p->c_base, "%s", self->units[u].base);
+        self->p->c_base = self->units[u].base;
         /* Type aliases visible here: every `pub` alias of a unit in this unit's
            transitive import closure (the same reachability the map lookup and
            the generated C headers use). Then the unit's own top-level aliases

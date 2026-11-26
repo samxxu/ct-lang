@@ -173,7 +173,7 @@ const struct frontend_parse_StmtMatch_vtbl frontend_parse_Stmt_frontend_parse_St
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-void frontend_parse_match_expr_type_key(const char *, char *, int);
+const char * frontend_parse_match_expr_type_key_text(const char *);
 static int frontend_parse_Stmt_frontend_parse_StmtMatch_match_ahead(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     const char * p;
@@ -725,11 +725,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     const char * rn = "";
     const char * vname;
     char msg[3 * MAX_TEXT];
-    char rtype[MAX_TEXT];
-    char rkey[MAX_TEXT];
+    const char * rtype = "";
+    const char * rkey = "";
     const char * ytype = "";
     char ybuf[MAX_TEXT];
-    char ykey[MAX_TEXT];
+    const char * ykey = "";
     struct frontend_sym_Adt * adts;
     int nadts;
     line = _self->lex->tokline;
@@ -793,7 +793,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     wild = (-1);
     seen_wild = 0;
     have_type = 0;
-    rtype[0] = 0;
+    rtype = "";
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a block after match (...)");
     }
@@ -1100,10 +1100,16 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
                 }
                 return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
             }
-            frontend_parse_match_expr_type_key(ytype, ykey, sizeof(ykey));
+            ykey = frontend_parse_match_expr_type_key_text(ytype);
+            if ((!ykey)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             if ((!have_type)) {
-                snprintf(rtype, sizeof(rtype), "%s", ytype);
-                snprintf(rkey, sizeof(rkey), "%s", ykey);
+                rtype = runtime_text_ct_intern(ytype);
+                if ((!rtype)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                rkey = ykey;
                 have_type = 1;
             }
             else {
@@ -1212,7 +1218,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     if ((!have_type)) {
         return tool_diag_ct_sem_error(line, col, "an expression match needs at least one arm that yields a value", _self->mem->path);
     }
-    _self->arena->nodes[s].text2 = runtime_text_ct_intern(rtype);
+    _self->arena->nodes[s].text2 = rtype;
     if ((!_self->arena->nodes[s].text2)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
@@ -1243,21 +1249,24 @@ const struct frontend_parse_StmtMatch_vtbl frontend_parse_Stmt_frontend_parse_St
     .parse_match_expr = frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr
 };
 
-void frontend_parse_match_expr_type_key(const char * in, char * out, int cap) {
-    char k[MAX_TEXT];
-    frontend_type_type_key(in, k, sizeof(k));
+const char * frontend_parse_match_expr_type_key_text(const char * in) {
+    const char * k;
+    k = frontend_type_type_key_text(in);
+    if ((!k)) {
+        return (const char *)(0);
+    }
     if (strncmp(k, "struct", 6) == 0) {
-        memmove(k, (k + 6), (strlen((k + 6)) + 1));
+        k += 6;
     }
     else {
         if (strncmp(k, "union", 5) == 0) {
-            memmove(k, (k + 5), (strlen((k + 5)) + 1));
+            k += 5;
         }
         else {
             if (strncmp(k, "enum", 4) == 0) {
-                memmove(k, (k + 4), (strlen((k + 4)) + 1));
+                k += 4;
             }
         }
     }
-    snprintf(out, (size_t)(cap), "%s", k);
+    return runtime_text_ct_intern(k);
 }

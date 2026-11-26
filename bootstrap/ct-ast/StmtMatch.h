@@ -106,6 +106,6 @@ extern const struct frontend_parse_StmtMatch_vtbl frontend_parse_Stmt_frontend_p
 struct frontend_parse_StmtMatch {
     int unused;
 };
-void frontend_parse_match_expr_type_key(const char *, char *, int);
+const char * frontend_parse_match_expr_type_key_text(const char *);
 
 #endif

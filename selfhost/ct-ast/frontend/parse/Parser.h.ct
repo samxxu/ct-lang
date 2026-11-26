@@ -223,7 +223,7 @@ pub struct Parser {
        name that may legitimately appear as `<base>.shim.h`. Set by the loader
        per unit; Parser must not reach back into Module. */
     int  c_strict;
-    char c_base[160];
+    const char *c_base;          /* S1a-0 C2p-6: pool text, never a 160 row */
     /* Set while the unit being parsed is a `.h.ct` interface unit. A type
        alias may live in a `.h.ct` (a public signature may use it) but not in
        a plain `.ct`, which no unit can import. */
@@ -246,7 +246,7 @@ pub struct Parser {
     int  nparams;
     /* Phase 78 S2a: the `out` parameter names of the function being checked,
        for the L1 definite-assignment walk. */
-    char out_names[16][160];
+    const char *out_names[16];   /* S1a-0 C2p-6: pool texts, not 160 rows */
     int  nout;
     /* Set by `parse_params` when the list ends with `...`; the caller stores it
        on the symbol row (for the prototype) and on the function node. */
@@ -1669,9 +1669,10 @@ impl ParseOps for Parser {
                     && self->lex->tok_prefix("#include")) {
                     const char *t = self->lex->tokstr.ptr + 8;
                     int tlen = self->lex->tokstr.len - 8;
-                    char want[200];
+                    const char *want;
                     while (tlen > 0 && (*t == ' ' || *t == '\t')) { t++; tlen--; }
-                    snprintf(want, sizeof want, "\"%s.shim.h\"", self->c_base);
+                    want = runtime::text::ct_internf("\"%s.shim.h\"", self->c_base);
+                    if (!want) return self->sup->fail("out of memory");
                     if (tlen != (int)strlen(want) || memcmp(t, want, (size_t)tlen) != 0)
                         return tool::diag::ct_sem_error(self->lex->tokline, 1,
                             "a strict C boundary forbids '#include';"
@@ -2381,8 +2382,7 @@ impl ParseOps for Parser {
         self->nout = 0;
         for (p = params; p > 0; p = self->arena->nodes[p].next)
             if (self->arena->nodes[p].aux == 3 && self->nout < 16)
-                snprintf(self->out_names[self->nout++], 160, "%s",
-                         self->arena->nodes[p].text2);
+                self->out_names[self->nout++] = self->arena->nodes[p].text2;
         if (self->nout == 0 || body < 0) return 0;
         all = (1 << self->nout) - 1;
         mask = 0;

@@ -405,10 +405,10 @@ impl StmtLoop for Stmt {
         int s, c, body, line, col, vi, nd, ip, bare;
         int aux, inst, nargs;
         char msg[MAX_TEXT];
-        char elem[MAX_TEXT];
+        const char *elem;
         const char *ex;
-        char tr[MAX_TEXT];
-        char iname[MAX_TEXT];
+        const char *tr;
+        const char *iname;
         const char *enc;
         const char *p;
         const char *q;
@@ -454,22 +454,22 @@ impl StmtLoop for Stmt {
            and naming it in a `Map` body is the L29-18 hard error (a map has no
            natural position, and offering one would read as an order promise). */
         aux = 0;
-        iname[0] = 0;
-        snprintf(iname, sizeof iname, "%s", self->sym->vars[vi].type);
-        if (strncmp(iname, "struct ", 7) == 0)
-            memmove(iname, iname + 7, strlen(iname + 7) + 1);
+        /* S1a-0 C2p-6: `Var.type` / `.slice_elem` are pool texts, so a 2000-byte
+           element type is not cut by the old `elem`/`iname`/`tr` rows. */
+        iname = self->sym->vars[vi].type;
+        if (strncmp(iname, "struct ", 7) == 0) iname += 7;
         /* P-7.2: a slice iterates through its `{ptr,len}` view. `item` is a
            by-value copy of the element, like the array path. */
         if (self->sym->vars[vi].is_slice) {
             aux = 3;
-            snprintf(elem, sizeof elem, "%s", self->sym->vars[vi].slice_elem);
+            elem = self->sym->vars[vi].slice_elem;
         }
         inst = frontend::sym::ct_inst_find(iname);
         if (inst >= 0) {
             struct StructInst *ins = frontend::sym::ct_insts(&nargs);
             if (strcmp(ins[inst].tmpl, "Vec") == 0) {
                 aux = 1;
-                snprintf(elem, sizeof elem, "%s", ins[inst].ctype[0]);
+                elem = ins[inst].ctype[0];
             } else if (strcmp(ins[inst].tmpl, "Map") == 0) {
                 aux = 2;
             }
@@ -510,7 +510,8 @@ impl StmtLoop for Stmt {
                                             ins[inst].carg, ins[inst].ctype,
                                             &enc, 0, 0, 0) != 0)
                         return -1;
-                    snprintf(elem, sizeof elem, "struct %s", enc);
+                    elem = runtime::text::ct_internf("struct %s", enc);
+                    if (!elem) return self->sup->fail("out of memory");
                 }
             }
         }
@@ -529,7 +530,7 @@ impl StmtLoop for Stmt {
                      self->sym->vars[vi].name);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
-        snprintf(elem, sizeof elem, "%s", self->sym->vars[vi].type);
+        elem = self->sym->vars[vi].type;
         /* A function-pointer array stores its declarator in `text3` instead of
            plain `[N]`; `int item = handlers[i];` would be illegal C. */
         if (self->sym->vars[vi].dims[0] != '[' || strchr(elem, '(')) {
@@ -570,7 +571,7 @@ impl StmtLoop for Stmt {
         }
         /* An interface value is a (vptr, data) pair; a by-value copy would
            bypass the vptr discipline, and the element type gives no owner. */
-        if (self->sup->iface_ref_type(elem, tr, sizeof tr, &ip) && !ip) {
+        if (self->sup->iface_ref_type_text(elem, &tr, &ip) && !ip) {
             snprintf(msg, sizeof msg,
                      "foreach cannot copy interface values ('%s')",
                      self->sym->vars[vi].name);
@@ -653,7 +654,7 @@ impl StmtLoop for Stmt {
                                             self->mem->path);
         }
         self->sup->pop_scope();
-        self->arena->nodes[s].text = runtime::text::ct_intern(elem);
+        self->arena->nodes[s].text = elem;
         if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
         /* aux: 0 = array, 1 = Vec, 2 = Map; text2 names the container instance
            the emitter calls `len` / `get` / `entry` on. */
@@ -662,9 +663,10 @@ impl StmtLoop for Stmt {
                 self->arena->nodes[s].text2 = runtime::text::ct_intern(self->sym->vars[vi].cname);
                 if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
         }
-        else
+        else {
             self->arena->nodes[s].text2 = runtime::text::ct_intern(aux ? iname : "");
             if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
+        }
         self->arena->nodes[s].a = c;
         self->arena->nodes[s].d = body;
         return s;

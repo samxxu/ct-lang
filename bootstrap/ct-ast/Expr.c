@@ -1820,14 +1820,15 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     }
                                     else {
                                         if ((trtext = _self->sym->__frontend_sym_symbolops_vptr->method_trait_text(_self->sym, rtype, fname)) != 0) {
-                                            char tr2[MAX_TEXT];
+                                            const char * tr2;
                                             if (((!arrow) && piface)) {
                                                 char pmsg[MAX_TEXT];
                                                 snprintf(pmsg, sizeof(pmsg), "'.' cannot call method '%s' through a pointer receiver; use '->%s()'", fname, fname);
                                                 return tool_diag_ct_sem_error(mline, mcol, pmsg, _self->sup->mem->path);
                                             }
                                             _self->arena->nodes[m].text = trtext;
-                                            if (_self->sup->__frontend_parse_supportops_vptr->method_trait_amb(_self->sup, rtype, fname, trtext, tr2, sizeof(tr2)) == 0) {
+                                            tr2 = _self->sup->__frontend_parse_supportops_vptr->method_trait_amb_text(_self->sup, rtype, fname, trtext);
+                                            if (tr2 != 0) {
                                                 char amsg[MAX_TEXT];
                                                 snprintf(amsg, sizeof(amsg), "declared by '%s' and '%s'; '%s' is used", trtext, tr2, trtext);
                                                 if (_self->sup->__frontend_parse_supportops_vptr->amb_warn(_self->sup, mline, mcol, fname, amsg) != 0) {

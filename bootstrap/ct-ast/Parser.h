@@ -173,7 +173,7 @@ struct frontend_parse_Parser {
     const char * cur_func;
     int unit_is_map;
     int c_strict;
-    char c_base[160];
+    const char * c_base;
     int unit_is_hdr;
     int seen_decl;
     int * rel_line;
@@ -181,7 +181,7 @@ struct frontend_parse_Parser {
     int field_pub;
     int field_col;
     int nparams;
-    char out_names[16][160];
+    const char * out_names[16];
     int nout;
     int variadic;
     int pending_attr;

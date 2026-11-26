@@ -653,15 +653,15 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
 
 static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, int unit) {
     struct frontend_parse_MapBuild *_self = (struct frontend_parse_MapBuild *)self;
-    char tname[MAX_TEXT];
-    char rtrait[MAX_TEXT];
-    char inst[MAX_TEXT];
-    char icn[MAX_TEXT];
-    char prefix[MAX_TEXT];
-    char vt[MAX_TEXT];
-    char hostpath[MAX_TEXT];
-    char hostcn[MAX_TEXT];
-    char host_type[MAX_TEXT];
+    const char * tname;
+    const char * rtrait;
+    const char * inst;
+    const char * icn;
+    const char * prefix;
+    const char * vt;
+    const char * hostpath;
+    const char * hostcn;
+    const char * host_type;
     char wname[MAX_TEXT];
     char callbuf[MAX_TEXT];
     char msg[MAX_TEXT];
@@ -686,12 +686,9 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     int j2;
     int ident;
     int ns_host;
-    int hl;
-    int cl;
     int is_static;
     int type_host;
     int want;
-    size_t wl;
     (void)(_self);
     line = _self->lex->tokline;
     col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
@@ -707,17 +704,16 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a trait name");
     }
 {
-        const char * tname_t = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
         const char * rtrait_t;
-        if ((!tname_t)) {
+        tname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!tname)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        rtrait_t = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, tname_t);
+        rtrait_t = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, tname);
         if ((!rtrait_t)) {
             return (-1);
         }
-        snprintf(rtrait, sizeof(rtrait), "%s", rtrait_t);
-        snprintf(tname, sizeof(tname), "%s", tname_t);
+        rtrait = rtrait_t;
     }
     ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rtrait);
     if (ti < 0) {
@@ -725,7 +721,13 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     }
     is_static = (*_self->unit_is_map);
     type_host = 0;
-    host_type[0] = 0;
+    host_type = "";
+    prefix = "";
+    vt = "";
+    inst = "";
+    icn = "";
+    hostpath = "";
+    hostcn = "";
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if ((!((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "for")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected 'for'");
@@ -741,7 +743,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected an instance name");
         }
         for (; ; ) {
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, inst, sizeof(inst));
+            inst = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!inst)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::"))) {
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -752,13 +757,12 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
             }
             break;
         }
-        if (_self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, inst) < 0) {
+        k = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, inst);
+        if (k < 0) {
             snprintf(msg, sizeof(msg), "map instance '%s' is not declared (use 'void *%s;' as its host)", inst, inst);
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
         }
-        if (_self->sym->__frontend_sym_symbolops_vptr->var_cname(_self->sym, inst, icn, sizeof(icn)) != 0) {
-            snprintf(icn, sizeof(icn), "%s", inst);
-        }
+        icn = _self->sym->vars[k].cname;
     }
     else {
         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "namespace"))) {
@@ -767,37 +771,29 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a namespace name");
             }
             ns_host = 1;
-            hl = 0;
-            cl = 0;
-            hostpath[0] = 0;
-            hostcn[0] = 0;
             for (; ; ) {
-                wl = _self->lex->tokstr.len;
-                if (hl > 0) {
-                    if ((hl + 3) >= (int)(sizeof(hostpath))) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "namespace path is too long");
+                const char * seg = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                if ((!seg)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                if (hostpath[0]) {
+                    hostpath = runtime_text_ct_intern_join(hostpath, "::");
+                    if ((!hostpath)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
-                    hostpath[hl] = ':';
-                    hostpath[(hl + 1)] = ':';
-                    hl += 2;
-                    hostpath[hl] = 0;
-                    if ((cl + 2) >= (int)(sizeof(hostcn))) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "namespace path is too long");
+                    hostcn = runtime_text_ct_intern_join(hostcn, "_");
+                    if ((!hostcn)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
-                    hostcn[cl] = '_';
-                    cl++;
-                    hostcn[cl] = 0;
                 }
-                if ((hl + (int)(wl)) >= (int)(sizeof(hostpath))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "namespace path is too long");
+                hostpath = runtime_text_ct_intern_join(hostpath, seg);
+                if ((!hostpath)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, (hostpath + hl), ((int)(sizeof(hostpath)) - hl));
-                hl += (int)(wl);
-                if ((cl + (int)(wl)) >= (int)(sizeof(hostcn))) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "namespace path is too long");
+                hostcn = runtime_text_ct_intern_join(hostcn, seg);
+                if ((!hostcn)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, (hostcn + cl), ((int)(sizeof(hostcn)) - cl));
-                cl += (int)(wl);
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "::"))) {
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -808,8 +804,8 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                 }
                 break;
             }
-            snprintf(inst, sizeof(inst), "%s", hostpath);
-            snprintf(icn, sizeof(icn), "%s", hostcn);
+            inst = hostpath;
+            icn = hostcn;
             if ((is_static && (strcmp(_self->sym->traits[ti].ns, icn) != 0))) {
                 return tool_diag_ct_sem_error(line, col, "a static trait for a namespace host must be declared in that namespace", _self->sup->mem->path);
             }
@@ -826,14 +822,14 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                 if (((_self->lex->tok == T_EOF) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type after 'for type'");
                 }
-                if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type(_self->ex, host_type, sizeof(host_type)) != 0) {
+                if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&host_type)) != 0) {
                     return (-1);
                 }
                 if (((!host_type[0]) || ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "[")))) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type after 'for type'");
                 }
-                snprintf(inst, sizeof(inst), "%s", host_type);
-                snprintf(icn, sizeof(icn), "%s", host_type);
+                inst = host_type;
+                icn = host_type;
             }
             else {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected 'instance', 'namespace' or 'type'");
@@ -841,21 +837,25 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         }
     }
     if (is_static) {
-        prefix[0] = 0;
-        vt[0] = 0;
+        prefix = "";
+        vt = "";
     }
     else {
         if (((ns_host && (strncmp(rtrait, icn, strlen(icn)) == 0)) && (rtrait[strlen(icn)] == '_'))) {
-            snprintf(prefix, sizeof(prefix), "%s", rtrait);
+            prefix = rtrait;
         }
         else {
-            if (snprintf(prefix, sizeof(prefix), "%s_%s", icn, rtrait) >= (int)(sizeof(prefix))) {
+            prefix = runtime_text_ct_internf("%s_%s", icn, rtrait);
+            if ((!prefix)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map symbol name is too long");
             }
         }
     }
-    if (((!is_static) && (snprintf(vt, sizeof(vt), "%s_vtable", prefix) >= (int)(sizeof(vt))))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map symbol name is too long");
+    if ((!is_static)) {
+        vt = runtime_text_ct_internf("%s_vtable", prefix);
+        if ((!vt)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map symbol name is too long");
+        }
     }
     for (k2 = 0; ((!is_static) && (k2 < (*_self->nmaps))); k2++) {
         if (strcmp((*_self->maps)[k2].prefix, prefix) == 0) {

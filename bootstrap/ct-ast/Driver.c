@@ -712,31 +712,27 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         _self->p->unit_is_hdr = (((pl > 5) && (strcmp(((in + pl) - 5), ".h.ct") == 0)) ? 1 : 0);
         _self->p->c_strict = (((!_self->p->unit_is_map) && _self->m->__frontend_module_moduleops_vptr->c_boundary_for(_self->m, in)) ? 1 : 0);
 {
-            char base[160];
             const char * b = in;
             const char * r;
-            int bi = 0;
             int L;
             for (r = in; (*r) != 0; r++) {
                 if ((*r) == '/') {
                     b = (r + 1);
                 }
             }
-            while (((b[bi] != 0) && (bi < ((int)(sizeof(base)) - 1)))) {
-                base[bi] = b[bi];
-                bi++;
-            }
-            base[bi] = 0;
-            L = (int)(strlen(base));
-            if (((L > 5) && (strcmp((&base[(L - 5)]), ".h.ct") == 0))) {
-                base[(L - 5)] = 0;
+            L = (int)(strlen(b));
+            if (((L > 5) && (strcmp(((b + L) - 5), ".h.ct") == 0))) {
+                L -= 5;
             }
             else {
-                if (((L > 3) && (strcmp((&base[(L - 3)]), ".ct") == 0))) {
-                    base[(L - 3)] = 0;
+                if (((L > 3) && (strcmp(((b + L) - 3), ".ct") == 0))) {
+                    L -= 3;
                 }
             }
-            snprintf(_self->p->c_base, sizeof(_self->p->c_base), "%s", base);
+            _self->p->c_base = runtime_text_ct_intern_len(b, L);
+            if ((!_self->p->c_base)) {
+                return _self->__tool_driver_driverops_vptr->fail(_self, "out of memory");
+            }
         }
     }
     frontend_parse_ct_parse_clear_error();

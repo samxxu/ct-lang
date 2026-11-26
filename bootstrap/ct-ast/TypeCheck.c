@@ -286,11 +286,15 @@ static const char * frontend_type_TypeCheck_frontend_type_TypeOps_last_error(voi
     return (_self->errmsg ? _self->errmsg : "");
 }
 
-static int frontend_type_TypeCheck_frontend_type_TypeOps_is_iface_type(void *self, const char * type, char * tout, int tcap) {
+static int frontend_type_TypeCheck_frontend_type_TypeOps_is_iface_type_text(void *self, const char * type, const char * * tout) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     const char * base;
     size_t n;
     (void)(_self);
+    (*tout) = "";
+    if ((!type)) {
+        return 0;
+    }
     base = type;
     if (strncmp(base, "struct ", 7) != 0) {
         return 0;
@@ -300,65 +304,108 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_is_iface_type(void *sel
     if (((n <= 6) || (strcmp(((base + n) - 6), "_iface") != 0))) {
         return 0;
     }
-    if ((n - 6) >= (size_t)(tcap)) {
+    (*tout) = runtime_text_ct_intern_len(base, (int)((n - 6)));
+    return ((*tout) ? 1 : 0);
+}
+
+static int frontend_type_TypeCheck_frontend_type_TypeOps_is_iface_type(void *self, const char * type, char * tout, int tcap) {
+    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
+    const char * t;
+    if ((!_self->__frontend_type_typeops_vptr->is_iface_type_text(_self, type, (&t)))) {
         return 0;
     }
-    snprintf(tout, (size_t)(tcap), "%.*s", (int)((n - 6)), base);
+    if (snprintf(tout, (size_t)(tcap), "%s", t) >= tcap) {
+        return 0;
+    }
     return 1;
+}
+
+static int frontend_type_TypeCheck_frontend_type_TypeOps_iface_ref_type_text(void *self, const char * type, const char * * tout, int * is_ptr) {
+    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
+    const char * b;
+    size_t n;
+    (void)(_self);
+    (*tout) = "";
+    (*is_ptr) = 0;
+    if (((!type) || (!type[0]))) {
+        return 0;
+    }
+    b = type;
+    n = strlen(b);
+    while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '*')))) {
+        if (b[(n - 1)] == '*') {
+            (*is_ptr) = 1;
+        }
+        n--;
+    }
+    while (((n > 0) && (b[(n - 1)] == ' '))) {
+        n--;
+    }
+    b = runtime_text_ct_intern_len(b, (int)(n));
+    if ((!b)) {
+        return 0;
+    }
+    return _self->__frontend_type_typeops_vptr->is_iface_type_text(_self, b, tout);
 }
 
 static int frontend_type_TypeCheck_frontend_type_TypeOps_iface_ref_type(void *self, const char * type, char * tout, int tcap, int * is_ptr) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
-    char buf[MAX_TEXT];
-    size_t n;
-    (void)(_self);
-    (*is_ptr) = 0;
-    if ((!type[0])) {
+    const char * t;
+    if ((!_self->__frontend_type_typeops_vptr->iface_ref_type_text(_self, type, (&t), is_ptr))) {
         return 0;
     }
-    if (snprintf(buf, sizeof(buf), "%s", type) >= (int)(sizeof(buf))) {
+    if (snprintf(tout, (size_t)(tcap), "%s", t) >= tcap) {
         return 0;
     }
-    n = strlen(buf);
-    while (((n > 0) && ((buf[(n - 1)] == ' ') || (buf[(n - 1)] == '*')))) {
-        if (buf[(n - 1)] == '*') {
-            (*is_ptr) = 1;
-        }
-        buf[(n - 1)] = 0;
-        n--;
-    }
-    return _self->__frontend_type_typeops_vptr->is_iface_type(_self, buf, tout, tcap);
+    return 1;
 }
 
-static int frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct(void *self, const char * type, char * sout, int scap, int * is_ptr) {
+static int frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct_text(void *self, const char * type, const char * * sout, int * is_ptr) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
-    char buf[MAX_TEXT];
-    char * base;
+    const char * base;
+    const char * b;
     size_t n;
     (void)(_self);
-    if (snprintf(buf, sizeof(buf), "%s", type) >= (int)(sizeof(buf))) {
+    (*sout) = "";
+    (*is_ptr) = 0;
+    if ((!type)) {
         return 0;
     }
-    base = buf;
-    if (strncmp(base, "struct ", 7) == 0) {
-        base += 7;
+    b = type;
+    if (strncmp(b, "struct ", 7) == 0) {
+        b += 7;
     }
-    while ((*base) == ' ') {
-        base++;
+    while ((*b) == ' ') {
+        b++;
     }
-    n = strlen(base);
-    (*is_ptr) = 0;
-    while (((n > 0) && ((base[(n - 1)] == ' ') || (base[(n - 1)] == '*')))) {
-        if (base[(n - 1)] == '*') {
+    n = strlen(b);
+    while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '*')))) {
+        if (b[(n - 1)] == '*') {
             (*is_ptr) = 1;
         }
-        base[(n - 1)] = 0;
         n--;
+    }
+    while (((n > 0) && (b[(n - 1)] == ' '))) {
+        n--;
+    }
+    base = runtime_text_ct_intern_len(b, (int)(n));
+    if ((!base)) {
+        return 0;
     }
     if (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base) < 0) {
         return 0;
     }
-    if (snprintf(sout, (size_t)(scap), "%s", base) >= scap) {
+    (*sout) = base;
+    return 1;
+}
+
+static int frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct(void *self, const char * type, char * sout, int scap, int * is_ptr) {
+    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
+    const char * s;
+    if ((!_self->__frontend_type_typeops_vptr->concrete_struct_text(_self, type, (&s), is_ptr))) {
+        return 0;
+    }
+    if (snprintf(sout, (size_t)(scap), "%s", s) >= scap) {
         return 0;
     }
     return 1;
@@ -2058,8 +2105,11 @@ const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_Ty
     .new_node = frontend_type_TypeCheck_frontend_type_TypeOps_new_node,
     .fail = frontend_type_TypeCheck_frontend_type_TypeOps_fail,
     .last_error = frontend_type_TypeCheck_frontend_type_TypeOps_last_error,
+    .is_iface_type_text = frontend_type_TypeCheck_frontend_type_TypeOps_is_iface_type_text,
     .is_iface_type = frontend_type_TypeCheck_frontend_type_TypeOps_is_iface_type,
+    .iface_ref_type_text = frontend_type_TypeCheck_frontend_type_TypeOps_iface_ref_type_text,
     .iface_ref_type = frontend_type_TypeCheck_frontend_type_TypeOps_iface_ref_type,
+    .concrete_struct_text = frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct_text,
     .concrete_struct = frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct,
     .expr_type = frontend_type_TypeCheck_frontend_type_TypeOps_expr_type,
     .expr_type_text = frontend_type_TypeCheck_frontend_type_TypeOps_expr_type_text,

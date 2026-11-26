@@ -146,7 +146,6 @@ impl ExprInstantiate for Expr {
     int generic_instance(int gfi, const char *targ, int line, int col)
     {
         char cname[MAX_TEXT];
-        char tmp[MAX_TEXT];
         char msg[MAX_TEXT];
         const char *itxt;
         int i, k, ni, fi, suffix, taken, seq;
@@ -211,12 +210,15 @@ impl ExprInstantiate for Expr {
         self->sym->funcs[ni].ntparams = 0;
         self->sym->funcs[ni].tparam = runtime::text::ct_intern("");
         if (!self->sym->funcs[ni].tparam) return self->sup->fail("out of memory");
-        itxt = frontend::sym::ct_generic_subst(self->sym->funcs[gfi].ret,
-                                               self->sym->funcs[gfi].tparam, targ,
-                                               tmp, sizeof tmp) == 0
-                   ? tmp : self->sym->funcs[gfi].ret;
-        self->sym->funcs[ni].ret = runtime::text::ct_intern(itxt);
-        if (!self->sym->funcs[ni].ret) return self->sup->fail("out of memory");
+        /* S1a-0 C2p-6: the return type is substituted with the pool-text form.
+           The old `char tmp[MAX_TEXT]` copy failed for a 2000-byte argument and
+           the row kept the template's `T`, which then leaked into the emitted
+           prototype as an unknown type. */
+        itxt = frontend::sym::ct_generic_subst_text(self->sym->funcs[gfi].ret,
+                                                    self->sym->funcs[gfi].tparam,
+                                                    targ);
+        if (!itxt) return self->sup->fail("out of memory");
+        self->sym->funcs[ni].ret = itxt;
         for (k = 0; k < self->sym->funcs[gfi].nparams; k++) {
             const char *sub = frontend::sym::ct_generic_subst_text(
                                   self->sym->funcs[gfi].ptype[k],

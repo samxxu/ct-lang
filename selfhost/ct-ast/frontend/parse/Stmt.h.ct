@@ -44,6 +44,9 @@ import frontend::parse::StmtUninit;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
+/* S1a-0 C2p-6: the formal text bound (mirror of Symbols/Limits); the _Alignas
+   prefix is built in a block of this size instead of a 160-byte row. */
+#define TEXT_LIMIT 65536
 /* S1a-0 C3: the binding-name scratch ceiling (OOM guard only). */
 #define MAX_ADT_FIELDS_MAX 65536
 #define MAX_LABELS 64
@@ -2117,26 +2120,45 @@ impl StmtOps for Stmt {
         }
         if (self->lex->tok == T_ID && self->lex->tok_is("_Alignas")) {
             int r, np, depth;
-            char tbuf[MAX_TEXT];
-            char dpx[MAX_TEXT];
+            char nbuf[64];
+            char *dpx;
             if (self->ex->decl_prefix[0])
                 return self->sup->fail("duplicate _Alignas on one declaration");
-            dpx[0] = 0;
+            /* S1a-0 C2p-6: the prefix grows with the specifier, so a 2000-byte
+               type name between the parentheses is not cut at 160. */
+            dpx = (char *)malloc(TEXT_LIMIT);
+            if (!dpx) return self->sup->fail("out of memory");
             np = 0;
-            if (self->ex->type_append(dpx, sizeof dpx, &np, "_Alignas") != 0)
+            dpx[0] = 0;
+            if (self->ex->type_append(dpx, TEXT_LIMIT, &np, "_Alignas") != 0) {
+                free(dpx);
                 return -1;
+            }
             self->sup->lex_next();
-            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("("))) {
+                free(dpx);
                 return self->sup->fail("expected '(' after _Alignas");
+            }
             depth = 0;
             for (;;) {
-                if (self->lex->tok == T_EOF) return self->sup->fail("unterminated _Alignas");
-                if (self->lex->tok == T_NUM && !self->lex->tokfloat)
-                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
-                else
-                    self->lex->tok_copy(tbuf, sizeof tbuf);
-                if (self->ex->type_append(dpx, sizeof dpx, &np, tbuf) != 0)
+                if (self->lex->tok == T_EOF) {
+                    free(dpx);
+                    return self->sup->fail("unterminated _Alignas");
+                }
+                if (self->lex->tok == T_NUM && !self->lex->tokfloat) {
+                    snprintf(nbuf, sizeof nbuf, "%ld", self->lex->toknum);
+                    if (self->ex->type_append(dpx, TEXT_LIMIT, &np, nbuf) != 0) {
+                        free(dpx);
+                        return -1;
+                    }
+                } else if (self->ex->type_append(dpx, TEXT_LIMIT, &np,
+                                                self->lex->tok_cstr()) != 0) {
+                    /* S1a-0 C2p-6: the token's own C string is passed straight
+                       through (never stored), so its growable buffer is not
+                       aliased by a local. */
+                    free(dpx);
                     return -1;
+                }
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
                     depth--;
@@ -2148,6 +2170,7 @@ impl StmtOps for Stmt {
                 self->sup->lex_next();
             }
             self->ex->decl_prefix = runtime::text::ct_intern(dpx);
+            free(dpx);
             if (!self->ex->decl_prefix) return self->sup->fail("out of memory");
             r = self->parse_stmt();
             if (r < 0) {

@@ -70,6 +70,9 @@ pub trait SupportOps {
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
     int  method_trait_amb(const char *stype, const char *method, const char *first,
                           char *other, int ocap);
+    /* S1a-0 C2p-6: pool-text form (NULL = no second trait). */
+    const char *method_trait_amb_text(const char *stype, const char *method,
+                                      const char *first);
     int  arity_warn(int line, int col, const char *callee, const char *msg);
     int  type_warn(int line, int col, const char *callee, const char *msg);
     int  amb_warn(int line, int col, const char *method, const char *msg);
@@ -78,6 +81,9 @@ pub trait SupportOps {
     int  resolve_type(const char *name, char *out, int cap);
     int  is_iface_type(const char *type, char *tout, int tcap);
     int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
+    /* S1a-0 C2p-6: pool-text forms (see TypeCheck). */
+    int  is_iface_type_text(const char *type, const char **tout);
+    int  iface_ref_type_text(const char *type, const char **tout, int *is_ptr);
     /* Phase 29: adopt a trait for a struct row (an instance's `use` list). */
     int  adopt_use(const char *name, const char *trait);
     int  expr_type(int n, char *out, int cap);
@@ -786,6 +792,12 @@ impl SupportOps for ParseSupport {
 
     /* SH-46 (19.3): whether a trait other than `first` also declares the
        method; the symbol unit owns the tables, this only wraps the error. */
+    const char *method_trait_amb_text(const char *stype, const char *method,
+                                      const char *first)
+    {
+        return self->sym->method_trait_amb_text(stype, method, first);
+    }
+
     int method_trait_amb(const char *stype, const char *method, const char *first,
                          char *other, int ocap)
     {
@@ -849,6 +861,16 @@ impl SupportOps for ParseSupport {
     int iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr)
     {
         return self->ty->iface_ref_type(type, tout, (int)tcap, is_ptr);
+    }
+
+    int is_iface_type_text(const char *type, const char **tout)
+    {
+        return self->ty->is_iface_type_text(type, tout);
+    }
+
+    int iface_ref_type_text(const char *type, const char **tout, int *is_ptr)
+    {
+        return self->ty->iface_ref_type_text(type, tout, is_ptr);
     }
 
     /* Phase 29: adopt `trait` for the struct row `name` once. An instance's

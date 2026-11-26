@@ -247,8 +247,8 @@ struct backend_emit_Emitter {
     int nclvar;
     int range_depth;
     int range_k;
-    char * * gtparam;
-    char * * gtarg;
+    const char * * gtparam;
+    const char * * gtarg;
     int gtntparam;
     int gtcap;
     int gtacap;

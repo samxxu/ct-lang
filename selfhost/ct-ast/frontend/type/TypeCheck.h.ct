@@ -71,6 +71,12 @@ pub trait TypeOps {
     int  is_iface_type(const char *type, char *tout, int tcap);
     int  iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr);
     int  concrete_struct(const char *type, char *sout, int scap, int *is_ptr);
+    /* S1a-0 C2p-6: the pool-text forms. The interface / concrete-struct name
+       never passes through a caller's 160-byte row, so a 2000-byte struct name
+       survives the classification. 0 = not that shape (or OOM). */
+    int  is_iface_type_text(const char *type, const char **tout);
+    int  iface_ref_type_text(const char *type, const char **tout, int *is_ptr);
+    int  concrete_struct_text(const char *type, const char **sout, int *is_ptr);
     int  expr_type(int n, char *out, int cap);
     int  expr_ctype(int n, char *out, int cap);
     /* S1a-0 C2p-3: pool-text forms. The caller gets an interned spelling, so
@@ -669,62 +675,93 @@ impl TypeOps for TypeCheck {
     }
 
     /* `struct T_iface` -> T. */
-    int is_iface_type(const char *type, char *tout, int tcap)
+    int is_iface_type_text(const char *type, const char **tout)
     {
         const char *base;
         size_t n;
         (void)self;
 
+        *tout = "";
+        if (!type) return 0;
         base = type;
         if (strncmp(base, "struct ", 7) != 0) return 0;
         base += 7;
         n = strlen(base);
         if (n <= 6 || strcmp(base + n - 6, "_iface") != 0) return 0;
-        if (n - 6 >= (size_t)tcap) return 0;
-        snprintf(tout, (size_t)tcap, "%.*s", (int)(n - 6), base);
+        *tout = runtime::text::ct_intern_len(base, (int)(n - 6));
+        return *tout ? 1 : 0;
+    }
+
+    int is_iface_type(const char *type, char *tout, int tcap)
+    {
+        const char *t;
+        if (!self->is_iface_type_text(type, &t)) return 0;
+        if (snprintf(tout, (size_t)tcap, "%s", t) >= tcap) return 0;
         return 1;
     }
 
     /* `struct X_iface` -> (X, 0); `struct X_iface *` -> (X, 1). */
-    int iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr)
+    int iface_ref_type_text(const char *type, const char **tout, int *is_ptr)
     {
-        char buf[MAX_TEXT];
+        const char *b;
         size_t n;
         (void)self;
 
+        *tout = "";
         *is_ptr = 0;
-        if (!type[0]) return 0;                  /* no type derived: not an interface */
-        if (snprintf(buf, sizeof buf, "%s", type) >= (int)sizeof buf) return 0;
-        n = strlen(buf);
-        while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '*')) {
-            if (buf[n - 1] == '*') *is_ptr = 1;
-            buf[n - 1] = 0;
+        if (!type || !type[0]) return 0;         /* no type derived: not an interface */
+        b = type;
+        n = strlen(b);
+        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '*')) {
+            if (b[n - 1] == '*') *is_ptr = 1;
             n--;
         }
-        return self->is_iface_type(buf, tout, tcap);
+        while (n > 0 && b[n - 1] == ' ') n--;
+        b = runtime::text::ct_intern_len(b, (int)n);
+        if (!b) return 0;
+        return self->is_iface_type_text(b, tout);
+    }
+
+    int iface_ref_type(const char *type, char *tout, int tcap, int *is_ptr)
+    {
+        const char *t;
+        if (!self->iface_ref_type_text(type, &t, is_ptr)) return 0;
+        if (snprintf(tout, (size_t)tcap, "%s", t) >= tcap) return 0;
+        return 1;
     }
 
     /* `struct S` / `S` / `struct S *` -> S (and whether it was a pointer). */
-    int concrete_struct(const char *type, char *sout, int scap, int *is_ptr)
+    int concrete_struct_text(const char *type, const char **sout, int *is_ptr)
     {
-        char buf[MAX_TEXT];
-        char *base;
+        const char *base;
+        const char *b;
         size_t n;
         (void)self;
 
-        if (snprintf(buf, sizeof buf, "%s", type) >= (int)sizeof buf) return 0;
-        base = buf;
-        if (strncmp(base, "struct ", 7) == 0) base += 7;
-        while (*base == ' ') base++;
-        n = strlen(base);
+        *sout = "";
         *is_ptr = 0;
-        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) {
-            if (base[n - 1] == '*') *is_ptr = 1;
-            base[n - 1] = 0;
+        if (!type) return 0;
+        b = type;
+        if (strncmp(b, "struct ", 7) == 0) b += 7;
+        while (*b == ' ') b++;
+        n = strlen(b);
+        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '*')) {
+            if (b[n - 1] == '*') *is_ptr = 1;
             n--;
         }
+        while (n > 0 && b[n - 1] == ' ') n--;
+        base = runtime::text::ct_intern_len(b, (int)n);
+        if (!base) return 0;
         if (self->sym->find_struct(base) < 0) return 0;
-        if (snprintf(sout, (size_t)scap, "%s", base) >= scap) return 0;
+        *sout = base;
+        return 1;
+    }
+
+    int concrete_struct(const char *type, char *sout, int scap, int *is_ptr)
+    {
+        const char *s;
+        if (!self->concrete_struct_text(type, &s, is_ptr)) return 0;
+        if (snprintf(sout, (size_t)scap, "%s", s) >= scap) return 0;
         return 1;
     }
 

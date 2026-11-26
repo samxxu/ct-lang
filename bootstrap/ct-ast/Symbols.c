@@ -1558,7 +1558,7 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_tex
     return (const char *)(0);
 }
 
-static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb(void *self, const char * stype, const char * method, const char * first, char * other, int ocap) {
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb_text(void *self, const char * stype, const char * method, const char * first) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     const char * base;
     const char * key;
@@ -1566,7 +1566,6 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb(void *se
     int s;
     int ti;
     int mi;
-    int w;
     (void)(_self);
     base = stype;
     if (strncmp(base, "struct ", 7) == 0) {
@@ -1581,11 +1580,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb(void *se
     }
     key = runtime_text_ct_intern_len(base, (int)(n));
     if ((!key)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        return (const char *)(0);
     }
     s = _self->__frontend_sym_symbolops_vptr->find_struct(_self, key);
     if (s < 0) {
-        return (-1);
+        return (const char *)(0);
     }
     for (ti = 0; ti < _self->structs[s].nuse; ti++) {
         int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->structs[s].use[ti]);
@@ -1597,15 +1596,26 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb(void *se
         }
         for (mi = 0; mi < _self->traits[t].nm; mi++) {
             if (strcmp(_self->traits[t].m[mi].name, method) == 0) {
-                w = snprintf(other, (size_t)(ocap), "%s", _self->traits[t].name);
-                if (((w < 0) || (w >= ocap))) {
-                    return (-1);
-                }
-                return 0;
+                return _self->traits[t].name;
             }
         }
     }
-    return (-1);
+    return (const char *)(0);
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb(void *self, const char * stype, const char * method, const char * first, char * other, int ocap) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    const char * o;
+    int w;
+    o = _self->__frontend_sym_symbolops_vptr->method_trait_amb_text(_self, stype, method, first);
+    if ((!o)) {
+        return (-1);
+    }
+    w = snprintf(other, (size_t)(ocap), "%s", o);
+    if (((w < 0) || (w >= ocap))) {
+        return (-1);
+    }
+    return 0;
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_name(void *self, const char * name, char * out, int cap) {
@@ -1898,6 +1908,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .impl_use_concrete = frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete,
     .method_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait,
     .method_trait_text = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_text,
+    .method_trait_amb_text = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb_text,
     .method_trait_amb = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb,
     .ns_decl_name = frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_name,
     .ns_decl_text = frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_text,

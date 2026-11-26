@@ -298,7 +298,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             }
             depth = 0;
             for (; ; ) {
-                char tbuf[MAX_TEXT];
+                char nbuf[64];
                 if (_self->lex->tok == T_EOF) {
                     if (need_paren) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated _Alignas");
@@ -306,13 +306,15 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated _Atomic");
                 }
                 if (((_self->lex->tok == T_NUM) && (!_self->lex->tokfloat))) {
-                    snprintf(tbuf, sizeof(tbuf), "%ld", _self->lex->toknum);
+                    snprintf(nbuf, sizeof(nbuf), "%ld", _self->lex->toknum);
+                    if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), nbuf) != 0) {
+                        return (-1);
+                    }
                 }
                 else {
-                    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
-                }
-                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), tbuf) != 0) {
-                    return (-1);
+                    if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) != 0) {
+                        return (-1);
+                    }
                 }
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
                     depth++;

@@ -94,6 +94,7 @@ void frontend_sym_adt_strip_type(const char *, char *, int);
 const char * frontend_sym_adt_strip_type_text(const char *);
 int frontend_sym_ct_generic_subst(const char *, const char *, const char *, char *, int);
 char * * frontend_sym_ct_rows_reserve(char * *, int, int, int *);
+const char * * frontend_sym_ct_text_rows_reserve(const char * *, int, int, int *);
 int frontend_sym_ct_inst_arg_count(const char *);
 int frontend_sym_ct_inst_encode(const char *, int, char * *, char *, int);
 const char * frontend_sym_ct_inst_encode_text(const char *, int, char * *);
@@ -286,6 +287,53 @@ char * * frontend_sym_ct_rows_reserve(char * * rows, int have, int need, int * g
             }
             return grown;
         }
+    }
+    if (got) {
+        (*got) = cap;
+    }
+    return grown;
+}
+const char * * frontend_sym_ct_text_rows_reserve(const char * * rows, int have, int need, int * got) {
+    const char * * grown;
+    int cap;
+    int i;
+    if (have < 0) {
+        have = 0;
+    }
+    if (need <= have) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    if (need > MAX_STRUCT_TPARAMS_MAX) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    cap = ((have > 0) ? have : MAX_STRUCT_TPARAMS);
+    while (((cap < need) && (cap < MAX_STRUCT_TPARAMS_MAX))) {
+        cap *= 2;
+    }
+    if (cap > MAX_STRUCT_TPARAMS_MAX) {
+        cap = MAX_STRUCT_TPARAMS_MAX;
+    }
+    if (need > cap) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    grown = (const char * *)(realloc((void *)(rows), ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        if (got) {
+            (*got) = have;
+        }
+        return rows;
+    }
+    for (i = have; i < cap; i++) {
+        grown[i] = (const char *)(0);
     }
     if (got) {
         (*got) = cap;

@@ -1180,12 +1180,15 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_program(void *sel
             if (((_self->c_strict && (!_self->unit_is_map)) && _self->lex->__frontend_lex_lexops_vptr->tok_prefix(_self->lex, "#include"))) {
                 const char * t = (_self->lex->tokstr.ptr + 8);
                 int tlen = (_self->lex->tokstr.len - 8);
-                char want[200];
+                const char * want;
                 while (((tlen > 0) && (((*t) == ' ') || ((*t) == '\t')))) {
                     t++;
                     tlen--;
                 }
-                snprintf(want, sizeof(want), "\"%s.shim.h\"", _self->c_base);
+                want = runtime_text_ct_internf("\"%s.shim.h\"", _self->c_base);
+                if ((!want)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 if (((tlen != (int)(strlen(want))) || (memcmp(t, want, (size_t)(tlen)) != 0))) {
                     return tool_diag_ct_sem_error(_self->lex->tokline, 1, "a strict C boundary forbids '#include';"" use .m.ct or <base>.shim.h", _self->mem->path);
                 }
@@ -1955,7 +1958,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_out_check_body(void *se
     _self->nout = 0;
     for (p = params; p > 0; p = _self->arena->nodes[p].next) {
         if (((_self->arena->nodes[p].aux == 3) && (_self->nout < 16))) {
-            snprintf(_self->out_names[_self->nout++], 160, "%s", _self->arena->nodes[p].text2);
+            _self->out_names[_self->nout++] = _self->arena->nodes[p].text2;
         }
     }
     if (((_self->nout == 0) || (body < 0))) {
