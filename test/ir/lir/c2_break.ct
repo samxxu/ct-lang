@@ -1,0 +1,23 @@
+// S1b-S2 cleanup edge 2: `break` leaves through every enclosing block with a
+// defer, innermost first.
+#include <stdio.h>
+
+static int find(int n)
+{
+    int i = 0;
+    while (i < n) {
+        defer { printf("iter %d\n", i); }
+        if (i == 3) {
+            defer { printf("arm\n"); }
+            break;
+        }
+        i = i + 1;
+    }
+    return i;
+}
+
+int main(void)
+{
+    printf("hit=%d\n", find(10));
+    return 0;
+}

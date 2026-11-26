@@ -1,0 +1,21 @@
+// S1b-S2 owned entry: AutoDrop lowers to a Drop cleanup entry and is verified
+// (V6/V8), but the S2 printer does not render it yet, so the program is
+// emitted by the old path (ready=0) byte for byte.
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Box { int n; } use Drop;
+
+impl Drop for Box {
+    void drop(void)
+    {
+        printf("drop %d\n", self->n);
+    }
+}
+
+int main(void)
+{
+    own Box *b = malloc(sizeof(Box));
+    b->n = 3;
+    return 0;
+}

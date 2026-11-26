@@ -49,6 +49,8 @@ root = sys.argv[1]
 files = [
     "selfhost/ct-ast/backend/tir/TModule.h.ct",
     "selfhost/ct-ast/backend/tir/TBuilder.h.ct",
+    "selfhost/ct-ast/backend/lir/LModule.h.ct",
+    "selfhost/ct-ast/backend/lir/Lower.h.ct",
     "selfhost/ct-ast/backend/verify/Verifier.h.ct",
 ]
 pat = re.compile(r"^#define\s+([A-Z][A-Z0-9_]*)\s+([0-9]+)\s*$")
@@ -68,7 +70,7 @@ for rel in files:
 if not seen:
     print("no mirrored defines found", file=sys.stderr)
     sys.exit(1)
-print("ir: %d mirrored defines agree across the three TIR units" % len(seen))
+print("ir: %d mirrored defines agree across the TIR/LIR units" % len(seen))
 PY
 then ok; else bad "the TIR mirror defines disagree"; fi
 
@@ -215,10 +217,100 @@ else
     bad "the shadow is not off by default"
 fi
 
+# ---------------------------------------------------------------------------
+# G. the S2 LIR subset: --ir=on prints LIR -> C, byte-identical to AST -> C
+# ---------------------------------------------------------------------------
+lirn=0
+lirbad=0
+for f in test/ir/lir/*.ct; do
+    [ -f "$f" ] || continue
+    lirn=$((lirn + 1))
+    base="$work/lir-base.c"
+    lir="$work/lir-on.c"
+    rm -f "$base" "$lir"
+    if ! "$CT" "$f" -o "$base" >"$work/lirb.log" 2>&1; then
+        bad "LIR baseline compile failed: $f"
+        lirbad=$((lirbad + 1))
+        continue
+    fi
+    if ! CT_LIR_REPORT=1 "$CT" "$f" -o "$lir" --ir=on >"$work/lirl.log" 2>"$work/lire.log"; then
+        bad "LIR compile failed: $f ($(head -2 "$work/lire.log" | tr '\n' ' '))"
+        lirbad=$((lirbad + 1))
+        continue
+    fi
+    if ! cmp -s "$base" "$lir"; then
+        bad "LIR changed the generated C: $f"
+        lirbad=$((lirbad + 1))
+        continue
+    fi
+    if ! grep -q '^lir: unit=.*ready=' "$work/lire.log"; then
+        bad "LIR coverage report missing: $f"
+        lirbad=$((lirbad + 1))
+        continue
+    fi
+    case "$f" in
+        *c7_autodrop_model.ct)
+            if ! grep -q 'ready=0' "$work/lire.log"; then
+                bad "the AutoDrop fixture must stay on the AST path: $f"
+                lirbad=$((lirbad + 1))
+            fi ;;
+        *)
+            if ! grep -q 'ready=1' "$work/lire.log"; then
+                bad "the fixture is not printed from LIR: $f"
+                lirbad=$((lirbad + 1))
+            fi ;;
+    esac
+    if ! grep -Eq 'cleanups=[1-9]' "$work/lire.log"; then
+        bad "no cleanup entry reached LIR: $f"
+        lirbad=$((lirbad + 1))
+    fi
+done
+if [ "$lirbad" -eq 0 ] && [ "$lirn" -ge 6 ]; then ok; else bad "the LIR subset is not byte-identical"; fi
+printf 'ir: LIR %d fixtures, %d failures\n' "$lirn" "$lirbad"
+
+# V5-V8 negatives: E-IR-105..108, non-zero exit, no `.c`
+lneg=0
+lnegbad=0
+for spec in "ir-v5-temp-cross-scope:E-IR-105:c1_return_defer" \
+            "ir-v6-cleanup-mismatch:E-IR-106:c2_break" \
+            "ir-v7-errdefer-normal:E-IR-107:c1_return_defer" \
+            "ir-v8-double-drop:E-IR-108:c2_break"; do
+    key=${spec%%:*}
+    rest=${spec#*:}
+    code=${rest%%:*}
+    fixture=${rest##*:}
+    out="$work/lneg-$key.c"
+    rm -f "$out"
+    CT_LIR_FAULT="$key" "$CT" "test/ir/lir/$fixture.ct" -o "$out" --ir=on \
+        >"$work/lneg-$key.log" 2>&1
+    rc=$?
+    lneg=$((lneg + 1))
+    if [ "$rc" -eq 0 ]; then
+        bad "LIR $key was accepted"
+        lnegbad=$((lnegbad + 1))
+    elif ! grep -q "$code" "$work/lneg-$key.log"; then
+        bad "LIR $key did not report $code"
+        lnegbad=$((lnegbad + 1))
+    elif [ -f "$out" ]; then
+        bad "LIR $key left a .c behind"
+        lnegbad=$((lnegbad + 1))
+    fi
+done
+if [ "$lnegbad" -eq 0 ]; then ok; else bad "a LIR verifier negative did not behave"; fi
+
+# the switch is opt-in: no LIR line without it
+if "$CT" test/ir/lir/c1_return_defer.ct -o "$work/lir-off.c" \
+        >"$work/lir-off.out" 2>"$work/lir-off.err" \
+   && ! grep -q '^lir:' "$work/lir-off.err"; then
+    ok
+else
+    bad "the LIR switch is not off by default"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
-    printf 'ir: OK (%d corpus byte-identical, %d verifier negatives, %d module builds, selfhost=%d, %d checks)\n' \
-        "$corpus" "$neg" "$mods" "$selfhost" "$pass"
+    printf 'ir: OK (%d corpus byte-identical, %d TIR negatives, %d LIR negatives, %d LIR fixtures, %d module builds, selfhost=%d, %d checks)\n' \
+        "$corpus" "$neg" "$lneg" "$lirn" "$mods" "$selfhost" "$pass"
 else
     printf 'ir: FAIL (%d failure(s), %d checks passed)\n' "$fail" "$pass"
 fi

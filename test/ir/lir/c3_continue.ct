@@ -1,0 +1,24 @@
+// S1b-S2 cleanup edge 3: `continue` runs the same cleanup set as `break`
+// before the next iteration.
+#include <stdio.h>
+
+static int sum(int n)
+{
+    int i = 0;
+    int s = 0;
+    while (i < n) {
+        defer { printf("iter %d\n", i); }
+        i = i + 1;
+        if (i == 2) {
+            continue;
+        }
+        s = s + i;
+    }
+    return s;
+}
+
+int main(void)
+{
+    printf("sum=%d\n", sum(4));
+    return 0;
+}

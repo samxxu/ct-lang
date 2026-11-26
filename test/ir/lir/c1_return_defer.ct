@@ -1,0 +1,18 @@
+// S1b-S2 cleanup edge 1: a normal `return` runs the defers, not the errdefer,
+// and the value is copied out before the bodies run.
+#include <stdio.h>
+
+static int f(int n)
+{
+    int r = n;
+    defer { r = r + 100; printf("d1 r=%d\n", r); }
+    errdefer { printf("e1\n"); }
+    defer { printf("d2\n"); }
+    return r;
+}
+
+int main(void)
+{
+    printf("f=%d\n", f(7));
+    return 0;
+}

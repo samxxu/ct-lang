@@ -1,0 +1,17 @@
+// S1b-S2 cleanup edge 5: `return err:` runs defers and errdefers; the value
+// is materialised first, so a defer that rewrites the local cannot change it.
+#include <stdio.h>
+
+static int fail(int n)
+{
+    int r = n;
+    defer { r = 99; printf("defer r=%d\n", r); }
+    errdefer { printf("errdefer\n"); }
+    return err: r;
+}
+
+int main(void)
+{
+    printf("fail=%d\n", fail(4));
+    return 0;
+}

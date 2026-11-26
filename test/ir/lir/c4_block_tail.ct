@@ -1,0 +1,20 @@
+// S1b-S2 cleanup edge 4: a block that falls out runs its own defers in LIFO
+// order, and the inner block's defer runs before the outer one.
+#include <stdio.h>
+
+static void g(void)
+{
+    defer { printf("outer\n"); }
+    {
+        defer { printf("inner-a\n"); }
+        defer { printf("inner-b\n"); }
+        printf("body\n");
+    }
+    printf("after\n");
+}
+
+int main(void)
+{
+    g();
+    return 0;
+}
