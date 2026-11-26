@@ -65,13 +65,15 @@ defer 也跑、own 不被回滚」的断言（与 [lowering-invariants](lowering
 | # | 夹具 | 期望 |
 | --- | --- | --- |
 | F1 | `(int,int) => int` 作为形参类型 | 与 `fn ptr` 同一 ABI；零运行期成本 |
-| F2 | 与闭包互操作 | 闭包可赋给函子类型（捕获集为空时） |
+| F2 | 与闭包互操作 | 闭包按既有绑定规则落到函子类型；捕获规则不变（D-029 §5） |
 | F3 | 与 trait / vtable 的关系 | 函子类型不做动态派发；调用点直调 |
 | F4 | 与 `fn` 指针混用 | 可互相赋值（签名一致时） |
 | F5 | IDE / 语法高亮 | 编辑器侧单独一份（`ct-vscode` 仓，`npm test`） |
-| F6 | 非零成本用法 | 拒绝：捕获非空的闭包转函子（需显式装箱） |
+| F6 | 非零成本用法 | 不新增：函子类型不创造可存储的闭包值；捕获闭包仍是绑定（与手写 `fn ptr` 相同，D-029 §5） |
 
-负例：`functor_arity.ct`、`functor_capture.ct`、`functor_variance.ct`。
+负例：`functor_arity.ct`、`functor_variance.ct`、`functor_missing_paren.ct`。
+`functor_capture.ct` 不作为本阶段负例：捕获闭包对函子类型与对手写函数指针的现有
+行为一致；拒绝它属于闭包语义变更，D-029 明确不做（要可存储回调走 struct + trait）。
 
 ## 5 S4–S6：ADT 模式
 

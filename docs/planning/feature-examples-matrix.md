@@ -57,7 +57,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 20 | `errdefer` | 4 / `examples/43_errdefer`、`45_error_return_contract`、`61_errdefer_vs_return`、`62_try_cleanup` | 22 | spec §4.58 | 有 |
 | 21 | 后缀 `?` | 2 / `examples/46_result_try`、`62_try_cleanup` | 10 | spec §4.62 | 薄 |
 | 22 | 自定义下标（§4.64） | 1 / `examples/59_custom_subscript`（2026-11-26 补；`28_subscript_forms` 是 C 数组 / 容器下标形态，不算） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64 | 薄 |
-| 23 | 函子 `(A,B) => R` | 0 | 0 | 无 | 待实现（S3） |
+| 23 | 函子 `(A,B) => R` | 0（S8c B-6 补样例） | 2 夹具 + 13 断言（`test/ast/p3_functor*`） | spec §4.77 | 薄（S3 已实现，样例待 S8c） |
 
 ## 2 缺口清单（按 S8c 分片顺序）
 
