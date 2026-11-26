@@ -1362,6 +1362,40 @@ else
     bad "the C-boundary diagnostic cut the 2000-byte callee"
 fi
 
+
+# ---- C2p-10.11) a duplicate member whose name is 2000 bytes ------------
+# `register_field` formatted the duplicate-member error into a 160-byte row,
+# so the diagnostic quoted 159 bytes of the 2000-byte field name.
+fm10=$(printf '%*s' 2000 '' | tr ' ' w)
+cat >"$work/c2p10_dupfield.ct" <<CT
+struct S10 { int $fm10; int $fm10; };
+int main(void) { return 0; }
+CT
+"$CT" "$work/c2p10_dupfield.ct" -o "$work/c2p10_dupfield.c" >"$work/c2p10_dupfield.log" 2>&1
+if [ $? -eq 0 ]; then
+    bad "c2p10_dupfield: a duplicate member was accepted"
+elif grep -qF "'$fm10'" "$work/c2p10_dupfield.log"; then
+    ok; printf '  2000-byte duplicate member: the diagnostic quotes it whole\n'
+else
+    bad "the duplicate-member diagnostic cut the 2000-byte name"
+fi
+
+# ---- C2p-10.12) a duplicate struct tag whose name is 2000 bytes ---------
+tm10=$(printf '%*s' 2000 '' | tr ' ' x)
+cat >"$work/c2p10_dupstruct.ct" <<CT
+struct $tm10 { int n; };
+struct $tm10 { int m; };
+int main(void) { return 0; }
+CT
+"$CT" "$work/c2p10_dupstruct.ct" -o "$work/c2p10_dupstruct.c" >"$work/c2p10_dupstruct.log" 2>&1
+if [ $? -eq 0 ]; then
+    bad "c2p10_dupstruct: a duplicate struct tag was accepted"
+elif grep -qF "'$tm10'" "$work/c2p10_dupstruct.log"; then
+    ok; printf '  2000-byte duplicate struct tag: the diagnostic quotes it whole\n'
+else
+    bad "the duplicate-struct diagnostic cut the 2000-byte tag"
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
 
 [ "$fail" -eq 0 ]
