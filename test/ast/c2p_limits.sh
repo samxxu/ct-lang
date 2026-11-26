@@ -1297,6 +1297,71 @@ else
     bad "the duplicate-key diagnostic cut the 2000-byte key"
 fi
 
+
+# ---- C2p-10.8) a `$` target with a 2000-byte variable name --------------
+# The `$` suffix copied the target name through `tok_copy(…, 160)`, so a
+# 2000-byte declared variable never matched its row and the hop was refused
+# with "'$' target must be a declared variable".
+cat >"$work/c2p10_dollar.ct" <<CT
+struct S10 { int n; };
+impl S10 { int m() { return self->n + 1; } }
+int main(void)
+{
+    struct S10 s = { 1 };
+    int $lt10 = 0;
+    s.m()\$$lt10;
+    return $lt10 - 2;
+}
+CT
+if run_product c2p10_dollar "$work/c2p10_dollar.ct"; then
+    if grep -qF "$lt10" "$work/c2p10_dollar.c"; then
+        ok; printf '  2000-byte "\\$" target: materialised whole\n'
+    else
+        bad "the generated C cut the 2000-byte \$ target name"
+    fi
+fi
+
+# ---- C2p-10.9) `_Generic` over a 2000-byte typedef ----------------------
+# `_Generic` copies its selection verbatim into the pool through a 160-byte
+# token row, so the long typedef name was cut and the host cc rejected the
+# emitted selection.
+cat >"$work/c2p10_generic.ct" <<CT
+typedef int $lt10;
+int main(void)
+{
+    int v = 3;
+    return _Generic(v, $lt10: 1, default: 0) - 1;
+}
+CT
+if run_product c2p10_generic "$work/c2p10_generic.ct"; then
+    if grep -qF "$lt10" "$work/c2p10_generic.c"; then
+        ok; printf '  2000-byte _Generic selection: copied whole\n'
+    else
+        bad "the generated C cut the 2000-byte _Generic selection"
+    fi
+fi
+
+# ---- C2p-10.10) a C-boundary diagnostic naming a 2000-byte function -----
+# `cannot pass a '<T>' handle to C function '<name>'` formatted the callee
+# into a 160-byte row, so the error named a cut function.
+fn10=$(printf '%*s' 2000 '' | tr ' ' f)
+cat >"$work/c2p10_cfunc.ct" <<CT
+int main(void)
+{
+    String s = "x";
+    $fn10(s);
+    return 0;
+}
+CT
+"$CT" "$work/c2p10_cfunc.ct" -o "$work/c2p10_cfunc.c" >"$work/c2p10_cfunc.log" 2>&1
+if [ $? -eq 0 ]; then
+    bad "c2p10_cfunc: passing a String handle to an undeclared C function was accepted"
+elif grep -qF "'$fn10'" "$work/c2p10_cfunc.log"; then
+    ok; printf '  2000-byte C-boundary callee: the diagnostic quotes it whole\n'
+else
+    bad "the C-boundary diagnostic cut the 2000-byte callee"
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
 
 [ "$fail" -eq 0 ]
