@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10525 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10944 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=85158 io_cap=1024
+     emitted_before=48223 emitted_after=86367 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -245,6 +245,12 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   54712 → 54792（+80：内建层拆分后的四个字符串单元、单元归属与前置声明）。上面 PH-88
   的历史数字保持不变；本文件头部的 `emitter_after` / `emitted_after` 是 p88_metrics 的
   live pin，随每次 emitter 变更同步。
+- **v1-PH-2 S5（ADT 模式 B：or / 守卫）后的 live 校准**：`Emitter.h.ct`
+  10525 → 10944 行（+419：or-pattern 的 DNF 条件组、按组选绑定访问器、
+  守卫 arm 的 flag 形状与 `emit_match_arm_ext`），发射 C 85158 → 86367
+  （+1209：模式解析的 DNF/守卫、TIR `guard` 行与 LIR 回退检查；or/守卫的
+  LIR 打印按 per-function fallback 回到 AST body seam，产物逐字节相同）。
+  切片清单仍为 76；`io_names` 由 1024 提到 2048（S5 新增约 28 个 callee）。
 - **v1-PH-2 S4（ADT 模式 A）后的 live 校准**：`Emitter.h.ct` 10467 → 10525 行
   （+58：arm 条件串与绑定访问路径的发射、非 ADT 主语的 `__ct_matchN` 声明、
   `emit_arm_conds` helper），发射 C 84025 → 85158（+1133：模式条件/路径的
