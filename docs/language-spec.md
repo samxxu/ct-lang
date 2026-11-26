@@ -3249,9 +3249,10 @@ weak / 跨过程分析（D-012）。
 ### 4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）
 
 最小名义和类型，为 ct-ast 重写提供穷尽判别（D3 / LANG-21）。本轮只做名义和类型、
-构造器负载、穷尽 `match` 与变量绑定；泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式
-仍是**非目标**（v1.1+ 增量提案，R84-5）。表达式形式的 `match` 由 LANG-29 S4 / B5
-补齐（见下），语句形式与其拼写不变。
+构造器负载、穷尽 `match` 与变量绑定；泛型 ADT、or / 守卫仍是**非目标**（v1.1+ 增量
+提案，R84-5）。表达式形式的 `match` 由 LANG-29 S4 / B5 补齐（见下），语句形式与其拼写
+不变。字面量、嵌套与结构体模式自 `v1-PH-2` S4 起补齐，口径见「S4 模式扩展」小节与
+[adt-patterns](design/adt-patterns.md)。
 
 #### 语法（冻结）
 
@@ -3307,6 +3308,52 @@ int area(Shape s)
   `match covers every variant of '<T>'; the wildcard arm is unnecessary`（opt-in，普通
   `ct check` 不报）。
 
+#### S4 模式扩展（`v1-PH-2` S4，仅语句 `match` 扩主语）
+
+在既有变体模式之上增加三种模式；S5 的 or / 守卫不在此列。完整设计见
+[adt-patterns](design/adt-patterns.md)。
+
+```
+pattern      := '_' | binder | INT | CHAR
+              | type '.' variant '(' pattern (',' pattern)* ')'
+              | type '{' field-pattern (',' field-pattern)* ','? '}'
+              | type '{' '..' '}'
+field-pattern := IDENT ':' pattern | IDENT | '..'
+```
+
+- **字面量模式**：整数字面量与字符字面量，按值比较；只接受整数族位置
+  （`int` / `char` / `bool` / `short` / `long` / 定宽整数等）。`bool` 用 `0` / `1`。
+  字符串字面量模式不支持（现有类型面没有字符串相等），遇到即报
+  `string literal patterns are not supported (S4: int/char/bool only)`。
+- **嵌套模式**：变体负载位置与结构体字段位置都可以再写任意模式，包括嵌套变体模式
+  （`Some(Node.Leaf(v))`）与嵌套结构体模式（`Some(Point { x: 0 })`）。负载字段类型为
+  指针时只能写 `_` 或绑定整个值。
+- **结构体模式**：`Point { x: 0, y }`；`y` 是字段同名的简写绑定，`x: 0` 是显式子模式。
+  `..` 表示余下字段，必须最后且只能一次；不写 `..` 又没列全字段是硬错。未知字段、
+  重复字段、字段类型不符都是硬错。
+- **主语**：语句 `match` 的主语可以是 ADT、结构体或整数族值。ADT 主语仍只接受
+  `T.V(…)`、`_`、绑定；结构体主语接受 `T { … }`、`_`、绑定；整数族主语接受字面量、
+  `_`、绑定。其它类型报
+  `match needs an ADT, struct, or integer-like value, but '<T>' is not supported`。
+  表达式 `match` 的主语**仍限 ADT**（非 ADT 主语不引入，避免把 `match` 变成通用
+  `switch` 表达式）。
+- **绑定与顺序**：arm 自上而下第一个命中即执行；绑定是该位置值的副本，同一 arm 内绑定名
+  不得重复（`duplicate binding '<name>' in a match arm`）。
+- **穷尽（保守判定）**：只有**不可反驳**的根模式才计入覆盖——`_`、绑定、所有子模式都
+  不可反驳的变体模式、带 `..` 或列全字段且子模式都不可反驳的结构体模式。`Some(0)` 这类
+  可反驳 arm 不覆盖 `Some(1)`；ADT 主语仍需每个变体各有一个不可反驳 arm 或有根 `_` /
+  根绑定兜底；结构体与整数族主语必须有根 `_` / 根绑定（除非结构体模式本身不可反驳）。
+  `_` 与根绑定都是“捕获全部”，必须写在最后一个 arm；`_` 只能一个。
+- **重复**：同一变体的两个不可反驳根仍是
+  `duplicate match arm for variant 'T.V'`；逐字相同的完整模式报
+  `duplicate match arm pattern '<sig>'`。
+- **诊断位置**：所有模式错误都在模式起始 token 处给出 `file:line:col: error:`；文本清单
+  见 [adt-patterns](design/adt-patterns.md) §5。
+- **发射**：顶层变体 tag 仍由 if/else 链判定；嵌套变体追加 `<path>.tag == k`，字面量与
+  结构体字段追加 `<path> == value`。非 ADT 主语的语句 `match` 声明
+  `%s __ct_matchN`（主语 C 类型，指针加 `*`），条件来自模式；最后一个 arm 是 `else`。
+  绑定初始化仍是 `__ct_matchN` + 访问路径；表达式 `match` 的 `__ct_mresN` 形态不变。
+
 #### 布局与 ABI（冻结）
 
 ```c
@@ -3356,8 +3403,9 @@ struct Shape {
 - **payload 生命周期（LANG-29 S2 / B3 起）**：ADT 的 owning payload 由编译器生成的
   `<T>_retain` / `<T>_release` 持有与释放；裸 `Str` 不能作 payload（存 `String`，取视图用
   `as_str()`），声明处即硬错。
-- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；没有 or / 守卫 / 嵌套 /
-  结构体模式；`offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。
+- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；没有 or / 守卫；字符串字面量
+  模式不支持；模式不穿透指针负载；非 ADT 主语只在语句 `match` 开放。
+  `offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。
   表达式 `match` 的当前切面另有三条边界（LANG-29 S4 / B5）：臂块内不允许 `defer` /
   `own`（`yield` 必须在清理之前求值），`yield` 不能出现在臂块里嵌套的内部块中，
   且不实现块尾隐式取值。
