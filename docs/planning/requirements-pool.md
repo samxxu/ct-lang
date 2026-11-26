@@ -240,7 +240,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `status` | `planned`（`v1-PH-2` S7） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
-| `block` | 依赖 `--types` 在 40 个 example 上的 FP=0 证据；默认策略需用户单独签字；不依赖 IR |
+| `block` | 依赖 `--types` 在 40 个 example 上的 FP=0 证据；默认策略需用户单独签字；不依赖 IR。**证据基线**见 [s7-evidence-baseline](s7-evidence-baseline.md)（2026-11-26：`--types` 新增 0 条，11 个非零文件全是既有 check 诊断） |
 
 ## REQ-MEM-1 — 基于 CFG 的所有权 / 资源数据流分析
 
@@ -274,7 +274,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `status` | `planned`（`v1-PH-2` S7） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
-| `block` | 无（用 S1 的清理 CFG 做单元内一层写入摘要；跨单元不做） |
+| `block` | 无（用 S1 的清理 CFG 做单元内一层写入摘要；跨单元不做）。**用例矩阵**见 [s7-evidence-baseline](s7-evidence-baseline.md) §5（P1–P6 / N1–N6 / D1–D2） |
 
 ## REQ-CI-1 — `nightly.yml` 缺 TSan job，与脚本 / 卡片口径不一致
 
@@ -371,7 +371,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `status` | `planned`（`v1-PH-2` S9） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
-| `block` | 无；依赖 S1 的 LIR（迁移在 LIR 上）与 S7 的类型检查证据 |
+| `block` | 无；依赖 S1 的 LIR（迁移在 LIR 上）与 S7 的类型检查证据。**现数输入**见 [strict-include-audit](strict-include-audit.md)（2026-11-26：819 文件 / 1,078 行，M1–M5） |
 
 ## REQ-POINTERFREE-1 — 日常代码的指针退场
 

@@ -23,6 +23,14 @@ grep -rl 'char \*' examples --include='*.ct' | wc -l
 | 缺 | example = 0 |
 | 待实现 | 语言侧还没落地（S2–S6） |
 
+**新增样例会改变语料 pin（2026-11-26 实测踩坑）**：`p85/m0` 与 `p88/emit` 用
+`test/probes/p85_corpus_sha.tsv` 钉住 `examples/*/*.ct` 的清单与 sha256。新增或改写 example 必须在
+**同一提交**里重生成该文件，否则两段门禁会红：
+
+```sh
+python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> > test/probes/p85_corpus_sha.tsv
+```
+
 ## 1 矩阵
 
 | # | 特性 | example（数 / 代表） | test（数） | docs | 档 |
