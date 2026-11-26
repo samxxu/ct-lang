@@ -237,6 +237,8 @@ const char * frontend_parse_ctype_mcall(struct frontend_parse_Expr *, int, int *
 const char * frontend_parse_ctype_slice_index(struct frontend_parse_Expr *, int, int *, int);
 const char * frontend_parse_ctype_slice_get(struct frontend_parse_Expr *, int, int *, int);
 const char * frontend_parse_ctype_slice_range(struct frontend_parse_Expr *, int, int *, int);
+static int fnptr_sig_parts(const char *, const char * *, const char * *);
+static int fnptr_param_count(const char *);
 static int frontend_parse_Expr_frontend_parse_ExprStaticType_parse_array_dims(void *self, int n) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     int warned = 0;
@@ -1026,6 +1028,138 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_brace_arg_ok(void *
     return ((fs == as) ? 0 : 1);
 }
 
+static const char * frontend_parse_Expr_frontend_parse_ExprStaticType_expr_fnptr_sig(void *self, int e) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    int k;
+    int vi;
+    int fi;
+    int i;
+    int n;
+    const char * name;
+    char * buf;
+    int cap;
+    const char * pooled;
+    buf = 0;
+    cap = 0;
+    if (e < 0) {
+        return (const char *)(0);
+    }
+    k = _self->arena->nodes[e].kind;
+    if (k == N_ADDR) {
+        return _self->__frontend_parse_exprstatictype_vptr->expr_fnptr_sig(_self, _self->arena->nodes[e].a);
+    }
+    if (k == N_RAW) {
+        name = _self->arena->nodes[e].text;
+        fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, name);
+        if (fi < 0) {
+            return (const char *)(0);
+        }
+        goto named_func;
+    }
+    if (k != N_VAR) {
+        return (const char *)(0);
+    }
+    name = _self->arena->nodes[e].text2;
+    vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
+    if (vi >= 0) {
+        if (_self->sym->vars[vi].is_closure) {
+            return (const char *)(0);
+        }
+        if ((_self->sym->vars[vi].type && strstr(_self->sym->vars[vi].type, "(*)"))) {
+            return _self->sym->vars[vi].type;
+        }
+        return (const char *)(0);
+    }
+    fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, name);
+    if (fi < 0) {
+        return (const char *)(0);
+    }
+    named_func:
+        ;
+        if (_self->sym->funcs[fi].variadic) {
+            return (const char *)(0);
+        }
+        n = _self->sym->funcs[fi].nparams;
+        for (i = 0; i < n; i++) {
+            if (_self->sym->funcs[fi].pann[i]) {
+                return (const char *)(0);
+            }
+            if ((_self->sym->funcs[fi].pdim[i] && _self->sym->funcs[fi].pdim[i][0])) {
+                return (const char *)(0);
+            }
+        }
+        if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+            return (const char *)(0);
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), _self->sym->funcs[fi].ret) != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), " (*)(") != 0) {
+            goto fail;
+        }
+        for (i = 0; i < n; i++) {
+            if (((i > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ", ") != 0))) {
+                goto fail;
+            }
+            if (tool_sh_ct_text_cat((&buf), (&cap), _self->sym->funcs[fi].ptype[i]) != 0) {
+                goto fail;
+            }
+        }
+        if (((n == 0) && (tool_sh_ct_text_cat((&buf), (&cap), "void") != 0))) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), ")") != 0) {
+            goto fail;
+        }
+        pooled = runtime_text_ct_intern(buf);
+        tool_sh_ct_text_free((&buf), (&cap));
+        return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+
+static int frontend_parse_Expr_frontend_parse_ExprStaticType_fnptr_sig_check(void *self, const char * formal, int e, int line, int col) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    const char * actual;
+    const char * fret;
+    const char * fps;
+    const char * aret;
+    const char * aps;
+    const char * fk;
+    const char * ak;
+    int fn;
+    int an;
+    if (((!formal) || (!strstr(formal, "(*)")))) {
+        return 0;
+    }
+    actual = _self->__frontend_parse_exprstatictype_vptr->expr_fnptr_sig(_self, e);
+    if ((!actual)) {
+        return 0;
+    }
+    if ((!fnptr_sig_parts(formal, (&fret), (&fps)))) {
+        return 0;
+    }
+    if ((!fnptr_sig_parts(actual, (&aret), (&aps)))) {
+        return 0;
+    }
+    fn = fnptr_param_count(fps);
+    an = fnptr_param_count(aps);
+    if (fn != an) {
+        return tool_diag_ct_sem_error(line, col, runtime_text_ct_internf("function pointer arity mismatch: expected '%s', got '%s'", formal, actual), _self->sup->mem->path);
+    }
+    fk = frontend_type_type_key_text(fret);
+    ak = frontend_type_type_key_text(aret);
+    if (((!fk) || (!ak))) {
+        return 0;
+    }
+    if (strcmp(fk, ak) != 0) {
+        return tool_diag_ct_sem_error(line, col, runtime_text_ct_internf("function pointer type mismatch: expected '%s', got '%s': return type differs", formal, actual), _self->sup->mem->path);
+    }
+    return 0;
+}
+
 const struct frontend_parse_ExprStaticType_vtbl frontend_parse_Expr_frontend_parse_ExprStaticType_vtable = {
     .parse_array_dims = frontend_parse_Expr_frontend_parse_ExprStaticType_parse_array_dims,
     .tok_is_type_name = frontend_parse_Expr_frontend_parse_ExprStaticType_tok_is_type_name,
@@ -1046,7 +1180,9 @@ const struct frontend_parse_ExprStaticType_vtbl frontend_parse_Expr_frontend_par
     .container_subscript_kind = frontend_parse_Expr_frontend_parse_ExprStaticType_container_subscript_kind,
     .container_write_check = frontend_parse_Expr_frontend_parse_ExprStaticType_container_write_check,
     .container_addr_check = frontend_parse_Expr_frontend_parse_ExprStaticType_container_addr_check,
-    .brace_arg_ok = frontend_parse_Expr_frontend_parse_ExprStaticType_brace_arg_ok
+    .brace_arg_ok = frontend_parse_Expr_frontend_parse_ExprStaticType_brace_arg_ok,
+    .expr_fnptr_sig = frontend_parse_Expr_frontend_parse_ExprStaticType_expr_fnptr_sig,
+    .fnptr_sig_check = frontend_parse_Expr_frontend_parse_ExprStaticType_fnptr_sig_check
 };
 
 int frontend_parse_expr_generic_token(struct frontend_parse_Expr * self) {
@@ -1320,4 +1456,94 @@ const char * frontend_parse_ctype_slice_range(struct frontend_parse_Expr * self,
     (void)(array_depth);
     (void)(depth);
     return runtime_text_ct_intern("struct __ct_slice");
+}
+static int fnptr_sig_parts(const char * t, const char * * ret, const char * * params) {
+    const char * p;
+    const char * q;
+    const char * lp;
+    int len;
+    int depth;
+    if ((!t)) {
+        return 0;
+    }
+    p = strstr(t, "(*)");
+    if (((!p) || (p == t))) {
+        return 0;
+    }
+    len = (int)((p - t));
+    while (((len > 0) && ((t[(len - 1)] == ' ') || (t[(len - 1)] == '\t')))) {
+        len--;
+    }
+    if (len <= 0) {
+        return 0;
+    }
+    q = (p + 3);
+    while ((((*q) == ' ') || ((*q) == '\t'))) {
+        q++;
+    }
+    if ((*q) != '(') {
+        return 0;
+    }
+    lp = q;
+    depth = 0;
+    for (; (*q); q++) {
+        if ((*q) == '(') {
+            depth++;
+        }
+        else {
+            if ((*q) == ')') {
+                depth--;
+                if (depth == 0) {
+                    break;
+                }
+            }
+        }
+    }
+    if (depth != 0) {
+        return 0;
+    }
+    (*ret) = runtime_text_ct_intern_len(t, len);
+    (*params) = runtime_text_ct_intern_len((lp + 1), (int)(((q - lp) - 1)));
+    if (((!(*ret)) || (!(*params)))) {
+        return 0;
+    }
+    return 1;
+}
+static int fnptr_param_count(const char * ps) {
+    const char * p;
+    int n;
+    int depth;
+    int seen;
+    if (((!ps) || (!ps[0]))) {
+        return 0;
+    }
+    p = ps;
+    while ((((*p) == ' ') || ((*p) == '\t'))) {
+        p++;
+    }
+    if (strcmp(p, "void") == 0) {
+        return 0;
+    }
+    n = 1;
+    depth = 0;
+    seen = 0;
+    for (; (*p); p++) {
+        if (((((*p) == '(') || ((*p) == '[')) || ((*p) == '<'))) {
+            depth++;
+        }
+        else {
+            if (((((*p) == ')') || ((*p) == ']')) || ((*p) == '>'))) {
+                depth--;
+            }
+            else {
+                if ((((*p) == ',') && (depth == 0))) {
+                    n++;
+                }
+            }
+        }
+        if ((((*p) != ' ') && ((*p) != '\t'))) {
+            seen = 1;
+        }
+    }
+    return (seen ? n : 0);
 }

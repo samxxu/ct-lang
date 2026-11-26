@@ -4921,7 +4921,7 @@ static int lw_pw_decl(struct backend_lir_Lower * w, struct backend_lir_ct_lstmt 
         const char * sp = ((s->spelling && s->spelling[0]) ? s->spelling : backend_lir_lmod_cspell(w->l, s->type));
         const char * star = (sp ? strstr(sp, "(*)") : 0);
         if (star) {
-            fprintf(backend_lir_g_lir_out, "%.*s(*%s)%s", (int)((star - sp)), sp, (s->name ? s->name : ""), (star + 3));
+            fprintf(backend_lir_g_lir_out, "%.*s(*%s%s)%s", (int)((star - sp)), sp, (s->name ? s->name : ""), (s->dims ? s->dims : ""), (star + 3));
         }
         else {
             fprintf(backend_lir_g_lir_out, "%s %s%s", sp, (s->name ? s->name : ""), (s->dims ? s->dims : ""));

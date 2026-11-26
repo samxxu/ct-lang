@@ -1627,6 +1627,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
                     if (e < 0) {
                         return (-1);
                     }
+                    if (_self->ex->__frontend_parse_exprstatictype_vptr->fnptr_sig_check(_self->ex, ret, e, func_line, func_col) != 0) {
+                        return (-1);
+                    }
                     if (_self->ex->__frontend_parse_exprtypes_vptr->lit_coerce(_self->ex, ret, e) != 0) {
                         return (-1);
                     }
@@ -1647,6 +1650,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     }
     if (_self->ex->saw_atomic) {
         return tool_diag_ct_sem_error(func_line, func_col, "an atomic value cannot be a return type", _self->mem->path);
+    }
+    if (strstr(ret, "(*)")) {
+        return tool_diag_ct_sem_error(func_line, func_col, "a function cannot return a function pointer; use a struct field or an 'out' parameter", _self->mem->path);
     }
     if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
         return (-1);
@@ -2151,7 +2157,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
         if (_self->ex->__frontend_parse_exprstatictype_vptr->parse_array_dims(_self->ex, p) != 0) {
             return (-1);
         }
-        if (((seen_ref || seen_out) && (_self->arena->nodes[p].text3[0] || _self->ex->fnptr_state))) {
+        if ((strstr(typebuf, "(*)") && _self->arena->nodes[p].text3[0])) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "function-pointer arrays are not supported as parameters");
+        }
+        if (((seen_ref || seen_out) && ((_self->arena->nodes[p].text3[0] || _self->ex->fnptr_state) || strstr(typebuf, "(*)")))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "ref/out parameters cannot be arrays or function pointers");
         }
         if ((seen_ref && seen_borrow)) {

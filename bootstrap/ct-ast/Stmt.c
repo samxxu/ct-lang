@@ -263,6 +263,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
             "switch", "trait", "typedef", "while", NULL
         };
     (void)(_self);
+    if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
+        return _self->ex->__frontend_parse_exprtypeparse_vptr->functor_type_ahead(_self->ex);
+    }
     if (_self->lex->tok != T_ID) {
         return 0;
     }
@@ -1992,6 +1995,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                         if (e < 0) {
                             return (-1);
                         }
+                        if (((!is_slice) && (_self->ex->__frontend_parse_exprstatictype_vptr->fnptr_sig_check(_self->ex, typebuf, e, iline, icol) != 0))) {
+                            return (-1);
+                        }
                         if (_self->ex->__frontend_parse_exprtypes_vptr->lit_coerce(_self->ex, typebuf, e) != 0) {
                             return (-1);
                         }
@@ -2442,6 +2448,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         _self->ex->into_ok = 0;
                         _self->ex->fnval_ok = 0;
                         if (rhs < 0) {
+                            return (-1);
+                        }
+                        if ((((k == N_VAR) && tt[0]) && (_self->ex->__frontend_parse_exprstatictype_vptr->fnptr_sig_check(_self->ex, tt, rhs, rline, rcol) != 0))) {
                             return (-1);
                         }
                         if ((tt[0] && (_self->ex->__frontend_parse_exprtypes_vptr->lit_coerce(_self->ex, tt, rhs) != 0))) {

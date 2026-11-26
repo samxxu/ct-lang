@@ -228,7 +228,22 @@ static const char * inst_spell(const char *, int, char * *);
 static const char * type_resolve_name(struct frontend_parse_Expr *, const char *);
 static const char * type_resolve_token(struct frontend_parse_Expr *);
 int frontend_parse_type_only_qualifiers(const char *);
+static int functor_ahead(struct frontend_parse_Expr *);
+static int functor_arrow_on_line(struct frontend_parse_Expr *);
+static int functor_params(struct frontend_parse_Expr *, const char * *);
+static int functor_parse(struct frontend_parse_Expr *, char *, int, int *);
 static const char * frontend_parse_g_expr_inst_override = 0;
+static int frontend_parse_Expr_frontend_parse_ExprTypeParse_functor_type_ahead(void *self) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    if (((_self->lex->tok != T_PUNCT) || (!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
+        return 0;
+    }
+    if (functor_ahead(_self)) {
+        return 1;
+    }
+    return functor_arrow_on_line(_self);
+}
+
 static int frontend_parse_Expr_frontend_parse_ExprTypeParse_is_type_word(void *self, const char * w) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     (void)(_self);
@@ -273,6 +288,19 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
     _self->fnptr_name = "";
     _self->fnptr_dims = "";
     _self->last_bare_tag = "";
+    if ((((((!_self->type_no_ptr) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && (!functor_ahead(_self))) && functor_arrow_on_line(_self))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a functor type needs a '(A, B) => R' shape");
+    }
+    if (((((!_self->type_no_ptr) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && functor_ahead(_self))) {
+        int fn = 0;
+        if (functor_parse(_self, out, cap, (&fn)) != 0) {
+            return (-1);
+        }
+        if (fn == 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a type");
+        }
+        return 0;
+    }
     for (; ; ) {
         if ((((n == 0) && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "atomic"))) {
             _self->saw_atomic = 1;
@@ -899,6 +927,9 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
         }
     }
     if (n == 0) {
+        if (((((!_self->type_no_ptr) && (_self->lex->tok == T_PUNCT)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")) && functor_arrow_on_line(_self))) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a functor type needs a '(A, B) => R' shape");
+        }
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("expected a type (tok %d '%.*s')", _self->lex->tok, _self->lex->tokstr.len, _self->lex->tokstr.ptr));
     }
     return 0;
@@ -1131,6 +1162,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type_text
 }
 
 const struct frontend_parse_ExprTypeParse_vtbl frontend_parse_Expr_frontend_parse_ExprTypeParse_vtable = {
+    .functor_type_ahead = frontend_parse_Expr_frontend_parse_ExprTypeParse_functor_type_ahead,
     .is_type_word = frontend_parse_Expr_frontend_parse_ExprTypeParse_is_type_word,
     .type_append = frontend_parse_Expr_frontend_parse_ExprTypeParse_type_append,
     .parse_type = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type,
@@ -1207,4 +1239,218 @@ int frontend_parse_type_only_qualifiers(const char * spell) {
         }
     }
     return 1;
+}
+static int functor_ahead(struct frontend_parse_Expr * self) {
+    const char * s = self->lex->src;
+    int i = self->lex->tokstart;
+    int depth = 0;
+    if (s[i] != '(') {
+        return 0;
+    }
+    for (; s[i]; i++) {
+        char c = s[i];
+        if (((c == '"') || (c == '\''))) {
+            char q = c;
+            i++;
+            while ((s[i] && (s[i] != q))) {
+                if (((s[i] == '\\') && s[(i + 1)])) {
+                    i++;
+                }
+                i++;
+            }
+            if ((!s[i])) {
+                return 0;
+            }
+            continue;
+        }
+        if (((c == '/') && (s[(i + 1)] == '/'))) {
+            while ((s[i] && (s[i] != '\n'))) {
+                i++;
+            }
+            if ((!s[i])) {
+                return 0;
+            }
+            continue;
+        }
+        if (((c == '/') && (s[(i + 1)] == '*'))) {
+            i += 2;
+            while ((s[i] && (!((s[i] == '*') && (s[(i + 1)] == '/'))))) {
+                i++;
+            }
+            if ((!s[i])) {
+                return 0;
+            }
+            i++;
+            continue;
+        }
+        if ((((c == '(') || (c == '[')) || (c == '{'))) {
+            depth++;
+        }
+        else {
+            if ((((c == ')') || (c == ']')) || (c == '}'))) {
+                depth--;
+                if (depth == 0) {
+                    i++;
+                    break;
+                }
+            }
+        }
+    }
+    while (((((s[i] == ' ') || (s[i] == '\t')) || (s[i] == '\n')) || (s[i] == '\r'))) {
+        i++;
+    }
+    return ((s[i] == '=') && (s[(i + 1)] == '>'));
+}
+static int functor_arrow_on_line(struct frontend_parse_Expr * self) {
+    const char * s = (self->lex->src + self->lex->tokstart);
+    if ((*s) != '(') {
+        return 0;
+    }
+    for (; (*s); s++) {
+        char c = (*s);
+        if (((((c == '\n') || (c == ';')) || (c == '{')) || (c == '}'))) {
+            return 0;
+        }
+        if (((c == '"') || (c == '\''))) {
+            char q = c;
+            s++;
+            while (((*s) && ((*s) != q))) {
+                if ((((*s) == '\\') && s[1])) {
+                    s++;
+                }
+                s++;
+            }
+            if ((!(*s))) {
+                return 0;
+            }
+            continue;
+        }
+        if (((c == '/') && (s[1] == '/'))) {
+            while (((*s) && ((*s) != '\n'))) {
+                s++;
+            }
+            if ((!(*s))) {
+                return 0;
+            }
+            continue;
+        }
+        if (((c == '/') && (s[1] == '*'))) {
+            s += 2;
+            while (((*s) && (!(((*s) == '*') && (s[1] == '/'))))) {
+                s++;
+            }
+            if ((!(*s))) {
+                return 0;
+            }
+            s++;
+            continue;
+        }
+        if (((c == '=') && (s[1] == '>'))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int functor_params(struct frontend_parse_Expr * self, const char * * plist_out) {
+    const char * plist = "";
+    int pn = 0;
+    (*plist_out) = "void";
+    if (((self->lex->tok == T_PUNCT) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, ")"))) {
+        self->sup->__frontend_parse_supportops_vptr->lex_next(self->sup);
+        return 0;
+    }
+    for (; ; ) {
+        const char * pt;
+        const char * joiner;
+        if (((self->lex->tok == T_PUNCT) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, "..."))) {
+            if (((pn == 0) || (strcmp(plist, "void") == 0))) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a variadic functor type needs a parameter before '...'");
+            }
+            plist = runtime_text_ct_intern_join(plist, ", ...");
+            if ((!plist)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
+            self->sup->__frontend_parse_supportops_vptr->lex_next(self->sup);
+            break;
+        }
+        if (self->__frontend_parse_exprtypeparse_vptr->parse_type_text(self, (&pt)) != 0) {
+            return (-1);
+        }
+        if ((self->fnptr_state || strstr(pt, "(*)"))) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "nested function pointers are not supported");
+        }
+        if (strcmp(pt, "void") == 0) {
+            if (((self->lex->tok != T_PUNCT) || (!(self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, ",") || self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, ")"))))) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a 'void' functor parameter must be the only parameter");
+            }
+            if (self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, ",")) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a 'void' functor parameter must be the only parameter");
+            }
+        }
+        if (self->lex->tok == T_ID) {
+            self->sup->__frontend_parse_supportops_vptr->lex_next(self->sup);
+        }
+        joiner = ((pn > 0) ? ", " : "");
+        if (joiner[0]) {
+            plist = runtime_text_ct_intern_join(plist, joiner);
+            if ((!plist)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
+        }
+        plist = runtime_text_ct_intern_join(plist, pt);
+        if ((!plist)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+        }
+        pn++;
+        if (((self->lex->tok == T_PUNCT) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, ","))) {
+            self->sup->__frontend_parse_supportops_vptr->lex_next(self->sup);
+            continue;
+        }
+        break;
+    }
+    if (self->sup->__frontend_parse_supportops_vptr->expect(self->sup, ")") != 0) {
+        return (-1);
+    }
+    if (pn == 0) {
+        plist = "void";
+    }
+    (*plist_out) = plist;
+    return 0;
+}
+static int functor_parse(struct frontend_parse_Expr * self, char * out, int cap, int * n) {
+    const char * plist;
+    const char * rt;
+    const char * sig;
+    if (self->functor_depth > 0) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "nested function pointers are not supported");
+    }
+    self->functor_depth++;
+    self->sup->__frontend_parse_supportops_vptr->lex_next(self->sup);
+    if (functor_params(self, (&plist)) != 0) {
+        return (-1);
+    }
+    if (self->sup->__frontend_parse_supportops_vptr->expect(self->sup, "=>") != 0) {
+        return (-1);
+    }
+    if (self->__frontend_parse_exprtypeparse_vptr->parse_type_text(self, (&rt)) != 0) {
+        return (-1);
+    }
+    if ((self->fnptr_state || strstr(rt, "(*)"))) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "nested function pointers are not supported");
+    }
+    sig = runtime_text_ct_internf("(*)(%s)", plist);
+    if ((!sig)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    if (self->__frontend_parse_exprtypeparse_vptr->type_append(self, out, cap, n, rt) != 0) {
+        return (-1);
+    }
+    if (self->__frontend_parse_exprtypeparse_vptr->type_append(self, out, cap, n, sig) != 0) {
+        return (-1);
+    }
+    self->fnptr_state = 0;
+    self->fnptr_name = "";
+    self->fnptr_dims = "";
+    self->functor_depth--;
+    return 0;
 }

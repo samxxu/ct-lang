@@ -433,6 +433,12 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_expr(void *self) {
         if (right < 0) {
             return (-1);
         }
+        if (((op == 0) && (k2 == N_VAR))) {
+            const char * lt = _self->sym->__frontend_sym_symbolops_vptr->var_type_text(_self->sym, _self->arena->nodes[left].text2);
+            if ((lt && (_self->__frontend_parse_exprstatictype_vptr->fnptr_sig_check(_self, lt, right, aline, acol) != 0))) {
+                return (-1);
+            }
+        }
         if ((((op == 0) && (k2 == N_VAR)) && (_self->arena->nodes[right].kind == N_VAR))) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[left].text2);
             int vj = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[right].text2);

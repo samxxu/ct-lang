@@ -154,6 +154,8 @@ struct frontend_parse_ExprStaticType_vtbl {
     const char * (*static_ctype_text)(void *, int, int *, int);
     const char * (*ctype_expand_text)(void *, const char *, int);
     const char * (*fnptr_ret_text)(void *, const char *);
+    const char * (*expr_fnptr_sig)(void *, int);
+    int (*fnptr_sig_check)(void *, const char *, int, int, int);
     const char * (*peel_ptr_text)(void *, const char *);
     int (*ctype_expand)(void *, const char *, char *, int, int);
     int (*fnptr_ret)(void *, const char *, char *, int);
@@ -178,6 +180,7 @@ struct frontend_parse_ExprStaticType_iface {
 
 struct frontend_parse_ExprTypeParse_vtbl {
     int (*is_type_word)(void *, const char *);
+    int (*functor_type_ahead)(void *);
     int (*type_append)(void *, char *, int, int *, const char *);
     int (*parse_type)(void *, char *, int);
     int (*parse_type_text)(void *, const char * *);
@@ -351,6 +354,7 @@ struct frontend_parse_Expr {
     int call_col;
     const char * fnptr_dims;
     int fnptr_state;
+    int functor_depth;
     int saw_atomic;
     int saw_trait;
     const char * decl_prefix;
