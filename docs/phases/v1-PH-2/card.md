@@ -109,6 +109,12 @@ version-minor: 2
 | S9 全局默认 strict（V1 欠账） | ① 审计 `#include`（2026-11-26 实测 **819 文件 / 1,078 行**：`selfhost` 56/183、`lib/core` 8/14、`examples` 180/218、`test` 575/663，见 [strict-include-audit](../../planning/strict-include-audit.md)），按 M1–M5 分三类推进：边界单元、C 互操作用例、待清理；② `selfhost/` 与 `lib/core/` 迁到边界单元（`.m.ct` / shim），**零 allow**；③ `examples/`、`test/` 能迁则迁，C 互操作/负例显式 allow（589 个文件可直删冗余 `<stdio.h>`，生成 C 逐字节不变）；④ `c_boundary_for` 去掉五目录豁免，默认 strict；manifest 无键改为 strict，`ct migrate` 为旧包写 `c-boundary = allow`；⑤ spec §1.2 / §4.66 与 README 更新；⑥ 自举与 seed 重生成 | [REQ-STRICT-1](../../planning/requirements-pool.md)、[v0-PH-65](../v0-PH-65/card.md) | 默认 strict 下 `check-all` 绿；`selfhost/`、`lib/core/` 零 allow；普通 `.ct` 无 include 不受影响；显式 allow 仍可用；`ct migrate` 旧包夹具通过；自举 2 轮 + seed 两轮逐字节 | L |
 | S10 收口 | `stable-subset` 分档更新；冷/热构建各测一次并记录（不立项）；`CTC_VERSION 1.2.0` 与 dist；**tag 与 release 不自动创建**，由所有者手工验证后执行；seed 重生成 | — | E-V3-11 | M |
 
+> **S6 的命名未决（2026-11-27）**：卡上写的是 `enum Option<T>` / `Result<T,E>`，但 `lib/core`
+> 已把两者定义为普通泛型 struct（`has` / `value` / `ok` / `err`），且 `?` 的 lowering 依赖这套布局。
+> S6 先按 [adt-patterns §10.5](../../design/adt-patterns.md) 的**方案 A** 落地机制（验收名
+> `Maybe<T>` / `Either<T,E>`）；是否把内置名升级为 ADT 由单独 ADR（拟 `D-031`）在所有者的裁定下决定，
+> 不与机制切片混做。
+>
 > **S8c 的前置（2026-11-27，所有者裁定）**：`Str.print()` / `println()`（[LANG-30](../../../issues/lang/lang-30-str-print-api.md)，
 > 施工卡 [lang30-str-print-construction](../../design/lang30-str-print-construction.md)）**在 v1.2 内必须实现，不顺延**。
 > E3 类 26 个样例的打印依赖它；API 未落地前可以先做 H1–H4 中不依赖 E3 的部分，但 S8c **不得据此宣称收口**，

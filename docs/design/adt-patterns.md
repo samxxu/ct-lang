@@ -1,7 +1,8 @@
 # ADT 模式 A/B：字面量 / 嵌套 / 结构体 / or / 守卫（v1-PH-2 S4–S5）
 
-> 状态：**实现设计（2026-11-27）**。对应 [REQ-ADT-PATTERN-1](../planning/requirements-pool.md#req-adt-pattern-1--adt-模式扩展字面量--嵌套--结构体--or--守卫--泛型-adt) 的前两段、
-> [v1-PH-2](../phases/v1-PH-2/card.md) 的 S4–S5。S6（泛型 ADT）不在本设计内。
+> 状态：**S4–S5 已实现（2026-11-27）；S6（泛型 ADT）为设计草案（§10），未实施**。
+> 对应 [REQ-ADT-PATTERN-1](../planning/requirements-pool.md#req-adt-pattern-1--adt-模式扩展字面量--嵌套--结构体--or--守卫--泛型-adt)、
+> [v1-PH-2](../phases/v1-PH-2/card.md) 的 S4–S6。
 > 语言口径落在 [spec §4.73](../language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast)。
 
 ## 1 范围
@@ -20,6 +21,7 @@
 | or 模式 `A | B` | S5 | 任何模式位置；DNF 条件组，见 §9 |
 | 指针负载上的模式 | 不做 | 负载字段类型为指针时，只能 `_` 或绑定整个值 |
 | 守卫 `pattern if expr` | S5 | 见 §9；守卫可读模式绑定 |
+| 泛型 ADT `enum Option<T>` | S6 | 设计见 §10；单态化布局、实例化构造/模式、与 `Box`/`Vec` 互操作 |
 
 ## 2 文法
 
@@ -260,3 +262,133 @@ if (!__ct_matched0 && (__ct_match0.tag == 1)) { … }
 - 字符串字面量模式、指针负载模式仍不做（同 S4）。
 - 跨变体的非整数绑定（owning / 结构体）不做（§9.2）。
 - LIR 的 or/守卫打印回退到 AST body seam（§9.6）。
+
+## 10 S6：泛型 ADT（设计草案，未实施）
+
+> 状态：**设计草案（2026-11-27），待 REVIEW 复核与一条 ADR。** S4/S5 已落地；本节只定 S6 的
+> 语法、单态化布局、穷尽扩展与互操作边界，不声称代码已存在。
+> 头号未决问题见 §10.5（与内置 `Option` / `Result` 撞名），它决定 S6 的验收用哪个名字。
+
+### 10.1 范围
+
+| 做 | 不做 |
+| --- | --- |
+| `enum Name<T, …> { V(payload…) }` 的声明、单态化实例、构造、`match`、穷尽 | 方法级泛型、变体自带参数、`where` 子句、关联类型 |
+| 每实例独立 C 结构（`struct Option_int`）与独立 `_Static_assert` | 运行期类型擦除 / 泛型接口值 |
+| 与 `Vec` / `Box` / `Drop` glue 的既有协议对接 | `Option<T>` 作为 `?` 的操作数（`?` 仍只认内置 `Result`） |
+| 字符串/指针负载仍按 S4 边界（只能 `_` 或整值绑定） | 跨实例模式、实例推断、`match` 主语类型推断 |
+
+### 10.2 文法
+
+```
+enum-decl    := 'enum' NAME tparams '{' variant (',' variant)* ','? '}'
+tparams      := '<' IDENT (',' IDENT)* '>'
+variant      := NAME '(' ')' | NAME '(' field (',' field)* ')'
+ctor         := type-inst '.' variant '(' arg (',' arg)* ')'
+inst-pattern := type-inst '.' variant '(' pattern (',' pattern)* ')'
+type-inst    := NAME '<' type (',' type)* '>'
+```
+
+- 构造与模式都写**完整实例**：`Option<int>.Some(1)`、`Option<int>.Some(v)`；
+  与泛型函数要求显式类型实参（`max_of<int>`）一致，**不做**实参/主语推断。
+  备选写法（`Option.Some<int>(1)`、由主语推断）列在 §10.10。
+- 实参个数必须等于模板参数个数；每个实参必须是完整类型（不允许 `_` 占位符）。
+- 实例名沿用 `ct_inst_encode`：`Option<int>` → `Option_int`；嵌套 `Option<Vec<int>>` →
+  `Option_Vec_lint_r_`；编码到 64 字符退化为前缀 + 8 位哈希（与 §4.55 同一规则）。
+- 变体名在同一声明内唯一；与普通 `enum`（无负载）的规则分离：任一变体带负载即为 ADT，
+  全部无负载仍是 C `enum`（§4.73 D84-1）。
+
+### 10.3 单态化与布局
+
+| 项 | 约定 |
+| --- | --- |
+| 结构 | 每实例一个 `struct <Inst>`，`int tag` 在偏移 0，其后是匿名 union |
+| 负载 | 有负载变体在 union 里占一个匿名 struct；零负载变体只占 tag |
+| 尺寸/对齐 | 按实例实参的 C 拼写计算；union 最大成员给出对齐，不手工 padding |
+| 断言 | 四条 `_Static_assert`（tag 在 0 / union 在 tag 后 / tag 结束于 union 前 / size 容下 union）按实例重写 |
+| 实例闭包 | 构造、模式、`Vec`/`Box` 实参出现即登记实例；模板体内引用新实例迭代到不动点 |
+| 容量 | 实例表走 SH-109 的动态池（初值 + 倍增到 `CAP_LIMIT`），**不做**第 N 个实例硬错 |
+| 命名冲突 | 实例名与已声明 struct/trait/实例撞名时硬错（与 §4.55 同判据） |
+
+### 10.4 `match` 与穷尽
+
+- 主语类型是实例；**模式必须写同一实例**：`Option<int>` 的主语不能用
+  `Option<long>.Some(v)`，跨实例是硬错 `pattern instance 'Option_long' does not match subject 'Option_int'`。
+- 穷尽按**实例**判定：每个变体一个不可反驳的根模式，或一个根 `_` / 根绑定；S4 的保守规则
+  （嵌套可反驳不计覆盖）与 S5 的守卫规则（带守卫的 arm 不计覆盖）原样沿用。
+- 嵌套：`Box<Option<int>>` 不能直接模式（指针负载不穿透，S4 边界）；先 `at()` 借出再 `match`。
+- 表达式 `match` 的臂必须产出同一实例的值或同一基础类型（沿用 §4.73 的产值类型规则）。
+
+### 10.5 头号未决：与内置 `Option` / `Result` 撞名
+
+`lib/core` 现在把 `Option<T>` / `Result<T,E>` 定义成**普通泛型 struct**
+（`lib/core/Option.h.ct:27`、`lib/core/Result.h.ct:25`），字段是 `has` / `value` / `ok` / `err`，
+且 `?` 的 lowering 直接依赖 `Result` 的这套布局（spec §4.62）。S6 卡原文写的是
+「`enum Option<T>` / `Result<T,E>`」，因此必须先裁定：
+
+| 方案 | 做法 | 代价 | 风险 |
+| --- | --- | --- | --- |
+| **A（推荐先做）** | S6 只实现**机制**，验收用未被占用的名字（`Maybe<T>` / `Either<T,E>`）；内置 `Option`/`Result` 保持 struct | 零破坏；机制与命名解耦 | 卡上的 `Option<T>` 名字暂不可用，需在卡里改口径 |
+| B | 把内置 `Option`/`Result` 升级为 ADT，`has`/`value`/`ok`/`err` 改为模式绑定；`?` 改 lowering | 需迁移所有 `.has` / `.value` / `ok.ok` 用法（examples、tests、docs、seed）+ 改 §4.62 | 破坏性最大；必须单独 ADR + 所有者签字 |
+| C | 双轨：内置 struct 保留，`Option` 名字让给 ADT（内置改名） | 内置层改名同样是大迁移 | 与 DOC-87 的命名迁移叠加，不建议 |
+
+建议：**S6 按 A 落地机制并在 v1.2 收口前完成**；B 作为独立 ADR（拟 `D-031`）由所有者决定
+是否在 v1.2 内追加，不与 S6 的机制切片混在一起。卡 S6 的文案按裁定结果回填。
+
+### 10.6 与 `Box` / `Vec` / `Drop` 的互操作
+
+| 形态 | 结论 |
+| --- | --- |
+| `Vec<Option<int>>` | 允许；元素是值类型，`release()` 走实例的 `__ct_elem_release` |
+| `Vec<Option<String>>` | 允许；Some 的 owning 负载按 D-013 的 retain / release 参与元素释放 |
+| `Option<String>` 值字段 | 按 `uses_drop` 进入宿主 glue；显式 `impl Drop` 仍整体接管 |
+| `Box<Option<int>>` | **不做** `new Option<int> { … }`：`new` 的初始化器是字段列表，与构造器语义冲突；需要时先 `Option<int>` 值再装盒（若 `Box` 提供 `of`，另立 REQ） |
+| `Option<Box<T>>` | 允许；Box 是值类型句柄，释放走 Box 的 Drop |
+
+### 10.7 诊断（拟，**不预登记**）
+
+S6 的错误目前没有 registry 码（`match` 的既有诊断在 spec 里用 `E84-3` 这类历史号）。
+拟新增 `E-ADT-1xx`（域 `ADT` 需在 [codes.md](../diagnostics/codes.md) §1 增加），
+**S6 实现与码表、源码字面量同批提交**；在此之前不写入 registry，否则
+`check-docs` 的「registry == 源码字面量」断言会红。
+
+拟码表（草）：
+
+| 码 | 触发 |
+| --- | --- |
+| `E-ADT-101` | 实例实参个数/类型与声明不符 |
+| `E-ADT-102` | 构造实例与声明不匹配，或负载实参个数/类型错 |
+| `E-ADT-103` | 模式实例与主语实例不一致 |
+| `E-ADT-104` | 实例名与已声明类型撞名 |
+| `E-ADT-105` | 实例闭包成环或超容量 |
+
+### 10.8 负例清单（每类 ≥3，S6 落盘时逐条建夹具）
+
+| 类 | 负例 | 期望 |
+| --- | --- | --- |
+| 声明 | `enum Box2<T, T> { … }` 参数重名 / `enum E<T> { V<T>(T x) }` 变体自带参数 / 变体名重复 | 声明期硬错 |
+| 构造 | `Maybe<int>.Some("s")` 负载类型不符 / `Maybe<int>.Some(1, 2)` 个数不符 / `Maybe.Some(1)` 缺实例 | `E-ADT-102` |
+| 模式 | `Maybe<int>` 主语写 `Maybe<long>.Some(v)` / 漏 `None()` / `_` 之后还有 arm | `E-ADT-103` / 漏分支 / `_` 末位规则 |
+| 穷尽 × 守卫 | 只有 `Maybe<int>.Some(v) if v > 0` 覆盖 Some | 漏分支，诊断带 `a guarded arm does not count as coverage` |
+| 嵌套 | `Vec<Maybe<int>>` 直接当主语 / `Box<Maybe<int>>` 直接模式 | 主语类型不支持 / 指针负载不穿透 |
+| 互操作 | `new Maybe<int> { … }` / 实例名与 `struct Maybe_int` 撞名 | 硬错（`new` 不支持 ADT / 命名冲突） |
+
+### 10.9 实施切片（S6 开工后）
+
+| 片 | 内容 | 判据 |
+| --- | --- | --- |
+| S6-1 | 声明 + 实例登记 + 布局 + 四条断言 | 实例夹具生成 C 可编译；零负载/多负载各一 |
+| S6-2 | 构造 `TypeInst.V(args)` | 与字段初始化器区分；类型/个数负例 |
+| S6-3 | 模式 + 穷尽（含 S4/S5 规则沿用） | 跨实例负例；守卫不计覆盖 |
+| S6-4 | `Vec` / `Drop` / `Option<Box<T>>` 互操作 | ASAN 无泄漏；元素释放正确 |
+| S6-5 | spec 新节 + 矩阵样例 + glossary | `check-docs` 绿；样例进 corpus |
+
+每片独立提交；S6-1～S6-3 不改用户语料，S6-4 起才碰 glue，必须 seed 两轮逐字节。
+
+### 10.10 开放问题（需 ADR 裁定）
+
+1. **命名**：§10.5 的 A / B / C。
+2. **构造写法**：`Option<int>.Some(1)`（本节默认） vs `Option.Some<int>(1)` vs 由实参推断实例。
+3. **模式实例省略**：允许 `Option.Some(v)`（由主语推断实例）还是必须写全 `Option<int>.Some(v)`。
+4. **`Box<Option<T>>`**：是否需要 `Box.of(value)`，还是只允许「先值后装盒」。
+5. **`?` 与泛型 ADT**：`Result` 若走方案 B，`?` 的 lowering 与 §4.62 的契约要同批改；本节不展开。

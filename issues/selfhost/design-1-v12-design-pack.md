@@ -9,7 +9,7 @@
 | 依据 | [`v1-PH-2` 并行轨道](../../docs/phases/v1-PH-2/card.md)、[typed-lowered-ir](../../docs/proposals/typed-lowered-ir.md)、[D-026](../../docs/decisions/D-026.md) |
 | 状态 | open |
 | 负责人 | REQ / REVIEW |
-| 处置证据 | 2026-11-26：D1–D3 落 [tir-lir-contract](../../docs/design/tir-lir-contract.md)，D7 落 [tir-lir-fixtures](../../docs/design/tir-lir-fixtures.md)。2026-11-27：D4/D5 由主线以 [D-028](../../docs/decisions/D-028.md) / [D-029](../../docs/decisions/D-029.md) 交付并落地（S2/S3）；仅剩 D6（ADT 模式规范）。不改 `selfhost/**`，不触发 seed。 |
+| 处置证据 | 2026-11-26：D1–D3 落 [tir-lir-contract](../../docs/design/tir-lir-contract.md)，D7 落 [tir-lir-fixtures](../../docs/design/tir-lir-fixtures.md)。2026-11-27：D4/D5 由主线以 [D-028](../../docs/decisions/D-028.md) / [D-029](../../docs/decisions/D-029.md) 交付并落地（S2/S3）；D6 落 [adt-patterns](../../docs/design/adt-patterns.md)（S4–S5 已成文，S6 见 §10，含 §10.8 负例清单与 §10.10 开放问题）。**七项交付全部成文，待 REVIEW 复核后转 verified。** |
 
 ## 1 目标
 
@@ -68,7 +68,7 @@
 | D3 | 验证器与码表 | **已交（草）** | 同上 §5；`E-IR-101..110` 只在草表，S1b 与 registry 同批登记 |
 | D4 | 下标协议 ADR | **已交** | [D-028](../../docs/decisions/D-028.md)（2026-11-27，accepted；S2 已落地） |
 | D5 | 函子 ADR | **已交** | [D-029](../../docs/decisions/D-029.md)（2026-11-27，accepted；S3 已落地） |
-| D6 | ADT 模式规范 | 待写 | 依赖 S4 的语法草案；草案落 `docs/design/adt-patterns.md` |
+| D6 | ADT 模式规范 | **已交（草案）** | [docs/design/adt-patterns.md](../../docs/design/adt-patterns.md)（S4–S5 已成文，S6 泛型 ADT 见 §10）；S6 的命名未决见该文 §10.5，待 ADR 裁定 |
 | D7 | 夹具清单 | **已交** | [docs/design/tir-lir-fixtures.md](../../docs/design/tir-lir-fixtures.md) |
 
 D4/D5 以 ADR 成文时会触发 T-8（2026-11-20 之后的 ADR 需非作者角色 `签收:`），
