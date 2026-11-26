@@ -1,0 +1,16 @@
+/* S7-c P6: a self-call is passed conservatively; the function itself does not
+   store its parameter anywhere, so the entry call stays clean too. */
+struct Conn { int fd; };
+
+void walk(struct Conn *c)
+{
+    if (c->fd > 0) { c->fd = c->fd - 1; walk(c); }
+}
+
+int main(void)
+{
+    struct Conn local;
+    local.fd = 1;
+    walk(&local);
+    return 0;
+}

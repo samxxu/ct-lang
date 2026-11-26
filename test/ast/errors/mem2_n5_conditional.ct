@@ -1,0 +1,13 @@
+/* S7-c N5: a conditional store is judged conservatively. */
+struct Conn { int fd; };
+struct Conn *g;
+
+void put(struct Conn *c, int k) { if (k) { g = c; } }
+
+int main(void)
+{
+    struct Conn local;
+    local.fd = 1;
+    put(&local, 1);
+    return 0;
+}

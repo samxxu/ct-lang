@@ -1,0 +1,16 @@
+/* S7-c P5: the direct definition writes a global, but the program only calls
+   it through a function pointer, which the summary conservatively passes. */
+struct Conn { int fd; };
+struct Conn *g;
+typedef void (*fn_t)(struct Conn *);
+
+void put(struct Conn *c) { g = c; }
+
+int main(void)
+{
+    struct Conn local;
+    fn_t f = put;
+    local.fd = 1;
+    f(&local);
+    return g == &local ? 0 : 1;
+}

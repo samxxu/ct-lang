@@ -4999,6 +4999,18 @@ if [ "$p32_manifest_bad" -eq 0 ]; then
 fi
 
 echo
+echo "== S7 REQ-MEM-2: intra-unit write summary =="
+# The matrix lives in docs/planning/s7-evidence-baseline.md §5; the generic
+# loops below cover P2-P6 (positive fixtures 315-319) and N1-N5
+# (`test/ast/errors/mem2_*`). This probe adds D1, D2, the P1 note and the
+# `--check-level` escape, which one compile cannot express.
+if bash test/ast/s7_mem2_probe.sh "$work/ct-ast" >"$work/s7mem2.out" 2>"$work/s7mem2.err"; then
+    ok "s7 mem2 probe ($(tail -1 "$work/s7mem2.out"))"
+else
+    bad "s7 mem2 probe" "$(cat "$work/s7mem2.out" "$work/s7mem2.err" | head -8)"
+fi
+
+echo
 echo "== negative cases (test/ast/errors/*.ct) =="
 # Every source diagnostic now carries the full position (`file:line:col: error:`);
 # driver-level failures (an unreadable input, a limit) keep the `ctc:` prefix and

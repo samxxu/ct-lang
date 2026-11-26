@@ -1,0 +1,15 @@
+/* S7-c N4: one level of passing is enough: put only forwards c to sink, and
+   sink is the function that stores it. */
+struct Conn { int fd; };
+struct Conn *g;
+
+void sink(struct Conn *c) { g = c; }
+void put(struct Conn *c) { sink(c); }
+
+int main(void)
+{
+    struct Conn local;
+    local.fd = 1;
+    put(&local);
+    return 0;
+}

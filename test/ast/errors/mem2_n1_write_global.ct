@@ -1,0 +1,14 @@
+/* S7-c N1: an unannotated parameter stored in a global; the call is the hard
+   error, and the message names the callee, the parameter and the write line. */
+struct Conn { int fd; };
+struct Conn *g;
+
+void put(struct Conn *c) { g = c; }
+
+int main(void)
+{
+    struct Conn local;
+    local.fd = 1;
+    put(&local);
+    return 0;
+}

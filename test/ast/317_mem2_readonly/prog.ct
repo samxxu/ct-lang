@@ -1,0 +1,11 @@
+/* S7-c P4: a read-only `borrow` parameter is not a write, so no finding. */
+struct Conn { int fd; };
+
+int fd(borrow struct Conn *c) { return c->fd; }
+
+int main(void)
+{
+    struct Conn local;
+    local.fd = 3;
+    return fd(&local) == 3 ? 0 : 1;
+}

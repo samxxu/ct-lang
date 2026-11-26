@@ -1,0 +1,11 @@
+/* S7-c P2: an immortal literal stored in a global has no parameter behind it,
+   so the write summary stays silent. */
+char *g;
+
+void put(void) { g = "lit"; }
+
+int main(void)
+{
+    put();
+    return g[0] == 'l' ? 0 : 1;
+}

@@ -1,0 +1,14 @@
+/* S7-c P3: a by-value struct parameter is copied into the global; there is no
+   pointer to outlive the call, so no `borrow` is required. */
+struct Conn { int fd; };
+struct Conn g;
+
+void take(struct Conn c) { g = c; }
+
+int main(void)
+{
+    struct Conn local;
+    local.fd = 7;
+    take(local);
+    return g.fd == 7 ? 0 : 1;
+}

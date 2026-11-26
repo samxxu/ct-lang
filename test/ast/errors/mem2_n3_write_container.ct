@@ -1,0 +1,13 @@
+/* S7-c N3: a built-in container insertion is an escaping store. */
+struct Conn { int fd; };
+Vec<struct Conn *> v;
+
+void keep(struct Conn *c) { v.push(c); }
+
+int main(void)
+{
+    struct Conn local;
+    local.fd = 1;
+    keep(&local);
+    return 0;
+}

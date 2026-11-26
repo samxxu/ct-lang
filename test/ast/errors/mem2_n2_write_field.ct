@@ -1,0 +1,14 @@
+/* S7-c N2: the parameter is stored in another struct's field. */
+struct Conn { int fd; };
+struct Holder { struct Conn *c; };
+
+void put(struct Holder *h, struct Conn *c) { h->c = c; }
+
+int main(void)
+{
+    struct Holder h;
+    struct Conn local;
+    local.fd = 1;
+    put(&h, &local);
+    return 0;
+}
