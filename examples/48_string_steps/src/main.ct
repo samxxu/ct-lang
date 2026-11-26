@@ -3,6 +3,11 @@
 // 起点是字符串；split_once 返回的还是 char *，所以能继续链，
 // 最后 len() 收口成 int。全程没有对象、没有接口值、没有 vtable。
 // 适合：无状态、单一实现、调用方不需要面向接口的转换。
+//
+// 为什么必须指针（S8c 例外，见 docs/planning/pointer-free-exemptions.md）：
+// 本样例演示的就是「把方法挂到 C 类型 char * 上」，宿主类型本身是指针；
+// 方法体经 `text.shim.h` 直通 `strchr` / `strlen`。换成 `Str` 会变成另一个
+// 样例（宿主是值类型），也失去「C 类型宿主 + shim」这一教学点。
 //@ct-requires: ct-ast
 import text::text;
 

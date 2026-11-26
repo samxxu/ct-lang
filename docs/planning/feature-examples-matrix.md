@@ -66,8 +66,8 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | B-1 | ~~可选链 `?.` 无样例~~ | **已补** `examples/58_optional_chain`（2026-11-26，compile + 运行）；S8c 复核是否需要补 `?[` 与 `m?["k"]` 形态 | 无（语言已实现） |
 | B-1b | ~~自定义下标（§4.64）无样例~~ | **已补** `examples/59_custom_subscript`（2026-11-26，读 + 写一对）；S8c 待补「只读报错、`+=` / `&x[k]` 拒绝」的说明段与 S2 的按键分派样例 | 无（语言已实现） |
 | B-2 | ~~`match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例~~ | **已补**（2026-11-26）：`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup`、`63_ref_out_places`、`64_match_expr`、`65_generic_trait_instances`；defer / errdefer 升「有」，其余仍「薄」，S8c 再按需加反例 | 无 |
-| B-3 | `String` / `Str` 样例仍以 `char *` 混写 | 改写 `40_str_ownership`、`48_string_steps`，只保留 C 互操作处的指针 | 无 |
-| B-4 | 非 C 互操作用例的指针 | 59 个 `char *` / 83 个 `->` / 14 个 `malloc` 逐条判定：迁 `String`/`Vec`/`Box` 或写例外理由 | B-3 |
+| B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 已改（去 `cstr`+`free`，改 `as_str()`）；`48_string_steps` 判定为 C 类型宿主例外并注明理由；其余见 B-4 | 无 |
+| B-4 | 非 C 互操作用例的指针 | **判定已完成**（2026-11-27）：101 个文件分五类，见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写，E3 的 26 个文件阻塞于缺 print API | B-3 |
 | B-5 | 文档可执行片段只有 3 个（`docs/snippets/README/`）+ 2 个教程用例 | 为矩阵里每个「有」档特性至少一个 `// source:` 片段 | B-1…B-4 |
 | B-6 | S2 下标协议、S3 函子、S4–S6 模式 | 实现落地时同批补样例（先负例后正例） | S2–S6 |
 

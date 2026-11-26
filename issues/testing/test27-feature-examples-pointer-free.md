@@ -67,7 +67,10 @@ README 的快速开始与实际用法示例仍以 `char *` / `->` 为主，与�
 | C docs | README / tutorial / guide / idioms / snippets 改写；C 互操作章节显式标注“这里必须指针” | 活跃文档指针用法只剩 C 互操作段；snippets 全部可编译 |
 | D 门禁 | examples 全量构建；矩阵一致性断言（可先 `warn`，S8c 收口转硬） | `check-ast` 绿；`check-docs` 绿 |
 
-**保留的 C 互操作例外**（不要求去指针）：`examples/55_c_boundary_shim`、`examples/c-superset`、`examples/54_freestanding_alloc`、`.m.ct` / `.shim.*` / `#ct-raw` 相关夹具。例外必须在矩阵里逐条写明“为什么必须指针”。
+**保留的 C 互操作例外**（不要求去指针）：`examples/55_c_boundary_shim`、`examples/c-superset`、
+`examples/54_freestanding_alloc`、`.m.ct` / `.shim.*` / `#ct-raw` 相关夹具。**2026-11-27 已逐文件判定**：
+101 个有真实指针用法的文件分类与理由见
+[pointer-free-exemptions](../../docs/planning/pointer-free-exemptions.md)（E1 41 / E2 11 / E3 26 / E4 15 / 可迁 8）。
 
 ## 4 特性清单（矩阵行）
 

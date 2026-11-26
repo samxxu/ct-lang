@@ -15,18 +15,19 @@ int main(void)
     printf("s after release: len=%d\n", s.len());
 
     // 2. `retain` shares the buffer: the source may be released and the copy
-    //    stays usable while a reference remains.
+    //    stays usable while a reference remains. The borrowed `Str` view is
+    //    taken with `as_str()`, so no C string (and no `free`) is involved.
     String t = str_dup("world");
     String u = t.retain();
-    char *uc;
     t.release();
-    uc = u.cstr();
-    printf("u len=%d (source released)\n", u.len());
-    free(uc);
+    Str view = u.as_str();
+    printf("u len=%d view len=%d (source released)\n", u.len(), view.len());
     u.release();
 
     // 3. `own String *` + `delete`: Drop releases the buffer, frees the struct,
-    //    then nulls the pointer.
+    //    then nulls the pointer. The pointer is the subject here: `new String`
+    //    is explicitly rejected (`use the literal, 'to_string()' or 'as_str()'`),
+    //    so Drop-on-a-handle can only be shown through a heap cell.
     own String *p = malloc(sizeof(struct String));
     *p = str_dup("heap");
     delete p;

@@ -1,10 +1,9 @@
-// 59_custom_subscript - `x["k"]` / `x["k"] = v` on a user struct.
+// 59_custom_subscript - `x[k]` / `x[k] = v` on a user struct.
 //
-// `x["k"]` expands to the inherent `get(k)`; the statement `x["k"] = v`
-// expands to `set(k, v)`. Scheme A matches by name + arity only, so the key is
-// written as the C string the method takes; keyed dispatch by parameter type
-// (so `get(int)` and `get(char *)` could coexist) is REQ-JSACCESS-1 and not
-// implemented yet.
+// `x[k]` expands to the inherent `get(k)`; the statement `x[k] = v` expands to
+// `set(k, v)`. Since S2 (D-028) the match is by name **and parameter type**, so
+// an int keyed protocol can coexist with a string keyed one on the same struct
+// -- here the int instance is the only one, and no C string is involved.
 //
 // Also out of scope for this sugar: `+=` / `++` / `&x[k]` and assignment to a
 // non-place -- all three are rejected with their own diagnostics (spec §4.64).
@@ -12,22 +11,23 @@
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
 #include <stdio.h>
-#include <string.h>
 
-struct Slot { int value; }
+struct Slot { int value; int other; }
 
 impl Slot {
-    int get(char *k)
+    int get(int k)
     {
-        if (strcmp(k, "main") == 0) {
+        if (k == 0) {
             return self->value;
         }
-        return 0;
+        return self->other;
     }
-    void set(char *k, int n)
+    void set(int k, int n)
     {
-        if (strcmp(k, "main") == 0) {
+        if (k == 0) {
             self->value = n;
+        } else {
+            self->other = n;
         }
     }
 }
@@ -37,7 +37,9 @@ int main(void)
     Slot s;
 
     s.value = 1;
-    s["main"] = 7;
-    printf("main=%d other=%d\n", s["main"], s["other"]);
+    s.other = 2;
+    s[0] = 7;
+    s[1] = 8;
+    printf("zero=%d one=%d\n", s[0], s[1]);
     return 0;
 }
