@@ -59,6 +59,7 @@
 #define N_IMPL 33
 #define N_INDEX 26
 #define N_MCALL 30
+#define N_METHOD 29
 #define N_MEMBER 24
 #define N_NUM 8
 #define N_OFFSETOF 47
@@ -95,6 +96,15 @@
 #define U_NOT 2
 #define U_BNOT 3
 #define CT_EXPR_CLOSURE_HINT "tier 1: trait Op { int call(int x); } struct A { int n; } use Op; impl Op for A { int call(int x) { return x + self->n; } }"
+#define CI_OK       0
+#define CI_NONAME   1
+#define CI_PRIVATE  2
+#define CI_STATIC   3
+#define CI_ARITY    4
+#define CI_NOMATCH  5
+#define CI_AMBIG    6
+#define CI_INFER    7
+#define CI_MAX_CAND 64
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -212,6 +222,15 @@ const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_pars
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+static int ci_param_count(struct frontend_parse_Expr *, int);
+static const char * ci_subst_type(struct frontend_parse_Expr *, const char *, int, const char *);
+static const char * ci_param_type(struct frontend_parse_Expr *, const char *, int, int, int);
+static int ci_is_private(struct frontend_parse_Expr *, int, int);
+static int ci_collect(struct frontend_parse_Expr *, const char *, const char *, int *, int *, int *, int);
+static int ci_probe(struct frontend_parse_Expr *, const char *, const char *, int, int, int, int *, int *, int *);
+static const char * ci_signature_text(struct frontend_parse_Expr *, const char *, int, int);
+static const char * ci_candidates_text(struct frontend_parse_Expr *, const char *, const char *, int, int, int);
+static int ci_emit_failure(struct frontend_parse_Expr *, int, const char *, const char *, int, int, int, int, int);
 static const char * frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label_text(void *self, const char * bty) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     const char * base;
@@ -247,60 +266,569 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label(v
     return 0;
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(void *self, const char * bty, const char * name, int want, int line, int col, int writable, int idx_node) {
+static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(void *self, const char * bty, const char * name, int want, int line, int col, int writable, int idx_node, int call_node, int defer) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     int m;
-    int p;
-    int got = 0;
-    const char * label;
-    label = _self->__frontend_parse_exprsubscript_vptr->custom_index_label_text(_self, bty);
-    if ((!label)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
-    m = _self->__frontend_parse_exprinstantiate_vptr->inst_inherent_method(_self, bty, name);
-    if (m == (-2)) {
-        if (writable) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no writable subscript: '%s' is private to its unit", label, name), _self->sup->mem->path);
+    int row;
+    int inode;
+    int code;
+    code = ci_probe(_self, bty, name, want, idx_node, writable, (&m), (&row), (&inode));
+    if (((code != CI_OK) && defer)) {
+        if (((call_node >= 0) && (call_node < _self->arena->nnode))) {
+            _self->arena->nodes[call_node].suffix = "";
         }
-        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: '%s' is private to its unit", label, name), _self->sup->mem->path);
+        return (-2);
     }
-    if (m < 0) {
-        if (writable) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s", label, label), _self->sup->mem->path);
+    if (code == CI_OK) {
+        const char * suf = _self->__frontend_parse_exprsubscript_vptr->custom_index_suffix(_self, bty, m, row, inode);
+        if ((!suf)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: declare 'V get(K)' in impl %s", label, label), _self->sup->mem->path);
-    }
-    if (_self->arena->nodes[m].c) {
-        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: '%s' must be an instance method", label, name), _self->sup->mem->path);
-    }
-    for (p = _self->arena->nodes[m].a; p > 0; p = _self->arena->nodes[p].next) {
-        got++;
-    }
-    if (got != want) {
-        if (writable) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no writable subscript: 'set' must take 2 parameters", label), _self->sup->mem->path);
+        if (((call_node >= 0) && (call_node < _self->arena->nnode))) {
+            _self->arena->nodes[call_node].suffix = suf;
         }
-        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: 'get' must take 1 parameter", label), _self->sup->mem->path);
+        return m;
     }
-    if (idx_node >= 0) {
-        int kz = 0;
-        const char * pt = _self->arena->nodes[_self->arena->nodes[m].a].text;
-        const char * kty = _self->__frontend_parse_exprtypes_vptr->chk_type_text(_self, idx_node, (&kz));
-        if (((kty && kty[0]) && pt[0])) {
-            _self->chk_line = line;
-            _self->chk_col = col;
-            _self->chk_arg = 1;
-            if (_self->__frontend_parse_exprtypes_vptr->chk_assignable(_self, pt, kty, 0, 6) != 0) {
-                return (-1);
-            }
+    return ci_emit_failure(_self, code, bty, name, want, writable, idx_node, line, col);
+}
+
+static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_write_form(void *self, int e, int line, int col) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    const char * bty;
+    const char * suf;
+    int idx;
+    int m;
+    int row;
+    int inode;
+    int code;
+    int g;
+    int grow = (-1);
+    int gnode = (-1);
+    if (((e < 0) || (e >= _self->arena->nnode))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a subscript node is missing");
+    }
+    bty = _self->arena->nodes[e].text;
+    idx = _self->arena->nodes[e].b;
+    code = ci_probe(_self, bty, "set", 2, idx, 1, (&m), (&row), (&inode));
+    if (code == CI_OK) {
+        suf = _self->__frontend_parse_exprsubscript_vptr->custom_index_suffix(_self, bty, m, row, inode);
+        if ((!suf)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->arena->nodes[e].suffix = suf;
+        return 1;
+    }
+    g = ci_probe(_self, bty, "get", 1, idx, 0, (&m), (&grow), (&gnode));
+    if ((((g == CI_OK) && _self->arena->nodes[m].text[0]) && strchr(_self->arena->nodes[m].text, '*'))) {
+        suf = _self->__frontend_parse_exprsubscript_vptr->custom_index_suffix(_self, bty, m, grow, gnode);
+        if ((!suf)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->arena->nodes[e].suffix = suf;
+        return 2;
+    }
+    return ci_emit_failure(_self, code, bty, "set", 2, 1, idx, line, col);
+}
+
+static const char * frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_suffix(void *self, const char * bty, int m, int row, int node) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    char * buf = 0;
+    int cap = 0;
+    int n;
+    int pos;
+    int pi;
+    int k;
+    const char * out;
+    if ((((node < 0) || (m < 0)) || (m >= _self->arena->nnode))) {
+        return "";
+    }
+    n = frontend_parse_ct_overload_count(node, _self->arena->nodes[m].text2);
+    if (n <= 1) {
+        return "";
+    }
+    pos = frontend_parse_ct_overload_pos(node, m);
+    if (pos <= 0) {
+        return "";
+    }
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return (const char *)(0);
+    }
+    for (pi = 0; pi < ci_param_count(_self, m); pi++) {
+        const char * pt = ci_param_type(_self, bty, m, row, pi);
+        const char * ek = frontend_parse_ct_overload_key_text(pt);
+        if ((!ek)) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), "$") != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), ek) != 0) {
+            goto fail;
         }
     }
-    return m;
+    out = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    (void)(k);
+    return (out ? out : (const char *)(0));
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
 }
 
 const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable = {
     .custom_index_label_text = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label_text,
     .custom_index_label = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label,
-    .custom_index_method = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method
+    .custom_index_method = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method,
+    .custom_index_write_form = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_write_form,
+    .custom_index_suffix = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_suffix
 };
 
+static int ci_param_count(struct frontend_parse_Expr * self, int m) {
+    int p;
+    int n = 0;
+    for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next) {
+        n++;
+    }
+    return n;
+}
+static const char * ci_subst_type(struct frontend_parse_Expr * self, const char * bty, int row, const char * type) {
+    const char * base;
+    const char * pt;
+    int inst;
+    int nimpls;
+    int nins;
+    int j;
+    int k;
+    struct frontend_sym_StructImpl * im;
+    struct frontend_sym_StructInst * ins;
+    (void)(self);
+    if ((!type)) {
+        return type;
+    }
+    pt = type;
+    if (row < 0) {
+        return pt;
+    }
+    base = ((strncmp(bty, "struct ", 7) == 0) ? (bty + 7) : bty);
+    inst = frontend_sym_ct_inst_find(base);
+    if (inst < 0) {
+        return pt;
+    }
+    im = frontend_sym_ct_impls((&nimpls));
+    ins = frontend_sym_ct_insts((&nins));
+    if (((((!im) || (!ins)) || (row >= nimpls)) || (inst >= nins))) {
+        return pt;
+    }
+    for (j = 0; j < im[row].ntparams; j++) {
+        if ((!im[row].tparam[j])) {
+            continue;
+        }
+        for (k = 0; ((k < im[row].nargs) && (k < ins[inst].nargs)); k++) {
+            if (((!im[row].pat[k]) || (strcmp(im[row].pat[k], im[row].tparam[j]) != 0))) {
+                continue;
+            }
+            if (ins[inst].ctype[k]) {
+                const char * nx = frontend_sym_ct_generic_subst_text(pt, im[row].tparam[j], ins[inst].ctype[k]);
+                if (nx) {
+                    pt = nx;
+                }
+            }
+            break;
+        }
+    }
+    return pt;
+}
+static const char * ci_param_type(struct frontend_parse_Expr * self, const char * bty, int m, int row, int pi) {
+    int p;
+    int k;
+    p = self->arena->nodes[m].a;
+    k = 0;
+    while (((p > 0) && (k < pi))) {
+        p = self->arena->nodes[p].next;
+        k++;
+    }
+    if (p <= 0) {
+        return (const char *)(0);
+    }
+    return ci_subst_type(self, bty, row, self->arena->nodes[p].text);
+}
+static int ci_is_private(struct frontend_parse_Expr * self, int m, int inode) {
+    const char * owner;
+    if (self->arena->nodes[m].d == 1) {
+        return 0;
+    }
+    owner = self->arena->nodes[inode].text3;
+    if (((!owner) || (!owner[0]))) {
+        return 1;
+    }
+    return (strcmp(owner, self->sup->mem->path) != 0);
+}
+static int ci_collect(struct frontend_parse_Expr * self, const char * bty, const char * name, int * om, int * orow, int * onode, int cap) {
+    const char * base;
+    int inst;
+    int nimpls;
+    int ii;
+    int m;
+    int ni;
+    int n = 0;
+    int best = (-1);
+    int bestscore = (-1);
+    struct frontend_sym_StructImpl * im;
+    if (((!bty) || (!name))) {
+        return 0;
+    }
+    if (strncmp(bty, "struct ", 7) != 0) {
+        return 0;
+    }
+    base = (bty + 7);
+    inst = frontend_sym_ct_inst_find(base);
+    if (inst >= 0) {
+        im = frontend_sym_ct_impls((&nimpls));
+        for (ii = 0; (im && (ii < nimpls)); ii++) {
+            int declares = 0;
+            if (im[ii].use[0]) {
+                continue;
+            }
+            if ((!frontend_sym_ct_impl_matches(ii, inst))) {
+                continue;
+            }
+            for (m = self->arena->nodes[im[ii].node].a; m >= 0; m = self->arena->nodes[m].next) {
+                if ((((self->arena->nodes[m].kind == N_METHOD) && self->arena->nodes[m].text2) && (strcmp(self->arena->nodes[m].text2, name) == 0))) {
+                    declares = 1;
+                    break;
+                }
+            }
+            if ((!declares)) {
+                continue;
+            }
+            if (frontend_parse_inst_impl_score(ii) > bestscore) {
+                bestscore = frontend_parse_inst_impl_score(ii);
+                best = ii;
+            }
+        }
+        if (best >= 0) {
+            for (m = self->arena->nodes[im[best].node].a; m >= 0; m = self->arena->nodes[m].next) {
+                if (self->arena->nodes[m].kind != N_METHOD) {
+                    continue;
+                }
+                if (((!self->arena->nodes[m].text2) || (strcmp(self->arena->nodes[m].text2, name) != 0))) {
+                    continue;
+                }
+                if (n < cap) {
+                    om[n] = m;
+                    orow[n] = best;
+                    onode[n] = im[best].node;
+                }
+                n++;
+            }
+        }
+        return n;
+    }
+    for (ni = 0; ni < self->arena->nnode; ni++) {
+        if (self->arena->nodes[ni].kind != N_IMPL) {
+            continue;
+        }
+        if (self->arena->nodes[ni].aux == (-1)) {
+            continue;
+        }
+        if (self->arena->nodes[ni].text2[0]) {
+            continue;
+        }
+        if (((!self->arena->nodes[ni].text) || (strcmp(self->arena->nodes[ni].text, bty) != 0))) {
+            continue;
+        }
+        for (m = self->arena->nodes[ni].a; m >= 0; m = self->arena->nodes[m].next) {
+            if (self->arena->nodes[m].kind != N_METHOD) {
+                continue;
+            }
+            if (((!self->arena->nodes[m].text2) || (strcmp(self->arena->nodes[m].text2, name) != 0))) {
+                continue;
+            }
+            if (n < cap) {
+                om[n] = m;
+                orow[n] = (-1);
+                onode[n] = ni;
+            }
+            n++;
+        }
+        break;
+    }
+    return n;
+}
+static int ci_probe(struct frontend_parse_Expr * self, const char * bty, const char * name, int want, int idx_node, int writable, int * out_m, int * out_row, int * out_node) {
+    int om[CI_MAX_CAND];
+    int orow[CI_MAX_CAND];
+    int onode[CI_MAX_CAND];
+    int cand[CI_MAX_CAND];
+    int n;
+    int i;
+    int nonstatic = 0;
+    int arity = 0;
+    int priv = 0;
+    int matches = 0;
+    int zero = 0;
+    const char * actual;
+    const char * ak;
+    (void)(writable);
+    (*out_m) = (-1);
+    (*out_row) = (-1);
+    (*out_node) = (-1);
+    n = ci_collect(self, bty, name, om, orow, onode, CI_MAX_CAND);
+    if (n == 0) {
+        return CI_NONAME;
+    }
+    if (n > CI_MAX_CAND) {
+        return CI_AMBIG;
+    }
+    for (i = 0; i < n; i++) {
+        if (ci_is_private(self, om[i], onode[i])) {
+            priv = 1;
+        }
+    }
+    if (priv) {
+        return CI_PRIVATE;
+    }
+    for (i = 0; i < n; i++) {
+        if (self->arena->nodes[om[i]].c) {
+            continue;
+        }
+        nonstatic++;
+        if (ci_param_count(self, om[i]) != want) {
+            continue;
+        }
+        if (arity < CI_MAX_CAND) {
+            cand[arity] = i;
+        }
+        arity++;
+    }
+    if (nonstatic == 0) {
+        return CI_STATIC;
+    }
+    if (arity == 0) {
+        return CI_ARITY;
+    }
+    if (idx_node < 0) {
+        (*out_m) = om[cand[0]];
+        (*out_row) = orow[cand[0]];
+        (*out_node) = onode[cand[0]];
+        return CI_OK;
+    }
+    actual = self->__frontend_parse_exprtypes_vptr->chk_type_text(self, idx_node, (&zero));
+    if (((!actual) || (!actual[0]))) {
+        return CI_INFER;
+    }
+    ak = frontend_type_type_key_text(actual);
+    if ((!ak)) {
+        return CI_INFER;
+    }
+    for (i = 0; ((i < arity) && (i < CI_MAX_CAND)); i++) {
+        const char * pt = ci_param_type(self, bty, om[cand[i]], orow[cand[i]], 0);
+        const char * pk;
+        if (((!pt) || (!pt[0]))) {
+            continue;
+        }
+        pk = frontend_type_type_key_text(pt);
+        if (((!pk) || (strcmp(pk, ak) != 0))) {
+            continue;
+        }
+        (*out_m) = om[cand[i]];
+        (*out_row) = orow[cand[i]];
+        (*out_node) = onode[cand[i]];
+        matches++;
+    }
+    if (matches == 0) {
+        return CI_NOMATCH;
+    }
+    if (matches > 1) {
+        return CI_AMBIG;
+    }
+    return CI_OK;
+}
+static const char * ci_signature_text(struct frontend_parse_Expr * self, const char * bty, int m, int row) {
+    const char * ret;
+    const char * pt;
+    int pi;
+    int n;
+    char * buf = 0;
+    int cap = 0;
+    const char * out;
+    ret = (self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void");
+    ret = ci_subst_type(self, bty, row, ret);
+    if ((!ret)) {
+        return (const char *)(0);
+    }
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
+    }
+    if (tool_sh_ct_text_printf((&buf), (&cap), (strchr(ret, '*') ? "%s%s(" : "%s %s("), ret, self->arena->nodes[m].text2) != 0) {
+        goto fail;
+    }
+    n = ci_param_count(self, m);
+    for (pi = 0; pi < n; pi++) {
+        pt = ci_param_type(self, bty, m, row, pi);
+        if ((!pt)) {
+            goto fail;
+        }
+        if (((pi > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ", ") != 0))) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), pt) != 0) {
+            goto fail;
+        }
+    }
+    if (tool_sh_ct_text_cat((&buf), (&cap), ")") != 0) {
+        goto fail;
+    }
+    out = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return (out ? out : (const char *)(0));
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+static const char * ci_candidates_text(struct frontend_parse_Expr * self, const char * bty, const char * name, int want, int only_matching, int idx_node) {
+    int om[CI_MAX_CAND];
+    int orow[CI_MAX_CAND];
+    int onode[CI_MAX_CAND];
+    int n;
+    int i;
+    int no = 0;
+    int zero = 0;
+    const char * actual = 0;
+    const char * ak = 0;
+    const char * sig;
+    char * buf = 0;
+    int cap = 0;
+    const char * out;
+    if ((only_matching && (idx_node >= 0))) {
+        actual = self->__frontend_parse_exprtypes_vptr->chk_type_text(self, idx_node, (&zero));
+        if ((actual && actual[0])) {
+            ak = frontend_type_type_key_text(actual);
+        }
+    }
+    n = ci_collect(self, bty, name, om, orow, onode, CI_MAX_CAND);
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
+    }
+    for (i = 0; ((i < n) && (i < CI_MAX_CAND)); i++) {
+        const char * pt;
+        const char * pk;
+        if (self->arena->nodes[om[i]].c) {
+            continue;
+        }
+        if (ci_param_count(self, om[i]) != want) {
+            continue;
+        }
+        if (only_matching) {
+            if ((!ak)) {
+                continue;
+            }
+            pt = ci_param_type(self, bty, om[i], orow[i], 0);
+            if (((!pt) || (!pt[0]))) {
+                continue;
+            }
+            pk = frontend_type_type_key_text(pt);
+            if (((!pk) || (strcmp(pk, ak) != 0))) {
+                continue;
+            }
+        }
+        sig = ci_signature_text(self, bty, om[i], orow[i]);
+        if ((!sig)) {
+            goto fail;
+        }
+        if (((no > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ", ") != 0))) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), "'") != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), sig) != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), "'") != 0) {
+            goto fail;
+        }
+        no++;
+    }
+    out = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return (out ? out : (const char *)(0));
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+static int ci_emit_failure(struct frontend_parse_Expr * self, int code, const char * bty, const char * name, int want, int writable, int idx_node, int line, int col) {
+    const char * label;
+    const char * msg;
+    const char * cands;
+    const char * actual;
+    const char * path = self->sup->mem->path;
+    int zero = 0;
+    label = self->__frontend_parse_exprsubscript_vptr->custom_index_label_text(self, bty);
+    if ((!label)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
+    if (code == CI_PRIVATE) {
+        if (writable) {
+            msg = tool_sh_ct_scratch_fmt("type '%s' has no writable subscript: '%s' is private to its unit", label, name);
+        }
+        else {
+            msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript: '%s' is private to its unit", label, name);
+        }
+    }
+    else {
+        if (code == CI_STATIC) {
+            msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript: '%s' must be an instance method", label, name);
+        }
+        else {
+            if (code == CI_ARITY) {
+                if (writable) {
+                    msg = tool_sh_ct_scratch_fmt("type '%s' has no writable subscript: 'set' must take 2 parameters", label);
+                }
+                else {
+                    msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript: 'get' must take 1 parameter", label);
+                }
+            }
+            else {
+                if (code == CI_INFER) {
+                    msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript: cannot infer the subscript type; bind it to a local first", label);
+                }
+                else {
+                    if (((code == CI_NOMATCH) || (code == CI_AMBIG))) {
+                        cands = ci_candidates_text(self, bty, name, want, (code == CI_AMBIG), idx_node);
+                        if ((!cands)) {
+                            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+                        }
+                        if (code == CI_AMBIG) {
+                            msg = tool_sh_ct_scratch_fmt("type '%s' has an ambiguous subscript: candidates are %s", label, cands);
+                        }
+                        else {
+                            actual = ((idx_node >= 0) ? self->__frontend_parse_exprtypes_vptr->chk_type_text(self, idx_node, (&zero)) : 0);
+                            if (((!actual) || (!actual[0]))) {
+                                actual = "?";
+                            }
+                            if (writable) {
+                                msg = tool_sh_ct_scratch_fmt("type '%s' has no writable subscript matching 'set(%s, V)': candidates are %s", label, actual, cands);
+                            }
+                            else {
+                                msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript matching 'get(%s)': candidates are %s", label, actual, cands);
+                            }
+                        }
+                    }
+                    else {
+                        if (writable) {
+                            msg = tool_sh_ct_scratch_fmt("type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s", label, label);
+                        }
+                        else {
+                            msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript: declare 'V get(K)' in impl %s", label, label);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return tool_diag_ct_sem_error(line, col, msg, path);
+}

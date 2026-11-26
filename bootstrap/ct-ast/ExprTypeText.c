@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #define MAX_TEXT 160
+#define N_METHOD 29
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -144,6 +145,9 @@ int frontend_parse_qual_at(const char *, int);
 int frontend_parse_ref_type_is_const_value(const char *);
 int frontend_parse_slice_array_len(const char *);
 int frontend_parse_subst_tparam(const char *, char * *, char * *, int, char *, int);
+int frontend_parse_ct_overload_count(int, const char *);
+int frontend_parse_ct_overload_pos(int, int);
+const char * frontend_parse_ct_overload_key_text(const char *);
 const char * frontend_parse_subst_tparam_text(const char *, char * *, char * *, int);
 void frontend_parse_tbase(const char *, char *, int);
 int frontend_parse_tclass(const char *, const char *);
@@ -623,4 +627,113 @@ const char * frontend_parse_subst_tparam_text(const char * spell, char * * names
         }
     }
     return runtime_text_ct_intern(spell);
+}
+int frontend_parse_ct_overload_count(int impl_node, const char * name) {
+    struct runtime_arena_Arena * ar;
+    int m;
+    int n;
+    ar = runtime_arena_arena_get();
+    if (((((!ar) || (impl_node < 0)) || (impl_node >= ar->nnode)) || (!name))) {
+        return 0;
+    }
+    n = 0;
+    for (m = ar->nodes[impl_node].a; m >= 0; m = ar->nodes[m].next) {
+        if ((((ar->nodes[m].kind == N_METHOD) && ar->nodes[m].text2) && (strcmp(ar->nodes[m].text2, name) == 0))) {
+            n++;
+        }
+    }
+    return n;
+}
+int frontend_parse_ct_overload_pos(int impl_node, int m) {
+    struct runtime_arena_Arena * ar;
+    int k;
+    int pos;
+    ar = runtime_arena_arena_get();
+    if ((((((!ar) || (impl_node < 0)) || (impl_node >= ar->nnode)) || (m < 0)) || (m >= ar->nnode))) {
+        return (-1);
+    }
+    if ((!ar->nodes[m].text2)) {
+        return (-1);
+    }
+    pos = (-1);
+    for (k = ar->nodes[impl_node].a; k >= 0; k = ar->nodes[k].next) {
+        if (ar->nodes[k].kind != N_METHOD) {
+            continue;
+        }
+        if (((!ar->nodes[k].text2) || (strcmp(ar->nodes[k].text2, ar->nodes[m].text2) != 0))) {
+            continue;
+        }
+        pos++;
+        if (k == m) {
+            return pos;
+        }
+    }
+    return (-1);
+}
+const char * frontend_parse_ct_overload_key_text(const char * type) {
+    const char * key;
+    const char * hex = "0123456789abcdef";
+    char * buf = 0;
+    int cap = 0;
+    int i;
+    int enc_len = 0;
+    char one[2];
+    char hexb[4];
+    unsigned int h;
+    key = frontend_type_type_key_text((type ? type : ""));
+    if ((!key)) {
+        return (const char *)(0);
+    }
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return (const char *)(0);
+    }
+    for (i = 0; key[i]; i++) {
+        unsigned char c = (unsigned char)(key[i]);
+        if (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9')))) {
+            one[0] = (char)(c);
+            one[1] = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), one) != 0) {
+                goto fail;
+            }
+            enc_len += 1;
+        }
+        else {
+            hexb[0] = '_';
+            hexb[1] = hex[((c >> 4) & 15)];
+            hexb[2] = hex[(c & 15)];
+            hexb[3] = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), hexb) != 0) {
+                goto fail;
+            }
+            enc_len += 3;
+        }
+        if (enc_len > 120) {
+            break;
+        }
+    }
+    if (enc_len > 120) {
+        h = 2166136261U;
+        for (i = 0; key[i]; i++) {
+            h ^= (unsigned int)((unsigned char)(key[i]));
+            h *= 16777619U;
+        }
+        free(buf);
+        buf = 0;
+        cap = 0;
+        if (tool_sh_ct_text_init((&buf), (&cap), 16) != 0) {
+            return (const char *)(0);
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), tool_sh_ct_scratch_fmt("h%08x", h)) != 0) {
+            goto fail;
+        }
+    }
+{
+        const char * pooled = runtime_text_ct_intern(buf);
+        tool_sh_ct_text_free((&buf), (&cap));
+        return pooled;
+    }
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
 }

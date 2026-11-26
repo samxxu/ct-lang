@@ -2310,49 +2310,38 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
             if (_self->ex->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self->ex, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
                 return (-1);
             }
-            if (((_self->arena->nodes[e].kind == N_MCALL) && ((_self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e) == 1) || (_self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e) == 2)))) {
-                int ck = _self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e);
-                int idx;
-                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                _self->ex->into_ok = 1;
-                rhs = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
-                _self->ex->into_ok = 0;
-                if (rhs < 0) {
-                    return (-1);
-                }
-                idx = _self->arena->nodes[e].b;
-                if (idx < 0) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a container subscript has no index");
-                }
-                _self->arena->nodes[idx].next = rhs;
-                _self->arena->nodes[e].text2 = runtime_text_ct_intern(((ck == 1) ? "set" : "put"));
-                if ((!_self->arena->nodes[e].text2)) {
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_EXPR);
-                if (n < 0) {
-                    return (-1);
-                }
-                _self->arena->nodes[n].a = e;
-            }
-            else {
-                if (_self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e) == 3) {
+{
+                int csk = _self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e);
+                int cform = 0;
+                if (((_self->arena->nodes[e].kind == N_MCALL) && (csk == 3))) {
                     int cl = _self->arena->nodes[e].line;
                     int cc = _self->arena->nodes[e].num;
                     int recv = _self->arena->nodes[e].a;
-                    int sm;
-                    int vi;
-                    int widx;
                     while (((recv >= 0) && (((_self->arena->nodes[recv].kind == N_MEMBER) || (_self->arena->nodes[recv].kind == N_ARROW)) || (((_self->arena->nodes[recv].kind == N_MCALL) && ((strcmp(_self->arena->nodes[recv].text2, "data") == 0) || (strcmp(_self->arena->nodes[recv].text2, "get") == 0))) && ((strncmp(_self->arena->nodes[recv].text, "struct String", 13) == 0) || (strncmp(_self->arena->nodes[recv].text, "struct Str", 10) == 0)))))) {
                         recv = _self->arena->nodes[recv].a;
                     }
                     if (((recv < 0) || (_self->arena->nodes[recv].kind != N_VAR))) {
                         return tool_diag_ct_sem_error(cl, cc, "a custom subscript write needs a statement and an lvalue receiver", _self->sup->mem->path);
                     }
-                    sm = _self->ex->__frontend_parse_exprsubscript_vptr->custom_index_method(_self->ex, _self->arena->nodes[e].text, "set", 2, cl, cc, 1, (-1));
-                    if (sm < 0) {
+                    cform = _self->ex->__frontend_parse_exprsubscript_vptr->custom_index_write_form(_self->ex, e, cl, cc);
+                    if (cform < 0) {
                         return (-1);
                     }
+                    if (cform == 2) {
+                        int dr = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DEREF);
+                        if (dr < 0) {
+                            return (-1);
+                        }
+                        _self->arena->nodes[dr].a = e;
+                        _self->arena->nodes[dr].line = cl;
+                        _self->arena->nodes[dr].num = cc;
+                        e = dr;
+                        csk = 0;
+                    }
+                }
+                if (((_self->arena->nodes[e].kind == N_MCALL) && ((csk == 1) || (csk == 2)))) {
+                    int ck = csk;
+                    int idx;
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                     _self->ex->into_ok = 1;
                     rhs = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
@@ -2360,18 +2349,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                     if (rhs < 0) {
                         return (-1);
                     }
-                    if (_self->arena->nodes[rhs].kind == N_VAR) {
-                        vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[rhs].text2);
-                        if (((vi >= 0) && (_self->sym->vars[vi].autodrop || _self->sym->vars[vi].borrowed))) {
-                            return tool_diag_ct_sem_error(cl, cc, "a custom subscript set cannot take an 'own' or 'borrow' value", _self->sup->mem->path);
-                        }
+                    idx = _self->arena->nodes[e].b;
+                    if (idx < 0) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a container subscript has no index");
                     }
-                    widx = _self->arena->nodes[e].b;
-                    if (widx < 0) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a custom subscript has no index");
-                    }
-                    _self->arena->nodes[widx].next = rhs;
-                    _self->arena->nodes[e].text2 = runtime_text_ct_internf("set");
+                    _self->arena->nodes[idx].next = rhs;
+                    _self->arena->nodes[e].text2 = runtime_text_ct_intern(((ck == 1) ? "set" : "put"));
                     if ((!_self->arena->nodes[e].text2)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
@@ -2382,125 +2365,160 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                     _self->arena->nodes[n].a = e;
                 }
                 else {
-                    k = _self->arena->nodes[e].kind;
-                    if (((k == N_SLICE_INDEX) && (_self->arena->nodes[e].aux == 1))) {
-                        return tool_diag_ct_sem_error(_self->arena->nodes[e].line, _self->arena->nodes[e].num, "cannot write to an element of a const slice", _self->mem->path);
-                    }
-                    if (_self->ex->__frontend_parse_exprstatictype_vptr->container_write_check(_self->ex, e) != 0) {
-                        return (-1);
-                    }
-                    if (_self->__frontend_parse_stmtops_vptr->string_raw_write_check(_self, e) != 0) {
-                        return (-1);
-                    }
-                    if ((((((((k != N_VAR) && (k != N_MEMBER)) && (k != N_ARROW)) && (k != N_INDEX)) && (k != N_SLICE_INDEX)) && (k != N_DEREF)) && (k != N_INTO_SELF))) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "assignment target is not assignable");
-                    }
-                    _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                    if (k == N_VAR) {
-                        int ttvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
-                        if (ttvi >= 0) {
-                            tt = _self->sym->vars[ttvi].type;
+                    if (csk == 3) {
+                        int cl = _self->arena->nodes[e].line;
+                        int cc = _self->arena->nodes[e].num;
+                        int vi;
+                        int widx;
+                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                        _self->ex->into_ok = 1;
+                        rhs = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+                        _self->ex->into_ok = 0;
+                        if (rhs < 0) {
+                            return (-1);
                         }
+                        if (_self->arena->nodes[rhs].kind == N_VAR) {
+                            vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[rhs].text2);
+                            if (((vi >= 0) && (_self->sym->vars[vi].autodrop || _self->sym->vars[vi].borrowed))) {
+                                return tool_diag_ct_sem_error(cl, cc, "a custom subscript set cannot take an 'own' or 'borrow' value", _self->sup->mem->path);
+                            }
+                        }
+                        widx = _self->arena->nodes[e].b;
+                        if (widx < 0) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a custom subscript has no index");
+                        }
+                        _self->arena->nodes[widx].next = rhs;
+                        _self->arena->nodes[e].text2 = runtime_text_ct_internf("set");
+                        if ((!_self->arena->nodes[e].text2)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
+                        n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_EXPR);
+                        if (n < 0) {
+                            return (-1);
+                        }
+                        _self->arena->nodes[n].a = e;
                     }
                     else {
-                        if ((((k == N_INDEX) || (k == N_MEMBER)) || (k == N_ARROW))) {
-                            if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&tt)) != 0) {
-                                tt = "";
-                            }
+                        k = _self->arena->nodes[e].kind;
+                        if (((k == N_SLICE_INDEX) && (_self->arena->nodes[e].aux == 1))) {
+                            return tool_diag_ct_sem_error(_self->arena->nodes[e].line, _self->arena->nodes[e].num, "cannot write to an element of a const slice", _self->mem->path);
                         }
-                    }
-                    if (strstr(tt, "(*")) {
-                        _self->ex->fnval_ok = 1;
-                    }
-                    if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")) && ((strncmp(tt, "struct Vec_", 11) == 0) || (strncmp(tt, "Vec_", 4) == 0)))) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a brace list is not an expression; use Vec<T>::from or push");
-                    }
-                    if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")) && ((strncmp(tt, "struct Map_", 11) == 0) || (strncmp(tt, "Map_", 4) == 0)))) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a brace list is not an expression; use Map<K, V>::from or put");
-                    }
-                    _self->ex->into_ok = 1;
-                    rline = _self->lex->tokline;
-                    rcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-                    rhs = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
-                    _self->ex->into_ok = 0;
-                    _self->ex->fnval_ok = 0;
-                    if (rhs < 0) {
-                        return (-1);
-                    }
-                    if ((tt[0] && (_self->ex->__frontend_parse_exprtypes_vptr->lit_coerce(_self->ex, tt, rhs) != 0))) {
-                        return (-1);
-                    }
-                    if (tt[0]) {
-                        rhs = _self->ex->__frontend_parse_exprbinding_vptr->binding_convert(_self->ex, rhs, tt, rline, rcol);
-                        if (rhs < 0) {
+                        if (_self->ex->__frontend_parse_exprstatictype_vptr->container_write_check(_self->ex, e) != 0) {
                             return (-1);
                         }
-                    }
-                    if (k == N_VAR) {
-                        int gvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
-                        if ((((gvi >= 0) && (_self->sym->vars[gvi].is_global || _self->sym->vars[gvi].is_static)) && (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, rhs, tt, rline, rcol) != 0))) {
+                        if (_self->__frontend_parse_stmtops_vptr->string_raw_write_check(_self, e) != 0) {
                             return (-1);
                         }
-                    }
-                    if (((_self->ex->types_mode && (*_self->ex->types_mode)) && tt[0])) {
-                        int is_zero = 0;
-                        const char * out = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, rhs, (&is_zero));
-                        if (out) {
-                            _self->ex->chk_line = rline;
-                            _self->ex->chk_col = rcol;
-                            _self->ex->chk_arg = 0;
-                            if (_self->ex->__frontend_parse_exprtypes_vptr->chk_assignable(_self->ex, tt, out, is_zero, 2) != 0) {
-                                return (-1);
-                            }
+                        if ((((((((k != N_VAR) && (k != N_MEMBER)) && (k != N_ARROW)) && (k != N_INDEX)) && (k != N_SLICE_INDEX)) && (k != N_DEREF)) && (k != N_INTO_SELF))) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "assignment target is not assignable");
                         }
-                    }
-                    if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, tt, (&tr), (&ip)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr) >= 0))) {
-                        if (_self->sup->__frontend_parse_supportops_vptr->expr_is_slice(_self->sup, rhs)) {
-                            return tool_diag_ct_sem_error(rline, rcol, tool_sh_ct_scratch_fmt("a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view", tr), _self->mem->path);
-                        }
-                        rhs = _self->sup->__frontend_parse_supportops_vptr->maybe_box(_self->sup, rhs, tr, ip);
-                        if (rhs < 0) {
-                            return (-1);
-                        }
-                    }
-                    n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ASSIGN);
-                    if (n < 0) {
-                        return (-1);
-                    }
-                    _self->arena->nodes[n].a = e;
-                    _self->arena->nodes[n].b = rhs;
-                    if (check_closure_assign(_self, n, scol) != 0) {
-                        return (-1);
-                    }
-                    if (check_borrow_store(_self, n) != 0) {
-                        return (-1);
-                    }
-                    if ((_self->mem->leak_active && (_self->sup->__frontend_parse_supportops_vptr->leak_assign(_self->sup, n) != 0))) {
-                        return (-1);
-                    }
-                    if (k == N_VAR) {
-                        int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
-                        if (vi >= 0) {
-                            _self->sym->vars[vi].initialized = 1;
-                        }
-                        if (((vi >= 0) && (frontend_sym_ct_is_container_type(_self->sym->vars[vi].type) || frontend_sym_ct_is_string_value_type(_self->sym->vars[vi].type)))) {
-                            _self->sym->vars[vi].cview = frontend_parse_expr_borrow_root(_self->ex, rhs);
-                        }
-                        frontend_parse_expr_view_bind(_self->ex, _self->arena->nodes[e].text2, rhs);
-                    }
-                    if (((frontend_sym_ct_is_string_value_type(tt) || (frontend_sym_ct_adt_from_type(tt) >= 0)) && frontend_parse_expr_borrow_root(_self->ex, rhs))) {
-                        _self->arena->nodes[n].sflags |= 2;
-                    }
-                    if (k == N_VAR) {
-                        int hk = _self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, tt);
-                        if (((hk == 3) || (hk == 4))) {
-                            if (str_escape_op(_self, 2, rhs, _self->arena->nodes[e].text2, hk, rline, rcol, _self->arena->nodes[e].line, 0) != 0) {
-                                return (-1);
+                        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                        if (k == N_VAR) {
+                            int ttvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
+                            if (ttvi >= 0) {
+                                tt = _self->sym->vars[ttvi].type;
                             }
                         }
                         else {
-                            if (((hk == 1) || (hk == 2))) {
-                                str_escape_op(_self, 3, rhs, _self->arena->nodes[e].text2, hk, 0, 0, 0, 0);
+                            if ((((k == N_INDEX) || (k == N_MEMBER)) || (k == N_ARROW))) {
+                                if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&tt)) != 0) {
+                                    tt = "";
+                                }
+                            }
+                        }
+                        if (strstr(tt, "(*")) {
+                            _self->ex->fnval_ok = 1;
+                        }
+                        if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")) && ((strncmp(tt, "struct Vec_", 11) == 0) || (strncmp(tt, "Vec_", 4) == 0)))) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a brace list is not an expression; use Vec<T>::from or push");
+                        }
+                        if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")) && ((strncmp(tt, "struct Map_", 11) == 0) || (strncmp(tt, "Map_", 4) == 0)))) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a brace list is not an expression; use Map<K, V>::from or put");
+                        }
+                        _self->ex->into_ok = 1;
+                        rline = _self->lex->tokline;
+                        rcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+                        rhs = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+                        _self->ex->into_ok = 0;
+                        _self->ex->fnval_ok = 0;
+                        if (rhs < 0) {
+                            return (-1);
+                        }
+                        if ((tt[0] && (_self->ex->__frontend_parse_exprtypes_vptr->lit_coerce(_self->ex, tt, rhs) != 0))) {
+                            return (-1);
+                        }
+                        if (tt[0]) {
+                            rhs = _self->ex->__frontend_parse_exprbinding_vptr->binding_convert(_self->ex, rhs, tt, rline, rcol);
+                            if (rhs < 0) {
+                                return (-1);
+                            }
+                        }
+                        if (k == N_VAR) {
+                            int gvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
+                            if ((((gvi >= 0) && (_self->sym->vars[gvi].is_global || _self->sym->vars[gvi].is_static)) && (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, rhs, tt, rline, rcol) != 0))) {
+                                return (-1);
+                            }
+                        }
+                        if (((_self->ex->types_mode && (*_self->ex->types_mode)) && tt[0])) {
+                            int is_zero = 0;
+                            const char * out = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, rhs, (&is_zero));
+                            if (out) {
+                                _self->ex->chk_line = rline;
+                                _self->ex->chk_col = rcol;
+                                _self->ex->chk_arg = 0;
+                                if (_self->ex->__frontend_parse_exprtypes_vptr->chk_assignable(_self->ex, tt, out, is_zero, 2) != 0) {
+                                    return (-1);
+                                }
+                            }
+                        }
+                        if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, tt, (&tr), (&ip)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr) >= 0))) {
+                            if (_self->sup->__frontend_parse_supportops_vptr->expr_is_slice(_self->sup, rhs)) {
+                                return tool_diag_ct_sem_error(rline, rcol, tool_sh_ct_scratch_fmt("a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view", tr), _self->mem->path);
+                            }
+                            rhs = _self->sup->__frontend_parse_supportops_vptr->maybe_box(_self->sup, rhs, tr, ip);
+                            if (rhs < 0) {
+                                return (-1);
+                            }
+                        }
+                        n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ASSIGN);
+                        if (n < 0) {
+                            return (-1);
+                        }
+                        _self->arena->nodes[n].a = e;
+                        _self->arena->nodes[n].b = rhs;
+                        if (check_closure_assign(_self, n, scol) != 0) {
+                            return (-1);
+                        }
+                        if (check_borrow_store(_self, n) != 0) {
+                            return (-1);
+                        }
+                        if ((_self->mem->leak_active && (_self->sup->__frontend_parse_supportops_vptr->leak_assign(_self->sup, n) != 0))) {
+                            return (-1);
+                        }
+                        if (k == N_VAR) {
+                            int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
+                            if (vi >= 0) {
+                                _self->sym->vars[vi].initialized = 1;
+                            }
+                            if (((vi >= 0) && (frontend_sym_ct_is_container_type(_self->sym->vars[vi].type) || frontend_sym_ct_is_string_value_type(_self->sym->vars[vi].type)))) {
+                                _self->sym->vars[vi].cview = frontend_parse_expr_borrow_root(_self->ex, rhs);
+                            }
+                            frontend_parse_expr_view_bind(_self->ex, _self->arena->nodes[e].text2, rhs);
+                        }
+                        if (((frontend_sym_ct_is_string_value_type(tt) || (frontend_sym_ct_adt_from_type(tt) >= 0)) && frontend_parse_expr_borrow_root(_self->ex, rhs))) {
+                            _self->arena->nodes[n].sflags |= 2;
+                        }
+                        if (k == N_VAR) {
+                            int hk = _self->sup->__frontend_parse_supportops_vptr->str_handle_kind(_self->sup, tt);
+                            if (((hk == 3) || (hk == 4))) {
+                                if (str_escape_op(_self, 2, rhs, _self->arena->nodes[e].text2, hk, rline, rcol, _self->arena->nodes[e].line, 0) != 0) {
+                                    return (-1);
+                                }
+                            }
+                            else {
+                                if (((hk == 1) || (hk == 2))) {
+                                    str_escape_op(_self, 3, rhs, _self->arena->nodes[e].text2, hk, 0, 0, 0, 0);
+                                }
                             }
                         }
                     }

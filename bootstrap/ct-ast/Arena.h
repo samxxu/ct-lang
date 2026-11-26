@@ -164,6 +164,7 @@ struct runtime_arena_Node {
     const char * text2;
     const char * text3;
     const char * text4;
+    const char * suffix;
     int sflags;
 };
 struct runtime_arena_OutConv {

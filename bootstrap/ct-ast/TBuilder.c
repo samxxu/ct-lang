@@ -8,6 +8,8 @@
 #include "TypeCheck.h"
 #include "TModule.h"
 #include "Verifier.h"
+#include "ExprTypeText.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TBuilder.h.ct"
 #include <stdio.h>
@@ -421,6 +423,7 @@ static int tb_typedef(struct backend_tir_TBuilder *, int);
 static int tb_global(struct backend_tir_TBuilder *, int);
 static int tb_trait(struct backend_tir_TBuilder *, int);
 static int tb_ensure_trait(struct backend_tir_TBuilder *, const char *);
+static const char * tb_overload_suffix(struct backend_tir_TBuilder *, int, int);
 static int tb_impl(struct backend_tir_TBuilder *, int);
 static int tb_top_decl(struct backend_tir_TBuilder *, int);
 static int tb_find_inst(struct backend_tir_TModule *, int, int *, int);
@@ -1228,7 +1231,7 @@ static int tb_target_mcall(struct backend_tir_TBuilder * tb, int eid, int n) {
         if (strncmp(base, "struct ", 7) == 0) {
             base += 7;
         }
-        key = runtime_text_ct_internf("%s.%s", base, (method ? method : ""));
+        key = runtime_text_ct_internf("%s.%s%s", base, (method ? method : ""), (ar->nodes[n].suffix ? ar->nodes[n].suffix : ""));
         if ((!key)) {
             return (-1);
         }
@@ -2573,6 +2576,50 @@ static int tb_ensure_trait(struct backend_tir_TBuilder * tb, const char * name) 
     }
     return tb_trait(tb, ti);
 }
+static const char * tb_overload_suffix(struct backend_tir_TBuilder * tb, int impl_node, int m) {
+    struct runtime_arena_Arena * ar;
+    char * buf = 0;
+    int cap = 0;
+    int n;
+    int pos;
+    int p;
+    const char * out;
+    (void)(tb);
+    ar = tb_arena();
+    if (((((!ar) || (impl_node < 0)) || (m < 0)) || (m >= ar->nnode))) {
+        return "";
+    }
+    n = frontend_parse_ct_overload_count(impl_node, ar->nodes[m].text2);
+    if (n <= 1) {
+        return "";
+    }
+    pos = frontend_parse_ct_overload_pos(impl_node, m);
+    if (pos <= 0) {
+        return "";
+    }
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return (const char *)(0);
+    }
+    for (p = ar->nodes[m].a; p > 0; p = ar->nodes[p].next) {
+        const char * ek = frontend_parse_ct_overload_key_text(ar->nodes[p].text);
+        if ((!ek)) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), "$") != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), ek) != 0) {
+            goto fail;
+        }
+    }
+    out = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return (out ? out : "");
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
 static int tb_impl(struct backend_tir_TBuilder * tb, int n) {
     struct runtime_arena_Arena * ar;
     struct frontend_sym_Symbols * sym;
@@ -2640,8 +2687,9 @@ static int tb_impl(struct backend_tir_TBuilder * tb, int n) {
             m->decls[(mdecl - 1)].is_template = 1;
         }
         if (((si >= 0) && (si < sym->nstructs))) {
+            const char * msuf = ((trait && trait[0]) ? "" : tb_overload_suffix(tb, n, c));
             m->decls[(mdecl - 1)].is_method = 1;
-            m->decls[(mdecl - 1)].cname = runtime_text_ct_internf("%s_%s%s%s", sym->structs[si].name, ((trait && trait[0]) ? trait : ""), ((trait && trait[0]) ? "_" : ""), (ar->nodes[c].text2 ? ar->nodes[c].text2 : ""));
+            m->decls[(mdecl - 1)].cname = runtime_text_ct_internf("%s_%s%s%s%s", sym->structs[si].name, ((trait && trait[0]) ? trait : ""), ((trait && trait[0]) ? "_" : ""), (ar->nodes[c].text2 ? ar->nodes[c].text2 : ""), (msuf ? msuf : ""));
             if ((!m->decls[(mdecl - 1)].cname)) {
                 return (-1);
             }

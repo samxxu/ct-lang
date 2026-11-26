@@ -1482,10 +1482,6 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "]") != 0) {
                     return (-1);
                 }
-                gm = _self->__frontend_parse_exprsubscript_vptr->custom_index_method(_self, bty, "get", 1, bl, bc, 0, idx);
-                if (gm < 0) {
-                    return (-1);
-                }
                 m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
                 if (m < 0) {
                     return (-1);
@@ -1503,6 +1499,13 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 }
                 _self->arena->nodes[m].a = n;
                 _self->arena->nodes[m].b = idx;
+{
+                    int def = ((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "="));
+                    gm = _self->__frontend_parse_exprsubscript_vptr->custom_index_method(_self, bty, "get", 1, bl, bc, 0, idx, m, def);
+                    if (((gm < 0) && (gm != (-2)))) {
+                        return (-1);
+                    }
+                }
                 rt = n;
                 while (((rt >= 0) && ((_self->arena->nodes[rt].kind == N_MEMBER) || (_self->arena->nodes[rt].kind == N_ARROW)))) {
                     rt = _self->arena->nodes[rt].a;

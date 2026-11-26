@@ -249,7 +249,9 @@ struct frontend_parse_ExprTraitInst_iface {
 struct frontend_parse_ExprSubscript_vtbl {
     int (*custom_index_label)(void *, const char *, char *, int);
     const char * (*custom_index_label_text)(void *, const char *);
-    int (*custom_index_method)(void *, const char *, const char *, int, int, int, int, int);
+    int (*custom_index_method)(void *, const char *, const char *, int, int, int, int, int, int, int);
+    int (*custom_index_write_form)(void *, int, int, int);
+    const char * (*custom_index_suffix)(void *, const char *, int, int, int);
 };
 struct frontend_parse_ExprSubscript_iface {
     void *self;

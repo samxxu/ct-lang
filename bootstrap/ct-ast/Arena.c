@@ -160,6 +160,7 @@ static int runtime_arena_Arena_runtime_arena_ArenaOps_alloc(void *self, int kind
     _self->nodes[n].text2 = empty;
     _self->nodes[n].text3 = empty;
     _self->nodes[n].text4 = empty;
+    _self->nodes[n].suffix = empty;
     return n;
 }
 

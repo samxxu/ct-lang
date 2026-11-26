@@ -16,6 +16,7 @@
 #include "MapTable.h"
 #include "Unit.h"
 #include "Expr.h"
+#include "ExprTypeText.h"
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"

@@ -17,6 +17,8 @@
 #include "TypeCheck.h"
 #include "TModule.h"
 #include "Verifier.h"
+#include "ExprTypeText.h"
+#include "Sh.h"
 
 
 struct ct_buf;
