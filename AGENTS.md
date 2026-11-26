@@ -458,7 +458,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | --- | --- |
 | 对话清单 | 单会话；三类常驻会话未建，按 `deviation: single-session-workflow`；phase=v0-PH-88 |
 | 任务-对话映射 | [docs/session-map.md](docs/session-map.md)（单会话） |
-| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 已机械校验）；`selfhost/check-all.sh`（9 道硬门禁；gate 2–5 随 L1/L2 退役，gate 13 `check-seed` 在列） |
+| 门禁入口 | `tools/check.sh g0`…`g9`（治理门禁；g2 已机械校验）；`selfhost/check-all.sh`（8 道硬门禁；gate 2–5 随 L1/L2 退役、gate 6 随编辑器迁出退役，gate 13 `check-seed` 在列） |
 | 文档 snippet | 缺失 |
 | Issue 台账 | `issues/<area>/<id>.md`；id 前缀 `SH-`（缺陷）、`TEST-`、`DOC-`、`CI-`、`PKG-` |
 | 决策记录 | `docs/decisions/D-<n>.md`；phase 决策写 `docs/design/*.md`（`D<phase>-<n>`） |
@@ -616,7 +616,7 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | `examples/**` | 源码：可运行示例（`<name>.ct` + `<name>.expected.out`） | ✅ 新增语法时同步扩充；生成物不入库 |
 | `test/**` | 测试：用例、golden 基线、runner（含 `test/fuzz/` 的确定性 fuzz，Phase 17.1 起） | ✅ 可改；`*.expected.*` 只能用 `./ctc` 重新生成 |
 | `.github/**` | CI 配置：GitHub Actions 工作流（`ci.yml` 平台矩阵、`nightly.yml` 消毒器 + fuzz，Phase 17.1 起） | ✅ Phase 17 起新增；只放工作流配置，不进入编译路径、不成为构建步骤 |
-| `editors/**` | 编辑器插件：`editors/vscode/`（VS Code，纯 JSON） | ✅ 可改；见下方硬性边界 |
+| `editors/**` | 编辑器集成：VS Code 插件已迁至独立仓 [samxxu/ct-vscode](https://github.com/samxxu/ct-vscode)；本目录只留 `README.md` 指路 | 本仓不再维护插件代码；见下方编辑器边界 |
 | `selfhost/**` | 源码：自举编译器 —— **L0 C 种子** `selfhost/l0/ctc.c` ＋ 冻结种子 `selfhost/l1/ctc.ct`（L1，能力停在 Phase 2）＋ **开发主线** `selfhost/ct-ast/**`（`main.ct` = 只做绑定与分派的驱动入口，`runtime/arena/` = 节点池 + 字面量池（`namespace runtime::arena`），`frontend/lex/` = 词法器（源码游标 + 当前 token，`namespace frontend::lex`），`frontend/module/` = 单元表与 `map` 记录的取值类型 ＋ build 驱动（`namespace frontend::module`），`frontend/parse/` = 解析器、其共享原语、表达式与类型文法及 `map` 构造的构建器（`namespace frontend::parse`），`frontend/sym/` = 符号表（函数/变量/作用域/类型/trait/struct，`namespace frontend::sym`），`frontend/type/` = 类型推断与装箱判定（`namespace frontend::type`），`tool/diag/` = 告警存储（`namespace tool::diag`），`tool/cache/` = 增量缓存（`namespace tool::cache`），`tool/pkg/` = 包管理器（`namespace tool::pkg`），`tool/driver/` = compile 模式驱动（`namespace tool::driver`），`backend/mem/` = AutoDrop 与泄漏分析（`namespace backend::mem`），`backend/emit/` = 代码发射器（`.c`/`.h`/map JSON，`namespace backend::emit`）；Phase 9 的 AST 版编译器，ct-ast）＋ **冻结归档** `selfhost/l2/**`（`core.ct` + `driver.ct`，Phase 3–8 的旧管线 L2；只修 bug，不再加能力） | ✅ Phase 1 起新增；放编译器源码（含 L0 C 种子）与门禁脚本，生成物不入库 |
 | `test/bindings/**` | 源码：C 库的**声明式 binding**（Phase 12 起；2026-11-13 由顶层 `bindings/` 迁入 `test/`，作为测试夹具）—— 直通 `#include "<lib>.h"` ＋ 镜像 `trait` / `struct` ＋ 已声明全局实例 ＋ `map`；仓库内假 HAL 自带其头与实现 | ✅ Phase 12 起新增；只放 binding 源与（假 HAL 的）最小 C 头 / 实现，**不 vendored、不下载**、不成为编译器构建步骤；生成物不入库 |
 | `ct-pkg/std` | 标准库（原 Phase 17.2 的仓库内 `std/`）：已迁为独立 ct-pkg 包 `std`，官方身份 `publisher = ct`，规范名 `ct/std`，由编译器内置 pin 表解析（`ct get ct/std`，无索引可用；裸名只解析官方包），落共享库 `$CT_HOME/pkg/ct/std/<version>/`，namespace 仍 `std::<mod>`；本仓库不再保存内置库，`test/std/` 同时移除。外部包仓的声明、版本、tag、发布与验收均不在本仓 | ❌ 不在本仓库维护 |
@@ -763,7 +763,7 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - **Ct 线关卡同样必跑**（`run.sh` 只驱动 L0）：一条命令 `bash selfhost/check-all.sh` 依次跑
   `./test/run.sh`、`selfhost/check-goldens.sh`（L1 对 golden + L1′ 自举闭环 + L1/L2 不动点）、
   `selfhost/check-archive.sh`（L2 对归档 oracle 的棘轮）、`selfhost/check-m2a.sh`、
-  `selfhost/ct-tour.sh`、`editors/vscode/test/check-grammar.py`、`test/pkg/run.sh`（Phase 8.1–8.3
+  `selfhost/ct-tour.sh`、`test/pkg/run.sh`（Phase 8.1–8.3
   包管理器：本地目录源、git 源与 `install` 校验）、`selfhost/check-ast.sh`（Phase 9.1–9.7 + 10.x
   AST 编译器的行为用例、CLI 错误分支、自编不动点与全量语料等价）、`selfhost/check-warnings.sh`
   （生成物 `-Wall -Wextra` 零告警）、`test/docs/check-docs.py`（文档链接、版本 token、门禁计数与
@@ -773,9 +773,9 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
   构建时必须带 `-I selfhost/ct-ast`（门禁脚本与 README 的安装命令已内置；手工构建同样要加）。
 - **手工三件套不可省**：套件内部的路径与你手工敲的不完全相同，改完必须按上面三条命令亲自跑一次并贴结果。
 - **新增/修改语法必须补用例**：见第 9 节检查清单。
-- **编辑器侧**：语法有变必须同步 `editors/vscode/syntaxes/ct.tmLanguage.json`，并跑
-  `python3 editors/vscode/test/check-grammar.py`（168 项断言，无 node 时 167 项并跳过 index 检查；必须全绿）。它校验插件而不是编译器，
-  因此**不进** `./test/run.sh`；反过来它也不能替代手工三件套。
+- **编辑器侧**：VS Code 插件已迁至独立仓 [ct-vscode](https://github.com/samxxu/ct-vscode)（语法高亮、
+  snippet、跳转索引与 `npm test` 都在那边；版本线独立于编译器）。语法有变时在该仓同步
+  `syntaxes/ct.tmLanguage.json` 并跑 `npm test`；本仓不再有编辑器关卡。
 - **诚实报告**：验证失败就如实说失败并贴原始输出，不允许把「没跑」说成「通过」；
   更不允许靠改 golden 基线或 `.expected.out` 来「修」失败——只有在确认编译器行为变更是有意为之之后，才重新生成它们。
 - **逐片红证**：每个新增断言或夹具，必须先在本地跑出失败并记录退出码与失败文案，
@@ -825,5 +825,5 @@ gcc -Wall -Wextra /tmp/greeter.c -o /tmp/greeter && /tmp/greeter
 - [ ] 每个 Phase 至少交付一个**可运行样例**，并接入真门禁（`./test/run.sh` 或 `check-ast.sh` 的夹具，二者之一必须实际执行它）；缺样例视同判据未满足，不得在 roadmap 或阶段卡里标「完成」
 - [ ] `test/cases` 增加 golden 用例（基线用 `./ctc <case>.ct -o <case>.expected.c` 重新生成并人工核对，禁止手写），负例补进 `test/errors`
 - [ ] 三件套验证通过，且 `./test/run.sh` 全绿
-- [ ] `editors/vscode/syntaxes/ct.tmLanguage.json` 覆盖了新构造，`python3 editors/vscode/test/check-grammar.py` 全绿
+- [ ] 编辑器高亮已同步到 [ct-vscode](https://github.com/samxxu/ct-vscode)：`npm test` 全绿（插件已迁出本仓，语法跟随独立发版）
 - [ ] `README.md` / `docs/language-spec.md` 已同步

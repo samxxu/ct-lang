@@ -47,6 +47,8 @@ ADT/`match`（§4.73）在 `frontend/sym`（变体表）+ `frontend/parse`（语
 
 ## 4. 门禁
 
-`bash selfhost/check-all.sh`：gate 1（seed `ct` 冒烟）、6 编辑器语法、7 包管理、8 `check-ast`、
+`bash selfhost/check-all.sh`：gate 1（seed `ct` 冒烟）、7 包管理、8 `check-ast`、
 9 warning-free、10 语义入口、11 docs、12 静态 goldens + archive manifest、13 冻结 seed。
-gate 2–5 随 L0/L1/L2 退役（SH-119 S2）；历史证据见 [history](history/README.md) 与 tag `v1.0.0`。
+gate 2–5 随 L0/L1/L2 退役（SH-119 S2），gate 6 随编辑器插件迁出退役（现由
+[ct-vscode](https://github.com/samxxu/ct-vscode) 的 `npm test` 负责）；历史证据见
+[history](history/README.md) 与 tag `v1.0.0`。

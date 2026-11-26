@@ -19,7 +19,7 @@
 
 **单元命名**：每个单元以它的主类型命名（`Parser.h.ct` ↔ `struct Parser`），一个单元一个主类型，附属记录类型可同文件；主类型过大可拆子对象单元（文件头注明所属主对象），入口 `main.ct` 例外。这条与其它命名约定同在 [AGENTS.md](../AGENTS.md) §3，并由 `check-ast.sh` 的 unit-name lint 校验。
 
-## 脚本（9 道硬门禁）
+## 脚本（8 道硬门禁）
 
 `check-all.sh` 是聚合入口，依次跑下面 8 道硬门禁，任一失败即整体非零：
 
@@ -56,7 +56,7 @@ ln -s ct "$HOME/.local/bin/ctc"                                  # ctc 兼容别
 
 ```bash
 git clone <repo> /tmp/ct-clean && cd /tmp/ct-clean
-bash selfhost/check-all.sh         # 期望末行：check-all: OK (9 hard gates green)
+bash selfhost/check-all.sh         # 期望末行：check-all: OK (8 hard gates green)
 ```
 
 干净 clone 不需要预处理：`.gitignore` 只忽略按名字的生成物（`/ctc`、`*.o`、`a.out`、`examples/*/*.c|h`、

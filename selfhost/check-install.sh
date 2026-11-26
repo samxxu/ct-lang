@@ -85,16 +85,16 @@ else
     bad "check-all.sh does not register gate 13 (check-seed.sh)"
 fi
 ngates="$(grep -c '^run_gate "' "$src/selfhost/check-all.sh")"
-if [ "$ngates" -eq 9 ]; then
-    ok "check-all.sh runs 9 hard gates"
+if [ "$ngates" -eq 8 ]; then
+    ok "check-all.sh runs 8 hard gates"
 else
-    bad "check-all.sh runs $ngates hard gates, expected 9"
+    bad "check-all.sh runs $ngates hard gates, expected 8"
 fi
 if python3 "$src/test/docs/check-docs.py" >"$work/docs.log" 2>&1 &&
-   grep -q '9 hard gates' "$work/docs.log"; then
-    ok "check-docs.py agrees on 9 hard gates"
+   grep -q '8 hard gates' "$work/docs.log"; then
+    ok "check-docs.py agrees on 8 hard gates"
 else
-    bad "check-docs.py does not agree on 9 hard gates" "$(tail -n 2 "$work/docs.log" | tr '\n' ' ')"
+    bad "check-docs.py does not agree on 8 hard gates" "$(tail -n 2 "$work/docs.log" | tr '\n' ' ')"
 fi
 
 # --- B. clean-copy install --------------------------------------------------
