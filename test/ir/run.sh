@@ -17,7 +17,11 @@
 #   E  (optional, CT_IR_SELFHOST=0 to skip) the compiler's own source, 70
 #      units, builds under the shadow; the self-host tree stays byte-identical
 #      and is a fixpoint;
-#   F  the coverage / timing report is emitted only when asked for.
+#   F  the coverage / timing report is emitted only when asked for;
+#   G  the S1b-S2b LIR seam: --ir=on prints covered bodies from LIR, the
+#      generated C is byte-identical for the fixtures and the whole pinned
+#      corpus, V5-V10 reject malformed LIR without writing a `.c`, and a
+#      multi-unit build gets the same seam.
 #
 # Usage: bash test/ir/run.sh <ct-ast-binary>
 #        CT_IR_SELFHOST=0 bash test/ir/run.sh <ct-ast-binary>
@@ -193,7 +197,28 @@ if [ "${CT_IR_SELFHOST:-1}" != "0" ]; then
         ok
         units=$(grep -c '^tir: unit=' "$work/ss.err" 2>/dev/null || true)
         case "$units" in ''|*[!0-9]*) units=0 ;; esac
-        printf 'ir: self-host %d units, C tree byte-identical\n' "$units"
+        printf 'ir: self-host %d units, TIR shadow C tree byte-identical\n' "$units"
+    fi
+    # S1b-S2b: the same tree through the LIR seam. Every unit's declarations
+    # and signatures stay with the emitter; covered bodies come from LIR. The
+    # requirement is the same: byte-identical to the unswitched build.
+    if [ "$selfhost" -eq 1 ]; then
+        sl="$work/self-lir"
+        rm -rf "$sl"
+        mkdir -p "$sl"
+        if ! CT_LIR_REPORT=1 "$CT" build --emit-c --ir=on -I selfhost/ct-ast \
+                selfhost/ct-ast/main.ct -o "$sl" >"$work/sl.log" 2>"$work/sl.err"; then
+            bad "self-host LIR build failed ($(grep -m1 'error' "$work/sl.err" 2>/dev/null | tr '\n' ' '))"
+        elif ! diff -r "$sb" "$sl" >"$work/sld.log" 2>&1; then
+            bad "self-host tree differs under --ir=on ($(head -2 "$work/sld.log" | tr '\n' ' '))"
+        else
+            ok
+            lunits=$(find "$sl" -name '*.c' -type f | wc -l | tr -d ' ')
+            lready=$(grep -c 'ready=1' "$work/sl.err" 2>/dev/null || true)
+            case "$lready" in ''|*[!0-9]*) lready=0 ;; esac
+            printf 'ir: self-host LIR %d units, %d ready, C tree byte-identical\n' \
+                "$lunits" "$lready"
+        fi
     fi
 else
     printf 'ir: self-host section skipped (CT_IR_SELFHOST=0)\n'
@@ -218,8 +243,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# G. the S2 LIR subset: --ir=on prints LIR -> C, byte-identical to AST -> C
+# G. the LIR path: --ir=on prints covered bodies from LIR, byte for byte
 # ---------------------------------------------------------------------------
+# G1: the six cleanup-edge fixtures are fully covered (ready=1) and identical.
 lirn=0
 lirbad=0
 for f in test/ir/lir/*.ct; do
@@ -268,13 +294,56 @@ done
 if [ "$lirbad" -eq 0 ] && [ "$lirn" -ge 6 ]; then ok; else bad "the LIR subset is not byte-identical"; fi
 printf 'ir: LIR %d fixtures, %d failures\n' "$lirn" "$lirbad"
 
-# V5-V8 negatives: E-IR-105..108, non-zero exit, no `.c`
+# G2: the full corpus. Every file must compile under --ir=on and the generated
+# C must be byte-identical to the unswitched path. Coverage is reported, and
+# the aggregate function ratio is printed so a regression in the seam shows up.
+c2n=0
+c2bad=0
+c2ready=0
+c2ok=0
+c2tot=0
+for f in test/cases/*.ct examples/*/*.ct; do
+    case "$f" in *07_dialect*|*ct-dialects*) continue ;; esac
+    c2n=$((c2n + 1))
+    base="$work/lirc-base.c"
+    lir="$work/lirc-on.c"
+    rm -f "$base" "$lir"
+    if ! "$CT" "$f" -o "$base" >"$work/lircb.log" 2>&1; then
+        bad "LIR corpus baseline failed: $f"
+        c2bad=$((c2bad + 1))
+        continue
+    fi
+    if ! CT_LIR_REPORT=1 "$CT" "$f" -o "$lir" --ir=on >/dev/null 2>"$work/lirce.log"; then
+        bad "LIR corpus compile failed: $f"
+        c2bad=$((c2bad + 1))
+        continue
+    fi
+    if ! cmp -s "$base" "$lir"; then
+        bad "LIR changed the generated C: $f"
+        c2bad=$((c2bad + 1))
+        continue
+    fi
+    line=$(grep -m1 '^lir: unit=' "$work/lirce.log")
+    case "$line" in *ready=1*) c2ready=$((c2ready + 1)) ;; esac
+    ratio=$(printf '%s\n' "$line" | sed -n 's/.*funcs=\([0-9]*\)\/\([0-9]*\).*/\1 \2/p')
+    if [ -n "$ratio" ]; then
+        c2ok=$((c2ok + ${ratio% *}))
+        c2tot=$((c2tot + ${ratio#* }))
+    fi
+done
+if [ "$c2bad" -eq 0 ] && [ "$c2n" -ge 70 ]; then ok; else bad "the corpus is not byte-identical under --ir=on"; fi
+printf 'ir: LIR corpus %d files, %d failures, %d unit-ready, functions %d/%d\n' \
+    "$c2n" "$c2bad" "$c2ready" "$c2ok" "$c2tot"
+
+# V5-V10 negatives: E-IR-105..110, non-zero exit, no `.c`
 lneg=0
 lnegbad=0
 for spec in "ir-v5-temp-cross-scope:E-IR-105:c1_return_defer" \
             "ir-v6-cleanup-mismatch:E-IR-106:c2_break" \
             "ir-v7-errdefer-normal:E-IR-107:c1_return_defer" \
-            "ir-v8-double-drop:E-IR-108:c2_break"; do
+            "ir-v8-double-drop:E-IR-108:c2_break" \
+            "ir-v9-dangling-jump:E-IR-109:c1_return_defer" \
+            "ir-v10-raw-local:E-IR-110:c1_return_defer"; do
     key=${spec%%:*}
     rest=${spec#*:}
     code=${rest%%:*}
@@ -306,6 +375,38 @@ if "$CT" test/ir/lir/c1_return_defer.ct -o "$work/lir-off.c" \
 else
     bad "the LIR switch is not off by default"
 fi
+
+# G3: build mode (multi-unit) gets the same seam; the C tree is identical.
+ldn=0
+ldbad=0
+for spec in "test/modules/split/main.ct:split" \
+            "test/modules/autodrop/prog.ct:autodrop"; do
+    src=${spec%%:*}
+    name=${spec##*:}
+    [ -f "$src" ] || continue
+    lb="$work/lirbuild-$name-base"
+    ls="$work/lirbuild-$name-on"
+    rm -rf "$lb" "$ls"
+    mkdir -p "$lb" "$ls"
+    if ! "$CT" build --emit-c -I "$(dirname "$src")" "$src" -o "$lb" >"$work/lbb.log" 2>&1; then
+        bad "LIR build baseline failed: $name"
+        ldbad=$((ldbad + 1))
+        continue
+    fi
+    if ! "$CT" build --emit-c --ir=on -I "$(dirname "$src")" "$src" -o "$ls" \
+            >"$work/lbs.log" 2>&1; then
+        bad "LIR build failed: $name ($(head -2 "$work/lbs.log" | tr '\n' ' '))"
+        ldbad=$((ldbad + 1))
+        continue
+    fi
+    ldn=$((ldn + 1))
+    if ! diff -r "$lb" "$ls" >"$work/lbd.log" 2>&1; then
+        bad "LIR build changed the C tree: $name"
+        ldbad=$((ldbad + 1))
+    fi
+done
+if [ "$ldbad" -eq 0 ] && [ "$ldn" -ge 1 ]; then ok; else bad "a LIR build differs"; fi
+printf 'ir: LIR builds %d\n' "$ldn"
 
 echo
 if [ "$fail" -eq 0 ]; then
