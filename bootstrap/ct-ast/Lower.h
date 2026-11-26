@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "Intern.h"
+#include "Unit.h"
 #include "TModule.h"
 #include "TBuilder.h"
 #include "LModule.h"
@@ -79,6 +80,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -140,6 +146,35 @@ struct backend_lir_Lower {
     int loopcap;
     int mode;
     int forced;
+    int tmp_delta;
+    int func_scope;
+    int func_has_self;
+    int stmt_is_last;
+    int tmp_start_temps;
+    int bypass_te;
+    int hoist_block;
+    int h_map_te[256];
+    int h_map_tmp[256];
+    int h_nmap;
+    int h_into_ast[64];
+    int h_into_tmp[64];
+    int h_into_cat[64];
+    int h_into_n;
+    int h_temp[64];
+    int h_init[64];
+    int h_kind[64];
+    int h_type[64];
+    int h_cat[64];
+    int h_blk[64];
+    int h_n;
+    const char * sb_name[64];
+    int sb_block[64];
+    int sb_kind[64];
+    const char * sb_prefix[64];
+    int sb_n;
+    int cv_ci[64];
+    const char * cv_name[64];
+    int cv_n;
 };
 int backend_lir_ct_lir_on(void);
 int backend_lir_ct_lir_emit_on(void);
@@ -148,7 +183,8 @@ int backend_lir_ct_lir_build_program(int, const char *, const char *, const char
 int backend_lir_ct_lir_build_unit(void *, int, int);
 int backend_lir_ct_lir_ready(void);
 int backend_lir_ct_lir_emit(FILE *);
-int backend_lir_ct_lir_try_body(const char *, void *, int, int, int *);
+int backend_lir_ct_lir_try_body(const char *, void *, int, int, int *, int);
+void backend_lir_ct_lir_report_printed(void);
 void backend_lir_ct_lir_free(void);
 
 #endif

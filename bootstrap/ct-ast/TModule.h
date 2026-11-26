@@ -77,6 +77,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -161,6 +166,7 @@ struct backend_tir_ct_tdecl {
     int is_inline;
     int is_vararg;
     int is_template;
+    int is_method;
 };
 struct backend_tir_ct_ttype {
     int id;
@@ -197,6 +203,7 @@ struct backend_tir_ct_texpr {
 struct backend_tir_ct_tstmt {
     int id;
     int kind;
+    long num;
     struct backend_tir_ct_tspan span;
     int scope;
     int * kids;
@@ -241,6 +248,45 @@ struct backend_tir_ct_tcleanup {
     int on_error;
     struct backend_tir_ct_tspan span;
     int scope;
+};
+struct backend_tir_ct_tfieldinfo {
+    const char * name;
+    const char * type;
+    const char * dims;
+};
+struct backend_tir_ct_tstruct {
+    int id;
+    const char * name;
+    const char * * uses;
+    int nuses;
+    int ucap;
+    struct backend_tir_ct_tfieldinfo * fields;
+    int nfields;
+    int fcap;
+    int is_inst;
+    int uses_drop;
+    int uses_handback;
+    int has_drop_impl;
+    int drop_visible;
+};
+struct backend_tir_ct_tadtfield {
+    const char * name;
+    const char * type;
+};
+struct backend_tir_ct_tadvariant {
+    const char * name;
+    const char * cname;
+    struct backend_tir_ct_tadtfield * fields;
+    int nfields;
+    int fcap;
+};
+struct backend_tir_ct_tadt {
+    int id;
+    const char * name;
+    const char * full;
+    struct backend_tir_ct_tadvariant * variants;
+    int nvariants;
+    int vcap;
 };
 struct backend_tir_ct_tinst {
     int id;
@@ -328,6 +374,12 @@ struct backend_tir_TModule {
     struct backend_tir_ct_tmember * members;
     int nmembers;
     int mcap;
+    struct backend_tir_ct_tstruct * structs;
+    int nstructs;
+    int stcap;
+    struct backend_tir_ct_tadt * adts;
+    int nadts;
+    int adcap;
     struct backend_tir_ct_troot * roots;
     int nroots;
     int rcap;
@@ -370,6 +422,14 @@ int backend_tir_tmod_inst_add_arg(struct backend_tir_TModule *, int, int);
 int backend_tir_tmod_inst_add_member(struct backend_tir_TModule *, int, int);
 int backend_tir_tmod_new_member(struct backend_tir_TModule *, int, const char *, int, int, int);
 int backend_tir_tmod_member_count(struct backend_tir_TModule *, int);
+int backend_tir_tmod_new_struct(struct backend_tir_TModule *, const char *, int);
+int backend_tir_tmod_struct_add_use(struct backend_tir_TModule *, int, const char *);
+int backend_tir_tmod_struct_add_field(struct backend_tir_TModule *, int, const char *, const char *, const char *);
+int backend_tir_tmod_find_struct(struct backend_tir_TModule *, const char *);
+int backend_tir_tmod_new_adt(struct backend_tir_TModule *, const char *, const char *);
+int backend_tir_tmod_adt_add_variant(struct backend_tir_TModule *, int, const char *, const char *);
+int backend_tir_tmod_adt_add_field(struct backend_tir_TModule *, int, int, const char *, const char *);
+int backend_tir_tmod_find_adt(struct backend_tir_TModule *, const char *);
 int backend_tir_tmod_add_root(struct backend_tir_TModule *, int, int, const char *);
 int backend_tir_tmod_graph_node(struct backend_tir_TModule *, int, int);
 int backend_tir_tmod_graph_edge(struct backend_tir_TModule *, int, int, int, const char *, int);

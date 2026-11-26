@@ -76,6 +76,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -140,6 +145,7 @@ struct backend_lir_ct_lexpr {
     int kcap;
     const char * text;
     const char * member;
+    const char * extra;
     long num;
     int op;
     struct backend_lir_ct_lspan span;
@@ -155,8 +161,11 @@ struct backend_lir_ct_lstmt {
     const char * name;
     const char * dims;
     const char * spelling;
+    const char * member;
     const char * count;
     const char * vptr;
+    int vptr_loop;
+    int zero_init;
     int expr;
     int rhs;
     int cond;
@@ -174,6 +183,7 @@ struct backend_lir_ct_lstmt {
     int ccap;
     int scope;
     int origin;
+    int assignable;
     int err_edge;
     struct backend_lir_ct_lspan span;
 };
@@ -203,6 +213,7 @@ struct backend_lir_ct_lblock {
 struct backend_lir_ct_ltemp {
     int id;
     int kind;
+    int num;
     int type;
     int decl_block;
     const char * name;
@@ -224,6 +235,7 @@ struct backend_lir_ct_lfunc {
     int id;
     const char * name;
     const char * cname;
+    const char * seam;
     int temp_start;
     int temp_end;
     int ret;
@@ -294,6 +306,7 @@ struct backend_lir_LModule {
     int enabled;
     int emitting;
     const char * free_sym;
+    const char * path;
     int stat_funcs;
     int stat_funcs_ok;
     int stat_blocks;
@@ -301,6 +314,7 @@ struct backend_lir_LModule {
     int stat_temps;
     int stat_cleanups;
     int stat_fallback;
+    int stat_printed;
 };
 struct backend_lir_LModule * backend_lir_lmod_get(void);
 void backend_lir_lmod_reset(struct backend_lir_LModule *);
@@ -325,5 +339,8 @@ int backend_lir_lmod_new_scope(struct backend_lir_LModule *, int, int);
 int backend_lir_lmod_scope_add_cleanup(struct backend_lir_LModule *, int, int, int, int, int, int, int);
 int backend_lir_lmod_add_decl(struct backend_lir_LModule *, int);
 void backend_lir_lmod_report(struct backend_lir_LModule *, const char *);
+void backend_lir_lmod_report_printed(struct backend_lir_LModule *);
+const char * backend_lir_lmod_temp_name(struct backend_lir_LModule *, int, int);
+int backend_lir_lmod_temp_num(struct backend_lir_LModule *, int, int);
 
 #endif

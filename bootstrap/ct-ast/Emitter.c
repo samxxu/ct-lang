@@ -195,6 +195,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -441,8 +446,8 @@ static void sync_alloc(struct backend_emit_Emitter *);
 void backend_emit_ct_emit_bind_parse(int *, void *, int *);
 int backend_emit_ct_emit_ntmp(void);
 void backend_emit_ct_emit_set_out(void *);
-void backend_emit_ct_emit_set_body_hook(int (*)(const char *, void *, int, int, int *));
-int backend_emit_ct_emit_body_hook(const char *, void *, int, int, int *);
+void backend_emit_ct_emit_set_body_hook(int (*)(const char *, void *, int, int, int *, int));
+int backend_emit_ct_emit_body_hook(const char *, void *, int, int, int *, int);
 void backend_emit_ct_emit_clear_builtins(void);
 void backend_emit_ct_emit_add_builtin(int);
 void backend_emit_ct_emit_set_path(const char *);
@@ -458,7 +463,7 @@ void backend_emit_ct_emit_set_no_write(int);
 int backend_emit_ct_emit_no_write(void);
 static struct backend_emit_StrRetain backend_emit_g_sb;
 static int backend_emit_g_oc_bypass_node = (-1);
-static int (*backend_emit_g_body_hook)(const char *, void *, int, int, int *);
+static int (*backend_emit_g_body_hook)(const char *, void *, int, int, int *, int);
 static int backend_emit_g_shell_u = (-1);
 static int backend_emit_g_shell_header;
 static int * backend_emit_g_slice_used;
@@ -1003,13 +1008,32 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_impls(void *self, int 
             if ((!_self->__backend_emit_emitops_vptr->node_mentions(_self, body, "self"))) {
                 fputs("    (void)_self;\n", _self->out);
             }
-            k = _self->arena->nodes[body].a;
-            while (k >= 0) {
-                if (_self->__backend_emit_emitops_vptr->emit_node(_self, k, 1) != 0) {
-                    _self->sym->self_mode = 0;
-                    return (-1);
+{
+                int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
+                int printed = 0;
+                if (body_hook) {
+                    const char * key = tool_sh_ct_scratch_fmt("%s_%s%s%s", _self->sym->structs[si].name, tname, ((tname && tname[0]) ? "_" : ""), _self->arena->nodes[m].text2);
+                    int new_ntmp = _self->ntmp;
+                    int hr = (*body_hook)(key, _self->out, 1, _self->ntmp, (&new_ntmp), 1);
+                    if (hr < 0) {
+                        _self->sym->self_mode = 0;
+                        return (-1);
+                    }
+                    if (hr > 0) {
+                        _self->ntmp = new_ntmp;
+                        printed = 1;
+                    }
                 }
-                k = _self->arena->nodes[k].next;
+                if ((!printed)) {
+                    k = _self->arena->nodes[body].a;
+                    while (k >= 0) {
+                        if (_self->__backend_emit_emitops_vptr->emit_node(_self, k, 1) != 0) {
+                            _self->sym->self_mode = 0;
+                            return (-1);
+                        }
+                        k = _self->arena->nodes[k].next;
+                    }
+                }
             }
             sb_end_body(_self, 1);
             _self->sym->self_mode = 0;
@@ -1158,13 +1182,32 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_impls(void *self, int 
             if (((!is_static) && (!_self->__backend_emit_emitops_vptr->node_mentions(_self, body, "self")))) {
                 fputs("    (void)_self;\n", _self->out);
             }
-            k = _self->arena->nodes[body].a;
-            while (k >= 0) {
-                if (_self->__backend_emit_emitops_vptr->emit_node(_self, k, 1) != 0) {
-                    _self->sym->self_mode = 0;
-                    return (-1);
+{
+                int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
+                int printed = 0;
+                if (body_hook) {
+                    const char * key = tool_sh_ct_scratch_fmt("%s_%s", tag, _self->arena->nodes[m].text2);
+                    int new_ntmp = _self->ntmp;
+                    int hr = (*body_hook)(key, _self->out, 1, _self->ntmp, (&new_ntmp), 1);
+                    if (hr < 0) {
+                        _self->sym->self_mode = 0;
+                        return (-1);
+                    }
+                    if (hr > 0) {
+                        _self->ntmp = new_ntmp;
+                        printed = 1;
+                    }
                 }
-                k = _self->arena->nodes[k].next;
+                if ((!printed)) {
+                    k = _self->arena->nodes[body].a;
+                    while (k >= 0) {
+                        if (_self->__backend_emit_emitops_vptr->emit_node(_self, k, 1) != 0) {
+                            _self->sym->self_mode = 0;
+                            return (-1);
+                        }
+                        k = _self->arena->nodes[k].next;
+                    }
+                }
             }
             sb_end_body(_self, 1);
             _self->sym->self_mode = 0;
@@ -9814,10 +9857,10 @@ static int em_node_func(struct backend_emit_Emitter * self, int n, int ind, int 
         fprintf(self->out, "%s ", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
     }
 {
-        int (*body_hook)(const char *, void *, int, int, int *) = backend_emit_g_body_hook;
+        int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
         if ((body_hook && (!self->gtname[0]))) {
             int new_ntmp = self->ntmp;
-            int hr = (*body_hook)(self->arena->nodes[n].text2, self->out, ind, self->ntmp, (&new_ntmp));
+            int hr = (*body_hook)(self->arena->nodes[n].text2, self->out, ind, self->ntmp, (&new_ntmp), 0);
             if (hr > 0) {
                 self->ntmp = new_ntmp;
                 return 0;
@@ -11538,16 +11581,16 @@ int backend_emit_ct_emit_ntmp(void) {
 void backend_emit_ct_emit_set_out(void * out) {
     backend_emit_g_emit.out = (FILE *)(out);
 }
-void backend_emit_ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *)) {
+void backend_emit_ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *, int)) {
     backend_emit_g_body_hook = fn;
 }
-int backend_emit_ct_emit_body_hook(const char * name, void * out, int ind, int ntmp, int * new_ntmp) {
+int backend_emit_ct_emit_body_hook(const char * name, void * out, int ind, int ntmp, int * new_ntmp, int stmts) {
 {
-        int (*body_hook)(const char *, void *, int, int, int *) = backend_emit_g_body_hook;
+        int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
         if ((!body_hook)) {
             return 0;
         }
-        return (*body_hook)(name, out, ind, ntmp, new_ntmp);
+        return (*body_hook)(name, out, ind, ntmp, new_ntmp, stmts);
     }
 }
 void backend_emit_ct_emit_clear_builtins(void) {

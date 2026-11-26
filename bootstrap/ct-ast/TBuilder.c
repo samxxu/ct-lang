@@ -316,6 +316,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -422,6 +427,8 @@ static int tb_find_inst(struct backend_tir_TModule *, int, int *, int);
 static int tb_add_inst(struct backend_tir_TBuilder *, int, int *, int);
 static int tb_instances(struct backend_tir_TBuilder *);
 static int tb_fault(struct backend_tir_TBuilder *);
+static int tb_record_structs(struct backend_tir_TBuilder *);
+static int tb_record_adts(struct backend_tir_TBuilder *);
 static int tb_build(int, const char *, const char *, const char *, int, int, int, int, const char *);
 int backend_tir_ct_tir_build_unit(void *, int);
 static struct backend_tir_TBuilder backend_tir_g_tb;
@@ -1349,6 +1356,13 @@ static int tb_expr_children(struct backend_tir_TBuilder * tb, int eid, int n) {
         }
         return 0;
     }
+    if (ar0->nodes[n].kind == N_ADTCTOR) {
+        int c1;
+        for (c1 = ar0->nodes[n].a; c1 >= 0; c1 = ar0->nodes[c1].next) {
+            tb_expr_kid(tb, eid, tb_expr(tb, c1, 0));
+        }
+        return 0;
+    }
     if (ar0->nodes[n].kind == N_MCALL) {
         int c0;
         tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[n].a, 0));
@@ -1375,9 +1389,11 @@ static int tb_expr_children(struct backend_tir_TBuilder * tb, int eid, int n) {
             return 0;
         case N_INTO:
             tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
-            t = tb_stmt(tb, ar->nodes[n].b);
-            if (t > 0) {
-                backend_tir_tmod_expr_add_kid(tb->m, eid, t);
+            for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
+                t = tb_stmt(tb, c);
+                if (t > 0) {
+                    backend_tir_tmod_expr_add_kid(tb->m, eid, t);
+                }
             }
             return 0;
         case N_INTO_SELF:
@@ -1493,10 +1509,12 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
             break;
         case N_STR:
             m->exprs[(eid - 1)].text = ar->__runtime_arena_arenaops_vptr->str_at(ar, ar->nodes[n].num);
-            m->exprs[(eid - 1)].op = 3;
+            m->exprs[(eid - 1)].op = ar->nodes[n].aux;
+            m->exprs[(eid - 1)].num = n;
             break;
         case N_VAR:
             m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].member = runtime_text_ct_intern((ar->nodes[n].text3 ? ar->nodes[n].text3 : ""));
             break;
         case N_MEMBER:
             m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
@@ -1534,7 +1552,15 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
             m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
             break;
         case N_ADTCTOR:
-            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].num = ar->nodes[n].num;
+            break;
+        case N_SLICE_INDEX:
+        case N_SLICE_RANGE:
+        case N_SLICE_GET:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].op = ((k == N_SLICE_INDEX) ? 0 : ((k == N_SLICE_RANGE) ? 1 : 2));
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
             break;
         case N_INIT_RANGE:
         case N_INIT_BRACE:
@@ -1553,6 +1579,72 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
             m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
             m->exprs[(eid - 1)].member = runtime_text_ct_intern(ar->nodes[n].text);
             break;
+        case N_INTO:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
+            m->exprs[(eid - 1)].num = n;
+            break;
+        case N_INTO_SELF:
+            m->exprs[(eid - 1)].num = ar->nodes[n].num;
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
+            break;
+        case N_CLOSURE:
+{
+                struct frontend_sym_Closure * cl;
+                struct frontend_sym_Symbols * csym = tb_sym();
+                int ci = (int)(ar->nodes[n].num);
+                char buf[2048];
+                int bn = 0;
+                int q;
+                if (((ci >= 0) && (ci < csym->nclosure))) {
+                    cl = (&csym->closures[ci]);
+                    if (cl->ncap == 0) {
+                        buf[bn++] = '0';
+                    }
+                    else {
+                        for (q = 0; ((q < cl->ncap) && (q < 16)); q++) {
+                            const char * cn = cl->cap_name[q];
+                            if (q > 0) {
+                                buf[bn++] = ',';
+                                buf[bn++] = ' ';
+                            }
+                            if ((cn && (strcmp(cn, "self") == 0))) {
+                                if (bn < ((int)(sizeof(buf)) - 6)) {
+                                    memcpy((buf + bn), "_self", 5);
+                                    bn += 5;
+                                }
+                            }
+                            else {
+                                if (cn) {
+                                    int cl2 = (int)(strlen(cn));
+                                    if ((bn + cl2) < (int)(sizeof(buf))) {
+                                        memcpy((buf + bn), cn, (size_t)(cl2));
+                                        bn += cl2;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                buf[bn] = 0;
+                m->exprs[(eid - 1)].num = ci;
+                m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
+                m->exprs[(eid - 1)].text = runtime_text_ct_intern(buf);
+                break;
+            }
+        case N_MATCH:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].member = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
+            break;
+        case N_TRY:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].num = n;
+            break;
+        case N_OPT:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
+            break;
         case N_BIN:
         case N_UNARY:
         case N_ASSIGN:
@@ -1565,6 +1657,12 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
     }
     if (tb_target(tb, eid, n) != 0) {
         return (-1);
+    }
+    if (((((tk == TK_NAME_GLOBAL) && (m->exprs[(eid - 1)].target_kind == RT_DIRECT)) && (m->exprs[(eid - 1)].target_a > 0)) && (m->exprs[(eid - 1)].target_a <= m->ndecls))) {
+        struct backend_tir_ct_tdecl * gd = (&m->decls[(m->exprs[(eid - 1)].target_a - 1)]);
+        if ((gd->cname && gd->cname[0])) {
+            m->exprs[(eid - 1)].text = gd->cname;
+        }
     }
     if (tb_expr_children(tb, eid, n) != 0) {
         return (-1);
@@ -1597,11 +1695,11 @@ static int tb_declare(struct backend_tir_TBuilder * tb, int n, int is_param, int
     if (vid < 0) {
         return (-1);
     }
-    m->vars[(vid - 1)].is_ref = (((ar->nodes[n].aux == 2) || (ar->nodes[n].aux == 3)) ? 1 : 0);
+    m->vars[(vid - 1)].is_ref = (is_param ? (((ar->nodes[n].aux == 2) || (ar->nodes[n].aux == 3)) ? 1 : 0) : ((ar->nodes[n].aux == 2) ? 1 : 0));
     m->vars[(vid - 1)].dims = runtime_text_ct_intern(ar->nodes[n].text3);
     m->vars[(vid - 1)].spelling = runtime_text_ct_intern(spelling);
     m->vars[(vid - 1)].is_static = ((ar->nodes[n].aux == 1) ? 1 : 0);
-    m->vars[(vid - 1)].is_unused = ((ar->nodes[n].aux == 3) ? 1 : 0);
+    m->vars[(vid - 1)].is_unused = (((!is_param) && (ar->nodes[n].aux == 3)) ? 1 : 0);
     if (((tb->func_decl > 0) && (tb->scope > 0))) {
         m->vars[(vid - 1)].decl_stmt = 0;
     }
@@ -1747,6 +1845,52 @@ static int tb_stmt_match_arm(struct backend_tir_TBuilder * tb, int n) {
         return (-1);
     }
     tb->m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
+    tb->m->stmts[(sid - 1)].num = ar->nodes[n].num;
+    tb->m->stmts[(sid - 1)].text2 = runtime_text_ct_intern((ar->nodes[n].text2 ? ar->nodes[n].text2 : ""));
+{
+        char bbuf[4096];
+        int bn = 0;
+        int bc;
+        for (bc = ar->nodes[n].a; bc >= 0; bc = ar->nodes[bc].next) {
+            int bd = ar->nodes[bc].a;
+            const char * fld;
+            const char * bnm;
+            const char * bty;
+            if (bd < 0) {
+                continue;
+            }
+            fld = (ar->nodes[bc].text3 ? ar->nodes[bc].text3 : "");
+            bnm = (ar->nodes[bd].text2 ? ar->nodes[bd].text2 : "");
+            bty = (ar->nodes[bd].text ? ar->nodes[bd].text : "");
+            if (bn > 0) {
+                bbuf[bn++] = ';';
+            }
+            if (((((bn + (int)(strlen(fld))) + (int)(strlen(bnm))) + (int)(strlen(bty))) + 6) >= (int)(sizeof(bbuf))) {
+                break;
+            }
+            memcpy((bbuf + bn), fld, strlen(fld));
+            bn += (int)(strlen(fld));
+            bbuf[bn++] = '|';
+            memcpy((bbuf + bn), bnm, strlen(bnm));
+            bn += (int)(strlen(bnm));
+            bbuf[bn++] = '|';
+            memcpy((bbuf + bn), bty, strlen(bty));
+            bn += (int)(strlen(bty));
+        }
+        bbuf[bn] = 0;
+        tb->m->stmts[(sid - 1)].text = runtime_text_ct_intern(bbuf);
+    }
+    if (getenv("CT_TIR_DEBUG")) {
+        fprintf(stderr, "tir: arm node=%d num=%d aux=%d c=%d b=%d text2=%s text3=%s\n", n, (int)(ar->nodes[n].num), ar->nodes[n].aux, ar->nodes[n].c, ar->nodes[n].b, (ar->nodes[n].text2 ? ar->nodes[n].text2 : ""), (ar->nodes[n].text3 ? ar->nodes[n].text3 : ""));
+    }
+    if (getenv("CT_TIR_DEBUG")) {
+        int q;
+        fprintf(stderr, "tir:   c.kind=%d b.kind=%d", ((ar->nodes[n].c >= 0) ? ar->nodes[ar->nodes[n].c].kind : (-1)), ((ar->nodes[n].b >= 0) ? ar->nodes[ar->nodes[n].b].kind : (-1)));
+        for (q = ar->nodes[ar->nodes[n].b].a; q >= 0; q = ar->nodes[q].next) {
+            fprintf(stderr, " bkid=%d(k%d)", q, ar->nodes[q].kind);
+        }
+        fprintf(stderr, "\n");
+    }
     saved = tb->scope;
     if (tb_push_scope(tb, SC_ARM) < 0) {
         return (-1);
@@ -1755,7 +1899,10 @@ static int tb_stmt_match_arm(struct backend_tir_TBuilder * tb, int n) {
         return (-1);
     }
     if (ar->nodes[n].c >= 0) {
-        tb_expr_kid(tb, sid, tb_expr(tb, ar->nodes[n].c, 0));
+        int ye = tb_expr(tb, ar->nodes[n].c, 0);
+        if (ye > 0) {
+            backend_tir_tmod_stmt_add_kid(tb->m, sid, ye);
+        }
     }
     if (ar->nodes[n].b >= 0) {
         int b;
@@ -1763,6 +1910,9 @@ static int tb_stmt_match_arm(struct backend_tir_TBuilder * tb, int n) {
         if (b > 0) {
             backend_tir_tmod_stmt_add_kid(tb->m, sid, b);
         }
+    }
+    if (getenv("CT_TIR_DEBUG")) {
+        fprintf(stderr, "tir: arm sid=%d nkids=%d k0=%d k1=%d\n", sid, tb->m->stmts[(sid - 1)].nkids, ((tb->m->stmts[(sid - 1)].nkids > 0) ? tb->m->stmts[(sid - 1)].kids[0] : 0), ((tb->m->stmts[(sid - 1)].nkids > 1) ? tb->m->stmts[(sid - 1)].kids[1] : 0));
     }
     tb_pop_scope(tb);
     tb->scope = saved;
@@ -2021,6 +2171,7 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
                 return (-1);
             }
             m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
+            m->stmts[(sid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
             backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
             for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
                 t = tb_stmt_match_arm(tb, c);
@@ -2484,6 +2635,16 @@ static int tb_impl(struct backend_tir_TBuilder * tb, int n) {
         if (mdecl < 0) {
             return (-1);
         }
+        if (impl_tmpl) {
+            m->decls[(mdecl - 1)].is_template = 1;
+        }
+        if (((si >= 0) && (si < sym->nstructs))) {
+            m->decls[(mdecl - 1)].is_method = 1;
+            m->decls[(mdecl - 1)].cname = runtime_text_ct_internf("%s_%s%s%s", sym->structs[si].name, ((trait && trait[0]) ? trait : ""), ((trait && trait[0]) ? "_" : ""), (ar->nodes[c].text2 ? ar->nodes[c].text2 : ""));
+            if ((!m->decls[(mdecl - 1)].cname)) {
+                return (-1);
+            }
+        }
         if (backend_tir_tmod_decl_add_param(m, decl, mdecl) != 0) {
             return (-1);
         }
@@ -2676,6 +2837,73 @@ static int tb_fault(struct backend_tir_TBuilder * tb) {
     fprintf(stderr, "tir: unknown fault key '%s'\n", f);
     return 0;
 }
+static int tb_record_structs(struct backend_tir_TBuilder * tb) {
+    struct frontend_sym_Symbols * sym;
+    struct frontend_sym_StructDef * sd;
+    int i;
+    int j;
+    int srow;
+    sym = tb_sym();
+    for (i = 0; i < sym->nstructs; i++) {
+        sd = (&sym->structs[i]);
+        if (((!sd->name) || (!sd->name[0]))) {
+            continue;
+        }
+        if (backend_tir_tmod_find_struct(tb->m, sd->name) > 0) {
+            continue;
+        }
+        srow = backend_tir_tmod_new_struct(tb->m, sd->name, sd->is_inst);
+        if (srow <= 0) {
+            return (-1);
+        }
+        tb->m->structs[(srow - 1)].uses_drop = sd->uses_drop;
+        tb->m->structs[(srow - 1)].uses_handback = sd->uses_handback;
+        tb->m->structs[(srow - 1)].has_drop_impl = sd->has_drop_impl;
+        for (j = 0; ((j < sd->nuse) && (j < 64)); j++) {
+            if (backend_tir_tmod_struct_add_use(tb->m, srow, sd->use[j]) != 0) {
+                return (-1);
+            }
+        }
+        for (j = 0; j < sd->nfields; j++) {
+            if (backend_tir_tmod_struct_add_field(tb->m, srow, sd->fields[j].name, sd->fields[j].type, sd->fields[j].dims) != 0) {
+                return (-1);
+            }
+        }
+    }
+    return 0;
+}
+static int tb_record_adts(struct backend_tir_TBuilder * tb) {
+    struct frontend_sym_Adt * adts;
+    int n;
+    int i;
+    int j;
+    int arow;
+    int vrow;
+    adts = frontend_sym_ct_adts((&n));
+    for (i = 0; (adts && (i < n)); i++) {
+        if (((!adts[i].name) || (!adts[i].name[0]))) {
+            continue;
+        }
+        if (backend_tir_tmod_find_adt(tb->m, adts[i].name) > 0) {
+            continue;
+        }
+        arow = backend_tir_tmod_new_adt(tb->m, adts[i].name, adts[i].full);
+        if (arow <= 0) {
+            return (-1);
+        }
+        for (j = 0; j < adts[i].nvariants; j++) {
+            if (backend_tir_tmod_adt_add_variant(tb->m, arow, adts[i].variants[j].name, adts[i].variants[j].cname) != 0) {
+                return (-1);
+            }
+            for (vrow = 0; vrow < adts[i].variants[j].nfields; vrow++) {
+                if (backend_tir_tmod_adt_add_field(tb->m, arow, j, adts[i].variants[j].fields[vrow].name, adts[i].variants[j].fields[vrow].type) != 0) {
+                    return (-1);
+                }
+            }
+        }
+    }
+    return 0;
+}
 static int tb_build(int prog, const char * path, const char * base, const char * ns, int is_hdr, int is_map, int mod_unit, int ndep, const char * dep) {
     struct backend_tir_TBuilder * tb;
     struct backend_tir_TModule * m;
@@ -2744,6 +2972,12 @@ static int tb_build(int prog, const char * path, const char * base, const char *
         }
     }
     if (tb_instances(tb) != 0) {
+        return 1;
+    }
+    if (tb_record_structs(tb) != 0) {
+        return 1;
+    }
+    if (tb_record_adts(tb) != 0) {
         return 1;
     }
     if (tb->failed) {

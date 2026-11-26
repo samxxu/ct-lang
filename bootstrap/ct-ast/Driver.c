@@ -83,6 +83,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -154,7 +159,7 @@ struct tool_driver_Driver {
     const char * version;
     const struct tool_driver_DriverOps_vtbl *__tool_driver_driverops_vptr;
 };
-static int drv_lir_body(const char *, void *, int, int, int *);
+static int drv_lir_body(const char *, void *, int, int, int *, int);
 static int file_has_import(const char *);
 static int src_has_word(const char *, const char *);
 static int src_has_prefix(const char *, const char *);
@@ -914,6 +919,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         fprintf(stderr, "ctc: cannot write '%s'%s\n", out, (_self->m->diag_codes ? " [E-DRIVER-004]" : ""));
         return 1;
     }
+    backend_lir_ct_lir_report_printed();
     if (_self->m->__frontend_module_moduleops_vptr->write_header(_self->m, out) != 0) {
         return frontend_parse_ct_parse_report();
     }
@@ -936,8 +942,8 @@ static const struct tool_driver_DriverOps_vtbl tool_driver_Driver_tool_driver_Dr
     .run = tool_driver_Driver_tool_driver_DriverOps_run
 };
 
-static int drv_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp) {
-    return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+static int drv_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp, int stmts) {
+    return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp, stmts);
 }
 static int file_has_import(const char * path) {
     FILE * f = fopen(path, "r");

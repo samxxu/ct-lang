@@ -106,6 +106,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -155,7 +160,7 @@ const struct frontend_module_ModuleOps_vtbl frontend_module_Module_frontend_modu
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-static int mod_lir_body(const char *, void *, int, int, int *);
+static int mod_lir_body(const char *, void *, int, int, int *, int);
 static int ct_pkg_ns_clash(struct frontend_module_Module *, char * *, char * *);
 static int is_layer_fn(struct frontend_sym_Symbols *, int, int, const char *);
 static int file_uses_str(struct frontend_sym_Symbols *, const char *, int, int, int);
@@ -2424,6 +2429,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             remove(outc);
             return frontend_parse_ct_parse_report();
         }
+        backend_lir_ct_lir_report_printed();
         if ((_self->units[u].is_hdr && (_self->__frontend_module_moduleops_vptr->write_unit_header(_self, u) != 0))) {
             outc = tool_sh_ct_scratch_fmt("%s/%s.h", _self->outdir, _self->units[u].base);
             remove(outc);
@@ -3075,8 +3081,8 @@ const struct frontend_module_ModuleOps_vtbl frontend_module_Module_frontend_modu
     .write_model = frontend_module_Module_frontend_module_ModuleOps_write_model
 };
 
-static int mod_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp) {
-    return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+static int mod_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp, int stmts) {
+    return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp, stmts);
 }
 static int is_layer_fn(struct frontend_sym_Symbols * sym, int fn_start, int fn_end, const char * word) {
     int i;

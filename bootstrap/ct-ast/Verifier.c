@@ -122,6 +122,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -188,8 +193,10 @@ static int lver_expect(struct backend_lir_LModule *, int *, int, int, int, int, 
 static int lver_cmp(struct backend_lir_LModule *, struct backend_verify_lir_expect *, int, int *, int, int, int, int);
 static int lver_v7_set(struct backend_lir_LModule *, int *, int, int, int, int, int);
 static int lver_declared(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, const char *);
+static const char * lver_drop_object(struct backend_lir_LModule *, struct backend_lir_ct_lstmt *);
 static int lver_v8_set(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, int *, int, int, int, int);
 static int lver_tmp_prefix_ok(const char *);
+static int lver_temp_func(struct backend_lir_LModule *, int);
 static int lver_v5(struct backend_lir_LModule *);
 static int lver_loop_kind(int);
 static int lver_v9(struct backend_lir_LModule *);
@@ -584,6 +591,17 @@ static int lver_declared(struct backend_lir_LModule * l, struct backend_lir_ct_l
     }
     return 0;
 }
+static const char * lver_drop_object(struct backend_lir_LModule * l, struct backend_lir_ct_lstmt * s) {
+    struct backend_lir_ct_lexpr * e;
+    if (((s->expr <= 0) || (s->expr > l->nexprs))) {
+        return "";
+    }
+    e = (&l->exprs[(s->expr - 1)]);
+    if (e->kind != LE_NAME) {
+        return "";
+    }
+    return (e->text ? e->text : "");
+}
 static int lver_v8_set(struct backend_lir_LModule * l, struct backend_lir_ct_lfunc * f, int * ids, int nids, int file, int line, int col) {
     int i;
     int j;
@@ -596,7 +614,7 @@ static int lver_v8_set(struct backend_lir_LModule * l, struct backend_lir_ct_lfu
         if (s->kind != LS_DROP) {
             continue;
         }
-        if ((!lver_declared(l, f, s->name))) {
+        if ((!lver_declared(l, f, lver_drop_object(l, s)))) {
             lfail(l, file, line, col, "E-IR-108", "a drop names an object that is not declared here");
         }
         for (j = 0; j < i; j++) {
@@ -605,7 +623,7 @@ static int lver_v8_set(struct backend_lir_LModule * l, struct backend_lir_ct_lfu
                 continue;
             }
             p = (&l->stmts[(ids[j] - 1)]);
-            if (((((p->kind == LS_DROP) && p->name) && s->name) && (strcmp(p->name, s->name) == 0))) {
+            if (((p->kind == LS_DROP) && (strcmp(lver_drop_object(l, p), lver_drop_object(l, s)) == 0))) {
                 lfail(l, file, line, col, "E-IR-108", "the exit drops the same object twice");
                 break;
             }
@@ -646,7 +664,17 @@ static int lver_tmp_prefix_ok(const char * nm) {
                             p += 3;
                         }
                         else {
-                            return 0;
+                            if ((*p) == 'q') {
+                                p += 1;
+                            }
+                            else {
+                                if (strncmp(p, "match", 5) == 0) {
+                                    p += 5;
+                                }
+                                else {
+                                    return 0;
+                                }
+                            }
                         }
                     }
                 }
@@ -664,6 +692,22 @@ static int lver_tmp_prefix_ok(const char * nm) {
     }
     return 1;
 }
+static int lver_temp_func(struct backend_lir_LModule * l, int block) {
+    int i;
+    int j;
+    if (block <= 0) {
+        return (-1);
+    }
+    for (i = 0; i < l->nfuncs; i++) {
+        struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
+        for (j = 0; j < f->nblocks; j++) {
+            if (f->blocks[j] == block) {
+                return i;
+            }
+        }
+    }
+    return (-1);
+}
 static int lver_v5(struct backend_lir_LModule * l) {
     int i;
     int j;
@@ -678,7 +722,9 @@ static int lver_v5(struct backend_lir_LModule * l) {
             continue;
         }
         for (j = 0; j < i; j++) {
-            if (((l->temps[j].name && t->name) && (strcmp(l->temps[j].name, t->name) == 0))) {
+            int fj = lver_temp_func(l, l->temps[j].decl_block);
+            int fi2 = lver_temp_func(l, t->decl_block);
+            if ((((l->temps[j].name && t->name) && (fj == fi2)) && (strcmp(l->temps[j].name, t->name) == 0))) {
                 lfail(l, 0, 0, 0, "E-IR-105", "two temporaries share one name");
                 break;
             }
@@ -946,6 +992,16 @@ static void lver_block(struct backend_lir_LModule * l, struct backend_lir_ct_lfu
     b = (&l->blocks[(bid - 1)]);
     chain[0] = b->scope;
     if (lver_expect(l, chain, 1, 0, 1, 0, 0, exp, (&nexp)) == 0) {
+        if (b->term == LT_RETURN) {
+            int i;
+            int k = 0;
+            for (i = 0; i < nexp; i++) {
+                if (exp[i].kind != LS_DROP) {
+                    exp[k++] = exp[i];
+                }
+            }
+            nexp = k;
+        }
         lver_cmp(l, exp, nexp, b->tail_cleanups, b->ntail, b->span.file, b->span.line, b->span.col);
         lver_v7_set(l, b->tail_cleanups, b->ntail, 0, b->span.file, b->span.line, b->span.col);
         lver_v8_set(l, f, b->tail_cleanups, b->ntail, b->span.file, b->span.line, b->span.col);

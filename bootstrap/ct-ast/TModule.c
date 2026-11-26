@@ -220,6 +220,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -295,6 +300,14 @@ int backend_tir_tmod_inst_add_arg(struct backend_tir_TModule *, int, int);
 int backend_tir_tmod_inst_add_member(struct backend_tir_TModule *, int, int);
 int backend_tir_tmod_new_member(struct backend_tir_TModule *, int, const char *, int, int, int);
 int backend_tir_tmod_member_count(struct backend_tir_TModule *, int);
+int backend_tir_tmod_new_struct(struct backend_tir_TModule *, const char *, int);
+int backend_tir_tmod_struct_add_use(struct backend_tir_TModule *, int, const char *);
+int backend_tir_tmod_struct_add_field(struct backend_tir_TModule *, int, const char *, const char *, const char *);
+int backend_tir_tmod_find_struct(struct backend_tir_TModule *, const char *);
+int backend_tir_tmod_new_adt(struct backend_tir_TModule *, const char *, const char *);
+int backend_tir_tmod_adt_add_variant(struct backend_tir_TModule *, int, const char *, const char *);
+int backend_tir_tmod_adt_add_field(struct backend_tir_TModule *, int, int, const char *, const char *);
+int backend_tir_tmod_find_adt(struct backend_tir_TModule *, const char *);
 int backend_tir_tmod_add_root(struct backend_tir_TModule *, int, int, const char *);
 int backend_tir_tmod_graph_node(struct backend_tir_TModule *, int, int);
 int backend_tir_tmod_graph_edge(struct backend_tir_TModule *, int, int, int, const char *, int);
@@ -844,6 +857,159 @@ int backend_tir_tmod_member_count(struct backend_tir_TModule * self, int owner) 
         }
     }
     return n;
+}
+int backend_tir_tmod_new_struct(struct backend_tir_TModule * self, const char * name, int is_inst) {
+    int slot;
+    int id;
+    const char * pooled;
+    if (tir_reserve((void * *)((&self->structs)), (&self->stcap), (self->nstructs + 1), (int)(sizeof(struct backend_tir_ct_tstruct))) != 0) {
+        return (-1);
+    }
+    pooled = runtime_text_ct_intern((name ? name : ""));
+    if ((!pooled)) {
+        return (-1);
+    }
+    slot = self->nstructs;
+    id = (slot + 1);
+    self->structs[slot].id = id;
+    self->structs[slot].name = pooled;
+    self->structs[slot].is_inst = is_inst;
+    self->nstructs++;
+    return id;
+}
+int backend_tir_tmod_struct_add_use(struct backend_tir_TModule * self, int srow, const char * use) {
+    struct backend_tir_ct_tstruct * s;
+    const char * pooled;
+    if (((srow <= 0) || (srow > self->nstructs))) {
+        return (-1);
+    }
+    s = (&self->structs[(srow - 1)]);
+    if (tir_reserve((void * *)((&s->uses)), (&s->ucap), (s->nuses + 1), (int)(sizeof(const char *))) != 0) {
+        return (-1);
+    }
+    pooled = runtime_text_ct_intern((use ? use : ""));
+    if ((!pooled)) {
+        return (-1);
+    }
+    s->uses[s->nuses] = pooled;
+    s->nuses++;
+    return 0;
+}
+int backend_tir_tmod_struct_add_field(struct backend_tir_TModule * self, int srow, const char * name, const char * type, const char * dims) {
+    struct backend_tir_ct_tstruct * s;
+    const char * pn;
+    const char * pt;
+    const char * pd;
+    if (((srow <= 0) || (srow > self->nstructs))) {
+        return (-1);
+    }
+    s = (&self->structs[(srow - 1)]);
+    if (tir_reserve((void * *)((&s->fields)), (&s->fcap), (s->nfields + 1), (int)(sizeof(struct backend_tir_ct_tfieldinfo))) != 0) {
+        return (-1);
+    }
+    pn = runtime_text_ct_intern((name ? name : ""));
+    pt = runtime_text_ct_intern((type ? type : ""));
+    pd = runtime_text_ct_intern((dims ? dims : ""));
+    if ((((!pn) || (!pt)) || (!pd))) {
+        return (-1);
+    }
+    s->fields[s->nfields].name = pn;
+    s->fields[s->nfields].type = pt;
+    s->fields[s->nfields].dims = pd;
+    s->nfields++;
+    return 0;
+}
+int backend_tir_tmod_find_struct(struct backend_tir_TModule * self, const char * name) {
+    int i;
+    if (((!name) || (!name[0]))) {
+        return 0;
+    }
+    for (i = 0; i < self->nstructs; i++) {
+        if (strcmp(self->structs[i].name, name) == 0) {
+            return self->structs[i].id;
+        }
+    }
+    return 0;
+}
+int backend_tir_tmod_new_adt(struct backend_tir_TModule * self, const char * name, const char * full) {
+    int slot;
+    int id;
+    const char * pn;
+    const char * pf;
+    if (tir_reserve((void * *)((&self->adts)), (&self->adcap), (self->nadts + 1), (int)(sizeof(struct backend_tir_ct_tadt))) != 0) {
+        return (-1);
+    }
+    pn = runtime_text_ct_intern((name ? name : ""));
+    pf = runtime_text_ct_intern((full ? full : ""));
+    if (((!pn) || (!pf))) {
+        return (-1);
+    }
+    slot = self->nadts;
+    id = (slot + 1);
+    self->adts[slot].id = id;
+    self->adts[slot].name = pn;
+    self->adts[slot].full = pf;
+    self->nadts++;
+    return id;
+}
+int backend_tir_tmod_adt_add_variant(struct backend_tir_TModule * self, int adt, const char * name, const char * cname) {
+    struct backend_tir_ct_tadt * a;
+    const char * pn;
+    const char * pc;
+    if (((adt <= 0) || (adt > self->nadts))) {
+        return (-1);
+    }
+    a = (&self->adts[(adt - 1)]);
+    if (tir_reserve((void * *)((&a->variants)), (&a->vcap), (a->nvariants + 1), (int)(sizeof(struct backend_tir_ct_tadvariant))) != 0) {
+        return (-1);
+    }
+    pn = runtime_text_ct_intern((name ? name : ""));
+    pc = runtime_text_ct_intern((cname ? cname : ""));
+    if (((!pn) || (!pc))) {
+        return (-1);
+    }
+    a->variants[a->nvariants].name = pn;
+    a->variants[a->nvariants].cname = pc;
+    a->nvariants++;
+    return 0;
+}
+int backend_tir_tmod_adt_add_field(struct backend_tir_TModule * self, int adt, int variant, const char * name, const char * type) {
+    struct backend_tir_ct_tadt * a;
+    struct backend_tir_ct_tadvariant * v;
+    const char * pn;
+    const char * pt;
+    if (((adt <= 0) || (adt > self->nadts))) {
+        return (-1);
+    }
+    a = (&self->adts[(adt - 1)]);
+    if (((variant < 0) || (variant >= a->nvariants))) {
+        return (-1);
+    }
+    v = (&a->variants[variant]);
+    if (tir_reserve((void * *)((&v->fields)), (&v->fcap), (v->nfields + 1), (int)(sizeof(struct backend_tir_ct_tadtfield))) != 0) {
+        return (-1);
+    }
+    pn = runtime_text_ct_intern((name ? name : ""));
+    pt = runtime_text_ct_intern((type ? type : ""));
+    if (((!pn) || (!pt))) {
+        return (-1);
+    }
+    v->fields[v->nfields].name = pn;
+    v->fields[v->nfields].type = pt;
+    v->nfields++;
+    return 0;
+}
+int backend_tir_tmod_find_adt(struct backend_tir_TModule * self, const char * name) {
+    int i;
+    if (((!name) || (!name[0]))) {
+        return 0;
+    }
+    for (i = 0; i < self->nadts; i++) {
+        if (((self->adts[i].name && (strcmp(self->adts[i].name, name) == 0)) || (self->adts[i].full && (strcmp(self->adts[i].full, name) == 0)))) {
+            return self->adts[i].id;
+        }
+    }
+    return 0;
 }
 int backend_tir_tmod_add_root(struct backend_tir_TModule * self, int kind, int unit, const char * name) {
     int slot;

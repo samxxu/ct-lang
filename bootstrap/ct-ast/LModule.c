@@ -43,6 +43,16 @@
 #define LE_INIT_MBRACE     31
 #define LE_RANGEK          32
 #define LE_MCALL           33
+#define LE_STRLIT          34
+#define LE_COMPOUND        35
+#define LE_SLICE           36
+#define LE_OPT             37
+#define LE_TRY             38
+#define LE_CLOSURE_ARG     39
+#define LE_CLOSURE_PAIR    40
+#define LE_CLOSURE_CALL    41
+#define LE_ADTCTOR         42
+#define LE_MATCHEXPR       43
 #define LB_ADD              0
 #define LB_SUB              2
 #define LB_MUL              3
@@ -86,6 +96,13 @@
 #define LS_DECLS           18
 #define LS_LOOP            19
 #define LS_FOREACH         20
+#define LS_TEMPDECL        21
+#define LS_CLOSURE_DECL    22
+#define LS_RELEASE         23
+#define LS_MATCH           24
+#define LS_MATCHBIND       25
+#define LS_MATCHYIELD      26
+#define LS_RETBLOCK        27
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -108,6 +125,8 @@
 #define LTK_RET             4
 #define LTK_SRET            5
 #define LTK_NEW             6
+#define LTK_Q               7
+#define LTK_MATCH           8
 #define LR_INCLUDE          1
 #define LR_RECIPE           2
 #define LR_INTRINSIC        3
@@ -191,6 +210,11 @@ struct backend_tir_ct_tstmt;
 struct backend_tir_ct_tscope;
 struct backend_tir_ct_tvar;
 struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tfieldinfo;
+struct backend_tir_ct_tstruct;
+struct backend_tir_ct_tadtfield;
+struct backend_tir_ct_tadvariant;
+struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
@@ -262,6 +286,9 @@ int backend_lir_lmod_new_scope(struct backend_lir_LModule *, int, int);
 int backend_lir_lmod_scope_add_cleanup(struct backend_lir_LModule *, int, int, int, int, int, int, int);
 int backend_lir_lmod_add_decl(struct backend_lir_LModule *, int);
 void backend_lir_lmod_report(struct backend_lir_LModule *, const char *);
+void backend_lir_lmod_report_printed(struct backend_lir_LModule *);
+const char * backend_lir_lmod_temp_name(struct backend_lir_LModule *, int, int);
+int backend_lir_lmod_temp_num(struct backend_lir_LModule *, int, int);
 static int lir_reserve(void * *, int *, int, int);
 static int lir_type_kind(const char *);
 static int lir_add_int(int * *, int *, int *, int);
@@ -555,6 +582,10 @@ static const char * lir_tmp_prefix(int kind) {
             return "__ct_sret";
         case LTK_NEW:
             return "__ct_new";
+        case LTK_Q:
+            return "__ct_q";
+        case LTK_MATCH:
+            return "__ct_match";
         default:
             return "__ct_tmp";
     }
@@ -580,11 +611,28 @@ int backend_lir_lmod_new_temp(struct backend_lir_LModule * self, int kind, int t
     }
     self->temps[slot].id = id;
     self->temps[slot].kind = kind;
+    self->temps[slot].num = n;
     self->temps[slot].type = type;
     self->temps[slot].decl_block = decl_block;
     self->temps[slot].name = nm;
     self->ntemps++;
     return id;
+}
+const char * backend_lir_lmod_temp_name(struct backend_lir_LModule * self, int temp, int delta) {
+    static char buf[64];
+    struct backend_lir_ct_ltemp * t;
+    if (((temp <= 0) || (temp > self->ntemps))) {
+        return "";
+    }
+    t = (&self->temps[(temp - 1)]);
+    snprintf(buf, sizeof(buf), "%s%d", lir_tmp_prefix(t->kind), (t->num + delta));
+    return buf;
+}
+int backend_lir_lmod_temp_num(struct backend_lir_LModule * self, int temp, int delta) {
+    if (((temp <= 0) || (temp > self->ntemps))) {
+        return 0;
+    }
+    return (self->temps[(temp - 1)].num + delta);
 }
 int backend_lir_lmod_new_rawc(struct backend_lir_LModule * self, int origin, int trusted, const char * text) {
     int slot;
