@@ -7,6 +7,7 @@
  * docs/design/p85_m0.md for the baseline and the old->new map.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -31,7 +32,7 @@ import runtime::text::Intern;
 import frontend::sym::SymbolsTypeText;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
-#define MAX_TEXT   160
+#define TEXT_LIMIT 65536
 
 namespace backend::emit;
 /* A stateless unit: the type exists only because a unit file is
@@ -213,9 +214,7 @@ int init_has_elem_groups(const char *t)
    long as those helpers can answer. */
 const char *elem_ret_ctype(int inst, const char *text)
 {
-    char cur[MAX_TEXT];
-    char nxt[MAX_TEXT];
-    char res[MAX_TEXT];
+    const char *cur;
     int ti, tn, k, j;
     struct StructInst *ins;
     struct StructTmpl *tps;
@@ -224,19 +223,30 @@ const char *elem_ret_ctype(int inst, const char *text)
     if (!ins || inst < 0 || inst >= k) return (const char *)0;
     ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
     tps = frontend::sym::ct_tmpls(&tn);
-    if (snprintf(cur, sizeof cur, "%s", text) >= (int)sizeof cur) return (const char *)0;
+    /* S1a-0 C2p-8: substitution and instance resolution run on pool texts, so
+       a 2000-byte declared return type is not refused by a 160-byte row. */
+    cur = text ? text : "";
     if (ti >= 0 && tps) {
         for (j = 0; j < tps[ti].ntparams; j++) {
             if (j >= ins[inst].nargs) break;
-            if (tps[ti].tparam[j] && ins[inst].ctype[j]
-                && frontend::sym::ct_generic_subst(cur, tps[ti].tparam[j],
-                        ins[inst].ctype[j], nxt, sizeof nxt) == 0) {
-                if (snprintf(cur, sizeof cur, "%s", nxt) >= (int)sizeof cur)
-                    return (const char *)0;
+            if (tps[ti].tparam[j] && ins[inst].ctype[j]) {
+                cur = frontend::sym::ct_generic_subst_text(cur, tps[ti].tparam[j],
+                                                           ins[inst].ctype[j]);
+                if (!cur) return (const char *)0;
             }
         }
     }
-    if (strchr(cur, '<') && frontend::sym::ct_inst_resolve(cur, res, sizeof res) == 0)
-        if (snprintf(cur, sizeof cur, "%s", res) >= (int)sizeof cur) return (const char *)0;
+    if (strchr(cur, '<')) {
+        char *res = (char *)malloc(TEXT_LIMIT);
+        const char *pooled;
+        if (!res) return (const char *)0;
+        if (frontend::sym::ct_inst_resolve(cur, res, TEXT_LIMIT) != 0) {
+            free(res);
+            return (const char *)0;
+        }
+        pooled = runtime::text::ct_intern(res);
+        free(res);
+        return pooled;
+    }
     return runtime::text::ct_intern(cur);
 }

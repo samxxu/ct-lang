@@ -92,10 +92,9 @@ struct backend_emit_EmitterMapText {
     int unused;
 };
 void backend_emit_map_path_base(const char *, char *, int);
-void backend_emit_map_bind_key(const char *, char *, int);
 const char * backend_emit_map_bind_key_text(const char *);
-void backend_emit_map_clean_type(const char *, char *);
-void backend_emit_map_recipe_callee(const char *, char *);
+const char * backend_emit_map_clean_type_text(const char *);
+const char * backend_emit_map_recipe_callee_text(const char *);
 int backend_emit_map_is_ident(int);
 int backend_emit_map_repeatable(struct runtime_arena_Arena *, int);
 

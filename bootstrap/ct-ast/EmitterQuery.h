@@ -95,7 +95,7 @@ struct backend_emit_EmitterQuery {
 int backend_emit_sb_life_needs_handle_guard(const char *);
 int backend_emit_impl_writes(struct runtime_arena_Arena *, int, const char *);
 int backend_emit_impl_exists_anywhere(struct runtime_arena_Arena *, int, const char *);
-int backend_emit_default_missing_field(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, char *);
+const char * backend_emit_default_missing_field_text(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int);
 int backend_emit_map_param_index(struct frontend_module_MapBind *, const char *);
 void backend_emit_trait_qual_name(struct frontend_sym_Symbols *, int, char *, int);
 int backend_emit_inst_is_builtin_Box(const char *);

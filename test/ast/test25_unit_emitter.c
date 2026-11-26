@@ -1,9 +1,11 @@
 /*
  * TEST-25: white-box unit tests for the Emitter slice functions.
  *
- * `em_expr_num` is one of the PH-88 per-kind emitter slices; `backend_emit_map_clean_type`
- * and `backend_emit_map_recipe_callee` are the pure string helpers the static-map
- * path uses (SH-94 S1 moved them to EmitterMapText); `em_expr_num` is still
+ * `em_expr_num` is one of the PH-88 per-kind emitter slices;
+ * `backend_emit_map_clean_type_text` and `backend_emit_map_recipe_callee_text`
+ * are the pool-text helpers the static-map path uses (SH-94 S1 moved them to
+ * EmitterMapText; S1a-0 C2p-8 removed their fixed 160-byte output rows);
+ * `em_expr_num` is still
  * `static` in the emitted `Emitter.c`, so this file
  * includes that translation unit (the L0 test/unit recipe). The harness only
  * touches the two fields each helper reads (`arena`, `out`), never the build
@@ -34,7 +36,6 @@ int main(void)
     struct runtime_arena_Arena arena;
     struct runtime_arena_Node nodes[4];
     struct backend_emit_Emitter em;
-    char out[256];
     char line[256];
 
     memset(&arena, 0, sizeof arena);
@@ -79,20 +80,15 @@ int main(void)
     }
 
     /* ---- map_clean_type: drop the array dimensions and trailing blanks ---- */
-    backend_emit_map_clean_type("char a[32]", out);
-    eq_str("map_clean_type array", out, "char a");
-    backend_emit_map_clean_type("int  [3]", out);
-    eq_str("map_clean_type trailing blanks", out, "int");
-    backend_emit_map_clean_type("struct Point", out);
-    eq_str("map_clean_type plain", out, "struct Point");
+    /* S1a-0 C2p-8: the helper answers a pool text instead of filling a row. */
+    eq_str("map_clean_type array", backend_emit_map_clean_type_text("char a[32]"), "char a");
+    eq_str("map_clean_type trailing blanks", backend_emit_map_clean_type_text("int  [3]"), "int");
+    eq_str("map_clean_type plain", backend_emit_map_clean_type_text("struct Point"), "struct Point");
 
     /* ---- map_recipe_callee: the leading identifier of a recipe ---- */
-    backend_emit_map_recipe_callee("  atoi(s)", out);
-    eq_str("map_recipe_callee leading space", out, "atoi");
-    backend_emit_map_recipe_callee("snprintf(dst, n)", out);
-    eq_str("map_recipe_callee underscores", out, "snprintf");
-    backend_emit_map_recipe_callee("(nan)", out);
-    eq_str("map_recipe_callee non-identifier", out, "");
+    eq_str("map_recipe_callee leading space", backend_emit_map_recipe_callee_text("  atoi(s)"), "atoi");
+    eq_str("map_recipe_callee underscores", backend_emit_map_recipe_callee_text("snprintf(dst, n)"), "snprintf");
+    eq_str("map_recipe_callee non-identifier", backend_emit_map_recipe_callee_text("(nan)"), "");
 
     fclose(em.out);
     printf("unit-emitter: %d checks, %d failed\n", g_checks, g_failed);

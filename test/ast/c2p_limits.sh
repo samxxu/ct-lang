@@ -34,6 +34,12 @@
 #          so a 2000-byte name survives the symbol lookup and every emitted
 #          spelling (prototype, definition, call, initialiser designator).
 #
+#   C2p-8 the emitter's remaining reader rows: the C base tag of a type,
+#          the interned lifetime prefix, the lower-cased vptr field name, the
+#          `Result` operand / column spellings, the map recipe parameter type
+#          and suffix, the closure owner mangling and the Drop-glue field type
+#          are pool texts or growable blocks rather than 160-byte rows.
+#
 # Usage: bash test/ast/c2p_limits.sh <ct-ast>
 set -u
 CT=${1:?usage: c2p_limits.sh <ct-ast>}
@@ -855,6 +861,149 @@ int main(void)
 CT
 if run_product c2p7_foreach "$work/c2p7_foreach.ct"; then
     ok; printf '  2000-byte foreach element: kept whole\n'
+fi
+
+
+# ===========================================================================
+# C2p-8: the emitter's remaining 160-byte reader rows
+#
+# The emitter still copied several *readers* through `char[MAX_TEXT]` local
+# rows: the C base tag of a type (`adt_base_type` / `Box_type_owns`), the
+# interned lifetime prefix, the lower-cased vptr field name, the `Result`
+# operand / column spellings, the map recipe parameter type and suffix, the
+# closure owner mangling, and the Drop-glue field type. Each unit below is a
+# 2000-byte spelling that reaches the corresponding reader, so the old rows
+# either produced a different C spelling or refused the input.
+# ===========================================================================
+
+# ---- C2p-8.1) a 2000-byte trait name: the vptr field is whole ------------
+# `inst_emit_one` / `em_decl_struct` copied the lower-cased trait name into a
+# 160-byte row, so the struct field and every access were both cut: the C
+# compiled, but the emitted spelling was not the user's. Assert the whole
+# lower-cased name appears in the field declaration and the access.
+tr8=$(printf '%*s' 2000 '' | tr ' ' t)
+tr8low=$(printf '%s' "$tr8" | tr 'A-Z' 'a-z')
+cat >"$work/c2p8_trait_vptr.ct" <<CT
+trait $tr8 { int get(); }
+struct S { int n; } use $tr8;
+impl $tr8 for S { int get() { return self->n; } }
+int main(void) { S s = { .n = 4 }; S r = s; return s.get() + r.get() - 8; }
+CT
+if run_product c2p8_trait_vptr "$work/c2p8_trait_vptr.ct"; then
+    n=$(grep -oF "__${tr8low}_vptr" "$work/c2p8_trait_vptr.c" | wc -l | tr -d ' ')
+    if [ "$n" -ge 2 ]; then
+        ok; printf '  2000-byte trait name: whole vptr field and access\n'
+    else
+        bad "the generated C cut the 2000-byte vptr field name ($n whole occurrences)"
+    fi
+fi
+
+# ---- C2p-8.2) a 2000-byte map host type in `sizeof p` -------------------
+# `map_param_type` copied the host type into a 160-byte row and
+# `map_clean_type` copied it again, so `sizeof(struct <2000>)` named a
+# truncated, incomplete type. The recipe must carry the whole spelling.
+cat >"$work/c2p8_shapes.h.ct" <<CT
+pub struct $long { int v; }
+pub int sizeof_long(unsigned long n) { return n > 0; }
+CT
+cat >"$work/c2p8_ops.m.ct" <<CT
+import c2p8_shapes;
+pub trait Peek { int peek(); }
+map trait Peek for type struct $long {
+    peek(x) -> sizeof_long(sizeof x);
+}
+CT
+cat >"$work/c2p8_map.ct" <<CT
+import c2p8_shapes;
+import c2p8_ops;
+int main(void)
+{
+    struct $long node = { 5 };
+    return node.peek() - 1;
+}
+CT
+if mkdir -p "$work/c2p8_map_out" \
+   && "$CT" build --emit-c -I "$work" "$work/c2p8_map.ct" -o "$work/c2p8_map_out" \
+        >"$work/c2p8_map.log" 2>&1; then
+    if "$CC" -std=c99 -I "$work/c2p8_map_out" "$work/c2p8_map_out"/*.c \
+            -o "$work/c2p8_map.bin" >"$work/c2p8_map.cc" 2>&1 \
+       && "$work/c2p8_map.bin"; then
+        if grep -qF "sizeof(struct $long)" "$work/c2p8_map_out/c2p8_map.c"; then
+            ok; printf '  2000-byte map host type: sizeof carries the whole spelling\n'
+        else
+            bad "the generated C cut the 2000-byte map host type"
+        fi
+    else
+        bad "c2p8_map: cc failed: $(head -2 "$work/c2p8_map.cc" | tr '\n' ' ')"
+    fi
+else
+    bad "c2p8_map: compile failed: $(head -2 "$work/c2p8_map.log" | tr '\n' ' ')"
+fi
+
+# ---- C2p-8.3) a 2000-byte ADT variant with an owning payload ------------
+# `adt_emit_variant_life` built `self->u.<variant>.<field>` in a 160-byte row,
+# so the generated retain/release referenced a member that did not exist.
+ad8v=$(printf '%*s' 2000 '' | tr ' ' v)
+cat >"$work/c2p8_adt_life.ct" <<CT
+#include <stdlib.h>
+enum Shape { $ad8v(String s), Empty() }
+int main(void)
+{
+    Shape x = Shape.$ad8v(str_dup("hi"));
+    return 0;
+}
+CT
+if run_product c2p8_adt_life "$work/c2p8_adt_life.ct"; then
+    if grep -qF "u.$ad8v.s" "$work/c2p8_adt_life.c"; then
+        ok; printf '  2000-byte ADT variant: retain/release member kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte ADT variant in the lifetime glue"
+    fi
+fi
+
+# ---- C2p-8.4) a 2000-byte Drop-glue field type --------------------------
+# The Drop field glue copied the field type into a 160-byte row before
+# `find_struct`, so the long type was not recognised and its Drop call was
+# dropped. The outer struct's glue must call `<long>_Drop_drop(&_self->b)`.
+dg8=$(printf '%*s' 2000 '' | tr ' ' s)
+cat >"$work/c2p8_drop_glue.ct" <<CT
+#include <stdlib.h>
+struct $dg8 { int n; } use Drop;
+impl Drop for $dg8 { void drop(void) { } }
+struct Outer { struct $dg8 b; int n; } use Drop;
+int main(void)
+{
+    Outer *p = malloc(sizeof(Outer));
+    p->n = 1;
+    delete p;
+    return 0;
+}
+CT
+if run_product c2p8_drop_glue "$work/c2p8_drop_glue.ct"; then
+    if grep -qF "${dg8}_Drop_drop(&_self->b)" "$work/c2p8_drop_glue.c"; then
+        ok; printf '  2000-byte Drop field type: the field Drop call is whole\n'
+    else
+        bad "the generated Drop glue lost the 2000-byte field type"
+    fi
+fi
+
+# ---- C2p-8.5) a long namespace around a closure ------------------------
+# `closure_owned` joined the namespace prefix and the function name in a
+# 160-byte row; with a 2000-byte namespace the join never matched, so the
+# closure's struct and trampoline were not emitted.
+ns8=$(printf '%*s' 2000 '' | tr ' ' n)
+cat >"$work/c2p8_closure_ns.ct" <<CT
+namespace $ns8;
+pub int apply(int x)
+{
+    int base = 2;
+    int (*f)(int) = (int y) => y + base;
+    return f(x);
+}
+int main(void) { return $ns8::apply(3) - 5; }
+CT
+if run_product c2p8_closure_ns "$work/c2p8_closure_ns.ct"; then
+    ok; printf '  long namespace closure: owner join kept whole\n'
 fi
 
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"

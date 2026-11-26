@@ -431,6 +431,61 @@ scratch。下一批优先级：`expr_type`/`expr_ctype` 的调用方缓冲（`pa
 `tbuf`/`rbuf`/`ibuf` 及 `EmitterText`/`EmitHoist`/`EmitInit`/`Init` 的一次性
 scratch。
 
+**S1a-0 C2p-8（发射器读取行与剩余 emit 单元，已落）**：`backend/emit` 的
+reader 行按 4 个单元一批收掉。
+
+- `Emitter.h.ct`：`sb_norm`/`adt_base_type`/`sb_life_prefix`/`sb_is_tparam`
+  改为指针视图或 pool 文本（新增 `base_type_text` / `adt_base_type_text` /
+  `sb_life_prefix_text`）；`sb_owning_struct_type` 走 `concrete_struct_text`；
+  `sb_field_key` 直接返回两段 pool 文本；`Box_type_owns` /
+  `Box_emit_release_at` / `Box_emit_copy_at` 的 base 改 pool 文本、嵌套字段
+  表达式改 `ct_text_*`；`adt_emit_variant_life` 的 `self->u.<v>.<f>` 改
+  `ct_text_*`；`impl_emit_method`/`impl_emit_one` 的 `iname`/`cname`/`mret`/
+  `cuse` 改 pool 文本（`impl_use_concrete` 内部改用 `ct_inst_encode_text`，
+  输出 cap 由调用方给 `TEXT_LIMIT`）；`inst_emit_one` 与 `em_decl_struct` 的
+  vptr 小写名改 run-scoped 精确块；`elem_has_life`/`elem_plain_owner`/
+  `inst_emit_elem_method_protos`/`inst_emit_elem_helpers` 的 base/ename 改视图；
+  `map_param_type` 改 `map_param_type_text`（两侧本来就是 pool 文本），
+  `map_clean_type`/`map_recipe_callee` 改 pool 文本形式；`map_subst_arg` 的
+  token 用 `ct_intern_len`、后缀按源区间打印、`emit_recipe_impl` 的参数区间
+  改 run-scoped 块；`em_expr_try` 的 operand/Result 列改 pool 文本或
+  `TEXT_LIMIT` scratch；`em_expr_newobj` 的 `ctype`、`emit_outconv` 的 `ret`、
+  `emit_value_for` 的 `t`、`write_map` 的 callee、ABI header 的大写名改
+  pool/scratch；`em_unit_init`/局部数组/堆对象的 `cnt`/`recv` 改视图或
+  `ct_internf`。
+- `EmitHoist`：`bt`/`hbuf` 改 `TEXT_LIMIT` scratch（`hoist_ctype` 的 cap
+  参数本来就按传入值生效）。
+- `EmitterText`：`elem_ret_ctype` 的 `cur`/`nxt`/`res` 改
+  `ct_generic_subst_text` + `ct_inst_resolve(TEXT_LIMIT)`。
+- `Init`：两处 vptr 小写名改 run-scoped 精确块（`Init` 的 `[MAX_TEXT]` 清零）。
+- `EmitterMapText`：删除已无调用方的 `map_bind_key`（其 160 行随之退场）。
+
+保留的固定短行（逐类记录）：`fail_unknown_statement` 的 `msg[160]`（只有
+kind 数字）、`em_expr_newobj` 的 `tmp[160]`（`__ct_new<N>`）、`em_expr_try`
+的 `qt[160]`（`__ct_q<N>`）、`EmitInit.sb_rewrite_init` 的 `expr[160]`
+（只在 `e0 - fs < MAX_TEXT` 时走，长区间已走 run-scoped 块）。它们不承载
+用户文本，上限只由整数位数决定。
+
+证据：`test/ast/c2p_limits.sh` 39/39（baseline `06e1b8c5` 34/39：长 trait 的
+vptr 名、map 主机类型的 `sizeof`、长 ADT 变体的生命周期成员、长 Drop 字段类型、
+长命名空间闭包五处被 160 截断）；`check-ast` 1666→（本次）全量、`p88/metrics`
+复算 68377、`test25_unit` 的 map 文本 helper 改 pool 形式。源码
+`[MAX_TEXT]`：`backend/emit` 92 → 5（`Emitter.h.ct` 83 → 4 行，其中 1 行是
+注释、3 行是上述短 scratch；`EmitInit.h.ct` 1 行短 scratch），全树
+460 → 371。
+
+**C2p-8 后剩余（`grep -c '\[MAX_TEXT\]'`，行数）**：全树 371 处。
+`frontend/parse` 271（`Expr` 58、`Parser` 39、`Stmt` 32、`ExprTypes` 32、
+`ExprStaticType` 22、`MapBuild` 15、`ExprInstantiate` 14、`ExprOptional` 9、
+`StmtLoop` 8、`ExprCallCheck` 7、`ExprBinding` 6、`ExprClosure` 5、
+`ExprTypeText` 4、`StmtRangeText`/`ExprSubscript`/`ExprAdtCtor` 各 3、
+`StmtMatch`/`ParseSupport`/`ExprPure` 各 2、`StmtRangeScan`/`StmtControl`/
+`ExprTypeParse`/`ExprTry`/`ExprTraitInst` 各 1）；`tool/pkg` 39；
+`frontend/type` 21；`frontend/module` 20；`frontend/sym` 8；
+`backend/emit` 5；`backend/mem` 7。下一批按卡片的第 2 项继续：
+`Expr`/`Parser`/`Stmt`/`ExprTypes`/`ExprStaticType` 中仍会截断用户文本的
+一次性 `msg`/类型 scratch（`expr_type` 系列调用点已在前批转 pool 文本）。
+
 ## 6 关联
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)（已落地的动态容量样板）

@@ -8,7 +8,6 @@
 #line 1 "selfhost/ct-ast/backend/emit/EmitterMapText.h.ct"
 #include <stdio.h>
 #include <string.h>
-#define MAX_TEXT 160
 #define N_VAR 10
 #define N_NUM 8
 #define N_STR 9
@@ -97,10 +96,9 @@ extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
 void backend_emit_map_path_base(const char *, char *, int);
-void backend_emit_map_bind_key(const char *, char *, int);
 const char * backend_emit_map_bind_key_text(const char *);
-void backend_emit_map_clean_type(const char *, char *);
-void backend_emit_map_recipe_callee(const char *, char *);
+const char * backend_emit_map_clean_type_text(const char *);
+const char * backend_emit_map_recipe_callee_text(const char *);
 int backend_emit_map_is_ident(int);
 int backend_emit_map_repeatable(struct runtime_arena_Arena *, int);
 void backend_emit_map_path_base(const char * p, char * out, int cap) {
@@ -112,24 +110,6 @@ void backend_emit_map_path_base(const char * p, char * out, int cap) {
         }
     }
     snprintf(out, (size_t)(cap), "%s", b);
-}
-void backend_emit_map_bind_key(const char * in, char * out, int cap) {
-    char k[MAX_TEXT];
-    frontend_type_type_key(in, k, sizeof(k));
-    if (strncmp(k, "struct", 6) == 0) {
-        memmove(k, (k + 6), (strlen((k + 6)) + 1));
-    }
-    else {
-        if (strncmp(k, "union", 5) == 0) {
-            memmove(k, (k + 5), (strlen((k + 5)) + 1));
-        }
-        else {
-            if (strncmp(k, "enum", 4) == 0) {
-                memmove(k, (k + 4), (strlen((k + 4)) + 1));
-            }
-        }
-    }
-    snprintf(out, (size_t)(cap), "%s", k);
 }
 const char * backend_emit_map_bind_key_text(const char * in) {
     const char * k = frontend_type_type_key_text(in);
@@ -147,29 +127,31 @@ const char * backend_emit_map_bind_key_text(const char * in) {
     }
     return k;
 }
-void backend_emit_map_clean_type(const char * in, char * out) {
-    int n = 0;
-    while (((*in) && ((*in) != '['))) {
-        out[n] = (*in);
-        n++;
-        in++;
+const char * backend_emit_map_clean_type_text(const char * in) {
+    size_t n = 0;
+    if ((!in)) {
+        return (const char *)(0);
     }
-    while (((n > 0) && ((out[(n - 1)] == ' ') || (out[(n - 1)] == '\t')))) {
+    while ((in[n] && (in[n] != '['))) {
+        n++;
+    }
+    while (((n > 0) && ((in[(n - 1)] == ' ') || (in[(n - 1)] == '\t')))) {
         n--;
     }
-    out[n] = 0;
+    return runtime_text_ct_intern_len(in, (int)(n));
 }
-void backend_emit_map_recipe_callee(const char * call, char * out) {
-    int n = 0;
+const char * backend_emit_map_recipe_callee_text(const char * call) {
+    const char * b;
+    size_t n = 0;
     while ((((((*call) == ' ') || ((*call) == '\t')) || ((*call) == '\n')) || ((*call) == '\r'))) {
         call++;
     }
-    while ((((((((*call) >= 'a') && ((*call) <= 'z')) || (((*call) >= 'A') && ((*call) <= 'Z'))) || (((*call) >= '0') && ((*call) <= '9'))) || ((*call) == '_')) && ((n + 1) < MAX_TEXT))) {
-        out[n] = (*call);
+    b = call;
+    while (((((((*call) >= 'a') && ((*call) <= 'z')) || (((*call) >= 'A') && ((*call) <= 'Z'))) || (((*call) >= '0') && ((*call) <= '9'))) || ((*call) == '_'))) {
         n++;
         call++;
     }
-    out[n] = 0;
+    return runtime_text_ct_intern_len(b, (int)(n));
 }
 int backend_emit_map_is_ident(int c) {
     return (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_'));

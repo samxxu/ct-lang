@@ -11,7 +11,7 @@
 #   test25_unit_typecheck.c   tc_expr_num / tc_expr_fnum / type_key
 #   test25_unit_expr.c        ctype_adtctor / ctype_opt / ctype_slice_get /
 #                             ctype_slice_range (ExprStaticType.c)
-#   test25_unit_emitter.c     em_expr_num / map_clean_type / map_recipe_callee
+#   test25_unit_emitter.c     em_expr_num / map_clean_type_text / map_recipe_callee_text
 #
 # Usage: sh test/ast/test25_unit.sh <generated-source-dir> [cc]
 # Exit code 0 means every assertion passed.

@@ -228,3 +228,26 @@ output:
   2000-byte label: goto and definition kept whole
   2000-byte foreach element: kept whole
 c2p: 34 passed, 0 failed
+
+C2p-8 emitter reader rows (baseline 06e1b8c5, frozen-seed compiler):
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+  ... C2p-1..C2p-7 sections unchanged ...
+  FAIL c2p: the generated C cut the 2000-byte vptr field name (0 whole occurrences)
+  FAIL c2p: c2p8_map: cc failed: ...: error: invalid application of 'sizeof' to an incomplete type 'struct ssss…(159)…'
+  FAIL c2p: c2p8_adt_life: cc failed: ...: error: no member named 'vvvv…(159)…' in 'struct Shape'
+  FAIL c2p: the generated Drop glue lost the 2000-byte field type
+  FAIL c2p: c2p8_closure_ns: cc failed: ...: error: variable has incomplete type 'struct __ct_cl_env_0'
+c2p: 34 passed, 5 failed
+
+green (C2p-8 implementation):
+command: bash test/ast/c2p_limits.sh <ct-ast built from this commit's seed>
+exit: 0
+output:
+  2000-byte trait name: whole vptr field and access
+  2000-byte map host type: sizeof carries the whole spelling
+  2000-byte ADT variant: retain/release member kept whole
+  2000-byte Drop field type: the field Drop call is whole
+  long namespace closure: owner join kept whole
+c2p: 39 passed, 0 failed

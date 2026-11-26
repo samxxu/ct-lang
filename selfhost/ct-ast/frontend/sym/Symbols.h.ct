@@ -1897,8 +1897,8 @@ impl SymbolOps for Symbols {
     int impl_use_concrete(const char *use, int nargs, char **args, char **cargs,
                           int owner, char *out, int cap)
     {
-        char tname[MAX_TEXT];
-        char enc[MAX_TEXT];
+        const char *tname;
+        const char *enc;
         const char *lt;
         size_t nl;
         int ni;
@@ -1909,11 +1909,16 @@ impl SymbolOps for Symbols {
             return 0;
         }
         nl = (size_t)(lt - use);
-        if (nl == 0 || nl >= sizeof tname) return -1;
-        memcpy(tname, use, nl);
-        tname[nl] = 0;
+        if (nl == 0) return -1;
+        /* S1a-0 C2p-8: the template name and the encoded instance are pool
+           texts (`ct_inst_encode_text`), so a 2000-byte argument is not cut
+           by the old 160-byte `tname` / `enc` rows. The caller supplies the
+           formal-limit output cap. */
+        tname = runtime::text::ct_intern_len(use, (int)nl);
+        if (!tname) return -1;
         if (nargs < 1) return -1;
-        if (ct_inst_encode(tname, nargs, args, enc, MAX_TEXT) != 0) return -1;
+        enc = ct_inst_encode_text(tname, nargs, args);
+        if (!enc) return -1;
         ni = self->find_trait(enc);
         if (ni < 0 && owner >= 0)
             ni = self->trait_inst(tname, nargs, args, cargs, owner);

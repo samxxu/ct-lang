@@ -14,9 +14,10 @@
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterText.h.ct"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#define MAX_TEXT   160
+#define TEXT_LIMIT 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -271,9 +272,7 @@ int backend_emit_init_has_elem_groups(const char * t) {
     return 0;
 }
 const char * backend_emit_elem_ret_ctype(int inst, const char * text) {
-    char cur[MAX_TEXT];
-    char nxt[MAX_TEXT];
-    char res[MAX_TEXT];
+    const char * cur;
     int ti;
     int tn;
     int k;
@@ -286,25 +285,33 @@ const char * backend_emit_elem_ret_ctype(int inst, const char * text) {
     }
     ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
     tps = frontend_sym_ct_tmpls((&tn));
-    if (snprintf(cur, sizeof(cur), "%s", text) >= (int)(sizeof(cur))) {
-        return (const char *)(0);
-    }
+    cur = (text ? text : "");
     if (((ti >= 0) && tps)) {
         for (j = 0; j < tps[ti].ntparams; j++) {
             if (j >= ins[inst].nargs) {
                 break;
             }
-            if (((tps[ti].tparam[j] && ins[inst].ctype[j]) && (frontend_sym_ct_generic_subst(cur, tps[ti].tparam[j], ins[inst].ctype[j], nxt, sizeof(nxt)) == 0))) {
-                if (snprintf(cur, sizeof(cur), "%s", nxt) >= (int)(sizeof(cur))) {
+            if ((tps[ti].tparam[j] && ins[inst].ctype[j])) {
+                cur = frontend_sym_ct_generic_subst_text(cur, tps[ti].tparam[j], ins[inst].ctype[j]);
+                if ((!cur)) {
                     return (const char *)(0);
                 }
             }
         }
     }
-    if ((strchr(cur, '<') && (frontend_sym_ct_inst_resolve(cur, res, sizeof(res)) == 0))) {
-        if (snprintf(cur, sizeof(cur), "%s", res) >= (int)(sizeof(cur))) {
+    if (strchr(cur, '<')) {
+        char * res = (char *)(malloc(TEXT_LIMIT));
+        const char * pooled;
+        if ((!res)) {
             return (const char *)(0);
         }
+        if (frontend_sym_ct_inst_resolve(cur, res, TEXT_LIMIT) != 0) {
+            free(res);
+            return (const char *)(0);
+        }
+        pooled = runtime_text_ct_intern(res);
+        free(res);
+        return pooled;
     }
     return runtime_text_ct_intern(cur);
 }

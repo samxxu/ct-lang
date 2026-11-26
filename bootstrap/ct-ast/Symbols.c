@@ -1432,8 +1432,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete(void *self, const char * use, int nargs, char * * args, char * * cargs, int owner, char * out, int cap) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
-    char tname[MAX_TEXT];
-    char enc[MAX_TEXT];
+    const char * tname;
+    const char * enc;
     const char * lt;
     size_t nl;
     int ni;
@@ -1445,15 +1445,18 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete(void *s
         return 0;
     }
     nl = (size_t)((lt - use));
-    if (((nl == 0) || (nl >= sizeof(tname)))) {
+    if (nl == 0) {
         return (-1);
     }
-    memcpy(tname, use, nl);
-    tname[nl] = 0;
+    tname = runtime_text_ct_intern_len(use, (int)(nl));
+    if ((!tname)) {
+        return (-1);
+    }
     if (nargs < 1) {
         return (-1);
     }
-    if (frontend_sym_ct_inst_encode(tname, nargs, args, enc, MAX_TEXT) != 0) {
+    enc = frontend_sym_ct_inst_encode_text(tname, nargs, args);
+    if ((!enc)) {
         return (-1);
     }
     ni = _self->__frontend_sym_symbolops_vptr->find_trait(_self, enc);

@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#define MAX_TEXT   160
+#define TEXT_LIMIT 65536
 #define MAX_HOISTS 4
 #define MAX_HOISTS_MAX 65536
 #define N_MATSEQ 73
@@ -300,7 +300,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_hoist_scan(void *self, in
         lvl = n;
         for (; ; ) {
             int ok = 0;
-            char bt[MAX_TEXT];
+            char * bt = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
             root = _self->arena->nodes[lvl].a;
             while (((root >= 0) && ((_self->arena->nodes[root].kind == N_MEMBER) || (_self->arena->nodes[root].kind == N_ARROW)))) {
                 root = _self->arena->nodes[root].a;
@@ -316,7 +316,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_hoist_scan(void *self, in
             }
             if (((((!ok) && (_self->arena->nodes[root].kind == N_MCALL)) && (_self->arena->nodes[root].aux != 5)) && (_self->arena->nodes[root].aux != 6))) {
                 int rd = 0;
-                if (((backend_emit_hoist_ctype(root, bt, sizeof(bt), (&rd)) && (rd == 0)) && backend_emit_materializable_ctype(bt))) {
+                if (((backend_emit_hoist_ctype(root, bt, TEXT_LIMIT, (&rd)) && (rd == 0)) && backend_emit_materializable_ctype(bt))) {
                     ok = 1;
                 }
             }
@@ -395,7 +395,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
     int cat;
     int s;
     const char * hty;
-    char hbuf[MAX_TEXT];
+    char * hbuf = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
     int hd;
     (void)(_self);
     if (_self->__backend_emit_emitinvariant_vptr->invariant_temp_check(_self) != 0) {
@@ -416,7 +416,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
                 hty = runtime_text_ct_intern(_self->arena->nodes[_self->hoist_calls[i]].text);
             }
             else {
-                if (((!backend_emit_hoist_ctype(_self->hoist_calls[i], hbuf, sizeof(hbuf), (&hd))) || (hd != 0))) {
+                if (((!backend_emit_hoist_ctype(_self->hoist_calls[i], hbuf, TEXT_LIMIT, (&hd))) || (hd != 0))) {
                     return _self->__backend_emit_emitops_vptr->fail_from(_self, _self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
                 }
                 hty = runtime_text_ct_intern(hbuf);

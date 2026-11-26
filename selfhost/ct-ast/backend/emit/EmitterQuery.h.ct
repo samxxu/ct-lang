@@ -20,7 +20,6 @@ import runtime::arena::Arena;
 import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
-#define MAX_TEXT 160
 #define N_IMPL 33
 #define N_VAR 10
 #define N_ARROW 25
@@ -35,8 +34,10 @@ pub struct EmitterQuery {
 pub int sb_life_needs_handle_guard(const char *prefix);
 pub int impl_writes(struct Arena *arena, int node, const char *name);
 pub int impl_exists_anywhere(struct Arena *arena, int si, const char *tname);
-pub int default_missing_field(struct Arena *arena, int n, struct Symbols *sym,
-                                 int si, char *out);
+/* S1a-0 C2p-8: the missing field name as the pool text it already is, so a
+   2000-byte field name is not cut before the diagnostic is formatted. */
+pub const char *default_missing_field_text(struct Arena *arena, int n,
+                                           struct Symbols *sym, int si);
 pub int map_param_index(struct MapBind *b, const char *name);
 pub void trait_qual_name(struct Symbols *sym, int ti, char *out, int cap);
 pub int inst_is_builtin_Box(const char *name);
@@ -67,8 +68,8 @@ pub int impl_exists_anywhere(struct Arena *arena, int si, const char *tname)
     return 0;
 }
 
-pub int default_missing_field(struct Arena *arena, int n, struct Symbols *sym,
-                                 int si, char *out)
+const char *default_missing_field_text(struct Arena *arena, int n,
+                                       struct Symbols *sym, int si)
 {
     for (; n >= 0; n = arena->nodes[n].next) {
         if (arena->nodes[n].kind == N_ARROW && arena->nodes[n].a >= 0) {
@@ -77,18 +78,22 @@ pub int default_missing_field(struct Arena *arena, int n, struct Symbols *sym,
                 int fi, found = 0;
                 for (fi = 0; fi < sym->structs[si].nfields; fi++)
                     if (strcmp(sym->structs[si].fields[fi].name, arena->nodes[n].text2) == 0) found = 1;
-                if (!found) {
-                    snprintf(out, MAX_TEXT, "%s", arena->nodes[n].text2);
-                    return 1;
-                }
+                if (!found) return arena->nodes[n].text2;
             }
         }
-        if (default_missing_field(arena, arena->nodes[n].a, sym, si, out)) return 1;
-        if (default_missing_field(arena, arena->nodes[n].b, sym, si, out)) return 1;
-        if (default_missing_field(arena, arena->nodes[n].c, sym, si, out)) return 1;
-        if (default_missing_field(arena, arena->nodes[n].d, sym, si, out)) return 1;
+        {
+            const char *hit;
+            hit = default_missing_field_text(arena, arena->nodes[n].a, sym, si);
+            if (hit) return hit;
+            hit = default_missing_field_text(arena, arena->nodes[n].b, sym, si);
+            if (hit) return hit;
+            hit = default_missing_field_text(arena, arena->nodes[n].c, sym, si);
+            if (hit) return hit;
+            hit = default_missing_field_text(arena, arena->nodes[n].d, sym, si);
+            if (hit) return hit;
+        }
     }
-    return 0;
+    return (const char *)0;
 }
 
 pub int map_param_index(struct MapBind *b, const char *name)

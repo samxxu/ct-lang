@@ -9,7 +9,6 @@
 #line 1 "selfhost/ct-ast/backend/emit/EmitterQuery.h.ct"
 #include <stdio.h>
 #include <string.h>
-#define MAX_TEXT 160
 #define N_IMPL 33
 #define N_VAR 10
 #define N_ARROW 25
@@ -94,7 +93,7 @@ extern void U16String_Drop_drop(void *self);
 int backend_emit_sb_life_needs_handle_guard(const char *);
 int backend_emit_impl_writes(struct runtime_arena_Arena *, int, const char *);
 int backend_emit_impl_exists_anywhere(struct runtime_arena_Arena *, int, const char *);
-int backend_emit_default_missing_field(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, char *);
+const char * backend_emit_default_missing_field_text(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int);
 int backend_emit_map_param_index(struct frontend_module_MapBind *, const char *);
 void backend_emit_trait_qual_name(struct frontend_sym_Symbols *, int, char *, int);
 int backend_emit_inst_is_builtin_Box(const char *);
@@ -123,7 +122,7 @@ int backend_emit_impl_exists_anywhere(struct runtime_arena_Arena * arena, int si
     }
     return 0;
 }
-int backend_emit_default_missing_field(struct runtime_arena_Arena * arena, int n, struct frontend_sym_Symbols * sym, int si, char * out) {
+const char * backend_emit_default_missing_field_text(struct runtime_arena_Arena * arena, int n, struct frontend_sym_Symbols * sym, int si) {
     for (; n >= 0; n = arena->nodes[n].next) {
         if (((arena->nodes[n].kind == N_ARROW) && (arena->nodes[n].a >= 0))) {
             int r = arena->nodes[n].a;
@@ -136,25 +135,31 @@ int backend_emit_default_missing_field(struct runtime_arena_Arena * arena, int n
                     }
                 }
                 if ((!found)) {
-                    snprintf(out, MAX_TEXT, "%s", arena->nodes[n].text2);
-                    return 1;
+                    return arena->nodes[n].text2;
                 }
             }
         }
-        if (backend_emit_default_missing_field(arena, arena->nodes[n].a, sym, si, out)) {
-            return 1;
-        }
-        if (backend_emit_default_missing_field(arena, arena->nodes[n].b, sym, si, out)) {
-            return 1;
-        }
-        if (backend_emit_default_missing_field(arena, arena->nodes[n].c, sym, si, out)) {
-            return 1;
-        }
-        if (backend_emit_default_missing_field(arena, arena->nodes[n].d, sym, si, out)) {
-            return 1;
+{
+            const char * hit;
+            hit = backend_emit_default_missing_field_text(arena, arena->nodes[n].a, sym, si);
+            if (hit) {
+                return hit;
+            }
+            hit = backend_emit_default_missing_field_text(arena, arena->nodes[n].b, sym, si);
+            if (hit) {
+                return hit;
+            }
+            hit = backend_emit_default_missing_field_text(arena, arena->nodes[n].c, sym, si);
+            if (hit) {
+                return hit;
+            }
+            hit = backend_emit_default_missing_field_text(arena, arena->nodes[n].d, sym, si);
+            if (hit) {
+                return hit;
+            }
         }
     }
-    return 0;
+    return (const char *)(0);
 }
 int backend_emit_map_param_index(struct frontend_module_MapBind * b, const char * name) {
     int i;

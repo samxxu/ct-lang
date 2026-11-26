@@ -21,7 +21,6 @@ import runtime::text::Intern;
 import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
-#define MAX_TEXT 160
 
 namespace backend::emit;
 pub trait InitOps {
@@ -129,8 +128,9 @@ impl InitOps for Init {
         si = self->sym->find_struct(base);
         if (si < 0) return 0;
         for (u = 0; u < self->sym->structs[si].nuse; u++) {
-            char low[MAX_TEXT];
-            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+            char *low = tool::sh::ct_scratch_alloc(
+                (int)strlen(self->sym->structs[si].use[u]) + 1);
+            for (i = 0; self->sym->structs[si].use[u][i]; i++) {
                 char c = self->sym->structs[si].use[u][i];
                 if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                 low[i] = c;
@@ -157,8 +157,9 @@ impl InitOps for Init {
         si = self->sym->find_struct(tb);
         if (si < 0) return 0;
         for (u = 0; u < self->sym->structs[si].nuse; u++) {
-            char low[MAX_TEXT];
-            for (i = 0; self->sym->structs[si].use[u][i] && i + 1 < MAX_TEXT; i++) {
+            char *low = tool::sh::ct_scratch_alloc(
+                (int)strlen(self->sym->structs[si].use[u]) + 1);
+            for (i = 0; self->sym->structs[si].use[u][i]; i++) {
                 char c = self->sym->structs[si].use[u][i];
                 if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                 low[i] = c;

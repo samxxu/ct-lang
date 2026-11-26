@@ -42,7 +42,7 @@ import backend::emit::EmitterTry;
 import backend::emit::EmitInvariant;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
-#define MAX_TEXT   160
+#define TEXT_LIMIT 65536
 #define MAX_HOISTS 4
 #define MAX_HOISTS_MAX 65536
 #define N_MATSEQ 73
@@ -284,7 +284,7 @@ impl EmitHoist for Emitter {
             lvl = n;
             for (;;) {
                 int ok = 0;
-                char bt[MAX_TEXT];
+                char *bt = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
                 root = self->arena->nodes[lvl].a;
                 while (root >= 0 && (self->arena->nodes[root].kind == N_MEMBER
                                      || self->arena->nodes[root].kind == N_ARROW))
@@ -307,7 +307,7 @@ impl EmitHoist for Emitter {
                     && self->arena->nodes[root].aux != 5
                     && self->arena->nodes[root].aux != 6) {
                     int rd = 0;
-                    if (hoist_ctype(root, bt, sizeof bt, &rd) && rd == 0
+                    if (hoist_ctype(root, bt, TEXT_LIMIT, &rd) && rd == 0
                         && materializable_ctype(bt)) ok = 1;
                 }
                 if (!ok) break;
@@ -363,10 +363,10 @@ impl EmitHoist for Emitter {
     {
         int i, f, k, cat, s;
         /* S1a-0 C2n-3: the declared type of a hoisted receiver is pool text
-           (a type spelling), not a 160-byte row. `hbuf` is the `static_ctype`
-           working row, whose own formal cap is MAX_TEXT. */
+           (a type spelling), not a 160-byte row. S1a-0 C2p-8: `hbuf` is a
+           formal-limit scratch, so a 2000-byte receiver type is not cut. */
         const char *hty;
-        char hbuf[MAX_TEXT];
+        char *hbuf = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
         int hd;
         (void)self;
 
@@ -391,7 +391,7 @@ impl EmitHoist for Emitter {
                      && self->arena->nodes[self->hoist_calls[i]].text[0]) {
                 hty = runtime::text::ct_intern(self->arena->nodes[self->hoist_calls[i]].text);
             } else {
-                if (!hoist_ctype(self->hoist_calls[i], hbuf, sizeof hbuf, &hd)
+                if (!hoist_ctype(self->hoist_calls[i], hbuf, TEXT_LIMIT, &hd)
                     || hd != 0)
                     return self->fail_from(self->hoist_calls[i], "cannot infer the type of a hoisted receiver");
                 hty = runtime::text::ct_intern(hbuf);

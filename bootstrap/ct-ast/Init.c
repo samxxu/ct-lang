@@ -8,7 +8,6 @@
 
 #line 1 "selfhost/ct-ast/backend/emit/Init.h.ct"
 #include <string.h>
-#define MAX_TEXT 160
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -168,8 +167,8 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_items(void *self, co
         return 0;
     }
     for (u = 0; u < _self->sym->structs[si].nuse; u++) {
-        char low[MAX_TEXT];
-        for (i = 0; (_self->sym->structs[si].use[u][i] && ((i + 1) < MAX_TEXT)); i++) {
+        char * low = tool_sh_ct_scratch_alloc(((int)(strlen(_self->sym->structs[si].use[u])) + 1));
+        for (i = 0; _self->sym->structs[si].use[u][i]; i++) {
             char c = _self->sym->structs[si].use[u][i];
             if (((c >= 'A') && (c <= 'Z'))) {
                 c = (char)(((c - 'A') + 'a'));
@@ -203,8 +202,8 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_stmts(void *self, co
         return 0;
     }
     for (u = 0; u < _self->sym->structs[si].nuse; u++) {
-        char low[MAX_TEXT];
-        for (i = 0; (_self->sym->structs[si].use[u][i] && ((i + 1) < MAX_TEXT)); i++) {
+        char * low = tool_sh_ct_scratch_alloc(((int)(strlen(_self->sym->structs[si].use[u])) + 1));
+        for (i = 0; _self->sym->structs[si].use[u][i]; i++) {
             char c = _self->sym->structs[si].use[u][i];
             if (((c >= 'A') && (c <= 'Z'))) {
                 c = (char)(((c - 'A') + 'a'));
