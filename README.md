@@ -317,6 +317,98 @@ int main(void)
 `ct build docs/snippets/README/0.8_optional_index.ct --c-boundary=allow -o /tmp/opt && /tmp/opt`
 实测 `slot=9 hit=5 miss=0`。
 
+#### 0.10 特性联展：泛型 struct / 泛型 trait / 函子 / 切片 / ref-out / Box / Map
+
+一个程序把几条日常路径放在一起；每段都对应独立特性章节，完整解释在 tutorial：
+
+```ct
+// source: docs/snippets/README/0.10_feature_tour.ct
+struct Pair<T> {
+    T a;
+    T b;
+}
+
+impl<T> Pair<T> {
+    T first() { return self->a; }
+}
+
+typedef (int, int) => int Bin;
+
+static int add(int a, int b) { return a + b; }
+
+static int apply(Bin f, int a, int b) { return f(a, b); }
+
+trait Score { int score(void); }
+
+struct Run { int n; } use Score;
+
+impl Score for Run {
+    int score(void) { return self->n * 10; }
+}
+
+static int best<T: Score>(T x) { return x.score(); }
+
+trait Next<T> { T next(void); }
+
+struct Count { int cur; } use Next<int>;
+
+impl Next<int> for Count {
+    int next(void)
+    {
+        int v = self->cur;
+        self->cur = self->cur - 1;
+        return v;
+    }
+}
+
+
+static int sum(int[] xs)
+{
+    int total = 0;
+    for (int i = 0; i < xs.len; i++) total = total + xs[i];
+    return total;
+}
+
+static void inc(ref int x) { x = x + 1; }
+
+static int two(out int a, out int b)
+{
+    a = 3;
+    b = 4;
+    return 1;
+}
+
+struct Point { int x; int y; }
+
+int main(void)
+{
+    Pair<int> p = { 2, 3 };
+    Run r = { 4 };
+    Count c = { 2 };
+    int a[] = { 1, 2, 3 };
+    int v = 1;
+    int x;
+    int y;
+    Box<Point> b = new Point { 4, 5 };
+    Map<char *, int> m;
+    m.h = 0;
+    m.put("x", 7);
+
+    inc(v);
+    two(x, y);
+    printf("%d %d %d %d %d %d %d %d %d %d\n",
+           p.first(), best<Run>(r), apply(add, 2, 5), sum(a),
+           v, x, y, b.x, *m.get("x"), c.next());
+    m.release();
+    b.release();
+    return 0;
+}
+```
+
+`ct build docs/snippets/README/0.10_feature_tour.ct --c-boundary=allow -o /tmp/tour && /tmp/tour`
+实测 `2 40 7 6 2 3 4 4 7 2`。它覆盖 `Pair<T>`、`best<T: Score>`、`Next<T>` 泛型 trait、
+`(int, int) => int` 函子、`int[]` 切片、`ref`/`out`、`Box<T>`/`new` 与 `Map`。
+
 ### 1. 快速开始
 
 0.1 的静态宿主链就是本仓库的第一个完整样例：
