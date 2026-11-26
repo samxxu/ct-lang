@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10944 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=86367 io_cap=2048
+     emitted_before=48223 emitted_after=86371 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -247,8 +247,8 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   live pin，随每次 emitter 变更同步。
 - **v1-PH-2 S5（ADT 模式 B：or / 守卫）后的 live 校准**：`Emitter.h.ct`
   10525 → 10944 行（+419：or-pattern 的 DNF 条件组、按组选绑定访问器、
-  守卫 arm 的 flag 形状与 `emit_match_arm_ext`），发射 C 85158 → 86367
-  （+1209：模式解析的 DNF/守卫、TIR `guard` 行与 LIR 回退检查；or/守卫的
+  守卫 arm 的 flag 形状与 `emit_match_arm_ext`），发射 C 85158 → 86371
+  （+1213：模式解析的 DNF/守卫、TIR `guard` 行与 LIR 回退检查；or/守卫的
   LIR 打印按 per-function fallback 回到 AST body seam，产物逐字节相同）。
   切片清单仍为 76；`io_names` 由 1024 提到 2048（S5 新增约 28 个 callee）。
 - **v1-PH-2 S4（ADT 模式 A）后的 live 校准**：`Emitter.h.ct` 10467 → 10525 行
