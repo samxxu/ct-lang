@@ -24,6 +24,16 @@
 #          compare the whole spelling, so two types that agree for 159 bytes no
 #          longer collide. The 2000-byte fixtures run end to end.
 #
+#   C2p-6 map/generic host rows: the map type host, the generic argument, the
+#          match result key and the `foreach` element are pool texts, and
+#          `_Atomic` / `_Alignas` carry whole specifier spellings.
+#
+#   C2p-7 member / method / label / match-binding names: a member name
+#          (`.` / `->` / `?.`), a trait impl method name, an enum member, a
+#          C label / `goto` target and a `match` arm binding are pool texts,
+#          so a 2000-byte name survives the symbol lookup and every emitted
+#          spelling (prototype, definition, call, initialiser designator).
+#
 # Usage: bash test/ast/c2p_limits.sh <ct-ast>
 set -u
 CT=${1:?usage: c2p_limits.sh <ct-ast>}
@@ -713,6 +723,138 @@ int main(void)
 CT
 if run_product c2p6_alignas "$work/c2p6_alignas.ct"; then
     ok; printf '  2000-byte _Alignas specifier: kept whole\n'
+fi
+
+# ===========================================================================
+# C2p-7: the remaining name rows in the parser and the emitted spellings
+#
+# `parse_postfix` copied a member name into a 160-byte row, so a 2000-byte
+# struct field resolved to a cut name: the declaration emitted whole, but every
+# `s.<field>` access named a member that did not exist. `parse_impl` copied the
+# method name the same way, so a 2000-byte trait method never matched the
+# trait's row ("not implemented"); a `match` arm binding name was copied into a
+# `calloc(nbind, MAX_TEXT)` block and declared under the cut spelling. The
+# tests below pin the whole-chain spellings (prototype / definition / call) for
+# a long field, a long trait method and a long match binding, and keep the long
+# label and long `foreach` element as guards.
+# ===========================================================================
+
+# ---- C2p-7.1) a 2000-byte struct field name through declaration/access ----
+fld=$(printf '%*s' 2000 '' | tr ' ' w)
+cat >"$work/c2p7_field.ct" <<CT
+struct S { int $fld; };
+int main(void)
+{
+    struct S s;
+    s.$fld = 3;
+    return s.$fld - 3;
+}
+CT
+if run_product c2p7_field "$work/c2p7_field.ct"; then
+    if grep -qF "$fld" "$work/c2p7_field.c"; then
+        ok; printf '  2000-byte struct field: declaration and access kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte struct field name"
+    fi
+fi
+
+# ---- C2p-7.1b) a 2000-byte struct field designator in an initialiser ----
+cat >"$work/c2p7_field_designator.ct" <<CT
+struct S { int $fld; };
+int main(void)
+{
+    struct S s = { .$fld = 3 };
+    return s.$fld - 3;
+}
+CT
+if run_product c2p7_field_designator "$work/c2p7_field_designator.ct"; then
+    if grep -qF "$fld" "$work/c2p7_field_designator.c"; then
+        ok; printf '  2000-byte field designator: initialiser kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte field designator"
+    fi
+fi
+
+# ---- C2p-7.2) a 2000-byte trait method name (prototype/impl/call) --------
+mth=$(printf '%*s' 2000 '' | tr ' ' m)
+cat >"$work/c2p7_method.ct" <<CT
+trait T { int $mth(); }
+struct S { int n; } use T;
+impl T for S { int $mth() { return self->n; } }
+int main(void)
+{
+    S s = { .n = 4 };
+    T t = s;
+    return t.$mth() - 4;
+}
+CT
+if run_product c2p7_method "$work/c2p7_method.ct"; then
+    if [ "$(grep -oF "$mth" "$work/c2p7_method.c" | wc -l | tr -d ' ')" -ge 3 ]; then
+        ok; printf '  2000-byte trait method: vtable prototype, definition and call whole\n'
+    else
+        bad "the generated C did not spell the 2000-byte trait method in all three places"
+    fi
+fi
+
+# ---- C2p-7.3) a 2000-byte match arm binding name -------------------------
+bnd=$(printf '%*s' 2000 '' | tr ' ' b)
+cat >"$work/c2p7_match_bind.ct" <<CT
+enum E { A(int x), B() }
+int pick(E e)
+{
+    match (e) {
+        E.A($bnd) => { return $bnd; }
+        E.B() => { return 0; }
+    }
+}
+int main(void)
+{
+    E e = E.A(9);
+    return pick(e) - 9;
+}
+CT
+if run_product c2p7_match_bind "$work/c2p7_match_bind.ct"; then
+    if grep -qF "$bnd" "$work/c2p7_match_bind.c"; then
+        ok; printf '  2000-byte match binding: the declared variable is whole\n'
+    else
+        bad "the generated C cut the 2000-byte match binding name"
+    fi
+fi
+
+# ---- C2p-7.4) a 2000-byte C label (guard) -------------------------------
+lab=$(printf '%*s' 2000 '' | tr ' ' z)
+cat >"$work/c2p7_label.ct" <<CT
+int main(void)
+{
+    int s = 0;
+    goto $lab;
+    s = 9;
+$lab:
+    s = s + 3;
+    return s - 3;
+}
+CT
+if run_product c2p7_label "$work/c2p7_label.ct"; then
+    if grep -qF "$lab" "$work/c2p7_label.c"; then
+        ok; printf '  2000-byte label: goto and definition kept whole\n'
+    else
+        bad "the generated C cut the 2000-byte label"
+    fi
+fi
+
+# ---- C2p-7.5) a 2000-byte foreach element type (guard) -------------------
+cat >"$work/c2p7_foreach.ct" <<CT
+struct $long { int n; };
+int main(void)
+{
+    struct $long a[2] = {{1}, {2}};
+    int s = 0;
+    foreach (a) { s = s + item.n; }
+    return s - 3;
+}
+CT
+if run_product c2p7_foreach "$work/c2p7_foreach.ct"; then
+    ok; printf '  2000-byte foreach element: kept whole\n'
 fi
 
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"

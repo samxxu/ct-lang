@@ -200,3 +200,31 @@ output:
   2000-byte _Atomic specifier: kept whole
   2000-byte _Alignas specifier: kept whole
 c2p: 28 passed, 0 failed
+
+C2p-7 member/method/label/match-binding names (baseline 48b01c54, frozen-seed compiler):
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+  >160-byte qualified variable: resolved and emitted whole
+  ... C2p-1..C2p-6 sections unchanged ...
+  2000-byte _Atomic specifier: kept whole
+  2000-byte _Alignas specifier: kept whole
+FAIL c2p: c2p7_field: cc failed: <work>/c2p7_field.c:11:7: error: no member named 'www…(159 w)…' in 'struct S'
+FAIL c2p: c2p7_field_designator: cc failed: <work>/c2p7_field_designator.c:10:21: error: field designator 'www…(159 w)…' does not refer to any field
+FAIL c2p: c2p7_method: compile failed: <work>/c2p7_method.ct:3:14: error: trait method 'mmm…(2000 m)…' is not implemented for struct 'S'
+FAIL c2p: c2p7_match_bind: compile failed: <work>/c2p7_match_bind.ct:5:4027: error: use of an undeclared variable
+FAIL c2p: the generated C cut the 2000-byte label
+  2000-byte foreach element: kept whole
+c2p: 29 passed, 5 failed
+
+green (C2p-7 implementation):
+command: bash test/ast/c2p_limits.sh <ct-ast built from this commit's seed>
+exit: 0
+output:
+  2000-byte struct field: declaration and access kept whole
+  2000-byte field designator: initialiser kept whole
+  2000-byte trait method: vtable prototype, definition and call whole
+  2000-byte match binding: the declared variable is whole
+  2000-byte label: goto and definition kept whole
+  2000-byte foreach element: kept whole
+c2p: 34 passed, 0 failed
