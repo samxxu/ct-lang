@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/ct-logo.png" alt="Ct logo" width="128" height="128">
+</p>
+
 # ct — C with Traits compiler
 
 > English · [中文](README.md)

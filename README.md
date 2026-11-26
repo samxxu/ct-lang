@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/ct-logo.png" alt="Ct logo" width="128" height="128">
+</p>
+
 # Ct — C with Traits 编译器
 
 > **v1.1.0** · 中文 · [English](README.en.md)
