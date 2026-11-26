@@ -161,7 +161,7 @@ impl（trait impl、固有 impl）、泛型 struct / impl / 函数
 | 接口数组 / 构造点装箱 | 不支持 | 支持（相对 L0 扩展） | 支持 |
 | `map` | 不支持 | 不支持 | 支持 |
 | `Drop` / `#line` / 泄漏诊断 | 不支持 | 支持 | 支持 |
-| 用户可见容量上限 | 见 §7 表 | 旧管线额度 | 更高，见 §7 |
+| 容量上限 | L0 固定上限表 | 旧管线额度 | 初始值 + 倍增到形式上限，见 §7 |
 | 用途 | 差分 oracle / 引导种子 | 回归 oracle（只修 bug） | 安装入口 `ct` |
 
 L0 命中不认识的构造时直接报错（`'namespace' is not supported by this compiler` 一类）；需要写
@@ -221,7 +221,7 @@ v1.1 先固化轻量 lowering 不变量——临时值物化、求值顺序、`D
 - 字符串 / 字符字面量按 C 转义规则接受。单个字面量同样按需容纳到 `TEXT_LIMIT`
   = 65536 字节（S1a-0 C2o）：旧的 158 字节上限已退役，超过形式上限才报
   `string literal exceeds 65536 bytes; split it`，不静默截断；相邻字面量仍会拼接。
-- 固定容量上限越界一律报错（§7），不静默丢数据；v0.53.1 起字符串字面量也归入这一类。
+- 容量按需增长到形式上限（§7）；超限报错，不静默丢数据；v0.53.1 起字符串字面量也归入这一类。
 - **token 文本是实现内部的源缓冲视图（v0-PH-86 起，仅 ct-ast）**：当前 token 以
   `{ptr,len}` 指向源缓冲，不逐 token 复制、也不保证 NUL 终止；源缓冲在整段解析期间
   有效。实现内部只在 C 边界转换（调用方缓冲或词法器 scratch），因此
@@ -703,7 +703,7 @@ C 名（如 `uart1`），命名空间宿主的 `h` 是宿主路径（如 `hal`�
   - **fallback**：调用含表达式或成员路径时生成宿主级包装函数。每个实参按标识符逐个校验：字符串 / 字符
     字面量、数字字面量、`.` / `->` 后的成员名、`A::B` 限定名直接放行；其余标识符必须是左括号内的形参名、
     本 map 的实例、此前已声明的变量或 ALL_CAPS 宏，否则编译期报错。
-- 多个 map 可作用于同一实例或同一命名空间；`MAX_MAPS`（64）是 map 构造的**初始容量**，ct-ast 按需倍增到形式上限 65536（`MAX_MAPS_MAX`，只作 OOM 保护，不是语言语义上限）。
+- 多个 map 可作用于同一实例或同一命名空间；`MAX_MAPS`（64）是 map 构造的**初始容量**，ct-ast 按需倍增到形式上限 `CAP_LIMIT`（只作 OOM 保护，不是语言语义上限）。
 - **跨单元**：vtable 在 `pub` trait 且（对象宿主）实例是有 `pub` 全局时外部链接（同 §4.11 的 impl 规则）；
   命名空间宿主没有实例，只看 `pub` trait。头文件声明 `extern`、声明单元给出定义，其它单元可直接装箱。
   否则包装函数与 vtable 发射在**声明该 map 的单元**的 `.c` 里（`static`），不会重复出现在其它单元。
@@ -1134,8 +1134,7 @@ done:
 - 标签不能直接碰 `}`（C99 要求标签后面必须有一条语句）：`again: }` 报 `a label needs a statement`。
   最省的写法是空语句 `again: ;`（见 §4.21）。
 - `goto` 可以跳入 / 跳出块与循环（C 允许）。`goto` 跳出 `own` 的声明作用域**不会**触发自动释放（§4.9）；释放只在块尾、`return`、`break` / `continue` 前注入。
-- 一个函数最多 64 个标签与 64 条 `goto`，超出报 `too many labels in one function` /
-  `too many gotos in one function`。
+- 标签与 `goto` 表从初始各 64 行按需倍增到 `CAP_LIMIT`；旧的 64 条功能上限已退役（S1a-0 C4）。
 - 已知边界：`out:` 直接接 `case 2:` 不在子集内——标签链在 `case` / `default` 处终止，链空即按上面
   的「标签需要一条语句」报错。
 
@@ -2369,48 +2368,26 @@ int main(void) {
 
 ### 7. 容量上限
 
-> 下表是 **L0**（冻结种子）的上限。**ct-ast**（安装入口）把用户可见的上限整体抬高：`MAX_NODES` 262144、
-> `MAX_TRAITS` 64、`MAX_STRUCTS` 128、`MAX_METHODS` 64、`MAX_FIELDS` 64、`MAX_FUNCS` 512、
-> `MAX_PARAMS` 16、`MAX_VARS` 4096、`MAX_TYPES` 256、`MAX_CALLS` 1024；其余（`MAX_TEXT` / `MAX_PATH` /
-> `MAX_SCOPE` / `MAX_UNITS` / `MAX_IMPORTS` / `MAX_MAPS`）不变。策略仍是「固定上限 + 越界硬报错」，未改成动态分配。
->
-> `MAX_FUNCS` 是**整个程序**的累计预算：`build` 模式共用一张符号表，`nfunc` 跨单元累加
-> （builtin 层经 `nfunc_base` 扣除），不是「每个单元各有一份配额」。越界文案为
-> `too many functions (limit 512, whole program)`（依据：`frontend/parse/ParseSupport.h.ct` 的判界点）。
->
-> **决策（2026-11-23）**：`MAX_FUNCS` 将改为“初始容量 512 + 按需增长”（安全阀 65536，
-> 只作 OOM 保护）；固定 512 不再是功能上限，落地见 [SH-109](../issues/selfhost/sh109-max-funcs-capacity.md)。
-> 在 SH-109 合入前，本节仍按实测的 512 硬上限描述。
->
-> 实现细节（ct-ast）：`MAX_NODES` 是 `selfhost/ct-ast/runtime/arena/Arena.h.ct` 里的宏，只在 `alloc` 判界时使用；
-> 而节点数组会随 `pub struct Arena` 进入生成的 `Arena.h`，**宏不跨翻译单元**，所以该字段写的是字面量
-> `262144`。两者必须相等，改一处就要同步改另一处。
->
-> 契约测试范围（TEST-9）：只对已有生成式夹具的上限把越界文案钉成契约——`MAX_PARAMS` / `MAX_METHODS` /
-> `MAX_FUNCS` / `MAX_SCOPE` / `MAX_VARS` / `MAX_FIELDS` / `MAX_STRUCTS`（`MAX_MAPS` 与 `MAX_ERRORS` 分别由
-> `check-ast.sh` 的 map 段与恢复段覆盖）。其余上限可达但**故意不补夹具**：每条都要一份生成器与一份文案契约，
-> 收益已递减；只在改动某个上限时，才顺带把它的文案钉住。
+ct-ast 不再有“语言上限”表。计数表从初始容量开始、按需倍增，到形式上限才停；单条文本 / 路径 / 命令按需分配，到 `TEXT_LIMIT` 才停。形式上限只作 OOM / 资源保护，**不是语言语义**：真实程序不应触到它，触到只报资源错误，绝不静默截断。容量表里只有递归深度与错误恢复保留固定值；各特性语法自带的形状上限（如 range 初值 1024）仍见其小节。
 
-| 常量 | 值 | 含义 | 超限行为 |
-| --- | --- | --- | --- |
-| `MAX_TRAITS` | 16 | trait 数量 / 单 struct 的 `use` 数量 | 报错退出 |
-| `MAX_FIELDS` | 32 | 单 struct 里「类型是已知 Ct 类型」的字段数（值 / 指针 struct 字段、值 / 指针接口字段各表独立计） | 报错退出 |
-| `MAX_DEPTH` | 8 | 嵌套构造 / 字段链的递归深度上限 | 报错退出 |
-| `MAX_SCOPE` | 256 | 嵌套作用域（花括号块）深度上限 | 报错退出 |
-| `MAX_STRUCT` | 32 | struct 数量 | 报错退出 |
-| `MAX_METHOD` | 32 | 单 trait / 单 impl 的方法数 | 报错退出 |
-| `MAX_PARAMS` | 16 | 单方法参数个数 | 报错退出 |
-| `MAX_VARS` | 512 | 被登记的变量数 | 报错退出 |
-| `MAX_FUNCS` | 64 | 函数签名表条目数 | 报错退出 |
-| `MAX_NAME` | 128 | 标识符 / 类型名长度 | 报错退出 |
-| `MAX_PARAM` | 256 | 参数字符串长度 | 报错退出 |
+| 类别 | 初始值 | 增长 | 形式上限 | 超限行为 |
+| --- | --- | --- | --- | --- |
+| 计数表（函数、变量、类型、struct、trait、方法、参数、ADT、map、import、unit、label、call…） | 各自的 `MAX_*` 初始值（如 `MAX_FUNCS` 512、`MAX_PARAMS` 16、`MAX_ADTS` 64） | 满时 2 倍 | `CAP_LIMIT` = 65536 行 | OOM / 资源保护报错 |
+| 单条文本 / 路径 / 命令 / 键 | 0（按需） | 精确长度或 2 倍 | `TEXT_LIMIT` = 65536 字节 | 资源保护报错 |
+| AST 节点池 | `MAX_NODES` = 262144 | 2 倍 | `NODE_LIMIT` = 16777216 | OOM 报错 |
+| 递归深度（别名链、布局、包依赖、块嵌套、闭包嵌套） | 固定 | 不增长 | 如 `MAX_ALIAS_CHAIN` 32、`MAX_LAYOUT_DEPTH` 32、`MAX_PKG_DEPTH` 8 | 报错 |
+| 错误恢复 | 固定 | 不增长 | `MAX_ERRORS` = 20 | 报 `too many errors` |
+
+- **初始值不是功能上限**：它只决定第一次分配的大小，满后倍增；任何“超过初始值就报错”的旧契约都已退役（S1a-0 C4）。
+- **`MAX_FUNCS` 是整程序累计预算**：`build` 模式共用一张符号表，`nfunc` 跨单元累加（builtin 层经 `nfunc_base` 扣除），增长后仍按 `CAP_LIMIT` 封顶。
+- **TEST-9 契约（S1a-0 C4）**：旧的“too many …”夹具改为“增长成功”（`test/ast/cap_*.sh` 与 `check-ast.sh` 的 capacity 段）；负例只保留形式上限与深度 / 错误恢复，例如 65537 字节标识符 / 字面量、`blocks are nested too deeply`、`too many errors`。`p35_capacity.sh` 的“第 65 条 trait 必须被拒”也改为“增长成功”。
 
 ### 8. 明确不支持
 
 可见性修饰符的完整集合（`pub readonly` / `setter`）、继承、默认编译路径上的全量类型检查、嵌套定义、
 模板参数推导、单参数多约束与 supertrait。泛型**函数**（§4.48）、**约束泛型**（§4.50）、
 **泛型 struct**（§4.51）、**有界泛型 struct**（§4.54）与**泛型 trait**（§4.55）均已落地，
-类型参数的个数按需增长（初始 2，倍增到形式上限 65536，S1a-0 C3；泛型函数仍只支持一个），但都不做推导。
+类型参数的个数按需增长（初始 2，倍增到形式上限 `CAP_LIMIT`，S1a-0 C3；泛型函数仍只支持一个），但都不做推导。
 
 另有三类已知边界，写代码时按此规避：
 
@@ -2542,7 +2519,7 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
 
 ### 4.51 泛型 struct、固有方法与内置容器（Phase 29）
 
-- **声明**：`struct Name<T, U, V, …> { … }`，类型参数个数按需（初始 2，倍增到形式上限 65536，
+- **声明**：`struct Name<T, U, V, …> { … }`，类型参数个数按需（初始 2，倍增到形式上限 `CAP_LIMIT`，
   S1a-0 C3；不再有“最多两个”的语义上限）。类型参数可以出现在字段类型的任意位置
   （裸 `T`、`T *`、`T items[N]`）。
 - **实例化**：使用点写 `Name<Arg[, Arg]>`（`struct` 前缀可有可无）。每个 `(模板, 实参组合)`
@@ -2771,14 +2748,14 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 
 ### 4.55 泛型 trait（Phase 35，仅 ct-ast）
 
-- **声明**：`trait Iter<T, U, V, …> { T next(void); }` 类型参数个数按需（初始 2，倍增到形式上限
+- **声明**：`trait Iter<T, U, V, …> { T next(void); }` 类型参数个数按需（初始 2，倍增到形式上限 `CAP_LIMIT`
   65536，S1a-0 C3），参数可各带一个 bound（`trait Seq<T: Show>`）；一个参数写多个 bound 报 `a type parameter supports one trait bound`。泛型 trait 不支持默认方法体，报 `a generic trait cannot carry a default method body`。
 - **单态化命名**：实例名一律 `<Trait>_<ct_inst_encode 输出>`，产物随之变成 `Iter<int>` → `Iter_int_vtbl` / `Iter_int_iface` / `__iter_int_vptr` / `Circle_Iter_int_next` / `Circle_Iter_int_vtable`；`Iter<char *>` → `Iter_char_p_*`；嵌套实参按转义（`Iter<Vec<int>>` → `Iter_Vec_lint_r_*`）；编码达到 64 字符时退化为 40 字符前缀 + 8 位哈希。非泛型 trait 的产物命名与布局逐字节不变。
 - **impl 与使用**：`impl Iter<int> for Circle { … }`；接口值、字段、形参与 `T: Iter<int>` 约束都按实例行处理，实例的方法签名在创建实例时把 `T` 换成实参的 C 拼写，派发仍走既有 vtable 槽。
 - **约束**：`trait Seq<T: Show>` 在实例创建单元校验实参的 `use` / `impl`（与 §4.54 同一套判据），不满足报 `'int' does not satisfy the bound 'Show' of 'Seq'`。
 - **泛型 trait × 泛型 struct**：只支持参数一一对应的 `impl<T> MyVec<T> use Iter<T>`，其它形态报 `unsupported generic trait implementation shape`。
 - **跨单元边界**：泛型 trait 实例只能在模板属主单元创建；消费方可以命名该类型，但创建实例即报 `a generic trait instance must be created in its owner unit`（L35-4）。
-- **冲突与容量**：编码名与已声明的 trait、`struct <I>_vtbl` 或 `struct <I>_iface` 撞名时报 `trait instance name '<I>' collides with a declared type`；模板行与实例行共用 `MAX_TRAITS = 64`，第 65 条报 `too many traits`。
+- **冲突与容量**：编码名与已声明的 trait、`struct <I>_vtbl` 或 `struct <I>_iface` 撞名时报 `trait instance name '<I>' collides with a declared type`；模板行与实例行共用同一 trait 表（初始 64 行，按需倍增到 `CAP_LIMIT`，S1a-0 C4）；旧的“第 65 条报 `too many traits`”已退役。
 - **不做**：supertrait / 接口组合（开放项与触发条件见 [phase35 卡](phases/v0-PH-35/card.md) §10.2 / §10.3）、默认方法体、多 bound、关联类型、`Self`、方法级泛型与泛型 enum。
 
 ### 4.56 `Drop` 与长度前缀字符串 `Str`（Phase 36，仅 ct-ast）
@@ -3360,9 +3337,8 @@ struct Shape {
 #### 实现上限与边界
 
 - **计数按需增长（S1a-0 C3）**：ADT 表、单 ADT 的变体表、单个变体的负载字段表
-  都从初始容量（64 / 96 / 8）倍增，形式上限 **65536**（`MAX_ADTS_MAX` /
-  `MAX_ADT_VARIANTS_MAX` / `MAX_ADT_FIELDS_MAX`，只作 OOM 保护，不是语言语义上限）。
-  旧 64 ADT / 16 变体 / 8 负载的数字不再作为承诺或硬错；真实程序不应触到形式上限。
+  都从初始容量（64 / 96 / 8）倍增，形式上限 **`CAP_LIMIT` = 65536**（只作 OOM 保护，不是语言语义上限）。
+  旧 64 ADT / 96 变体 / 8 负载的数字不再作为承诺或硬错；真实程序不应触到形式上限。
   负载字段不能是数组或 `void`（错误带位置）。
 - ADT 必须**先声明后使用**（与 struct 一致）：`match`/构造时 tag 必须已在类型表中。
 - 跨单元：`pub` ADT 经 `.h.ct` 的生成头发布布局，消费者可构造/匹配；变体表在 build 内

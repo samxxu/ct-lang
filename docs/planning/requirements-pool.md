@@ -340,12 +340,12 @@ v0-PH-52 的 D52-6 指向本条。
 | --- | --- |
 | `id` | `REQ-CAP-1` |
 | `what` | 把 L0 留下的“固定上限 + 越界硬报错”全部收到形式上限：49 个 `Limits.h.ct` 常量 + 8 个单元内本地常量 + 14 处硬编码；计数类动态倍增到 `CAP_LIMIT=65536`，文本/路径按需到 `TEXT_LIMIT=65536`，arena 到 `NODE_LIMIT=16777216`；只保留深度/错误恢复保护。 |
-| `why` | `MAX_METHODS=64` 已挡住新增方法，`MAX_TEXT=160` 在 31 个单元出现 1494 次（791 处定长数组）；这些是编译器实现债，不是语言规则。清单见 [capacity-limits](capacity-limits.md)。 |
+| `why` | L0 的固定上限（如 `MAX_METHODS` 64、`MAX_TEXT` 160）会挡住新增方法与长文本，是编译器实现债、不是语言规则；S1a-0 已把计数表改为初始值 + 倍增到形式上限，文本按需到 `TEXT_LIMIT`。策略见 [capacity-limits](capacity-limits.md)。 |
 | `priority` | `P1` |
 | `status` | `planned`（`v1-PH-2` S1a-0） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
-| `block` | 无；ADT 形态与泛型元数（C3）同批收到形式上限，spec §8 / stable-subset 与实现同一提交 |
+| `block` | 无；ADT 形态与泛型元数（C3）同批收到形式上限，spec §7 / stable-subset 与实现同一提交 |
 
 ## REQ-DOGFOOD-1 — selfhost 源码狗粮化（用最新特性压缩 .ct）
 

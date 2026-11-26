@@ -127,7 +127,7 @@
 | 诊断格式 | `file:line:col: error: message` | 描述小写、无句号、标识符单引号 |
 | 字符串缓冲（Buf） | `buf_init` / `buf_puts` / `buf_putc` / `buf_putn` | 不要用 `strcat` |
 | 内存分配 | `xmalloc` / `xstrndup` | 失败即 `exit(1)` |
-| 容量上限（capacity limit） | `MAX_*` 常量（文件头部） | 越界一律 `die`，**不静默截断** |
+| 容量上限（capacity limit） | `CAP_LIMIT` / `TEXT_LIMIT` / `NODE_LIMIT`（`Limits.h.ct` 是权威） | 计数表 / 文本从初始值倍增到形式上限；只有 OOM 与深度 / 错误恢复报错，**不静默截断** |
 | 函数分区（partition） | 工具→源扫描→符号表→签名解析→生成器→构造解析→行重写→`main` | 新增函数放入对应分区 |
 | 惰性生成（lazy generation） | drop 函数体 | 仅在被 `delete` 触达时生成，零开销。**已随 Phase 0.3 移出 L0；现由自举编译器 `selfhost/` 用 Ct 重做** |
 | 传递闭包（drop closure） | `mark_drop_closure()` | 被删除类型递归拉入其 Drop 值字段。**同上，已移出 L0** |
