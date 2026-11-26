@@ -207,11 +207,10 @@ impl ExprSubscript for Expr {
         /* LANG-4: the index must also fit the declared key type. Matching only
            name+arity let `char *get(char *)` receive an int silently. */
         if (idx_node >= 0) {
-            char kty[MAX_TEXT];
             int kz = 0;
             const char *pt = self->arena->nodes[self->arena->nodes[m].a].text;
-            if (self->chk_type(idx_node, kty, sizeof kty, &kz) == 0
-                && kty[0] && pt[0]) {
+            const char *kty = self->chk_type_text(idx_node, &kz);
+            if (kty && kty[0] && pt[0]) {
                 self->chk_line = line;
                 self->chk_col = col;
                 self->chk_arg = 1;

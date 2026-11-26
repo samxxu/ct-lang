@@ -187,7 +187,6 @@ static int frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_typ
     char * * ctype = 0;
     const char * canon;
     const char * abuf;
-    char symbolic[MAX_TEXT];
     const char * iface;
     size_t base_len;
     int ccap = 0;
@@ -248,13 +247,15 @@ static int frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_typ
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("type argument '%s' cannot instantiate a generic trait", abuf));
         }
         for (gpi = 0; gpi < _self->in_generic_ntparam; gpi++) {
+            const char * sym;
             if ((!_self->in_generic_tparam[gpi])) {
                 continue;
             }
-            if (frontend_sym_ct_generic_subst(abuf, _self->in_generic_tparam[gpi], "", symbolic, sizeof(symbolic)) != 0) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
+            sym = frontend_sym_ct_generic_subst_text(abuf, _self->in_generic_tparam[gpi], "");
+            if ((!sym)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            if (strcmp(symbolic, abuf) != 0) {
+            if (strcmp(sym, abuf) != 0) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "symbolic trait type arguments are not supported yet");
             }
         }

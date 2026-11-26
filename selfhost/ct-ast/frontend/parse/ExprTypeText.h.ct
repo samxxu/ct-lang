@@ -44,10 +44,17 @@ pub const char *tnorm_text(const char *in);
 pub int id_char(int c);
 pub int inst_impl_score(int ii);
 pub int plist_next(const char *p, int *pos, char *out, int cap);
+/* S1a-0 C2p-10: the same comma-separated item as an interned text, so a
+   2000-byte function-pointer parameter type is kept whole. */
+pub const char *plist_next_text(const char *p, int *pos);
 pub int qual_at(const char *p, int prev_id);
 pub int ref_type_is_const_value(const char *t);
 pub int slice_array_len(const char *dims);
 pub int subst_tparam(const char *spell, char **names, char **vals, int n, char *out, int cap);
+/* S1a-0 C2p-10: the substitution as an interned text (NULL when the
+   spelling mentions a parameter in a shape the restricted rule cannot
+   decide). */
+pub const char *subst_tparam_text(const char *spell, char **names, char **vals, int n);
 pub void tbase(const char *k, char *out, int cap);
 pub int tclass(const char *raw, const char *base);
 pub void tnorm(const char *in, char *out, int cap);
@@ -408,4 +415,57 @@ int tstars(const char *k)
         k++;
     }
     return n;
+}
+
+const char *plist_next_text(const char *p, int *pos)
+{
+    int i, n, start;
+
+    i = *pos;
+    while (p[i] == ' ' || p[i] == '\t') i++;
+    if (!p[i]) return (const char *)0;
+    start = i;
+    while (p[i] && p[i] != ',') i++;
+    n = i;
+    while (n > start && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
+    if (p[i] == ',') i++;
+    *pos = i;
+    return runtime::text::ct_intern_len(p + start, n - start);
+}
+
+const char *subst_tparam_text(const char *spell, char **names, char **vals, int n)
+{
+    const char *k;
+    char *kbuf = 0;
+    int kcap = 0, i;
+    char one[2];
+
+    if (tool::sh::ct_text_init(&kbuf, &kcap, 64) != 0) return (const char *)0;
+    for (i = 0; spell[i]; i++) {
+        if (spell[i] == ' ' || spell[i] == '\t') continue;
+        one[0] = spell[i];
+        one[1] = 0;
+        if (tool::sh::ct_text_cat(&kbuf, &kcap, one) != 0) {
+            tool::sh::ct_text_free(&kbuf, &kcap);
+            return (const char *)0;
+        }
+    }
+    k = runtime::text::ct_intern(kbuf);
+    tool::sh::ct_text_free(&kbuf, &kcap);
+    if (!k) return (const char *)0;
+    for (i = 0; i < n; i++) {
+        const char *nv = names && names[i] ? names[i] : "";
+        const char *vv = vals && vals[i] ? vals[i] : "";
+        const char *p;
+        if (!nv[0]) continue;
+        if (strcmp(k, nv) == 0) return vv;
+        p = runtime::text::ct_internf("%s*", nv);
+        if (!p) return (const char *)0;
+        if (strcmp(k, p) == 0) return runtime::text::ct_internf("%s *", vv);
+    }
+    for (i = 0; i < n; i++) {
+        const char *nv = names && names[i] ? names[i] : "";
+        if (nv[0] && strstr(k, nv)) return (const char *)0;
+    }
+    return runtime::text::ct_intern(spell);
 }

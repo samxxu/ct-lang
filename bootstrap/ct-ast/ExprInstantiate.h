@@ -19,6 +19,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"

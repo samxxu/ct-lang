@@ -39,7 +39,7 @@ def read(path):
 TARGETS = [
     ("selfhost/ct-ast/frontend/type/TypeCheck.h.ct", "expr_ctype", 1),
     ("selfhost/ct-ast/frontend/type/TypeCheck.h.ct", "maybe_box", 3),
-    ("selfhost/ct-ast/frontend/parse/ExprTypes.h.ct", "chk_type", 1),
+    ("selfhost/ct-ast/frontend/parse/ExprTypes.h.ct", "chk_type_text", 1),
 ]
 
 def skip(s, i):
@@ -79,7 +79,7 @@ def match_brace(s, i):
     raise SystemExit("unbalanced braces")
 
 def body_of(src, fn):
-    m = re.search(r"^    int " + fn + r"\([^;\n]*\)\n    \{", src, re.M)
+    m = re.search(r"^    (?:int\s+|const char \*)" + fn + r"\([^;\n]*\)\n    \{", src, re.M)
     if not m:
         return None
     j = src.index("{", m.end() - 1)
@@ -149,7 +149,7 @@ else
     bad "$(head -3 "$tmp/check.err" | tr '\n' ' ')"
 fi
 
-# Missing-arm negative: delete the NK_STR arm from chk_type in a copy.
+# Missing-arm negative: delete the NK_STR arm from chk_type_text in a copy.
 if python3 - "$root" "$tmp/mut/tree" <<'PY'
 import os, re, shutil, sys
 root, dest = sys.argv[1], sys.argv[2]

@@ -421,6 +421,9 @@ pub trait SymbolOps {
     const char *find_qualified_global(const char *qual, const char *name);
     int  find_var(const char *name);
     int  var_type(const char *name, char *out, int cap);
+    /* S1a-0 C2p-10: the pool-text form of `var_type`, so a 2000-byte
+       variable type is not cut before a caller compares or quotes it. */
+    const char *var_type_text(const char *name);
     int  find_func(const char *cname);
     int  ensure_fn_capacity(int need);
     /* S1a-0 C1: grow function `fi`'s parameter rows to hold `need` positions.
@@ -1332,6 +1335,15 @@ impl SymbolOps for Symbols {
         w = snprintf(out, (size_t)cap, "%s", self->vars[i].type);
         if (w < 0 || w >= cap) return -1;
         return 0;
+    }
+
+    const char *var_type_text(const char *name)
+    {
+        int i;
+        (void)self;
+        i = self->find_var(name);
+        if (i < 0) return (const char *)0;
+        return self->vars[i].type;
     }
 
     /* Rows are keyed by the C spelling, not by the source name: two namespaces

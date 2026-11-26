@@ -9,6 +9,7 @@
 #include "Symbols.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprAdtCtor.h.ct"
 #include <stdio.h>
@@ -158,7 +159,6 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     int a;
     const char * rn;
     const char * vname;
-    char msg[3 * MAX_TEXT];
     struct frontend_sym_Adt * adts;
     int nadts;
     tline = _self->lex->tokline;
@@ -184,19 +184,16 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     adt = frontend_sym_ct_adt_from_type(rn);
     if (adt < 0) {
-        snprintf(msg, sizeof(msg), "'%s' is not an ADT", rn);
-        return tool_diag_ct_sem_error(tline, tcol, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(tline, tcol, tool_sh_ct_scratch_fmt("'%s' is not an ADT", rn), _self->sup->mem->path);
     }
     v = frontend_sym_ct_adt_variant(adt, vname);
     if (v < 0) {
         adts = frontend_sym_ct_adts((&nadts));
-        snprintf(msg, sizeof(msg), "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
-        return tool_diag_ct_sem_error(vline, vcol, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(vline, vcol, tool_sh_ct_scratch_fmt("unknown variant '%s' of ADT '%s'", vname, adts[adt].name), _self->sup->mem->path);
     }
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "(")))) {
         adts = frontend_sym_ct_adts((&nadts));
-        snprintf(msg, sizeof(msg), "expected '(' after '%s.%s'", adts[adt].name, vname);
-        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("expected '(' after '%s.%s'", adts[adt].name, vname), _self->sup->mem->path);
     }
     args = _self->__frontend_parse_exprops_vptr->parse_args(_self);
     if (args < 0) {
@@ -212,14 +209,13 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
         nargs++;
     }
     if (nargs != nfields) {
-        snprintf(msg, sizeof(msg), "'%s.%s' takes %d argument%s, but %d given", adts[adt].name, vname, nfields, ((nfields == 1) ? "" : "s"), nargs);
-        return tool_diag_ct_sem_error(tline, tcol, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(tline, tcol, tool_sh_ct_scratch_fmt("'%s.%s' takes %d argument%s, but %d given", adts[adt].name, vname, nfields, ((nfields == 1) ? "" : "s"), nargs), _self->sup->mem->path);
     }
     k = 0;
     for (a = args; a > 0; (a = _self->arena->nodes[a].next, k++)) {
-        char aty[MAX_TEXT];
-        char fb[MAX_TEXT];
-        char ab[MAX_TEXT];
+        const char * aty;
+        const char * fb;
+        const char * ab;
         int az;
         int rc;
         int aline;
@@ -233,13 +229,14 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
             return (-1);
         }
         az = 0;
-        if (_self->__frontend_parse_exprtypes_vptr->chk_type(_self, a, aty, sizeof(aty), (&az)) != 0) {
+        aty = _self->__frontend_parse_exprtypes_vptr->chk_type_text(_self, a, (&az));
+        if ((!aty)) {
             continue;
         }
         if ((az && strchr(adts[adt].variants[v].fields[k].type, '*'))) {
             continue;
         }
-        rc = frontend_parse_arg_class(adts[adt].variants[v].fields[k].type, aty, fb, sizeof(fb), ab, sizeof(ab));
+        rc = frontend_parse_arg_class_text(adts[adt].variants[v].fields[k].type, aty, (&fb), (&ab));
         if (rc == 2) {
             int fs;
             int as;
@@ -254,8 +251,7 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
         }
         aline = (((_self->arg_base + k) < _self->argcap) ? _self->arg_line[(_self->arg_base + k)] : tline);
         acol = (((_self->arg_base + k) < _self->argcap) ? _self->arg_col[(_self->arg_base + k)] : tcol);
-        snprintf(msg, sizeof(msg), "argument %d of '%s.%s': expected '%s', got '%s'", (k + 1), adts[adt].name, vname, adts[adt].variants[v].fields[k].type, aty);
-        return tool_diag_ct_sem_error(aline, acol, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(aline, acol, tool_sh_ct_scratch_fmt("argument %d of '%s.%s': expected '%s', got '%s'", (k + 1), adts[adt].name, vname, adts[adt].variants[v].fields[k].type, aty), _self->sup->mem->path);
     }
     n = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ADTCTOR);
     if (n < 0) {

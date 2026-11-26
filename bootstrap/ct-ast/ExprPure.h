@@ -104,6 +104,6 @@ int frontend_parse_bind_conv_on(void);
 int frontend_parse_expr_is_builtin_Box_type(const char *);
 int frontend_parse_bplus_space(int);
 int frontend_parse_bplus_id(int);
-int frontend_parse_bplus_lit_type(const char *, int, char *, int, int *);
+const char * frontend_parse_bplus_lit_type_text(const char *, int, int *);
 
 #endif

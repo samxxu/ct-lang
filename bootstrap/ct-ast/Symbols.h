@@ -118,6 +118,7 @@ struct frontend_sym_SymbolOps_vtbl {
     const char * (*find_qualified_global)(void *, const char *, const char *);
     int (*find_var)(void *, const char *);
     int (*var_type)(void *, const char *, char *, int);
+    const char * (*var_type_text)(void *, const char *);
     int (*find_func)(void *, const char *);
     int (*ensure_fn_capacity)(void *, int);
     int (*ensure_fn_param_capacity)(void *, int, int);

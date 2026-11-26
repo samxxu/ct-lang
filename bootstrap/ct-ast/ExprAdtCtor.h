@@ -16,6 +16,7 @@
 #include "Symbols.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 
 
 struct ct_buf;

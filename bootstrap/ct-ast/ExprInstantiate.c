@@ -11,6 +11,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -57,6 +58,7 @@
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define N_ADDR 27
 #define N_ARROW 25
 #define N_ASSIGN 13
@@ -188,8 +190,7 @@ extern void U16String_Drop_drop(void *self);
 int frontend_parse_expr_generic_param(struct frontend_parse_Expr *, const char *);
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(void *self, int gfi, const char * targ, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char cname[MAX_TEXT];
-    char msg[MAX_TEXT];
+    const char * cname;
     const char * itxt;
     int i;
     int k;
@@ -212,16 +213,18 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
         return (-1);
     }
     if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self->sym, (_self->sym->nfunc + 1)) != 0) {
-        snprintf(msg, sizeof(msg), "too many functions (limit %d, whole program)", MAX_FUNCS_MAX);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("too many functions (limit %d, whole program)", MAX_FUNCS_MAX));
     }
     taken = 1;
     for (suffix = 0; ((suffix <= 8) && taken); suffix++) {
         if (suffix == 0) {
-            snprintf(cname, sizeof(cname), "%s__ct%d", _self->sym->funcs[gfi].cname, seq);
+            cname = runtime_text_ct_internf("%s__ct%d", _self->sym->funcs[gfi].cname, seq);
         }
         else {
-            snprintf(cname, sizeof(cname), "%s__ct%d_%d", _self->sym->funcs[gfi].cname, seq, suffix);
+            cname = runtime_text_ct_internf("%s__ct%d_%d", _self->sym->funcs[gfi].cname, seq, suffix);
+        }
+        if ((!cname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, cname);
         taken = (fi >= 0);
@@ -249,10 +252,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
         memcpy(_self->sym->funcs[ni].pdim, _self->sym->funcs[gfi].pdim, ((size_t)(_self->sym->funcs[gfi].nparams) * sizeof(char *)));
         memcpy(_self->sym->funcs[ni].pann, _self->sym->funcs[gfi].pann, (size_t)(_self->sym->funcs[gfi].nparams));
     }
-    _self->sym->funcs[ni].cname = runtime_text_ct_intern(cname);
-    if ((!_self->sym->funcs[ni].cname)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->sym->funcs[ni].cname = cname;
     _self->sym->funcs[ni].name = _self->sym->funcs[ni].cname;
     _self->sym->funcs[ni].is_static = 1;
     _self->sym->funcs[ni].is_pub = 0;
@@ -290,7 +290,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
 
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_vptr_type(void *self, const char * ctype, int depth) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
+    const char * base;
     const char * p;
     int si;
     int fi;
@@ -304,7 +304,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_vptr_typ
     if (strncmp(p, "struct ", 7) == 0) {
         p += 7;
     }
-    snprintf(base, sizeof(base), "%s", p);
+    base = p;
     if (strchr(base, '*') != 0) {
         return 0;
     }
@@ -328,7 +328,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_vptr_typ
 
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_iface_ptr(void *self, const char * ctype) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
+    const char * base;
     const char * p;
     int n;
     int has_ptr;
@@ -340,19 +340,19 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_iface_pt
     if (strncmp(p, "struct ", 7) == 0) {
         p += 7;
     }
-    snprintf(base, sizeof(base), "%s", p);
+    base = p;
     n = strlen(base);
     has_ptr = 0;
     while (((n > 0) && ((base[(n - 1)] == ' ') || (base[(n - 1)] == '*')))) {
         if (base[(n - 1)] == '*') {
             has_ptr = 1;
         }
-        base[--n] = 0;
+        n--;
     }
     if ((!has_ptr)) {
         return 0;
     }
-    if (((n > 6) && (strcmp(((base + n) - 6), "_iface") == 0))) {
+    if (((n > 6) && (strncmp(((base + n) - 6), "_iface", 6) == 0))) {
         return 1;
     }
     return 0;
@@ -412,8 +412,8 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subst_type(vo
 
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_elem_foreign(void *self, const char * ctype, int container_tmpl) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char base[MAX_TEXT];
-    char tr[MAX_TEXT];
+    const char * base;
+    const char * tr;
     int ip;
     int ti;
     int inst;
@@ -427,7 +427,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_elem_for
     if (((!tps) || (container_tmpl < 0))) {
         return 0;
     }
-    if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, ctype, tr, sizeof(tr), (&ip))) {
+    if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, ctype, (&tr), (&ip))) {
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr);
         if ((((ti >= 0) && _self->sym->traits[ti].path[0]) && (strcmp(_self->sym->traits[ti].path, tps[container_tmpl].path) != 0))) {
             return 1;
@@ -437,7 +437,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_elem_for
     if (strncmp(ctype, "struct ", 7) != 0) {
         return 0;
     }
-    snprintf(base, sizeof(base), "%s", (ctype + 7));
+    base = (ctype + 7);
     inst = frontend_sym_ct_inst_find(base);
     if (inst < 0) {
         return 0;
@@ -559,14 +559,17 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
         for (ii3 = 0; (im3 && (ii3 < nimpls3)); ii3++) {
             if ((im3[ii3].use[0] && frontend_sym_ct_impl_matches(ii3, k))) {
                 int is_builtin = (((strcmp(im3[ii3].use, "Drop") == 0) || (strcmp(im3[ii3].use, "Handback") == 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, im3[ii3].use) < 0));
-                char cuse[MAX_TEXT];
+                char * cuse = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+                if ((!cuse)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 if (is_builtin) {
                     if (strcmp(im3[ii3].use, "Drop") == 0) {
                         _self->sym->structs[si2].has_drop_impl = 1;
                     }
                 }
                 else {
-                    if (_self->sym->__frontend_sym_symbolops_vptr->impl_use_concrete(_self->sym, im3[ii3].use, nargs, args, cargs, _self->cur_unit, cuse, sizeof(cuse)) != 0) {
+                    if (_self->sym->__frontend_sym_symbolops_vptr->impl_use_concrete(_self->sym, im3[ii3].use, nargs, args, cargs, _self->cur_unit, cuse, TEXT_LIMIT) != 0) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
                     }
                     else {
@@ -581,8 +584,10 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     }
     (*enc_out) = enc;
     if (((strcmp(tname, "Map") == 0) && (nt2 > 1))) {
-        char esub[MAX_TEXT * 2];
-        snprintf(esub, sizeof(esub), "struct MapEntry<%s, %s> *", cargs[0], cargs[1]);
+        const char * esub = runtime_text_ct_internf("struct MapEntry<%s, %s> *", cargs[0], cargs[1]);
+        if ((!esub)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         if (_self->__frontend_parse_exprinstantiate_vptr->inst_register_nested(_self, esub, (depth + 1)) != 0) {
             return (-1);
         }
@@ -592,8 +597,8 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
 
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nested(void *self, const char * spell, int depth) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char name[MAX_TEXT];
-    char tail[MAX_TEXT];
+    char * name = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+    char * tail = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
     const char * enc;
     char * * args = 0;
     char * * cargs = 0;
@@ -616,7 +621,10 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nest
     if (((((!args) || (acap < need)) || (!cargs)) || (ccap < need))) {
         return 0;
     }
-    if (frontend_sym_ct_inst_split(spell, name, (&nargs), args, acap, tail, sizeof(tail)) != 0) {
+    if (((!name) || (!tail))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    if (frontend_sym_ct_inst_split(spell, name, (&nargs), args, acap, tail, TEXT_LIMIT) != 0) {
         return 0;
     }
     if (((nargs <= 0) || (!args[0][0]))) {
@@ -731,12 +739,12 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_static_method
     int inst;
     int m;
     int ni;
-    char base[MAX_TEXT];
+    const char * base;
     struct frontend_sym_StructImpl * im;
     if (strncmp(ibase, "struct ", 7) != 0) {
         return (-1);
     }
-    snprintf(base, sizeof(base), "%s", (ibase + 7));
+    base = (ibase + 7);
     inst = frontend_sym_ct_inst_find(base);
     if (inst >= 0) {
         int best = (-1);

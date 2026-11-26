@@ -30,6 +30,7 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -129,9 +130,9 @@ pub struct ExprTypes {
 pub int closure_match(struct Expr *self, int ci, const char *host, int skip_env, int set_ret)
 {
     struct Closure *c = &self->sym->closures[ci];
-    char ret[MAX_TEXT];
-    char plist[MAX_TEXT];
-    char item[MAX_TEXT];
+    const char *ret;
+    const char *plist;
+    const char *item;
     const char *p;
     size_t n, hn;
     int lp, rp, pos, want, i, r;
@@ -142,10 +143,11 @@ pub int closure_match(struct Expr *self, int ci, const char *host, int skip_env,
             "a closure cannot be used where a plain function pointer is expected");
     n = (size_t)(p - host);
     while (n > 0 && (host[n - 1] == ' ' || host[n - 1] == '\t')) n--;
-    if (n == 0 || n >= MAX_TEXT)
+    if (n == 0)
         return self->sup->fail_at(c->line,
             "a closure cannot be used where a plain function pointer is expected");
-    snprintf(ret, sizeof ret, "%.*s", (int)n, host);
+    ret = runtime::text::ct_intern_len(host, (int)n);
+    if (!ret) return self->sup->fail("out of memory");
     hn = strlen(host);
     lp = -1;
     rp = -1;
@@ -156,82 +158,91 @@ pub int closure_match(struct Expr *self, int ci, const char *host, int skip_env,
     if (lp < 0 || rp <= lp + 1)
         return self->sup->fail_at(c->line,
             "a closure cannot be used where a plain function pointer is expected");
-    snprintf(plist, sizeof plist, "%.*s", rp - lp - 1, host + lp + 1);
+    plist = runtime::text::ct_intern_len(host + lp + 1, rp - lp - 1);
+    if (!plist) return self->sup->fail("out of memory");
     if (skip_env) {
-        char *comma = strchr(plist, ',');
-        if (comma) snprintf(plist, sizeof plist, "%s", comma + 1);
-        else plist[0] = 0;
+        const char *comma = strchr(plist, ',');
+        plist = comma ? comma + 1 : "";
     }
     want = 0;
     if (!(strcmp(plist, "void") == 0 || plist[0] == 0)) {
         pos = 0;
-        while (plist_next(plist, &pos, item, sizeof item)) want++;
+        while (plist_next_text(plist, &pos)) want++;
     }
-    if (want != c->nparams) {
-        char msg[512];
-        snprintf(msg, sizeof msg,
-                 "this closure takes %d parameters, but the expected type takes %d",
-                 c->nparams, want);
-        return self->sup->fail_at(c->line, msg);
-    }
+    if (want != c->nparams)
+        return self->sup->fail_at(c->line, tool::sh::ct_scratch_fmt(
+            "this closure takes %d parameters, but the expected type takes %d",
+            c->nparams, want));
     pos = 0;
     i = 0;
-    while (plist_next(plist, &pos, item, sizeof item)) {
-        char fb[MAX_TEXT], ab[MAX_TEXT];
+    while ((item = plist_next_text(plist, &pos)) != 0) {
+        const char *fb;
+        const char *ab;
         int fs, as;
-        r = arg_class(item, c->ptype[i], fb, sizeof fb, ab, sizeof ab);
+        r = arg_class_text(item, c->ptype[i], &fb, &ab);
         if (r == 2) {
             fs = self->sym->find_struct(fb + 6);
             as = self->sym->find_struct(ab + 6);
             r = (fs < 0 || as < 0) ? -1 : (fs != as);
         }
-        if (r == 1) {
-            char msg[512];
-            snprintf(msg, sizeof msg,
-                     "this closure's parameter %d is '%s', but the expected type is '%s'",
-                     i + 1, c->ptype[i], item);
-            return self->sup->fail_at(c->line, msg);
-        }
+        if (r == 1)
+            return self->sup->fail_at(c->line, tool::sh::ct_scratch_fmt(
+                "this closure's parameter %d is '%s', but the expected type is '%s'",
+                i + 1, c->ptype[i], item));
         i++;
     }
     if (set_ret) {
-        c->ret = runtime::text::ct_intern(ret);
+        c->ret = ret;
         if (!c->ret) return self->sup->fail("out of memory");
     }
     return 0;
 }
 
-pub int str_handle_value(struct Expr *self, int e, char *base, int cap)
+pub const char *str_handle_value_text(struct Expr *self, int e)
 {
     const char *ty = "";
     const char *p;
     size_t n;
 
-    if (base != 0 && cap > 0) base[0] = 0;
-    if (e < 0 || base == 0 || cap < 2) return 0;
-    if (self->arena->nodes[e].kind == N_CAST) return 0;
-    if (self->sup->expr_type_text(e, &ty) != 0) return 0;
+    if (e < 0) return (const char *)0;
+    if (self->arena->nodes[e].kind == N_CAST) return (const char *)0;
+    if (self->sup->expr_type_text(e, &ty) != 0) return (const char *)0;
     p = ty;
     while (*p == ' ' || *p == '\t') p++;
     if (strncmp(p, "struct ", 7) == 0) p += 7;
     n = strlen(p);
     while (n > 0 && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
-    if (n == 0 || n >= (size_t)cap || memchr(p, '*', n) != 0) return 0;
-    memcpy(base, p, n);
-    base[n] = 0;
-    if (strcmp(base, "String") == 0 || strcmp(base, "Str") == 0
-        || strcmp(base, "U16String") == 0 || strcmp(base, "U16Str") == 0)
-        return 1;
-    base[0] = 0;
-    return 0;
+    if (n == 0 || memchr(p, '*', n) != 0) return (const char *)0;
+    p = runtime::text::ct_intern_len(p, (int)n);
+    if (!p) return (const char *)0;
+    if (strcmp(p, "String") == 0 || strcmp(p, "Str") == 0
+        || strcmp(p, "U16String") == 0 || strcmp(p, "U16Str") == 0)
+        return p;
+    return (const char *)0;
 }
 
-pub int chk_type_static(struct Expr *self, int n, char *out, int cap)
+pub int str_handle_value(struct Expr *self, int e, char *base, int cap)
+{
+    const char *t;
+
+    if (base != 0 && cap > 0) base[0] = 0;
+    if (e < 0 || base == 0 || cap < 2) return 0;
+    t = str_handle_value_text(self, e);
+    if (!t) return 0;
+    if (snprintf(base, (size_t)cap, "%s", t) >= cap) {
+        base[0] = 0;
+        return 0;
+    }
+    return 1;
+}
+
+pub const char *chk_type_static_text(struct Expr *self, int n)
 {
     int ad;
-    if (!self->static_ctype(n, out, cap, &ad, 0)) return -1;
-    if (ad != 0) return -1;
-    return 0;
+    const char *t = self->static_ctype_text(n, &ad, 0);
+
+    if (!t || ad != 0) return (const char *)0;
+    return t;
 }
 
 impl ExprTypes for Expr {
@@ -245,10 +256,10 @@ impl ExprTypes for Expr {
     int chk_callptr_args(const char *ftype, const char *callee, int args,
                          int line, int col)
     {
-        char ps[MAX_TEXT];
+        const char *ps;
         const char *last;
         const char *lp;
-        int plen, ai, k, variadic;
+        int off, ai, k, variadic;
 
         if (!self->types_mode || !*self->types_mode) return 0;
         if (!ftype || strstr(ftype, "(*)") == 0) return 0;
@@ -257,38 +268,35 @@ impl ExprTypes for Expr {
         lp = last;
         while (lp > ftype && *lp != '(') lp--;
         if (*lp != '(' || last <= lp + 1) return 0;
-        plen = (int)(last - lp - 1);
-        if (plen >= (int)sizeof ps) plen = (int)sizeof ps - 1;
-        memcpy(ps, lp + 1, (size_t)plen);
-        ps[plen] = 0;
+        ps = runtime::text::ct_intern_len(lp + 1, (int)(last - lp - 1));
+        if (!ps) return self->sup->fail("out of memory");
+        off = 0;
         ai = (args == 0) ? -1 : args;
         k = 0;
         variadic = 0;
-        while (ps[0]) {
-            char pt[MAX_TEXT];
-            int n = 0;
-            char *pp = ps;
-            while (*pp == ' ') pp++;
-            if (strncmp(pp, "...", 3) == 0) { variadic = 1; break; }
-            while (*pp && *pp != ',') {
-                if (n < (int)sizeof pt - 1) pt[n++] = *pp;
-                pp++;
-            }
-            pt[n] = 0;
-            while (n > 0 && pt[n - 1] == ' ') pt[--n] = 0;
-            if (*pp == ',') pp++;
-            memmove(ps, pp, strlen(pp) + 1);
+        while (ps[off]) {
+            const char *pt;
+            int start, end;
+            while (ps[off] == ' ') off++;
+            if (strncmp(ps + off, "...", 3) == 0) { variadic = 1; break; }
+            start = off;
+            while (ps[off] && ps[off] != ',') off++;
+            end = off;
+            while (end > start && ps[end - 1] == ' ') end--;
+            pt = runtime::text::ct_intern_len(ps + start, end - start);
+            if (!pt) return self->sup->fail("out of memory");
+            if (ps[off] == ',') off++;
             if (strcmp(pt, "void") == 0 && ai < 0) break;
             if (ai < 0) {
-                char amsg[MAX_TEXT];
-                snprintf(amsg, sizeof amsg, "takes more arguments, %d given", k);
-                if (self->sup->arity_warn(line, col, callee, amsg) != 0) return -1;
+                if (self->sup->arity_warn(line, col, callee,
+                        tool::sh::ct_scratch_fmt("takes more arguments, %d given", k)) != 0)
+                    return -1;
                 break;
             }
             if (pt[0]) {
-                char out[MAX_TEXT];
                 int z = 0;
-                if (self->chk_type(ai, out, sizeof out, &z) == 0) {
+                const char *out = self->chk_type_text(ai, &z);
+                if (out) {
                     if (self->arg_base + k < self->argcap) {
                         self->chk_line = self->arg_line[self->arg_base + k];
                         self->chk_col = self->arg_col[self->arg_base + k];
@@ -304,9 +312,9 @@ impl ExprTypes for Expr {
             ai = self->arena->nodes[ai].next;
         }
         if (!variadic && ai >= 0) {
-            char amsg[MAX_TEXT];
-            snprintf(amsg, sizeof amsg, "takes fewer arguments, %d given", k + 1);
-            if (self->sup->arity_warn(line, col, callee, amsg) != 0) return -1;
+            if (self->sup->arity_warn(line, col, callee,
+                    tool::sh::ct_scratch_fmt("takes fewer arguments, %d given", k + 1)) != 0)
+                return -1;
         }
         return 0;
     }
@@ -319,9 +327,9 @@ impl ExprTypes for Expr {
        `initializer:` words the non-brace path uses. */
     int chk_brace_init(const char *type, const char *raw, int line, int col)
     {
-        char base[MAX_TEXT];
-        char fname[MAX_TEXT];
-        char actual[MAX_TEXT];
+        const char *base;
+        const char *fname;
+        const char *actual;
         const char *bt;
         int si, fi, pos, i, n, item_start, item_end, depth, s0, e0, k, vstart;
         int designated, is_zero, aline, acol;
@@ -332,9 +340,10 @@ impl ExprTypes for Expr {
         bt = type;
         if (strncmp(bt, "struct ", 7) == 0) bt += 7;
         while (*bt == ' ') bt++;
-        snprintf(base, sizeof base, "%s", bt);
-        bl = strlen(base);
-        while (bl > 0 && base[bl - 1] == ' ') base[--bl] = 0;
+        bl = strlen(bt);
+        while (bl > 0 && bt[bl - 1] == ' ') bl--;
+        base = runtime::text::ct_intern_len(bt, (int)bl);
+        if (!base) return self->sup->fail("out of memory");
         if (!base[0] || strchr(base, '*') || strchr(base, '[') || strchr(base, '('))
             return 0;
         si = self->sym->find_struct(base);
@@ -384,10 +393,11 @@ impl ExprTypes for Expr {
                 int fn = 0;
                 k = s0 + 1;
                 while (k < e0 && bplus_id(raw[k])) {
-                    if (fn + 1 < (int)sizeof fname) fname[fn++] = raw[k];
+                    fn++;
                     k++;
                 }
-                fname[fn] = 0;
+                fname = runtime::text::ct_intern_len(raw + s0 + 1, fn);
+                if (!fname) return self->sup->fail("out of memory");
                 while (k < e0 && bplus_space(raw[k])) k++;
                 if (fn > 0 && k < e0 && raw[k] == '=') {
                     k++;
@@ -407,8 +417,8 @@ impl ExprTypes for Expr {
             while (vstart < e0 && bplus_space(raw[vstart])) vstart++;
             while (e0 > vstart && bplus_space(raw[e0 - 1])) e0--;
             if (vstart >= e0) continue;
-            if (!bplus_lit_type(raw + vstart, e0 - vstart, actual, sizeof actual, &is_zero))
-                continue;
+            actual = bplus_lit_type_text(raw + vstart, e0 - vstart, &is_zero);
+            if (!actual) continue;
             /* the item's own source position, counted from the `{` the caller
                passed in; the diagnostic then names the item, not the brace */
             aline = line;
@@ -428,18 +438,16 @@ impl ExprTypes for Expr {
                performs (PH-80 / `lit_coerce`); SH-115's brace walk missed
                both and reported the legal p80_retain / p81_box fixtures. */
             {
-                char fbase[MAX_TEXT];
                 const char *fp = self->sym->structs[si].fields[fi].type;
                 size_t fl;
                 if (is_zero) continue;
                 while (*fp == ' ' || *fp == '\t') fp++;
                 if (strncmp(fp, "struct ", 7) == 0) fp += 7;
-                snprintf(fbase, sizeof fbase, "%s", fp);
-                fl = strlen(fbase);
-                while (fl > 0 && (fbase[fl - 1] == ' ' || fbase[fl - 1] == '\t'))
-                    fbase[--fl] = 0;
+                fl = strlen(fp);
+                while (fl > 0 && (fp[fl - 1] == ' ' || fp[fl - 1] == '\t')) fl--;
                 if (strcmp(actual, "char *") == 0
-                    && (strcmp(fbase, "String") == 0 || strcmp(fbase, "Str") == 0))
+                    && ((fl == 6 && strncmp(fp, "String", 6) == 0)
+                        || (fl == 3 && strncmp(fp, "Str", 3) == 0)))
                     continue;
             }
             if (self->chk_assignable(self->sym->structs[si].fields[fi].type,
@@ -456,176 +464,148 @@ impl ExprTypes for Expr {
        is skipped rather than guessed (D32-4). A value that still carries array
        dimensions is not a value type either: array actuals decay in C, and the
        skip list owns that case. */
-    int chk_type(int n, char *out, int cap, int *is_zero)
+    const char *chk_type_text(int n, int *is_zero)
     {
         if (is_zero) *is_zero = 0;
-        if (n < 0 || !out || cap < 2) return -1;
-        out[0] = 0;
+        if (n < 0) return (const char *)0;
         {
             int nk;
 
             nk = self->arena->nodes[n].kind;
             match ((NodeKind){ .tag = nk }) {
-                NodeKind.NK_UNUSED0() => { return -1; }
-                NodeKind.NK_PROG() => { return -1; }
-                NodeKind.NK_PP() => { return -1; }
-                NodeKind.NK_FUNC() => { return -1; }
-                NodeKind.NK_BLOCK() => { return -1; }
-                NodeKind.NK_RET() => { return -1; }
-                NodeKind.NK_EXPR() => { return -1; }
-                NodeKind.NK_CALL() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_UNUSED0() => { return (const char *)0; }
+                NodeKind.NK_PROG() => { return (const char *)0; }
+                NodeKind.NK_PP() => { return (const char *)0; }
+                NodeKind.NK_FUNC() => { return (const char *)0; }
+                NodeKind.NK_BLOCK() => { return (const char *)0; }
+                NodeKind.NK_RET() => { return (const char *)0; }
+                NodeKind.NK_EXPR() => { return (const char *)0; }
+                NodeKind.NK_CALL() => { return chk_type_static_text(self, n); }
                 NodeKind.NK_NUM() => {
                 /* D32-5: every arithmetic spelling is one class, so the literal
                    stays `int` whatever its suffix. `is_zero` is the null pointer
                    constant flag the caller hands to `chk_assignable`. */
                 if (is_zero) *is_zero = (self->arena->nodes[n].num == 0);
-                snprintf(out, (size_t)cap, "%s", "int");
-                return 0;
+                return "int";
                 }
                 NodeKind.NK_STR() => {
                 /* a string literal is `char *` in a value context; a character
                    literal stays the arithmetic class (`int`). PH-80: a literal
                    already bound to String/Str answers that type. */
-                if (self->arena->nodes[n].aux == 1)
-                    snprintf(out, (size_t)cap, "%s", "String");
-                else if (self->arena->nodes[n].aux == 2)
-                    snprintf(out, (size_t)cap, "%s", "Str");
-                else
-                    snprintf(out, (size_t)cap, "%s",
-                             self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
-                             ? "int" : "char *");
-                return 0;
+                if (self->arena->nodes[n].aux == 1) return "String";
+                if (self->arena->nodes[n].aux == 2) return "Str";
+                return self->arena->str_at((int)self->arena->nodes[n].num)[0] == '\''
+                       ? "int" : "char *";
                 }
-                NodeKind.NK_VAR() => { return chk_type_static(self, n, out, cap); }
+                NodeKind.NK_VAR() => { return chk_type_static_text(self, n); }
                 NodeKind.NK_BIN() => {
     {
                 int op = (int)self->arena->nodes[n].aux;
-                if ((op >= B_LT && op <= B_NE) || op == B_AND || op == B_OR) {
-                    snprintf(out, (size_t)cap, "%s", "int");
-                    return 0;
-                }
+                if ((op >= B_LT && op <= B_NE) || op == B_AND || op == B_OR)
+                    return "int";
                 if ((op >= B_ADD && op <= B_MOD) || op == B_XOR
                     || op == B_BAND || op == B_BOR || op == B_SHL || op == B_SHR) {
-                    char l[MAX_TEXT];
-                    char r[MAX_TEXT];
                     int zl = 0;
                     int zr = 0;
-                    if (self->chk_type(self->arena->nodes[n].a, l, sizeof l, &zl) != 0)
-                        return -1;
-                    if (self->chk_type(self->arena->nodes[n].b, r, sizeof r, &zr) != 0)
-                        return -1;
-                    if (strcmp(l, "double") == 0 || strcmp(r, "double") == 0) {
-                        snprintf(out, (size_t)cap, "%s", "double");
-                        return 0;
-                    }
-                    if (strcmp(l, "int") == 0 && strcmp(r, "int") == 0) {
-                        snprintf(out, (size_t)cap, "%s", "int");
-                        return 0;
-                    }
-                    return -1;
+                    const char *l = self->chk_type_text(self->arena->nodes[n].a, &zl);
+                    const char *r = self->chk_type_text(self->arena->nodes[n].b, &zr);
+                    if (!l || !r) return (const char *)0;
+                    if (strcmp(l, "double") == 0 || strcmp(r, "double") == 0)
+                        return "double";
+                    if (strcmp(l, "int") == 0 && strcmp(r, "int") == 0)
+                        return "int";
+                    return (const char *)0;
                 }
-                return -1;
+                return (const char *)0;
             }
                 }
-                NodeKind.NK_DECL() => { return -1; }
-                NodeKind.NK_ASSIGN() => { return -1; }
-                NodeKind.NK_IF() => { return -1; }
-                NodeKind.NK_WHILE() => { return -1; }
-                NodeKind.NK_FOR() => { return -1; }
+                NodeKind.NK_DECL() => { return (const char *)0; }
+                NodeKind.NK_ASSIGN() => { return (const char *)0; }
+                NodeKind.NK_IF() => { return (const char *)0; }
+                NodeKind.NK_WHILE() => { return (const char *)0; }
+                NodeKind.NK_FOR() => { return (const char *)0; }
                 NodeKind.NK_UNARY() => {
     {
                 int op = (int)self->arena->nodes[n].aux;
-                if (op == U_NOT || op == U_BNOT) {
-                    snprintf(out, (size_t)cap, "%s", "int");
-                    return 0;
-                }
+                if (op == U_NOT || op == U_BNOT) return "int";
                 if (op == U_NEG) {
-                    char t[MAX_TEXT];
                     int z = 0;
-                    if (self->chk_type(self->arena->nodes[n].a, t, sizeof t, &z) != 0)
-                        return -1;
-                    if (strcmp(t, "int") != 0 && strcmp(t, "double") != 0) return -1;
-                    snprintf(out, (size_t)cap, "%s", t);
-                    return 0;
+                    const char *t = self->chk_type_text(self->arena->nodes[n].a, &z);
+                    if (!t) return (const char *)0;
+                    if (strcmp(t, "int") != 0 && strcmp(t, "double") != 0)
+                        return (const char *)0;
+                    return t;
                 }
-                return -1;
+                return (const char *)0;
             }
                 }
-                NodeKind.NK_POST() => { return -1; }
-                NodeKind.NK_PARAM() => { return -1; }
-                NodeKind.NK_STRUCT() => { return -1; }
-                NodeKind.NK_TYPEDEF() => { return -1; }
-                NodeKind.NK_GLOBAL() => { return -1; }
-                NodeKind.NK_FIELD() => { return -1; }
-                NodeKind.NK_MEMBER() => { return chk_type_static(self, n, out, cap); }
-                NodeKind.NK_ARROW() => { return chk_type_static(self, n, out, cap); }
-                NodeKind.NK_INDEX() => { return chk_type_static(self, n, out, cap); }
-                NodeKind.NK_ADDR() => { return chk_type_static(self, n, out, cap); }
-                NodeKind.NK_DEREF() => { return chk_type_static(self, n, out, cap); }
-                NodeKind.NK_METHOD() => { return -1; }
-                NodeKind.NK_MCALL() => { return chk_type_static(self, n, out, cap); }
-                NodeKind.NK_RAW() => { return -1; }
-                NodeKind.NK_UNUSED32() => { return -1; }
-                NodeKind.NK_IMPL() => { return -1; }
-                NodeKind.NK_BOX() => { return -1; }
+                NodeKind.NK_POST() => { return (const char *)0; }
+                NodeKind.NK_PARAM() => { return (const char *)0; }
+                NodeKind.NK_STRUCT() => { return (const char *)0; }
+                NodeKind.NK_TYPEDEF() => { return (const char *)0; }
+                NodeKind.NK_GLOBAL() => { return (const char *)0; }
+                NodeKind.NK_FIELD() => { return (const char *)0; }
+                NodeKind.NK_MEMBER() => { return chk_type_static_text(self, n); }
+                NodeKind.NK_ARROW() => { return chk_type_static_text(self, n); }
+                NodeKind.NK_INDEX() => { return chk_type_static_text(self, n); }
+                NodeKind.NK_ADDR() => { return chk_type_static_text(self, n); }
+                NodeKind.NK_DEREF() => { return chk_type_static_text(self, n); }
+                NodeKind.NK_METHOD() => { return (const char *)0; }
+                NodeKind.NK_MCALL() => { return chk_type_static_text(self, n); }
+                NodeKind.NK_RAW() => { return (const char *)0; }
+                NodeKind.NK_UNUSED32() => { return (const char *)0; }
+                NodeKind.NK_IMPL() => { return (const char *)0; }
+                NodeKind.NK_BOX() => { return (const char *)0; }
                 NodeKind.NK_CAST() => {
                 /* PH-68-R2: a cast's type is its target spelling. */
-                snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text);
-                return 0;
+                return self->arena->nodes[n].text;
                 }
-                NodeKind.NK_SIZEOF() => { return -1; }
+                NodeKind.NK_SIZEOF() => { return (const char *)0; }
                 NodeKind.NK_TERN() => {
     {
                 /* Both arms must agree; the node's value type is that type. */
-                char t1[MAX_TEXT];
-                char t2[MAX_TEXT];
                 int z1 = 0;
                 int z2 = 0;
-                if (self->chk_type(self->arena->nodes[n].b, t1, sizeof t1, &z1) != 0)
-                    return -1;
-                if (self->chk_type(self->arena->nodes[n].c, t2, sizeof t2, &z2) != 0)
-                    return -1;
-                if (strcmp(t1, t2) != 0) return -1;
-                snprintf(out, (size_t)cap, "%s", t1);
-                return 0;
+                const char *t1 = self->chk_type_text(self->arena->nodes[n].b, &z1);
+                const char *t2 = self->chk_type_text(self->arena->nodes[n].c, &z2);
+                if (!t1 || !t2) return (const char *)0;
+                if (strcmp(t1, t2) != 0) return (const char *)0;
+                return t1;
             }
                 }
-                NodeKind.NK_BREAK() => { return -1; }
-                NodeKind.NK_CONT() => { return -1; }
-                NodeKind.NK_DECLS() => { return -1; }
-                NodeKind.NK_DELETE() => { return -1; }
-                NodeKind.NK_SWITCH() => { return -1; }
-                NodeKind.NK_CASE() => { return -1; }
-                NodeKind.NK_DOWHILE() => { return -1; }
-                NodeKind.NK_ENUM() => { return -1; }
-                NodeKind.NK_ENUMVAL() => { return -1; }
-                NodeKind.NK_OFFSETOF() => { return -1; }
-                NodeKind.NK_UNION() => { return -1; }
-                NodeKind.NK_LABEL() => { return -1; }
-                NodeKind.NK_GOTO() => { return -1; }
-                NodeKind.NK_COMPOUND() => { return -1; }
-                NodeKind.NK_EMPTY() => { return -1; }
-                NodeKind.NK_VAARG() => { return -1; }
-                NodeKind.NK_FNUM() => {
-                snprintf(out, (size_t)cap, "%s", "double");
-                return 0;
-                }
-                NodeKind.NK_SASSERT() => { return -1; }
-                NodeKind.NK_FIELDS() => { return -1; }
-                NodeKind.NK_PRE() => { return -1; }
-                NodeKind.NK_RAW_TEXT() => { return -1; }
-                NodeKind.NK_CLOSURE() => { return -1; }
-                NodeKind.NK_LOOP() => { return -1; }
-                NodeKind.NK_INIT_RANGE() => { return -1; }
-                NodeKind.NK_FOREACH() => { return -1; }
-                NodeKind.NK_INTO() => { return -1; }
-                NodeKind.NK_INTO_SELF() => { return -1; }
-                NodeKind.NK_INIT_BRACE() => { return -1; }
-                NodeKind.NK_INIT_ITEM() => { return -1; }
-                NodeKind.NK_INIT_MBRACE() => { return -1; }
-                NodeKind.NK_UNUSED68() => { return -1; }
-                NodeKind.NK_DEFER() => { return -1; }
-                NodeKind.NK_DEFER_RUN() => { return -1; }
+                NodeKind.NK_BREAK() => { return (const char *)0; }
+                NodeKind.NK_CONT() => { return (const char *)0; }
+                NodeKind.NK_DECLS() => { return (const char *)0; }
+                NodeKind.NK_DELETE() => { return (const char *)0; }
+                NodeKind.NK_SWITCH() => { return (const char *)0; }
+                NodeKind.NK_CASE() => { return (const char *)0; }
+                NodeKind.NK_DOWHILE() => { return (const char *)0; }
+                NodeKind.NK_ENUM() => { return (const char *)0; }
+                NodeKind.NK_ENUMVAL() => { return (const char *)0; }
+                NodeKind.NK_OFFSETOF() => { return (const char *)0; }
+                NodeKind.NK_UNION() => { return (const char *)0; }
+                NodeKind.NK_LABEL() => { return (const char *)0; }
+                NodeKind.NK_GOTO() => { return (const char *)0; }
+                NodeKind.NK_COMPOUND() => { return (const char *)0; }
+                NodeKind.NK_EMPTY() => { return (const char *)0; }
+                NodeKind.NK_VAARG() => { return (const char *)0; }
+                NodeKind.NK_FNUM() => { return "double"; }
+                NodeKind.NK_SASSERT() => { return (const char *)0; }
+                NodeKind.NK_FIELDS() => { return (const char *)0; }
+                NodeKind.NK_PRE() => { return (const char *)0; }
+                NodeKind.NK_RAW_TEXT() => { return (const char *)0; }
+                NodeKind.NK_CLOSURE() => { return (const char *)0; }
+                NodeKind.NK_LOOP() => { return (const char *)0; }
+                NodeKind.NK_INIT_RANGE() => { return (const char *)0; }
+                NodeKind.NK_FOREACH() => { return (const char *)0; }
+                NodeKind.NK_INTO() => { return (const char *)0; }
+                NodeKind.NK_INTO_SELF() => { return (const char *)0; }
+                NodeKind.NK_INIT_BRACE() => { return (const char *)0; }
+                NodeKind.NK_INIT_ITEM() => { return (const char *)0; }
+                NodeKind.NK_INIT_MBRACE() => { return (const char *)0; }
+                NodeKind.NK_UNUSED68() => { return (const char *)0; }
+                NodeKind.NK_DEFER() => { return (const char *)0; }
+                NodeKind.NK_DEFER_RUN() => { return (const char *)0; }
                 NodeKind.NK_TRY() => {
     {
                 int ad = 0;
@@ -634,75 +614,101 @@ impl ExprTypes for Expr {
                    `Result<U, E>` whose error parameter is the same `E`. A void
                    function only needs some `Result` operand: its failure has no
                    payload to carry. The judged type is `T`. */
-                char opty[MAX_TEXT];
-                char otag[MAX_TEXT];
-                char oval[MAX_TEXT];
-                char oerr[MAX_TEXT];
-                char rtag[MAX_TEXT];
-                char rval[MAX_TEXT];
-                char rerr[MAX_TEXT];
-                char msg[2 * MAX_TEXT + 64];
+                const char *opty;
+                const char *otag;
+                const char *oval;
+                const char *oerr;
+                const char *rtag;
+                const char *rval;
+                const char *rerr;
                 int oi;
                 int line = self->arena->nodes[n].line;
                 int col = (int)self->arena->nodes[n].num;
     
-                if (!self->static_ctype(self->arena->nodes[n].a, opty, sizeof opty, &ad, 0))
-                    return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
-                                                    self->sup->mem->path);
-                if (ad != 0 || !self->result_tag(opty, otag, sizeof otag))
-                    return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
-                                                    self->sup->mem->path);
+                opty = self->static_ctype_text(self->arena->nodes[n].a, &ad, 0);
+                if (!opty || ad != 0) {
+                    tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
+                                             self->sup->mem->path);
+                    return (const char *)0;
+                }
+                otag = self->result_tag_text(opty);
+                if (!otag) {
+                    tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
+                                             self->sup->mem->path);
+                    return (const char *)0;
+                }
                 oi = frontend::sym::ct_inst_find(otag);
-                if (!self->result_cols(oi, oval, sizeof oval, oerr, sizeof oerr))
-                    return tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
-                                                    self->sup->mem->path);
-                if (!self->sym->ret_type[0])
-                    return tool::diag::ct_sem_error(line, col, "'?' is not allowed here",
-                                                    self->sup->mem->path);
+                oval = self->result_cols_text(oi, &oerr);
+                if (!oval) {
+                    tool::diag::ct_sem_error(line, col, "'?' needs a Result operand",
+                                             self->sup->mem->path);
+                    return (const char *)0;
+                }
+                if (!self->sym->ret_type[0]) {
+                    tool::diag::ct_sem_error(line, col, "'?' is not allowed here",
+                                             self->sup->mem->path);
+                    return (const char *)0;
+                }
                 if (strcmp(self->sym->ret_type, "void") != 0) {
-                    if (!self->result_tag(self->sym->ret_type, rtag, sizeof rtag))
-                        return tool::diag::ct_sem_error(line, col,
+                    rtag = self->result_tag_text(self->sym->ret_type);
+                    if (!rtag) {
+                        tool::diag::ct_sem_error(line, col,
                             "postfix '?' needs a function returning Result",
                             self->sup->mem->path);
+                        return (const char *)0;
+                    }
                     oi = frontend::sym::ct_inst_find(rtag);
-                    if (!self->result_cols(oi, rval, sizeof rval, rerr, sizeof rerr))
-                        return tool::diag::ct_sem_error(line, col,
+                    rval = self->result_cols_text(oi, &rerr);
+                    if (!rval) {
+                        tool::diag::ct_sem_error(line, col,
                             "postfix '?' needs a function returning Result",
                             self->sup->mem->path);
+                        return (const char *)0;
+                    }
                     if (strcmp(oerr, rerr) != 0) {
-                        snprintf(msg, sizeof msg,
-                                 "'?': expected error type '%s', got '%s'", rerr, oerr);
-                        return tool::diag::ct_sem_error(line, col, msg,
-                                                        self->sup->mem->path);
+                        tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                            "'?': expected error type '%s', got '%s'", rerr, oerr),
+                            self->sup->mem->path);
+                        return (const char *)0;
                     }
                 }
-                if (snprintf(out, (size_t)cap, "%s", oval) >= cap) return -1;
-                return 0;
+                return oval;
             }
                 }
-                NodeKind.NK_OPT() => { return -1; }
-                NodeKind.NK_MATSEQ() => { return -1; }
-                NodeKind.NK_SLICE_INDEX() => { return -1; }
-                NodeKind.NK_SLICE_RANGE() => { return -1; }
-                NodeKind.NK_SLICE_GET() => { return -1; }
-                NodeKind.NK_NEWOBJ() => { return -1; }
+                NodeKind.NK_OPT() => { return (const char *)0; }
+                NodeKind.NK_MATSEQ() => { return (const char *)0; }
+                NodeKind.NK_SLICE_INDEX() => { return (const char *)0; }
+                NodeKind.NK_SLICE_RANGE() => { return (const char *)0; }
+                NodeKind.NK_SLICE_GET() => { return (const char *)0; }
+                NodeKind.NK_NEWOBJ() => { return (const char *)0; }
                 NodeKind.NK_MATCH() => {
                 /* LANG-29 S4 / B5: an expression match carries its unified arm
                    type; the statement form still has none here. */
                 if ((self->arena->nodes[n].sflags & 8) != 0
-                    && self->arena->nodes[n].text2[0]) {
-                    snprintf(out, (size_t)cap, "%s", self->arena->nodes[n].text2);
-                    return 0;
+                    && self->arena->nodes[n].text2[0])
+                    return self->arena->nodes[n].text2;
+                return (const char *)0;
                 }
-                return -1;
-            }
-                NodeKind.NK_ARM() => { return -1; }
-                NodeKind.NK_BIND() => { return -1; }
-                NodeKind.NK_ADTCTOR() => { return chk_type_static(self, n, out, cap); }
-                NodeKind.NK_ADTFIELD() => { return -1; }
-                NodeKind.NK_ADTMEM() => { return -1; }
+                NodeKind.NK_ARM() => { return (const char *)0; }
+                NodeKind.NK_BIND() => { return (const char *)0; }
+                NodeKind.NK_ADTCTOR() => { return chk_type_static_text(self, n); }
+                NodeKind.NK_ADTFIELD() => { return (const char *)0; }
+                NodeKind.NK_ADTMEM() => { return (const char *)0; }
             }
         }
+    }
+
+    int chk_type(int n, char *out, int cap, int *is_zero)
+    {
+        const char *t;
+
+        if (is_zero) *is_zero = 0;
+        if (n < 0 || !out || cap < 2) return -1;
+        out[0] = 0;
+        t = self->chk_type_text(n, is_zero);
+        if (!t) return -1;
+        if (snprintf(out, (size_t)cap, "%s", t) >= cap) return -1;
+        return 0;
     }
 
     /* Phase 32 S3: one formal against one actual through the same kernel
@@ -714,15 +720,17 @@ impl ExprTypes for Expr {
        sided pointer such as `int x = "s"` would be skipped (B32-8). */
     int chk_assignable(const char *formal, const char *actual, int is_zero, int diag)
     {
-        char fb[MAX_TEXT], ab[MAX_TEXT], tr[MAX_TEXT];
-        char msg[2 * MAX_TEXT + 64];
+        const char *fb;
+        const char *ab;
+        const char *tr;
         const char *label;
+        const char *msg;
         int r;
 
         if (!formal || !formal[0] || !actual || !actual[0]) return 0;
-        if (self->sup->is_iface_type(formal, tr, sizeof tr)) return 0;
+        if (self->sup->is_iface_type_text(formal, &tr)) return 0;
         if (is_zero && strchr(formal, '*')) return 0;
-        r = arg_class(formal, actual, fb, sizeof fb, ab, sizeof ab);
+        r = arg_class_text(formal, actual, &fb, &ab);
         if (r == -1) return 0;
         if (r == 2) {
             /* different struct spellings; the same row passes like `r == 0` */
@@ -733,16 +741,16 @@ impl ExprTypes for Expr {
             return 0;
         }
         if (diag == 6) {
-            snprintf(msg, sizeof msg, "argument %d: expected '%s', got '%s'",
-                     self->chk_arg, formal, actual);
+            msg = tool::sh::ct_scratch_fmt("argument %d: expected '%s', got '%s'",
+                                           self->chk_arg, formal, actual);
         } else if (diag == 8) {
-            snprintf(msg, sizeof msg, "'$' target: expected '%s', got '%s'",
-                     formal, actual);
+            msg = tool::sh::ct_scratch_fmt("'$' target: expected '%s', got '%s'",
+                                           formal, actual);
         } else {
             label = diag == 2 ? "assignment"
                     : ((diag == 3 || diag == 7) ? "return" : "initializer");
-            snprintf(msg, sizeof msg, "%s: expected '%s', got '%s'",
-                     label, formal, actual);
+            msg = tool::sh::ct_scratch_fmt("%s: expected '%s', got '%s'",
+                                           label, formal, actual);
         }
         /* SH-115: a `$` target / hard-return mismatch is a C-invalid
            assignment, so it does not downgrade under `--check-level=warn`. */
@@ -762,7 +770,7 @@ impl ExprTypes for Expr {
        has decayed to a pointer and carries no length, so it is left to C. */
     int slice_view_from_array(int n)
     {
-        char t[MAX_TEXT];
+        const char *t;
         int d = 0, vi, m;
 
         if (n < 0) return n;
@@ -770,15 +778,15 @@ impl ExprTypes for Expr {
             || self->arena->nodes[n].kind == N_SLICE_INDEX
             || self->arena->nodes[n].kind == N_SLICE_GET)
             return n;
-        if (!self->static_ctype(n, t, sizeof t, &d, 0)) return n;
-        if (d != 1) return n;
+        t = self->static_ctype_text(n, &d, 0);
+        if (!t || d != 1) return n;
         if (self->arena->nodes[n].kind == N_VAR) {
             vi = self->sym->find_var(self->arena->nodes[n].text2);
             if (vi >= 0 && self->sym->vars[vi].is_fnparam) return n;
         }
         m = self->sup->new_node(N_SLICE_RANGE);
         if (m < 0) return -1;
-        self->arena->nodes[m].text = runtime::text::ct_intern(t);
+        self->arena->nodes[m].text = t;
         if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
         self->arena->nodes[m].aux = 3;
         self->arena->nodes[m].a = n;
@@ -794,16 +802,15 @@ impl ExprTypes for Expr {
        is needed because `ct_method_bind` reads its type parameters. */
     int chk_mcall_args(const char *ibase, const char *fname, int args)
     {
-        char base[MAX_TEXT];
+        const char *base;
         char **bn = 0;
         char **bv = 0;
         int bcap = 0, bvcap = 0, bnt;
-        char fty[MAX_TEXT], out[MAX_TEXT];
         int ii, nimpls, inst, m, found, foundm, ai, k;
         struct StructImpl *im;
 
         if (strncmp(ibase, "struct ", 7) != 0) return 0;
-        snprintf(base, sizeof base, "%s", ibase + 7);
+        base = ibase + 7;
         inst = frontend::sym::ct_inst_find(base);
         if (inst < 0) return 0;
         im = frontend::sym::ct_impls(&nimpls);
@@ -885,9 +892,11 @@ impl ExprTypes for Expr {
             int pi = self->arena->nodes[foundm].a;
             while (pi >= 0 && ai > 0) {
                 int is_zero = 0;
-                if (subst_tparam(self->arena->nodes[pi].text, bn, bv, bnt,
-                                 fty, sizeof fty) == 0
-                    && self->chk_type(ai, out, sizeof out, &is_zero) == 0) {
+                const char *fty = subst_tparam_text(self->arena->nodes[pi].text,
+                                                    bn, bv, bnt);
+                const char *out = fty ? self->chk_type_text(ai, &is_zero)
+                                      : (const char *)0;
+                if (out) {
                     if (self->arg_base + k < self->argcap) {
                         self->chk_line = self->arg_line[self->arg_base + k];
                         self->chk_col = self->arg_col[self->arg_base + k];
@@ -911,9 +920,9 @@ impl ExprTypes for Expr {
        so a `String *` initializer is never silently rewritten. */
     int lit_coerce(const char *type, int e)
     {
-        char base[MAX_TEXT];
-        char hb[MAX_TEXT];
-        char msg[MAX_TEXT];
+        const char *base;
+        const char *hb;
+        const char *msg;
         const char *p;
         size_t n;
 
@@ -922,14 +931,16 @@ impl ExprTypes for Expr {
            assignment, the return position and a declared-parameter argument
            all reach this hook with the expected type, so one check covers
            the three shapes that used to emit `char *p = s;`. */
-        if (type != 0 && type[0] != 0 && strchr(type, '*') != 0
-            && str_handle_value(self, e, hb, sizeof hb)) {
-            snprintf(msg, sizeof msg,
-                     "cannot convert '%s' to '%s': use cstr() at the C boundary",
-                     hb, type);
-            return tool::diag::ct_sem_error(self->arena->nodes[e].line,
-                                            self->arena->nodes[e].num, msg,
-                                            self->sup->mem->path);
+        if (type != 0 && type[0] != 0 && strchr(type, '*') != 0) {
+            hb = str_handle_value_text(self, e);
+            if (hb) {
+                msg = tool::sh::ct_scratch_fmt(
+                    "cannot convert '%s' to '%s': use cstr() at the C boundary",
+                    hb, type);
+                return tool::diag::ct_sem_error(self->arena->nodes[e].line,
+                                                self->arena->nodes[e].num, msg,
+                                                self->sup->mem->path);
+            }
         }
         if (e < 0 || self->arena->nodes[e].kind != N_STR) return 0;
         if (self->arena->str_at((int)self->arena->nodes[e].num)[0] == '\'')
@@ -939,9 +950,8 @@ impl ExprTypes for Expr {
         if (strncmp(p, "struct ", 7) == 0) p += 7;
         n = strlen(p);
         while (n > 0 && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
-        if (n >= (size_t)MAX_TEXT) return 0;
-        memcpy(base, p, n);
-        base[n] = 0;
+        base = runtime::text::ct_intern_len(p, (int)n);
+        if (!base) return 0;
         if (strchr(base, '*') != 0) return 0;
         if (strcmp(base, "String") == 0) {
             self->arena->nodes[e].aux = 1;

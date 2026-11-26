@@ -247,10 +247,10 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(
         return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type '%s' has no subscript: 'get' must take 1 parameter", label), _self->sup->mem->path);
     }
     if (idx_node >= 0) {
-        char kty[MAX_TEXT];
         int kz = 0;
         const char * pt = _self->arena->nodes[_self->arena->nodes[m].a].text;
-        if ((((_self->__frontend_parse_exprtypes_vptr->chk_type(_self, idx_node, kty, sizeof(kty), (&kz)) == 0) && kty[0]) && pt[0])) {
+        const char * kty = _self->__frontend_parse_exprtypes_vptr->chk_type_text(_self, idx_node, (&kz));
+        if (((kty && kty[0]) && pt[0])) {
             _self->chk_line = line;
             _self->chk_col = col;
             _self->chk_arg = 1;

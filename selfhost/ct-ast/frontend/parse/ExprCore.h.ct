@@ -318,6 +318,9 @@ pub trait ExprTypes {
        silent). `is_zero` is optional and marks the bare literal `0`, a null
        pointer constant wherever a pointer is expected. */
     int  chk_type(int n, char *out, int cap, int *is_zero);
+    /* S1a-0 C2p-10: the pool-text form of the expression type (NULL when
+       the shape is undecidable). */
+    const char *chk_type_text(int n, int *is_zero);
     /* One compatibility judgement through the shared `arg_class` kernel
        (D32-2). `diag` picks the wording: 1 initializer, 2 assignment,
        3 return, 6 a container argument (the index comes from `chk_arg`).

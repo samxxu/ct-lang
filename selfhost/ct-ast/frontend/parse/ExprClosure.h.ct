@@ -30,6 +30,7 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -321,8 +322,8 @@ impl ExprClosure for Expr {
 
     int formal_is_env_fn(const char *t)
     {
-        char plist[MAX_TEXT];
-        char item[MAX_TEXT];
+        const char *plist;
+        const char *item;
         int lp, rp, pos;
         size_t n, hn;
 
@@ -335,9 +336,11 @@ impl ExprClosure for Expr {
             else if (t[n] == ')') rp = (int)n;
         }
         if (lp < 0 || rp <= lp + 1) return 0;
-        snprintf(plist, sizeof plist, "%.*s", rp - lp - 1, t + lp + 1);
+        plist = runtime::text::ct_intern_len(t + lp + 1, rp - lp - 1);
+        if (!plist) return 0;
         pos = 0;
-        if (!plist_next(plist, &pos, item, sizeof item)) return 0;
+        item = plist_next_text(plist, &pos);
+        if (!item) return 0;
         if (strncmp(item, "void *", 6) != 0) return 0;
         return item[6] != '*';
     }
@@ -428,7 +431,6 @@ impl ExprClosure for Expr {
 
     int map_closure_check(int line, int col, int args, int ti, int mi)
     {
-        char msg[MAX_TEXT];
         const char *ft;
         int cur, pos, ok, np;
 
@@ -447,9 +449,9 @@ impl ExprClosure for Expr {
                    got ''). */
                 if (self->sym->traits[ti].m[mi].variadic
                     && (pos >= np || pos + 1 >= np)) {
-                    snprintf(msg, sizeof msg,
-                             "a map recipe cannot pass a closure through '...'");
-                    tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    tool::diag::ct_sem_error(line, col,
+                        "a map recipe cannot pass a closure through '...'",
+                        self->sup->mem->path);
                     tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
                                             self->sup->mem->path);
                     return -1;
@@ -458,10 +460,9 @@ impl ExprClosure for Expr {
                     ok = self->formal_is_env_fn(ft)
                          && self->type_is_void_ptr(self->sym->traits[ti].m[mi].ptype[pos + 1]);
                 if (!ok) {
-                    snprintf(msg, sizeof msg,
-                             "a closure argument must fill a '(fn, env)' parameter pair (got '%s')",
-                             ft);
-                    tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                    tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                        "a closure argument must fill a '(fn, env)' parameter pair (got '%s')",
+                        ft), self->sup->mem->path);
                     tool::diag::ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT,
                                             self->sup->mem->path);
                     return -1;
@@ -486,8 +487,9 @@ impl ExprClosure for Expr {
 
     int decl_type_compat(const char *formal, const char *actual)
     {
-        char fb[MAX_TEXT], ab[MAX_TEXT];
-        int r = arg_class(formal, actual, fb, sizeof fb, ab, sizeof ab);
+        const char *fb;
+        const char *ab;
+        int r = arg_class_text(formal, actual, &fb, &ab);
         if (r == 2) {
             int fs = self->sym->find_struct(fb + 6);
             int as = self->sym->find_struct(ab + 6);
@@ -504,12 +506,9 @@ impl ExprClosure for Expr {
         vi = self->sym->find_var(vname);
         if (vi < 0)
             return self->sup->fail("a closure cannot be used where a plain function pointer is expected");
-        if (self->sym->vars[vi].is_global || self->sym->vars[vi].is_static) {
-            char msg[MAX_TEXT];
-            snprintf(msg, sizeof msg,
-                     "a closure cannot be stored in '%s' (its scope outlives the closure)", vname);
-            return self->sup->fail(msg);
-        }
+        if (self->sym->vars[vi].is_global || self->sym->vars[vi].is_static)
+            return self->sup->fail(tool::sh::ct_scratch_fmt(
+                "a closure cannot be stored in '%s' (its scope outlives the closure)", vname));
         self->sym->vars[vi].is_closure = 1;
         self->sym->vars[vi].closure_id = ci;
         return 0;

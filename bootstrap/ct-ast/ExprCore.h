@@ -259,6 +259,7 @@ struct frontend_parse_ExprRecvMut_iface {
 
 struct frontend_parse_ExprTypes_vtbl {
     int (*chk_type)(void *, int, char *, int, int *);
+    const char * (*chk_type_text)(void *, int, int *);
     int (*chk_assignable)(void *, const char *, const char *, int, int);
     int (*chk_mcall_args)(void *, const char *, const char *, int);
     int (*chk_callptr_args)(void *, const char *, const char *, int, int, int);

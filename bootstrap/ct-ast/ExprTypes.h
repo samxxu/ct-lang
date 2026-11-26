@@ -18,6 +18,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -111,7 +112,8 @@ struct frontend_parse_ExprTypes {
     int unused;
 };
 int frontend_parse_closure_match(struct frontend_parse_Expr *, int, const char *, int, int);
+const char * frontend_parse_str_handle_value_text(struct frontend_parse_Expr *, int);
 int frontend_parse_str_handle_value(struct frontend_parse_Expr *, int, char *, int);
-int frontend_parse_chk_type_static(struct frontend_parse_Expr *, int, char *, int);
+const char * frontend_parse_chk_type_static_text(struct frontend_parse_Expr *, int);
 
 #endif

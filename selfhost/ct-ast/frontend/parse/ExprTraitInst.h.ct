@@ -165,7 +165,6 @@ impl ExprTraitInst for Expr {
         char **ctype = 0;
         const char *canon;
         const char *abuf;
-        char symbolic[MAX_TEXT];
         const char *iface;
         size_t base_len;
         int ccap = 0, tccap = 0, gpi;
@@ -223,11 +222,12 @@ impl ExprTraitInst for Expr {
                          "type argument '%s' cannot instantiate a generic trait", abuf));
             }
             for (gpi = 0; gpi < self->in_generic_ntparam; gpi++) {
+                const char *sym;
                 if (!self->in_generic_tparam[gpi]) continue;
-                if (frontend::sym::ct_generic_subst(abuf, self->in_generic_tparam[gpi], "",
-                                                    symbolic, sizeof symbolic) != 0)
-                    return self->sup->fail("type is too long");
-                if (strcmp(symbolic, abuf) != 0)
+                sym = frontend::sym::ct_generic_subst_text(abuf,
+                                                           self->in_generic_tparam[gpi], "");
+                if (!sym) return self->sup->fail("out of memory");
+                if (strcmp(sym, abuf) != 0)
                     return self->sup->fail("symbolic trait type arguments are not supported yet");
             }
             if (frontend::sym::ct_row_set(ctype, nargs, abuf) != 0)

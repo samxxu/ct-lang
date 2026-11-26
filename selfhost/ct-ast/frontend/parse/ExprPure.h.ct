@@ -47,7 +47,7 @@ pub int bind_conv_on(void);
 pub int expr_is_builtin_Box_type(const char *type);
 pub int bplus_space(int c);
 pub int bplus_id(int c);
-pub int bplus_lit_type(const char *s, int n, char *out, int cap, int *is_zero);
+pub const char *bplus_lit_type_text(const char *s, int n, int *is_zero);
 
 pub int arg_count(struct Arena *a, int first)
 {
@@ -172,21 +172,15 @@ pub int bplus_id(int c)
         || (c >= '0' && c <= '9') || c == '_';
 }
 
-pub int bplus_lit_type(const char *s, int n, char *out, int cap, int *is_zero)
+pub const char *bplus_lit_type_text(const char *s, int n, int *is_zero)
 {
     int i, j, digits, dots, exps, suf_at, sn, all_zero, k, ucount, lcount;
     char suf[8];
 
     *is_zero = 0;
-    if (n <= 0) return 0;
-    if (s[0] == '"' && n >= 2 && s[n - 1] == '"') {
-        snprintf(out, (size_t)cap, "%s", "char *");
-        return 1;
-    }
-    if (s[0] == '\'' && n >= 2 && s[n - 1] == '\'') {
-        snprintf(out, (size_t)cap, "%s", "int");
-        return 1;
-    }
+    if (n <= 0) return (const char *)0;
+    if (s[0] == '"' && n >= 2 && s[n - 1] == '"') return "char *";
+    if (s[0] == '\'' && n >= 2 && s[n - 1] == '\'') return "int";
     i = 0;
     if (i < n && (s[i] == '-' || s[i] == '+')) i++;
     j = i;
@@ -199,37 +193,33 @@ pub int bplus_lit_type(const char *s, int n, char *out, int cap, int *is_zero)
         i++;
         while (i < n && s[i] >= '0' && s[i] <= '9') { i++; digits++; }
     }
-    if (digits == 0) return 0;
+    if (digits == 0) return (const char *)0;
     if (i < n && (s[i] == 'e' || s[i] == 'E')) {
         int ed = 0;
         exps = 1;
         i++;
         if (i < n && (s[i] == '+' || s[i] == '-')) i++;
         while (i < n && s[i] >= '0' && s[i] <= '9') { i++; ed++; }
-        if (ed == 0) return 0;
+        if (ed == 0) return (const char *)0;
     }
     suf_at = i;
     sn = 0;
     while (i < n && (s[i] == 'u' || s[i] == 'U' || s[i] == 'l' || s[i] == 'L'
                      || s[i] == 'f' || s[i] == 'F')) {
-        if (sn + 1 >= (int)sizeof suf) return 0;
+        if (sn + 1 >= (int)sizeof suf) return (const char *)0;
         suf[sn] = s[i];
         sn++;
         i++;
     }
     suf[sn] = 0;
-    if (i != n) return 0;              /* not a single literal */
+    if (i != n) return (const char *)0;    /* not a single literal */
     if (dots || exps || strchr(suf, 'f') != 0 || strchr(suf, 'F') != 0) {
-        if (strchr(suf, 'u') != 0 || strchr(suf, 'U') != 0) return 0;
-        if (sn == 0) snprintf(out, (size_t)cap, "%s", "double");
-        else if (sn == 1 && (suf[0] == 'f' || suf[0] == 'F'))
-            snprintf(out, (size_t)cap, "%s", "float");
-        else {
-            for (k = 0; k < sn; k++)
-                if (suf[k] != 'l' && suf[k] != 'L') return 0;
-            snprintf(out, (size_t)cap, "%s", "long double");
-        }
-        return 1;
+        if (strchr(suf, 'u') != 0 || strchr(suf, 'U') != 0) return (const char *)0;
+        if (sn == 0) return "double";
+        if (sn == 1 && (suf[0] == 'f' || suf[0] == 'F')) return "float";
+        for (k = 0; k < sn; k++)
+            if (suf[k] != 'l' && suf[k] != 'L') return (const char *)0;
+        return "long double";
     }
     /* an integer suffix: the only spellings that name a C numeric type */
     ucount = 0;
@@ -237,18 +227,17 @@ pub int bplus_lit_type(const char *s, int n, char *out, int cap, int *is_zero)
     for (k = 0; k < sn; k++) {
         if (suf[k] == 'u' || suf[k] == 'U') ucount++;
         else if (suf[k] == 'l' || suf[k] == 'L') lcount++;
-        else return 0;
+        else return (const char *)0;
     }
-    if (sn == 0) snprintf(out, (size_t)cap, "%s", "int");
-    else if (ucount && !lcount) snprintf(out, (size_t)cap, "%s", "unsigned");
-    else if (!ucount && lcount == 1) snprintf(out, (size_t)cap, "%s", "long");
-    else if (!ucount && lcount >= 2) snprintf(out, (size_t)cap, "%s", "long long");
-    else if (ucount == 1 && lcount == 1) snprintf(out, (size_t)cap, "%s", "unsigned long");
-    else if (ucount == 1 && lcount >= 2) snprintf(out, (size_t)cap, "%s", "unsigned long long");
-    else return 0;
     all_zero = 1;
     for (k = j; k < suf_at; k++)
         if (s[k] != '.' && s[k] != '0') { all_zero = 0; break; }
     if (all_zero && digits > 0) *is_zero = 1;
-    return 1;
+    if (sn == 0) return "int";
+    if (ucount && !lcount) return "unsigned";
+    if (!ucount && lcount == 1) return "long";
+    if (!ucount && lcount >= 2) return "long long";
+    if (ucount == 1 && lcount == 1) return "unsigned long";
+    if (ucount == 1 && lcount >= 2) return "unsigned long long";
+    return (const char *)0;
 }

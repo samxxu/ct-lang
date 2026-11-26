@@ -768,6 +768,17 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_var_type(void *self, cons
     return 0;
 }
 
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_var_type_text(void *self, const char * name) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int i;
+    (void)(_self);
+    i = _self->__frontend_sym_symbolops_vptr->find_var(_self, name);
+    if (i < 0) {
+        return (const char *)(0);
+    }
+    return _self->vars[i].type;
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_func(void *self, const char * cname) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
@@ -1897,6 +1908,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .find_qualified_global = frontend_sym_Symbols_frontend_sym_SymbolOps_find_qualified_global,
     .find_var = frontend_sym_Symbols_frontend_sym_SymbolOps_find_var,
     .var_type = frontend_sym_Symbols_frontend_sym_SymbolOps_var_type,
+    .var_type_text = frontend_sym_Symbols_frontend_sym_SymbolOps_var_type_text,
     .find_func = frontend_sym_Symbols_frontend_sym_SymbolOps_find_func,
     .add_meth_ann = frontend_sym_Symbols_frontend_sym_SymbolOps_add_meth_ann,
     .find_meth_ann = frontend_sym_Symbols_frontend_sym_SymbolOps_find_meth_ann,

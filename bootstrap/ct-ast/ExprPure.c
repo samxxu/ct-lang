@@ -101,7 +101,7 @@ int frontend_parse_bind_conv_on(void);
 int frontend_parse_expr_is_builtin_Box_type(const char *);
 int frontend_parse_bplus_space(int);
 int frontend_parse_bplus_id(int);
-int frontend_parse_bplus_lit_type(const char *, int, char *, int, int *);
+const char * frontend_parse_bplus_lit_type_text(const char *, int, int *);
 int frontend_parse_arg_count(struct runtime_arena_Arena * a, int first) {
     int c = 0;
     while (first > 0) {
@@ -257,7 +257,7 @@ int frontend_parse_bplus_space(int c) {
 int frontend_parse_bplus_id(int c) {
     return (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_'));
 }
-int frontend_parse_bplus_lit_type(const char * s, int n, char * out, int cap, int * is_zero) {
+const char * frontend_parse_bplus_lit_type_text(const char * s, int n, int * is_zero) {
     int i;
     int j;
     int digits;
@@ -272,15 +272,13 @@ int frontend_parse_bplus_lit_type(const char * s, int n, char * out, int cap, in
     char suf[8];
     (*is_zero) = 0;
     if (n <= 0) {
-        return 0;
+        return (const char *)(0);
     }
     if ((((s[0] == '"') && (n >= 2)) && (s[(n - 1)] == '"'))) {
-        snprintf(out, (size_t)(cap), "%s", "char *");
-        return 1;
+        return "char *";
     }
     if ((((s[0] == '\'') && (n >= 2)) && (s[(n - 1)] == '\''))) {
-        snprintf(out, (size_t)(cap), "%s", "int");
-        return 1;
+        return "int";
     }
     i = 0;
     if (((i < n) && ((s[i] == '-') || (s[i] == '+')))) {
@@ -303,7 +301,7 @@ int frontend_parse_bplus_lit_type(const char * s, int n, char * out, int cap, in
         }
     }
     if (digits == 0) {
-        return 0;
+        return (const char *)(0);
     }
     if (((i < n) && ((s[i] == 'e') || (s[i] == 'E')))) {
         int ed = 0;
@@ -317,14 +315,14 @@ int frontend_parse_bplus_lit_type(const char * s, int n, char * out, int cap, in
             ed++;
         }
         if (ed == 0) {
-            return 0;
+            return (const char *)(0);
         }
     }
     suf_at = i;
     sn = 0;
     while (((i < n) && ((((((s[i] == 'u') || (s[i] == 'U')) || (s[i] == 'l')) || (s[i] == 'L')) || (s[i] == 'f')) || (s[i] == 'F')))) {
         if ((sn + 1) >= (int)(sizeof(suf))) {
-            return 0;
+            return (const char *)(0);
         }
         suf[sn] = s[i];
         sn++;
@@ -332,29 +330,24 @@ int frontend_parse_bplus_lit_type(const char * s, int n, char * out, int cap, in
     }
     suf[sn] = 0;
     if (i != n) {
-        return 0;
+        return (const char *)(0);
     }
     if ((((dots || exps) || (strchr(suf, 'f') != 0)) || (strchr(suf, 'F') != 0))) {
         if (((strchr(suf, 'u') != 0) || (strchr(suf, 'U') != 0))) {
-            return 0;
+            return (const char *)(0);
         }
         if (sn == 0) {
-            snprintf(out, (size_t)(cap), "%s", "double");
+            return "double";
         }
-        else {
-            if (((sn == 1) && ((suf[0] == 'f') || (suf[0] == 'F')))) {
-                snprintf(out, (size_t)(cap), "%s", "float");
-            }
-            else {
-                for (k = 0; k < sn; k++) {
-                    if (((suf[k] != 'l') && (suf[k] != 'L'))) {
-                        return 0;
-                    }
-                }
-                snprintf(out, (size_t)(cap), "%s", "long double");
+        if (((sn == 1) && ((suf[0] == 'f') || (suf[0] == 'F')))) {
+            return "float";
+        }
+        for (k = 0; k < sn; k++) {
+            if (((suf[k] != 'l') && (suf[k] != 'L'))) {
+                return (const char *)(0);
             }
         }
-        return 1;
+        return "long double";
     }
     ucount = 0;
     lcount = 0;
@@ -367,38 +360,7 @@ int frontend_parse_bplus_lit_type(const char * s, int n, char * out, int cap, in
                 lcount++;
             }
             else {
-                return 0;
-            }
-        }
-    }
-    if (sn == 0) {
-        snprintf(out, (size_t)(cap), "%s", "int");
-    }
-    else {
-        if ((ucount && (!lcount))) {
-            snprintf(out, (size_t)(cap), "%s", "unsigned");
-        }
-        else {
-            if (((!ucount) && (lcount == 1))) {
-                snprintf(out, (size_t)(cap), "%s", "long");
-            }
-            else {
-                if (((!ucount) && (lcount >= 2))) {
-                    snprintf(out, (size_t)(cap), "%s", "long long");
-                }
-                else {
-                    if (((ucount == 1) && (lcount == 1))) {
-                        snprintf(out, (size_t)(cap), "%s", "unsigned long");
-                    }
-                    else {
-                        if (((ucount == 1) && (lcount >= 2))) {
-                            snprintf(out, (size_t)(cap), "%s", "unsigned long long");
-                        }
-                        else {
-                            return 0;
-                        }
-                    }
-                }
+                return (const char *)(0);
             }
         }
     }
@@ -412,5 +374,23 @@ int frontend_parse_bplus_lit_type(const char * s, int n, char * out, int cap, in
     if ((all_zero && (digits > 0))) {
         (*is_zero) = 1;
     }
-    return 1;
+    if (sn == 0) {
+        return "int";
+    }
+    if ((ucount && (!lcount))) {
+        return "unsigned";
+    }
+    if (((!ucount) && (lcount == 1))) {
+        return "long";
+    }
+    if (((!ucount) && (lcount >= 2))) {
+        return "long long";
+    }
+    if (((ucount == 1) && (lcount == 1))) {
+        return "unsigned long";
+    }
+    if (((ucount == 1) && (lcount >= 2))) {
+        return "unsigned long long";
+    }
+    return (const char *)(0);
 }

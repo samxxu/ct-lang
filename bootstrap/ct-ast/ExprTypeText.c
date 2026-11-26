@@ -101,10 +101,12 @@ const char * frontend_parse_tnorm_text(const char *);
 int frontend_parse_id_char(int);
 int frontend_parse_inst_impl_score(int);
 int frontend_parse_plist_next(const char *, int *, char *, int);
+const char * frontend_parse_plist_next_text(const char *, int *);
 int frontend_parse_qual_at(const char *, int);
 int frontend_parse_ref_type_is_const_value(const char *);
 int frontend_parse_slice_array_len(const char *);
 int frontend_parse_subst_tparam(const char *, char * *, char * *, int, char *, int);
+const char * frontend_parse_subst_tparam_text(const char *, char * *, char * *, int);
 void frontend_parse_tbase(const char *, char *, int);
 int frontend_parse_tclass(const char *, const char *);
 void frontend_parse_tnorm(const char *, char *, int);
@@ -507,4 +509,80 @@ int frontend_parse_tstars(const char * k) {
         k++;
     }
     return n;
+}
+const char * frontend_parse_plist_next_text(const char * p, int * pos) {
+    int i;
+    int n;
+    int start;
+    i = (*pos);
+    while (((p[i] == ' ') || (p[i] == '\t'))) {
+        i++;
+    }
+    if ((!p[i])) {
+        return (const char *)(0);
+    }
+    start = i;
+    while ((p[i] && (p[i] != ','))) {
+        i++;
+    }
+    n = i;
+    while (((n > start) && ((p[(n - 1)] == ' ') || (p[(n - 1)] == '\t')))) {
+        n--;
+    }
+    if (p[i] == ',') {
+        i++;
+    }
+    (*pos) = i;
+    return runtime_text_ct_intern_len((p + start), (n - start));
+}
+const char * frontend_parse_subst_tparam_text(const char * spell, char * * names, char * * vals, int n) {
+    const char * k;
+    char * kbuf = 0;
+    int kcap = 0;
+    int i;
+    char one[2];
+    if (tool_sh_ct_text_init((&kbuf), (&kcap), 64) != 0) {
+        return (const char *)(0);
+    }
+    for (i = 0; spell[i]; i++) {
+        if (((spell[i] == ' ') || (spell[i] == '\t'))) {
+            continue;
+        }
+        one[0] = spell[i];
+        one[1] = 0;
+        if (tool_sh_ct_text_cat((&kbuf), (&kcap), one) != 0) {
+            tool_sh_ct_text_free((&kbuf), (&kcap));
+            return (const char *)(0);
+        }
+    }
+    k = runtime_text_ct_intern(kbuf);
+    tool_sh_ct_text_free((&kbuf), (&kcap));
+    if ((!k)) {
+        return (const char *)(0);
+    }
+    for (i = 0; i < n; i++) {
+        const char * nv = ((names && names[i]) ? names[i] : "");
+        const char * vv = ((vals && vals[i]) ? vals[i] : "");
+        const char * p;
+        if ((!nv[0])) {
+            continue;
+        }
+        if (strcmp(k, nv) == 0) {
+            return vv;
+        }
+        p = runtime_text_ct_internf("%s*", nv);
+        if ((!p)) {
+            return (const char *)(0);
+        }
+        if (strcmp(k, p) == 0) {
+            return runtime_text_ct_internf("%s *", vv);
+        }
+    }
+    for (i = 0; i < n; i++) {
+        const char * nv = ((names && names[i]) ? names[i] : "");
+        if ((nv[0] && strstr(k, nv))) {
+            return (const char *)(0);
+        }
+    }
+    return runtime_text_ct_intern(spell);
 }

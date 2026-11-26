@@ -10,6 +10,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -203,8 +204,8 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_type_is_void_ptr(void 
 
 static int frontend_parse_Expr_frontend_parse_ExprClosure_formal_is_env_fn(void *self, const char * t) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char plist[MAX_TEXT];
-    char item[MAX_TEXT];
+    const char * plist;
+    const char * item;
     int lp;
     int rp;
     int pos;
@@ -229,9 +230,13 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_formal_is_env_fn(void 
     if (((lp < 0) || (rp <= (lp + 1)))) {
         return 0;
     }
-    snprintf(plist, sizeof(plist), "%.*s", ((rp - lp) - 1), ((t + lp) + 1));
+    plist = runtime_text_ct_intern_len(((t + lp) + 1), ((rp - lp) - 1));
+    if ((!plist)) {
+        return 0;
+    }
     pos = 0;
-    if ((!frontend_parse_plist_next(plist, (&pos), item, sizeof(item)))) {
+    item = frontend_parse_plist_next_text(plist, (&pos));
+    if ((!item)) {
         return 0;
     }
     if (strncmp(item, "void *", 6) != 0) {
@@ -336,7 +341,6 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_check(void
 
 static int frontend_parse_Expr_frontend_parse_ExprClosure_map_closure_check(void *self, int line, int col, int args, int ti, int mi) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
     const char * ft;
     int cur;
     int pos;
@@ -353,8 +357,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_map_closure_check(void
                 ft = _self->sym->traits[ti].m[mi].ptype[pos];
             }
             if ((_self->sym->traits[ti].m[mi].variadic && ((pos >= np) || ((pos + 1) >= np)))) {
-                snprintf(msg, sizeof(msg), "a map recipe cannot pass a closure through '...'");
-                tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+                tool_diag_ct_sem_error(line, col, "a map recipe cannot pass a closure through '...'", _self->sup->mem->path);
                 tool_diag_ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, _self->sup->mem->path);
                 return (-1);
             }
@@ -362,8 +365,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_map_closure_check(void
                 ok = (_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprclosure_vptr->type_is_void_ptr(_self, _self->sym->traits[ti].m[mi].ptype[(pos + 1)]));
             }
             if ((!ok)) {
-                snprintf(msg, sizeof(msg), "a closure argument must fill a '(fn, env)' parameter pair (got '%s')", ft);
-                tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+                tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a closure argument must fill a '(fn, env)' parameter pair (got '%s')", ft), _self->sup->mem->path);
                 tool_diag_ct_sem_note(line, col, CT_EXPR_CLOSURE_HINT, _self->sup->mem->path);
                 return (-1);
             }
@@ -390,9 +392,9 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_map_closure_check(void
 
 static int frontend_parse_Expr_frontend_parse_ExprClosure_decl_type_compat(void *self, const char * formal, const char * actual) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char fb[MAX_TEXT];
-    char ab[MAX_TEXT];
-    int r = frontend_parse_arg_class(formal, actual, fb, sizeof(fb), ab, sizeof(ab));
+    const char * fb;
+    const char * ab;
+    int r = frontend_parse_arg_class_text(formal, actual, (&fb), (&ab));
     if (r == 2) {
         int fs = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (fb + 6));
         int as = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (ab + 6));
@@ -412,9 +414,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_bind(void *sel
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a closure cannot be used where a plain function pointer is expected");
     }
     if ((_self->sym->vars[vi].is_global || _self->sym->vars[vi].is_static)) {
-        char msg[MAX_TEXT];
-        snprintf(msg, sizeof(msg), "a closure cannot be stored in '%s' (its scope outlives the closure)", vname);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("a closure cannot be stored in '%s' (its scope outlives the closure)", vname));
     }
     _self->sym->vars[vi].is_closure = 1;
     _self->sym->vars[vi].closure_id = ci;

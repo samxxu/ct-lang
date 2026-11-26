@@ -23,6 +23,7 @@ import frontend::sym::Symbols::Adt as Adt;
 import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -80,7 +81,6 @@ impl ExprAdt for Expr {
         int tline, tcol, vline, vcol, args, nargs, adt, v, nfields, n, k, a;
         const char *rn;
         const char *vname;
-        char msg[3 * MAX_TEXT];
         struct Adt *adts;
         int nadts;
 
@@ -101,20 +101,24 @@ impl ExprAdt for Expr {
         self->sup->lex_next();
         adt = frontend::sym::ct_adt_from_type(rn);
         if (adt < 0) {
-            snprintf(msg, sizeof msg, "'%s' is not an ADT", rn);
-            return tool::diag::ct_sem_error(tline, tcol, msg, self->sup->mem->path);
+            return tool::diag::ct_sem_error(tline, tcol,
+                tool::sh::ct_scratch_fmt("'%s' is not an ADT", rn),
+                self->sup->mem->path);
         }
         v = frontend::sym::ct_adt_variant(adt, vname);
         if (v < 0) {
             adts = frontend::sym::ct_adts(&nadts);
-            snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'", vname, adts[adt].name);
-            return tool::diag::ct_sem_error(vline, vcol, msg, self->sup->mem->path);
+            return tool::diag::ct_sem_error(vline, vcol, tool::sh::ct_scratch_fmt(
+                "unknown variant '%s' of ADT '%s'", vname, adts[adt].name),
+                self->sup->mem->path);
         }
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("("))) {
             adts = frontend::sym::ct_adts(&nadts);
-            snprintf(msg, sizeof msg, "expected '(' after '%s.%s'", adts[adt].name, vname);
             return tool::diag::ct_sem_error(self->lex->tokline,
-                self->lex->tokstart - self->lex->lstart + 1, msg, self->sup->mem->path);
+                self->lex->tokstart - self->lex->lstart + 1,
+                tool::sh::ct_scratch_fmt("expected '(' after '%s.%s'",
+                                         adts[adt].name, vname),
+                self->sup->mem->path);
         }
         args = self->parse_args();
         if (args < 0) return -1;
@@ -124,15 +128,16 @@ impl ExprAdt for Expr {
         nargs = 0;
         for (a = args; a > 0; a = self->arena->nodes[a].next) nargs++;
         if (nargs != nfields) {
-            snprintf(msg, sizeof msg, "'%s.%s' takes %d argument%s, but %d given",
-                     adts[adt].name, vname, nfields, nfields == 1 ? "" : "s", nargs);
-            return tool::diag::ct_sem_error(tline, tcol, msg, self->sup->mem->path);
+            return tool::diag::ct_sem_error(tline, tcol, tool::sh::ct_scratch_fmt(
+                "'%s.%s' takes %d argument%s, but %d given",
+                adts[adt].name, vname, nfields, nfields == 1 ? "" : "s", nargs),
+                self->sup->mem->path);
         }
         k = 0;
         for (a = args; a > 0; a = self->arena->nodes[a].next, k++) {
-            char aty[MAX_TEXT];
-            char fb[MAX_TEXT];
-            char ab[MAX_TEXT];
+            const char *aty;
+            const char *fb;
+            const char *ab;
             int az, rc, aline, acol;
             if (k >= nfields) break;
             /* LANG-22: an ADT payload copies the value into the variant, so a
@@ -143,10 +148,10 @@ impl ExprAdt for Expr {
                                           aline, acol) != 0)
                 return -1;
             az = 0;
-            if (self->chk_type(a, aty, sizeof aty, &az) != 0) continue;
+            aty = self->chk_type_text(a, &az);
+            if (!aty) continue;
             if (az && strchr(adts[adt].variants[v].fields[k].type, '*')) continue;
-            rc = arg_class(adts[adt].variants[v].fields[k].type, aty,
-                           fb, sizeof fb, ab, sizeof ab);
+            rc = arg_class_text(adts[adt].variants[v].fields[k].type, aty, &fb, &ab);
             if (rc == 2) {
                 int fs, as;
                 fs = self->sym->find_struct(fb + 6);
@@ -156,10 +161,10 @@ impl ExprAdt for Expr {
             if (rc != 1) continue;
             aline = (self->arg_base + k < self->argcap) ? self->arg_line[self->arg_base + k] : tline;
             acol = (self->arg_base + k < self->argcap) ? self->arg_col[self->arg_base + k] : tcol;
-            snprintf(msg, sizeof msg, "argument %d of '%s.%s': expected '%s', got '%s'",
-                     k + 1, adts[adt].name, vname,
-                     adts[adt].variants[v].fields[k].type, aty);
-            return tool::diag::ct_sem_error(aline, acol, msg, self->sup->mem->path);
+            return tool::diag::ct_sem_error(aline, acol, tool::sh::ct_scratch_fmt(
+                "argument %d of '%s.%s': expected '%s', got '%s'",
+                k + 1, adts[adt].name, vname,
+                adts[adt].variants[v].fields[k].type, aty), self->sup->mem->path);
         }
         n = self->sup->new_node(N_ADTCTOR);
         if (n < 0) return -1;
