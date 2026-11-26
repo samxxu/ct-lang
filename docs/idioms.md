@@ -104,6 +104,22 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 | 遍历 Map | `foreach` + `item.key` / `item.value` | 手写并行数组 | §4.49 |
 | 错误处理 | `Result` + `?` + `errdefer` | 错误码 + `goto` | §4.62 |
 
+### 11.1 C 互操作写法（仅边界）
+
+上表是 Ct 日常路径；只有接 C 时才回退到指针写法。**`char *` / `->` / `malloc` / `free`
+不属于 Ct 日常写法**，只允许出现在 `.m.ct`、shim、`#ct-raw`、MMIO/extern 与 C 互操作用例：
+
+| 场景 | C 互操作（仅边界） | Ct 日常 |
+| --- | --- | --- |
+| 字符串 | `char *s = strdup(...)` + `free` | `String s = "x";` / `Str` 借用 |
+| 数组参数 | `int *a, int n` | `int[] a` |
+| 出参 | `int *out` + 调用方约定 | `out int x` / `ref int x` |
+| 单对象 | `malloc` + `->` + `free` | `Box<T>` + `new` + `.` |
+| 多形态 | `enum kind` + `switch` | ADT + `match` |
+
+同一件事的逐组代码对照见 [guide §1.1](guide-for-c-programmers.md#11-同样的东西用-ct-写c-对照)；
+C 侧代码只用于说明互操作边界，不应当作 Ct 样例复制。
+
 ## 附录 briefing
 
 ```text
