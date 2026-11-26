@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10376 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10414 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=79794 io_cap=1024
+     emitted_before=48223 emitted_after=82533 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -261,6 +261,12 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   `backend/tir/TBuilder`、`backend/verify/Verifier` 三个新单元的 `.c`/`.h`，
   外加每个既有单元头部的三行前向声明；TIR 默认关闭，用户语料生成物逐字节
   不变）。切片清单仍为 76，判别式仍各读 1 次。
+- **v1-PH-2 S1b-S2c（LIR 全覆盖）后的 live 校准**：`Emitter.h.ct` 10376 → 10414
+  （+38：impl 方法体与 plain-struct inherent 方法体的发射缝，hook 签名加
+  `stmts` 模式），发射 C 79794 → 82533（+2739：TIR 的 ADT/结构体表，LIR 的
+  match / 闭包 / `?` / 语句头提升 / 切片 / 字符串句柄 / 清理，V5/V6 与
+  `bodies printed` 计数）。切片清单仍为 76，判别式仍各读 1 次；语料 78/78
+  unit、295/295 函数体由 LIR 打印且逐字节，自举 66/72 unit 逐字节。
 - **v1-PH-2 S1b-S2b（LIR 发射缝）后的 live 校准**：`Emitter.h.ct` 10323 → 10376
   （+53：函数体 seam 的 hook 与 `ct_emit_ntmp`），发射 C 77933 → 79794
   （+1861：`backend/lir/Lower` 的 seam、方法/虚派发、数组 vptr 环、`foreach` /
