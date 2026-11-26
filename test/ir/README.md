@@ -1,4 +1,4 @@
-# test/ir — TIR/LIR 探针（S1b-S1 / S1b-S2b）
+# test/ir — TIR/LIR 探针（S1b-S1 / S1b-S2c）
 
 > 中文
 
@@ -10,7 +10,7 @@
 ## 运行
 
 ```sh
-bash test/ir/run.sh <ct-ast>            # 全部六节
+bash test/ir/run.sh <ct-ast>            # 全部七节（A–G）
 CT_IR_SELFHOST=0 bash test/ir/run.sh <ct-ast>   # 跳过自举（约 6s）
 ```
 
@@ -42,29 +42,29 @@ CT_IR_SELFHOST=0 bash test/ir/run.sh <ct-ast>   # 跳过自举（约 6s）
 ## 覆盖口径
 
 - 语料：`test/cases/*.ct` + `examples/*/*.ct`，剔除方言演示（`07_dialect` /
-  `ct-dialects`，与 `p85_corpus_sha.tsv` 同一集合，当前 **72** 个）；
+  `ct-dialects`，与 `p85_corpus_sha.tsv` 同一集合，当前 **78** 个）；
 - 每个文件各编译一次（不带 / 带 `CT_TIR=1`），逐字节 `cmp`；
 - 多单元：`test/modules/split`（import + 跨单元派发）与
   `test/modules/autodrop`（AutoDrop），整棵 C 树 `diff -r`；
 - 自举：编译器自身源码（70 个单元）带影子重建，整棵树与不带影子逐字节相同。
 
-## S2b：LIR 发射缝（`--ir=on` / `CT_LIR=1`）
+## S2b–S2c：LIR 发射缝（`--ir=on` / `CT_LIR=1`）
 
 S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与 CP2
-（`E-IR-105`…`E-IR-110`）。S2b 把它接成 **函数体发射缝**：
+（`E-IR-105`…`E-IR-110`）。S2b 把它接成 **函数体发射缝**，S2c 把剩余构造
+全部降级并让缝在 `build` 模式也真正生效：
 
 1. TIR 建成后，lowerer 逐函数降级；落在子集外的函数只标记 `ok=0`，不拖累
    其他函数；
 2. 程序外壳（banner、include、类型/全局、原型、vtable/实例/胶水）仍由既有
    emitter 打印——S8 之前它仍是布局与实例化的唯一真相；
-3. emitter 在打印每个函数签名之后询问 LIR：这个函数体是否完整降级、且它的
-   `__ct_*N` 计数器与 emitter 当前值一致？是则从 LIR 打印函数体，否则用
-   emitter 自己的 body writer。
-
-因此 `--ir=on` 只可能改变 LIR 完整覆盖的函数体字节；未覆盖的函数与全部顶层
-声明逐字节来自旧路径。`test/ir/run.sh` 的 G 段同时断言：78 语料与自举树的
-生成 C 逐字节相同、每个 unit 的 `ready`/`funcs=ok/total` 报告存在、六个
-`E-IR-105`…`E-IR-110` 负例不产出 `.c`。
+3. emitter 在打印函数签名（自由函数）或方法前导（impl 方法）之后询问 LIR：
+   该函数体是否完整降级？`build` 模式在打开 `unit.c` 之前建 LIR 并过 CP2，
+   逐 unit 接同一发射缝；
+4. 每个函数体打印时，把 LIR 的**函数内临时编号**整体平移到 emitter 当时的
+   `__ct_*N` 计数器；`lir: bodies printed=N skipped=M` 给出真正由 LIR 打印的
+   函数体数，探针断言 `printed == funcs`（否则说明“降级了但没打印”，字节
+   一致性会被 AST writer 掩盖）。
 
 | 开关 | 行为 | 默认 |
 | --- | --- | --- |
@@ -72,63 +72,68 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
 | `--ir=on` / `CT_LIR=1` | 建 TIR（V1–V4）→ 降级到 LIR → CP2（V5–V10）→ 逐函数打印已覆盖的函数体 | 否 |
 | `--ir=shadow` / `CT_LIR=shadow` | 同上，但只校验，不打印 LIR | 否 |
 | `--ir=off` / `CT_LIR=0` | 同未设置（CLI 优先于环境） | — |
-| `CT_LIR_REPORT=1` | 每个 unit 打一行 `lir: unit=… ready=… funcs=ok/total …` | 否 |
+| `CT_LIR_REPORT=1` | 每个 unit 打一行 `lir: unit=… ready=… funcs=ok/total …`，发射后打 `lir: bodies printed=N skipped=M` | 否 |
 | `CT_LIR_FAULT=<key>` | 注入一条非法 LIR 行，供 V5–V10 负例使用 | 否 |
 
 `ready=1` 的定义是「本 unit 的每个**会被发射**的函数体都完整降级」；模板没有
-自己的 C body，不计入分母。`funcs=ok/total` 是逐函数覆盖率，ready=0 的 unit
-仍可能已经把大部分函数体交给 LIR（报告里可见）。
+自己的 C body，模板 impl 的单态体属生成 C，都不计入分母。`funcs=ok/total` 是
+逐函数覆盖率，ready=0 的 unit 仍可能已经把大部分函数体交给 LIR。
 
-### 子集范围（S2b）
+### 子集范围（S2c）
 
-- 函数：有函数体、自由函数 / impl 方法 / `static` / `inline` / 变参 /
-  `ref`·`out` 形参；模板（带自由类型参数）不发射、不算分母；
+- 函数：有函数体、自由函数 / impl 方法（trait impl 与 plain-struct inherent）/
+  `static` / `inline` / 变参 / `ref`·`out` 形参；模板（带自由类型参数）不发射、
+  不算分母；
 - 语句：单/多声明符 `Decl`/`Decls`、`Assign`、`ExprStmt`、`Drop`、`DeferRun` /
-  `ErrDeferRun`、`RawC`（模型位）、`if` / `while` / `for` / 块 / 空语句 /
-  同块 `goto` / label；
-- 表达式：字面量、名字（含 `ref`/`out` 的 `(*x)`）、`.`/`->`、下标、解引用、
-  取址、cast、一元、二元、普通调用、函数指针调用、callee 表达式调用、
-  赋值、`++`/`--`、三目、raw 片段、`sizeof`/`alignof`/`offsetof`；
+  `ErrDeferRun`、`RawC`（模型位）、`if` / `while` / `for` / `loop` / `foreach` /
+  块 / 空语句 / 同块 `goto` / label / `switch`·`case`（模型位）、
+  **`delete`（Drop / free / handback）**、**`match` 语句**、**`?` 语句表达式**、
+  **闭包绑定声明**、**语句头提升（`?.` / `into` / 接收者临时）**；
+- 表达式：字面量（含 `String` / `Str` 绑定）、名字（含 `ref`/`out` 的 `(*x)`、
+  命名空间全局的 C 拼写）、`.`/`->`、下标、解引用、取址、cast、一元、二元、
+  普通调用、函数指针调用、callee 表达式调用、赋值、`++`/`--`、三目、raw 片段、
+  `sizeof`/`alignof`/`offsetof`、`ref`/`out` 实参取址、函数指针与变参形参、
+  **`?`（Result 失败边）**、**`?.`**、**`into`**、**切片（index / get / range）**、
+  **表达式 `match`**、**ADT 构造**、**闭包（字面量 / 绑定 / 调用）**、容器
+  内在方法与 `str_*` / `map_*` / 原子 intrinsic；
+- 生成代码：trait-carrying struct 局部的 `.__x_vptr` 设计符（含嵌套字段、
+  `{ }` 空初值）、数组局部的逐元素 vptr 环、实例拼写（`Vec_int` / `Pair_int`）
+  的 vptr、malloc 指针的 `(*p).__x_vptr` 写入、容器 `_from(...)` 与 range 初值；
 - 出口清理集：块尾落出、`return`、`break`、`continue`（含 `err:` 错误边 =
   全部条目），每个出口把 `DeferRun` / `ErrDeferRun` / `Drop` 物化成语句，
-  由 V6 按 §4.3 重算比对；
+  由 V6 按 §4.3 重算比对；`return` 在 SH-45 条件下先物化到 `__ct_retN`，
+  终结的 `return` 之后若还有源码（label / 不可达分支）降成 `LS_RETBLOCK`；
+- SH-102：`String` / `U16String`（以及 payload 含 owning 值的用户 ADT）局部
+  的零初始化、块尾 / `return` 释放、`__ct_sretN` 返回物化；
 - CP2：V5 临时纪律、V6 清理集、V7 errdefer 边、V8 所有权、**V9 CFG 完整**
   （终结符/跳转目标/循环目标/void 返回值）、**V10 raw 边界**（非空、合法
-  origin、未受信 raw 不得命名 `__ct_*`）；
-- 临时编号：**模块级**计数器、前缀 `__ct_tmp` / `__ct_recv` / `__ct_opt` /
-  `__ct_ret` / `__ct_sret`（契约 §4.2 写「每函数从 0」，与现状不符；逐字节优先，
-  差异记录在此）。发射缝在每个函数入口核对两边计数器，不等就回退该函数体，
-  所以临时名不会因混合发射而错位；
-- `build` 模式每个 unit 在打开 `.c` 之前建 LIR 并过 CP2，逐 unit 接同一发射缝。
+  origin、未受信 raw 不得命名 `__ct_*`）。
 
 ### 夹具
 
 `test/ir/lir/c1…c6` 覆盖六类清理边：普通 `return`（defer + errdefer 混合）、
 `break`、`continue`、块尾落出（嵌套块 LIFO）、`return err:`（错误边）、同块多个
-defer 的逆序。`c7_autodrop_model` 把一个 `own` 的 Drop 条目降级并校验，但 S2b
-打印器仍不渲染 AutoDrop，所以它 `ready=0`、程序走 AST 路径（断言逐字节不变）。
+defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，Drop 语句
+由 LIR 打印，逐字节不变。
 
 ### 当前覆盖率（2026-11-27 实测）
 
 - 78 语料 + 自举 65 个 `.c` unit：`--ir=on` 生成 C 与默认路径**全部逐字节相同**；
-- 语料：**51/78 unit `ready=1`**，**242/276 个会被发射的函数体**由 LIR 打印
-  （内置层模板方法只经实例发射，不计分母）；
-- 自举：65 个 unit 中 12 个 `ready=1`，整棵 C 树逐字节相同；
+- 语料：**78/78 unit `ready=1`**，**295/295 个会被发射的函数体**由 LIR 打印
+  （`bodies printed=295 skipped=0`；分母包含内置层 `String` / `Str` 函数，
+  S2b 时它们因 owning 返回被排除在分母外）；
+- 自举：72 个报告 unit 中 66 个 `ready=1`，**每个已降级函数体全部由 LIR
+  打印**（`skipped=0`，1452 个），整棵 C 树逐字节相同；6 个 unit 仍有 19 个
+  函数落在子集外（下表）；
 - `build` 模式 `test/modules/split` 与 `test/modules/autodrop` 整树逐字节相同。
 
-### 剩余构造（S2b 未覆盖，函数级回退）
+### 剩余构造（S2c 后仍未降级，函数级回退）
 
-- 闭包（`__ct_cl_tramp_*` / 环境实例）、`?` 失败边与 `out` 转换、表达式
-  `match`、ADT 构造/模式、切片 helper（`__ct_slice_*`）、`?.`、`into`；
-- 需要 emitter 生成实例布局的容器局部：模板实例带 vtable（`impl Trait for
-  Vec<T>` 一类）时的 `.__x_vptr` 设计符，以及堆分配指针的 `(*p).__x_vptr`
-  写入（malloc/calloc 路径）；
-- 泛型实例体的结构化降级（`backend/tir` 目前只记实例模板 + 实参，不记
-  单态化后的语句/表达式树）；
-- AutoDrop 的 LIR→C 打印；
-- `switch` / `do…while` / `match` 语句形态（`TS_SWITCH` / `TS_DO` /
-  `TS_MATCH`）；`into` 块（`TS_INTO`）与组合语句（`TS_MATSEQ`）；
-- 顶层声明仍由 emitter 打印（S8 的 emitter 契约阶段迁走）。
+- `?` 所在函数带活跃 cleanup（defer / errdefer / own）时，失败边还要跑清理链
+  （`L7700`），该函数回退；语料没有此形态，自举有少数；
+- ADT 构造的 payload 是 owning 值且实参是 place（需要 emitter 的 retain，
+  `L7811`）；
+- 其余自举残留集中在少数生成/边界形态（分派/实例布局），见下节。
 
 ## S1 的已知边界（不声称已覆盖）
 
