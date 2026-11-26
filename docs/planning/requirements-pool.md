@@ -381,10 +381,10 @@ v0-PH-52 的 D52-6 指向本条。
 | `what` | 给借用视图加零分配输出入口：`Str.print()` / `Str.println()`，`String` 同名转发到 `as_str()`；按字节写 stdout，不调用 `cstr()`、不分配；`cstr()` 保留为 C 互操作出口。 |
 | `why` | `Str` / `String` 目前没有直接输出入口，`cstr()` 会分配并要求调用方 `free`。于是 examples 里 26 个文件（[pointer-free-exemptions](pointer-free-exemptions.md) 的 E3 类）只能用 `printf("%s", s.cstr())`，「去指针」变成「多一次分配」，S8c 的指针清零目标无法达成。 |
 | `priority` | `P2` |
-| `status` | `accepted`（2026-11-27 所有者批准方案 A；施工卡 [lang30-str-print-construction](../design/lang30-str-print-construction.md) 已交 DEV） |
+| `status` | `accepted`（2026-11-27 所有者批准方案 A；**交付窗口 = v1.2，不顺延**；施工卡 [lang30-str-print-construction](../design/lang30-str-print-construction.md) 已交 DEV） |
 | `owner` | DEV（实施）；REVIEW（ADR 签收）；REQ（验收） |
 | `last-touched` | 2026-11-27 |
-| `block` | 前置 ADR `D-030` 与 spec §4.78（与实现同批提交）；`fwrite` 声明走 `.m.ct` / shim（与 S9 同方向）。不依赖 IR；S8c 的 E3 类 26 个样例等它落地 |
+| `block` | 前置 ADR `D-030` 与 spec §4.78（与实现同批提交）；`fwrite` 声明走 `.m.ct` / shim（与 S9 同方向）。不依赖 IR；**必须在 S8c 收口前完成**（E-V3-9c 的 E3 清零依赖它），不接受顺延到 v1.3 |
 
 ## REQ-POINTERFREE-1 — 日常代码的指针退场
 

@@ -5,6 +5,7 @@
 | 模块 | lang / lib-core（`Str`、`String`）+ docs |
 | 定性 | **能力缺口**（REQ 提案；不是缺陷，不声称已有 API 丢失） |
 | 严重度 | **Medium**（阻塞 `v1-PH-2` S8c 的 E3 类 26 个样例去指针） |
+| 交付窗口 | **v1.2 必做（所有者 2026-11-27）**：必须在 S8c 收口前落地，是 E-V3-9c 的一部分，不顺延到 v1.3 |
 | 锚点 | `55c82d16`（2026-11-27） |
 | 依据 | [str-print-api 提案](../../docs/proposals/str-print-api.md)、[pointer-free-exemptions](../../docs/planning/pointer-free-exemptions.md) E3、[D-013](../../docs/decisions/D-013.md) |
 | 状态 | open |

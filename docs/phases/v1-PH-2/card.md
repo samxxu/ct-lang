@@ -59,7 +59,7 @@ version-minor: 2
 | S7 检查器 | S1b | `REQ-MEM-2` 直接用 S1b 的清理 CFG；`REQ-TYPE-1` 用现有检查器 |
 | S8 IR-2 | S1b | emitter 契约 + 语义图 + 自举切换；建议在 S2–S7 之后，避免反复搬发射逻辑 |
 | S8b 源码狗粮化 | S8 | 用最新特性压缩 selfhost 源码；**用户语料生成 C 逐字节不变**，编译器自身 C 允许差异；详见 [dogfooding](../../planning/dogfooding.md) |
-| S8c 样例与文档去指针化 | S2–S6（特性）、S8b（可并行） | 特性样例矩阵清零；examples/docs 用新写法；C 互操作例外逐条登记（[TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)） |
+| S8c 样例与文档去指针化 | S2–S6（特性）、S8b（可并行）、**LANG-30（打印 API，v1.2 必做）** | 特性样例矩阵清零；examples/docs 用新写法；C 互操作例外逐条登记（[TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)）；E3 类 26 个文件假删算未完成 |
 | S9 全局默认 strict | S8c | 默认翻转 + in-repo 迁移；依赖 S7 的类型检查证据与 S1b 的 LIR |
 | S10 收口 | S0–S9 | — |
 
@@ -105,14 +105,14 @@ version-minor: 2
 | S7 检查器与证据 | REQ-TYPE-1（`--types` 三类判定进 `build/compile` 默认，先 FP=0 再分切片）；REQ-MEM-2（用 S1b 的 CFG 做单元内写入摘要）；REQ-MEM-1 只复评；P-1.3 迁移 lint | [REQ-TYPE-1](../../planning/requirements-pool.md#L229-L243)、[REQ-MEM-2](../../planning/requirements-pool.md#L261-L277)、[J-6 台账](../../planning/j6-evidence/ledger.md) | FP=0 证据；`--check-level=off` 逃生；写入摘要正负例；迁移 lint 三档 dry-run；`check-all` 绿 | L |
 | S8 IR-2 | emitter 契约（类型/实例化/生命周期判定移出 emitter）；内建层/泛型实例语义依赖图；golden 差异清单后重基线；自举切换；**切换后按 [design §4.5](../../design/sh94-m1-core-layout.md#45-phase-demitter分两段避免与-ir-重复劳动) 做 Emitter D4–D6（EmitHeader / EmitDecl / EmitExpr）** | typed-lowered-ir §4、§6–§8、[SH-113](../../../issues/selfhost/sh113-builtin-live-boundary.md)、[SH-94](../../../issues/selfhost/sh94-giant-units-duplicate-constants.md) | emitter 无类型/实例化/生命周期判定（评审签字）；全语料等价或差异清单签字；自举 2 轮（tag 前 3 轮）逐字节；D4–D6 生成物逐字节；旧路径一提交可回滚 | L |
 | S8b 源码狗粮化 | D1 方法化（329 个 `struct X *self` 自由函数）→ D2 容器化（82 处手写 realloc / 并行数组）→ D5 错误路径（`?` / `errdefer`）→ D3 命名构建（选域 `snprintf` → `String`）→ D4 判别式（已 ADT 域用 `match`，节点池不动）→ D6 函子签名；**按片交付**：D1/D2/D5 的 `tool/`、`runtime/`、`frontend/sym/` 域不等 S8，emitter / lowerer 域等 S8（[dogfooding §2.1](../../planning/dogfooding.md)） | [dogfooding](../../planning/dogfooding.md)、[REQ-ADT-PATTERN-1](../../planning/requirements-pool.md)、[REQ-FUNCTOR-1](../../planning/requirements-pool.md) | 用户语料生成 C 逐字节不变；`check-ast` fixpoint；seed 两轮；每片报告前后 LOC/计数；生成 C 可读性 REVIEW 签字 | L |
-| S8c 样例与文档去指针化 | A：`docs/planning/feature-examples-matrix.md` 每个特性一行（example / test / doc / 状态）；B：examples 补齐缺失样例，非 C 互操作样例去掉 `char *` / `->` / `malloc`；C：README / tutorial / guide / idioms / snippets 改写；D：examples 全量构建 + 矩阵一致性断言（先 warn，收口转硬） | [TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)、[dogfooding](../../planning/dogfooding.md)、[pointer-free-v2](../../proposals/pointer-free-v2.md) | 矩阵无 missing；新特性（S2–S6）各有 ≥1 样例；非 C 互操作样例指针清零（例外逐条有理由）；snippets 可编译；`check-ast` / `check-docs` 绿 | L |
+| S8c 样例与文档去指针化 | A：`docs/planning/feature-examples-matrix.md` 每个特性一行（example / test / doc / 状态）；B：examples 补齐缺失样例，非 C 互操作样例去掉 `char *` / `->` / `malloc`；C：README / tutorial / guide / idioms / snippets 改写；D：examples 全量构建 + 矩阵一致性断言（先 warn，收口转硬） | [TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)、[LANG-30](../../../issues/lang/lang-30-str-print-api.md)（v1.2 必做）、[dogfooding](../../planning/dogfooding.md)、[pointer-free-v2](../../proposals/pointer-free-v2.md) | 矩阵无 missing；新特性（S2–S6）各有 ≥1 样例；非 C 互操作样例指针清零（例外逐条有理由）；**E3 类 26 个文件清零（依赖 LANG-30）**；snippets 可编译；`check-ast` / `check-docs` 绿 | L |
 | S9 全局默认 strict（V1 欠账） | ① 审计 `#include`（2026-11-26 实测 **819 文件 / 1,078 行**：`selfhost` 56/183、`lib/core` 8/14、`examples` 180/218、`test` 575/663，见 [strict-include-audit](../../planning/strict-include-audit.md)），按 M1–M5 分三类推进：边界单元、C 互操作用例、待清理；② `selfhost/` 与 `lib/core/` 迁到边界单元（`.m.ct` / shim），**零 allow**；③ `examples/`、`test/` 能迁则迁，C 互操作/负例显式 allow（589 个文件可直删冗余 `<stdio.h>`，生成 C 逐字节不变）；④ `c_boundary_for` 去掉五目录豁免，默认 strict；manifest 无键改为 strict，`ct migrate` 为旧包写 `c-boundary = allow`；⑤ spec §1.2 / §4.66 与 README 更新；⑥ 自举与 seed 重生成 | [REQ-STRICT-1](../../planning/requirements-pool.md)、[v0-PH-65](../v0-PH-65/card.md) | 默认 strict 下 `check-all` 绿；`selfhost/`、`lib/core/` 零 allow；普通 `.ct` 无 include 不受影响；显式 allow 仍可用；`ct migrate` 旧包夹具通过；自举 2 轮 + seed 两轮逐字节 | L |
 | S10 收口 | `stable-subset` 分档更新；冷/热构建各测一次并记录（不立项）；`CTC_VERSION 1.2.0` 与 dist；**tag 与 release 不自动创建**，由所有者手工验证后执行；seed 重生成 | — | E-V3-11 | M |
 
-> **S8c 的前置（2026-11-27）**：E3 类 26 个样例的打印依赖 `Str.print()` / `println()`
-> （[LANG-30](../../../issues/lang/lang-30-str-print-api.md)，施工卡
-> [lang30-str-print-construction](../../design/lang30-str-print-construction.md)，已交 DEV）。
-> API 落地前，S8c 只做 H1–H4 中不涉及 E3 的部分；不要用 `cstr()` + `free` 假装去指针。
+> **S8c 的前置（2026-11-27，所有者裁定）**：`Str.print()` / `println()`（[LANG-30](../../../issues/lang/lang-30-str-print-api.md)，
+> 施工卡 [lang30-str-print-construction](../../design/lang30-str-print-construction.md)）**在 v1.2 内必须实现，不顺延**。
+> E3 类 26 个样例的打印依赖它；API 未落地前可以先做 H1–H4 中不依赖 E3 的部分，但 S8c **不得据此宣称收口**，
+> 也不得用 `cstr()` + `free` 假装去指针。
 >
 > **S9 的边界（重要）**：这不是“加一个显式开关”，而是把 [v0-PH-65](../v0-PH-65/card.md) 的
 > pre-1.0 四目录豁免收回，**默认翻转为 strict**。C 互操作不删除：`.m.ct` / shim、manifest
@@ -140,7 +140,7 @@ version-minor: 2
 | E-V3-8 | 检查器：REQ-TYPE-1 FP=0 + 分切片；REQ-MEM-2 写入摘要；P-1.3 迁移 lint；`off` 逃生 |
 | E-V3-9 | IR-2：emitter 不再做类型/实例化/生命周期判定；语义图替换文本判活；golden 差异清单签字；自举 2 轮（tag 前 3 轮）逐字节；D4–D6 逐片生成物逐字节 |
 | E-V3-9b | 狗粮化：D1–D6 各片用户语料生成 C 逐字节；源码 LOC/自由函数/realloc/snprintf/判别式前后报告入库；生成 C 可读性 REVIEW 签字 |
-| E-V3-9c | 样例与文档：矩阵无 missing；新特性各有 ≥1 样例；非 C 互操作用例指针清零（例外有理由）；README/tutorial/guide/idioms/snippets 同步；`check-ast` / `check-docs` 绿 |
+| E-V3-9c | 样例与文档：矩阵无 missing；新特性各有 ≥1 样例；非 C 互操作用例指针清零（例外有理由）；**E3 类打印受阻的 26 个文件清零，依赖 LANG-30 在 v1.2 内落地**；README/tutorial/guide/idioms/snippets 同步；`check-ast` / `check-docs` 绿 |
 | E-V3-10 | 全局默认 strict：默认下 `check-all` 绿；`selfhost/` 与 `lib/core/` 零 allow；普通无 include 的 `.ct` 逐字节不变；显式 allow（manifest / CLI / shim）正负例；`ct migrate` 旧包夹具通过 |
 | E-V3-11 | 收口：`CTC_VERSION 1.2.0`、dist 与发布流程同 v1.1；**不自动打 tag / 不自动发 release**——所有者手工验证后才创建 annotated tag；`check-all` 全绿、seed 两轮逐字节 |
 
