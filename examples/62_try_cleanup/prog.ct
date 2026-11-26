@@ -1,0 +1,41 @@
+// 62_try_cleanup - `expr?` on a failed Result returns `Outer::err` and runs the
+// caller's own cleanup chain on the way out.
+//
+// Normal path: the inner call succeeds, only its `defer` runs.
+// Counterintuitive point: on failure the inner `defer` and `errdefer` both run,
+// and the short-circuit is a return, not an exception -- the outer function's
+// cleanup still runs. `a ? b : c` stays a ternary: the suffix form needs `?` in
+// a position that cannot start an expression.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static Result<int, char *> inner(int n)
+{
+    int guard = n errdefer { printf("inner errdefer $=%d\n", $); };
+    int trace = n defer { printf("inner defer $=%d\n", $); };
+
+    if (n < 0) {
+        return err: (Result<int, char *>){ 0, 0, "negative" };
+    }
+    return (Result<int, char *>){ 1, guard + trace, 0 };
+}
+
+static Result<int, char *> outer(int n)
+{
+    int v = inner(n)?;
+    return (Result<int, char *>){ 1, v * 10, 0 };
+}
+
+int main(void)
+{
+    Result<int, char *> ok = outer(3);
+    Result<int, char *> bad = outer(-2);
+    int pick = 1 ? 7 : 9;
+
+    printf("ok=%d v=%d\n", ok.ok, ok.ok ? ok.value : -1);
+    printf("bad=%d err=%s\n", bad.ok, bad.ok ? "ok" : bad.err);
+    printf("ternary=%d\n", pick);
+    return 0;
+}

@@ -1,0 +1,11 @@
+defer y=2
+ok=3
+---
+plain return -1: errdefer is dropped
+defer y=2
+neg=-1
+---
+error return: both run
+defer y=2
+errdefer x=1
+err=7

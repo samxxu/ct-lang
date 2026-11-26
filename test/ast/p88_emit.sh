@@ -295,7 +295,7 @@ fi
 if python3 tools/p85_inventory.py --root . corpus-manifest --ct "$CT" \
         >"$tmp/manifest.tsv" 2>"$tmp/manifest.err" \
    && diff "$tmp/manifest.tsv" test/probes/p85_corpus_sha.tsv >"$tmp/manifest.diff" 2>&1; then
-    ok; echo "  p88emit: 66 corpus files are byte-identical"
+    ok; echo "  p88emit: $(wc -l < "$tmp/manifest.tsv" | tr -d ' ') corpus files are byte-identical"
 else
     bad "the test corpus changed: $(head -3 "$tmp/manifest.diff" "$tmp/manifest.err" 2>/dev/null | tr '\n' ' ')"
 fi

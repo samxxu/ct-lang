@@ -1,0 +1,37 @@
+// 61_errdefer_vs_return - `errdefer` fires on the *shape* of the exit, not on
+// the value: `return -1;` is an ordinary return (no errdefer), `return err: 7;`
+// is an error exit (errdefer and defer both run).
+//
+// Counterintuitive point: both kinds share one block stack and run LIFO without
+// grouping by kind, so the later-registered `defer` runs before the earlier
+// `errdefer`.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static int run(int mode)
+{
+    int x = 1 errdefer { printf("errdefer x=%d\n", $); };
+    int y = 2 defer { printf("defer y=%d\n", $); };
+
+    if (mode == 1) {
+        printf("plain return -1: errdefer is dropped\n");
+        return -1;
+    }
+    if (mode == 2) {
+        printf("error return: both run\n");
+        return err: 7;
+    }
+    return x + y;
+}
+
+int main(void)
+{
+    printf("ok=%d\n", run(0));
+    printf("---\n");
+    printf("neg=%d\n", run(1));
+    printf("---\n");
+    printf("err=%d\n", run(2));
+    return 0;
+}

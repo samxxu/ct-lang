@@ -1,0 +1,35 @@
+// 60_defer_snapshot - `defer` runs at every exit of its block, and a `return`
+// expression is copied out *before* the deferred bodies run.
+//
+// Normal path: two defers in one block run in reverse source order.
+// Counterintuitive point: the deferred body may rewrite the local after the
+// return value was already copied, so the function still returns the old value.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+static int snapshot(void)
+{
+    int r = 1;
+    defer { r = 99; printf("defer sees r=%d\n", r); }
+    printf("body r=%d\n", r);
+    return r;
+}
+
+static void nested(void)
+{
+    defer { printf("outer\n"); }
+    {
+        defer { printf("inner\n"); }
+        printf("block\n");
+    }
+    printf("after block\n");
+}
+
+int main(void)
+{
+    printf("result=%d\n", snapshot());
+    nested();
+    return 0;
+}

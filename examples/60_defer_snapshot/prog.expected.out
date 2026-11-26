@@ -1,0 +1,7 @@
+body r=1
+defer sees r=99
+result=1
+block
+inner
+after block
+outer

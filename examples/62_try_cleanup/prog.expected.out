@@ -1,0 +1,6 @@
+inner defer $=3
+inner defer $=-2
+inner errdefer $=-2
+ok=1 v=60
+bad=0 err=negative
+ternary=7

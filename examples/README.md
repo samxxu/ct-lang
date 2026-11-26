@@ -29,6 +29,12 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
 | `42_defer` | 块级 `defer { … }`：后进先出，`return` 路径也执行；返回表达式先求值再跑 defer | ct-ast | `test/run.sh` |
+| `43_errdefer` | 尾随 `errdefer` / `defer` 与 `$`：只有错误出口跑 errdefer，普通返回只跑 defer | ct-ast | `test/run.sh` |
+| `45_error_return_contract` | `return err:` 载荷类型契约与错误出口 | ct-ast | `test/run.sh` |
+| `46_result_try` | 后缀 `?`：成功取值、失败以 `Outer::err` 返回 | ct-ast | `test/run.sh` |
+| `60_defer_snapshot` | `return` 表达式先复制再跑 defer（defer 改写局部不影响返回值）；嵌套块的 defer 内层先跑 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `61_errdefer_vs_return` | 触发只看出口形态：`return -1;` 不跑 errdefer，`return err: 7;` 跑；同栈 LIFO 不按种类分段 | ct-ast | 同上 |
+| `62_try_cleanup` | `?` 失败时内层 `defer` + `errdefer` 都跑，外层照常返回 `err`；`a ? b : c` 仍是三目 | ct-ast | 同上 |
 
 ## 类型宿主（type host）
 
@@ -91,6 +97,7 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `21_generic_bound` | 约束泛型（Phase 28）：`sort<T: Compare>` / `largest<T: Compare>` 在模板体内调用约束方法，`Num` 与 `Word` 两个无关 struct 各得一份实例，落成 `S_Compare_vtable.cmp` 裸调用 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `22_foreach_map` | `foreach` 容器协议（Phase 29）：`Vec<int>` / `Vec<Point>` 绑定只读 `i` 与值拷贝 `item`，`Map<char *, int>` 按插入序给出 `item.key` / `item.value` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `23_generic_stack` | 用户泛型 struct（Phase 29）：`struct Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段，`Stack<int>` 与 `Stack<char *>` 两份布局，`impl<T> Stack<T>` 静态派发 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
+| `65_generic_trait_instances` | 泛型 trait 的单态化：`Next<int>` 与 `Next<char *>` 是两个独立 trait，各有 vtable；`T: Next<int>` 只覆盖 int 实例 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
 | `24_vec_ops` | 内置 `Vec` 全 API（Phase 29）：`push` / `pop` / `get` / `set` / `len` / `clear` 的边界语义，`retain` / `release` 的引用计数与归零释放 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `25_wordcount` | 真实程序（Phase 29）：`Map<char *, int>` 词频统计，先按插入序输出，再复制条目按计数排序出报告 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `26_range_vec` | range 初值构造 `Vec<T>`（Phase 29 P29）：`Vec<int> sq = 4..8 { $ * $ }` 经复合字面量 + `Vec<T>::from` 纯降级，`foreach` 绑定 `i` / `item`，并直接调用 `Vec<char *>::from(arr, n)` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
@@ -115,6 +122,8 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | 同上 |
 | `58_optional_chain` | `?.` 穿过可空指针：接收者只求值一次（`__ct_optN` 临时）、空接收者读作 `0`；无 `T?` / `Maybe<T>` 结果类型 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
 | `59_custom_subscript` | `x["k"]` → `get(k)`、`x["k"] = v` → `set(k, v)`；方案 A 只按名字 + 参数个数匹配，按键分派属 REQ-JSACCESS-1 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `63_ref_out_places` | `ref` / `out` 写回调用方：`ref` 需已初始化、trivial `out` 可未初始化；实参必须是可赋值 place | ct-ast | 同上 |
+| `64_match_expr` | 表达式 `match` + `yield`：块臂无隐式取值、主语只求值一次、`_` 末位且唯一 | ct-ast | 同上 |
 
 ## 近相能力（TEST-23）
 

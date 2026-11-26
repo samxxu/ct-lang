@@ -39,23 +39,23 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 2 | 泛型函数 | 4 / `examples/16_generic_min` | 28 | spec §4.48 | 有 |
 | 3 | 泛型 struct | 5 / `examples/23_generic_stack` | 48 | spec §4.51 | 有 |
 | 4 | 有界泛型（`T: Trait`） | 3 / `examples/21_generic_bound` | 29 | spec §4.50、§4.54 | 有 |
-| 5 | 泛型 trait | 1 / `examples/39_generic_trait` | 13 | spec §4.55 | 薄 |
+| 5 | 泛型 trait | 2 / `examples/39_generic_trait`、`65_generic_trait_instances` | 13 | spec §4.55 | 薄 |
 | 6 | ADT `enum` | 7 / `examples/53_match_adt` | 29 | spec §4.73 | 有 |
-| 7 | `match` | 1 / `examples/53_match_adt` | 12 | spec §4.73 | 薄 |
+| 7 | `match` | 2 / `examples/53_match_adt`、`64_match_expr` | 12 | spec §4.73 | 薄 |
 | 8 | 模式扩展（字面量 / 嵌套 / 结构体 / or / 守卫 / 泛型 ADT） | 0 | 0 | 无 | 待实现（S4–S6） |
 | 9 | `String`（owning） | 2 / `examples/48_string_steps` | 81 | spec §4.70 | 薄 |
 | 10 | `Str`（借用视图） | 3 / `examples/40_str_ownership` | 72 | spec §4.56、§4.70 | 薄 |
 | 11 | 切片 `T[]` | 9 / `examples/51_slice` | 35 | spec §4.69 | 有 |
-| 12 | `ref` | 1 / `examples/50_ref_out` | 7 | spec §4.68 | 薄 |
+| 12 | `ref` | 2 / `examples/50_ref_out`、`63_ref_out_places` | 7 | spec §4.68 | 薄 |
 | 13 | `out` | 5 / `examples/50_ref_out` | 16 | spec §4.68 | 有 |
 | 14 | `Box<T>` / `new` | 4 / `examples/52_box_new` | 53 | spec §4.71 | 有 |
 | 15 | 可选链 `?.` | 1 / `examples/58_optional_chain`（2026-11-26 补） | 10（`test/ast/p53_eval_once`） | spec §4.65 | 薄 |
 | 16 | `Map` / map 构造 | 7 / `examples/34_map_literal` | 49 | spec §4.51.1 | 有 |
 | 17 | `map` 绑定 | 20（含 `.m.ct`）/ `examples/08_map_binding` | 52 | spec §4.10 | 有 |
 | 18 | `foreach` | 7 / `examples/20_foreach_statement` | 29 | spec §4.49 | 有 |
-| 19 | `defer` | 2 / `examples/42_defer` | 23 | spec §4.9.1 | 薄 |
-| 20 | `errdefer` | 2 / `examples/45_error_return_contract` | 22 | spec §4.58 | 薄 |
-| 21 | 后缀 `?` | 1 / `examples/46_result_try` | 10 | spec §4.62 | 薄 |
+| 19 | `defer` | 5 / `examples/42_defer`、`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup` | 23 | spec §4.9.1 | 有 |
+| 20 | `errdefer` | 4 / `examples/43_errdefer`、`45_error_return_contract`、`61_errdefer_vs_return`、`62_try_cleanup` | 22 | spec §4.58 | 有 |
+| 21 | 后缀 `?` | 2 / `examples/46_result_try`、`62_try_cleanup` | 10 | spec §4.62 | 薄 |
 | 22 | 自定义下标（§4.64） | 1 / `examples/59_custom_subscript`（2026-11-26 补；`28_subscript_forms` 是 C 数组 / 容器下标形态，不算） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64 | 薄 |
 | 23 | 函子 `(A,B) => R` | 0 | 0 | 无 | 待实现（S3） |
 
@@ -65,7 +65,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | --- | --- | --- | --- |
 | B-1 | ~~可选链 `?.` 无样例~~ | **已补** `examples/58_optional_chain`（2026-11-26，compile + 运行）；S8c 复核是否需要补 `?[` 与 `m?["k"]` 形态 | 无（语言已实现） |
 | B-1b | ~~自定义下标（§4.64）无样例~~ | **已补** `examples/59_custom_subscript`（2026-11-26，读 + 写一对）；S8c 待补「只读报错、`+=` / `&x[k]` 拒绝」的说明段与 S2 的按键分派样例 | 无（语言已实现） |
-| B-2 | `match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 各只有 1–2 个样例 | 每个特性补一份「正常路径 + 一个反直觉点」的样例 | 无 |
+| B-2 | ~~`match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例~~ | **已补**（2026-11-26）：`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup`、`63_ref_out_places`、`64_match_expr`、`65_generic_trait_instances`；defer / errdefer 升「有」，其余仍「薄」，S8c 再按需加反例 | 无 |
 | B-3 | `String` / `Str` 样例仍以 `char *` 混写 | 改写 `40_str_ownership`、`48_string_steps`，只保留 C 互操作处的指针 | 无 |
 | B-4 | 非 C 互操作用例的指针 | 59 个 `char *` / 83 个 `->` / 14 个 `malloc` 逐条判定：迁 `String`/`Vec`/`Box` 或写例外理由 | B-3 |
 | B-5 | 文档可执行片段只有 3 个（`docs/snippets/README/`）+ 2 个教程用例 | 为矩阵里每个「有」档特性至少一个 `// source:` 片段 | B-1…B-4 |

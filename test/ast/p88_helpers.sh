@@ -10,7 +10,7 @@
 #      from `chk_type` in a source copy and requires
 #      `match does not cover variant 'NodeKind.NK_STR'`.
 #
-# Behaviour equivalence (66 corpus byte-identical, 345 diagnostics verbatim,
+# Behaviour equivalence (the pinned corpus byte-identical, 345 diagnostics verbatim,
 # 2-round self-hosting fixpoint) is covered by p88_emit / p86_errors and the
 # check-ast fixpoint section.
 #

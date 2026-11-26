@@ -1,0 +1,49 @@
+// 64_match_expr - `match (subject) { arm => value }` is an expression; a block
+// arm produces its value with `yield`.
+//
+// Normal path: statement `match` with all variants; expression `match` with a
+// block arm and a trailing `_`.
+// Counterintuitive points: (a) there is no implicit block value -- the last
+// expression in `{ ... }` is discarded, `yield` is the only normal exit;
+// (b) the subject is evaluated exactly once even though the arms test it;
+// (c) `_` must be last and only one, and it is required once an arm is missing.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+enum Shape {
+    Circle(int r),
+    Rect(int w, int h),
+    Empty(),
+}
+
+static int g_calls = 0;
+
+static Shape next_shape(void)
+{
+    g_calls = g_calls + 1;
+    return Shape.Rect(3, 4);
+}
+
+static int area(Shape s)
+{
+    return match (s) {
+        Shape.Circle(r) => 3 * r * r,
+        Shape.Rect(w, h) => w * h,
+        Shape.Empty() => 0
+    };
+}
+
+int main(void)
+{
+    Shape s = next_shape();
+    int a = area(s);
+    int b = match (next_shape()) {
+        Shape.Circle(r) => r,
+        _ => { yield -1; }
+    };
+
+    printf("area=%d wildcard=%d calls=%d\n", a, b, g_calls);
+    return 0;
+}

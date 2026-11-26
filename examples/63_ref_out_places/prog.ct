@@ -1,0 +1,49 @@
+// 63_ref_out_places - `ref` and `out` write back into the caller's place, and
+// the call site never writes `&` or `out`.
+//
+// Normal path: `ref` reads and writes an existing place; `out` only writes.
+// Counterintuitive points: (a) `ref` needs an initialised place while a trivial
+// `out` target may be uninitialised; (b) the callee body writes `x = ...`, the
+// generated C writes `(*x) = ...`; (c) the argument must be an assignable place
+// -- `ref int` cannot receive a struct and a literal is rejected.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+struct Counter { int hits; int misses; }
+
+static void bump(ref int x)
+{
+    x = x + 1;
+}
+
+static void fill(out int n)
+{
+    n = 42;
+}
+
+static void record(ref struct Counter c, int ok)
+{
+    if (ok) {
+        c.hits = c.hits + 1;
+    } else {
+        c.misses = c.misses + 1;
+    }
+}
+
+int main(void)
+{
+    int calls = 0;
+    int answer;
+    struct Counter c = { 0, 0 };
+
+    bump(calls);
+    bump(calls);
+    fill(answer);
+    record(c, 1);
+    record(c, 0);
+    printf("calls=%d answer=%d hits=%d misses=%d\n",
+           calls, answer, c.hits, c.misses);
+    return 0;
+}
