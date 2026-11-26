@@ -581,5 +581,139 @@ else
     bad "c2p5_keys: compile failed: $(head -2 "$work/c2p5_keys.log" | tr '\n' ' ')"
 fi
 
+
+# ===========================================================================
+# C2p-6: the last 160-byte host/argument rows (S1a-0 C2p-6)
+#
+# The map reader kept the host spellings in `char[MAX_TEXT]` rows, so
+# `map trait T for type struct <2000-byte name>` was refused with
+# "type is too long"; the emitter's `gtarg`/`gtparam` rows cut a 2000-byte
+# generic argument, and the instance row kept the template's `T` in the
+# emitted prototype. The secondary rows below (`match` result key, `foreach`
+# element, `_Atomic` / `_Alignas` specifier) had the same 160-byte cut.
+# ===========================================================================
+
+# ---- C2p-6.1) a 2000-byte type host in one `map trait` unit ----------------
+cat >"$work/c2p6_shapes.h.ct" <<CT
+pub struct $long { int v; }
+pub int big_get(struct $long x) { return x.v; }
+CT
+cat >"$work/c2p6_ops.m.ct" <<CT
+import c2p6_shapes;
+pub trait Getter { int get(); }
+map trait Getter for type struct $long {
+    get(x) -> big_get(x);
+}
+CT
+cat >"$work/c2p6_map.ct" <<CT
+import c2p6_shapes;
+import c2p6_ops;
+int main(void)
+{
+    struct $long node = { 5 };
+    return node.get() - 5;
+}
+CT
+if mkdir -p "$work/c2p6_map_out" \
+   && "$CT" build --emit-c -I "$work" "$work/c2p6_map.ct" -o "$work/c2p6_map_out" \
+        >"$work/c2p6_map.log" 2>&1; then
+    if "$CC" -std=c99 -I "$work/c2p6_map_out" "$work/c2p6_map_out"/*.c \
+            -o "$work/c2p6_map.bin" >"$work/c2p6_map.cc" 2>&1 \
+       && "$work/c2p6_map.bin"; then
+        if grep -qF "$long" "$work/c2p6_map_out/c2p6_map.c"; then
+            ok; printf '  2000-byte map type host: the whole receiver type is kept\n'
+        else
+            bad "the generated C cut the 2000-byte map type host"
+        fi
+    else
+        bad "c2p6_map: cc failed: $(head -2 "$work/c2p6_map.cc" | tr '\n' ' ')"
+    fi
+else
+    bad "c2p6_map: compile failed: $(head -2 "$work/c2p6_map.log" | tr '\n' ' ')"
+fi
+
+# ---- C2p-6.2) a 2000-byte generic function argument -----------------------
+cat >"$work/c2p6_gen.ct" <<CT
+struct $long { int n; };
+T ident<T>(T x) { return x; }
+int main(void)
+{
+    struct $long v = { .n = 4 };
+    struct $long w = ident<struct $long>(v);
+    return w.n - 4;
+}
+CT
+if run_product c2p6_gen "$work/c2p6_gen.ct"; then
+    if grep -qF "$long" "$work/c2p6_gen.c" && ! grep -qE '(^|[^A-Za-z_])T([^A-Za-z_]|$)' "$work/c2p6_gen.c"; then
+        ok; printf '  2000-byte generic argument: prototype and definition carry the whole type\n'
+    else
+        bad "the generated C kept the template parameter T or cut the 2000-byte argument"
+    fi
+fi
+
+# ---- C2p-6.3) an expression match yielding a 2000-byte struct -------------
+cat >"$work/c2p6_match.ct" <<CT
+struct $long { int n; };
+enum N { A(), B() }
+struct $long pick(N x)
+{
+    struct $long a = { .n = 1 };
+    struct $long b = { .n = 2 };
+    return match (x) { N.A() => a, N.B() => b };
+}
+int main(void)
+{
+    N x = N.A();
+    return pick(x).n - 1;
+}
+CT
+if run_product c2p6_match "$work/c2p6_match.ct"; then
+    if grep -qF "__ct_mres" "$work/c2p6_match.c" && grep -qF "$long" "$work/c2p6_match.c"; then
+        ok; printf '  2000-byte match result type: the key and the temporary are whole\n'
+    else
+        bad "the generated C cut the 2000-byte match result type"
+    fi
+fi
+
+# ---- C2p-6.4) foreach over an array of a 2000-byte struct -----------------
+cat >"$work/c2p6_foreach.ct" <<CT
+struct $long { int n; };
+int main(void)
+{
+    struct $long a[2] = {{1}, {2}};
+    int s = 0;
+    foreach (a) { s = s + item.n; }
+    return s - 3;
+}
+CT
+if run_product c2p6_foreach "$work/c2p6_foreach.ct"; then
+    ok; printf '  2000-byte foreach element: the item binding is whole\n'
+fi
+
+# ---- C2p-6.5) `_Atomic(<2000-byte typedef>)` and `_Alignas(...)` ---------
+cat >"$work/c2p6_atomic.ct" <<CT
+typedef int $long;
+int main(void)
+{
+    _Atomic($long) n;
+    n = 5;
+    return n - 5;
+}
+CT
+if run_product c2p6_atomic "$work/c2p6_atomic.ct"; then
+    ok; printf '  2000-byte _Atomic specifier: kept whole\n'
+fi
+cat >"$work/c2p6_alignas.ct" <<CT
+typedef int $long;
+int main(void)
+{
+    _Alignas($long) int x = 3;
+    return x - 3;
+}
+CT
+if run_product c2p6_alignas "$work/c2p6_alignas.ct"; then
+    ok; printf '  2000-byte _Alignas specifier: kept whole\n'
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

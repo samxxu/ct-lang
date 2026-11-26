@@ -154,3 +154,49 @@ output:
   2000-byte trait name: default body, adoption and bound kept whole
   long keys: the two bindings differ past byte 159 and each is chosen
 c2p: 22 passed, 0 failed
+
+C2p-6 map/generic host rows (baseline cef14798, frozen-seed compiler):
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+  >160-byte qualified variable: resolved and emitted whole
+  >160-byte qualified call: resolved and emitted whole
+  200/1000-byte literals: kept whole
+  long diagnostic: the 150-byte struct name is kept whole
+  arity warning: the 300-byte callee name is kept whole
+  2000-byte struct type: local/field/param/return/receiver kept whole
+  2000-byte generic argument: instance field kept whole
+  2000-byte template name: instance encoded from the whole spelling
+  2000-byte trait receiver: vptr initialiser and interface box kept whole
+  2000-byte trait method parameter: kept whole in the signature
+  2000-byte trait method return: impl body and return kept whole
+  2000-byte closure parameter: trampoline kept whole
+  2000-byte map binding: host pair and recipe kept whole
+  2000-byte ADT variant name: constructor and match arm kept whole
+  2000-byte ADT field name: union member kept whole
+  2000-byte type alias target: expanded and emitted whole
+  expr_type/expr_ctype: no caller-sized out buffer is passed
+  2000-byte closure capture: name and type kept whole
+  2000-byte ADT tag: subject, constructor and arm kept whole
+  2000-byte function-pointer name: declarator and call kept whole
+  2000-byte trait name: default body, adoption and bound kept whole
+  long keys: the two bindings differ past byte 159 and each is chosen
+FAIL c2p: c2p6_map: compile failed: <work>/c2p6_ops.m.ct:3:34: error: type is too long 
+FAIL c2p: c2p6_gen: cc failed: <work>/c2p6_gen.c:8:8: error: unknown type name 'T'     8 | static T ident__ct1(struct ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss); 
+FAIL c2p: c2p6_match: compile failed: <work>/c2p6_match.ct:7:12: error: no conversion from 'struct ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss' to 'struct sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss ctc: 1 error(s) generated 
+FAIL c2p: c2p6_foreach: cc failed: <work>/c2p6_foreach.c:16:173: error: variable has incomplete type 'struct ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss'    16 |             struct ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss item = (a)[__ct_foreach_i_0]; 
+FAIL c2p: c2p6_atomic: cc failed: <work>/c2p6_atomic.c:6:15: error: unknown type name 'sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss'     6 |     _Atomic ( sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss ) n; 
+FAIL c2p: c2p6_alignas: compile failed: <work>/c2p6_alignas.ct:4:14: error: type is too long 
+c2p: 22 passed, 6 failed
+
+green (C2p-6 implementation):
+command: bash test/ast/c2p_limits.sh <ct-ast built from this commit's seed>
+exit: 0
+output:
+  2000-byte map type host: the whole receiver type is kept
+  2000-byte generic argument: prototype and definition carry the whole type
+  2000-byte match result type: the key and the temporary are whole
+  2000-byte foreach element: the item binding is whole
+  2000-byte _Atomic specifier: kept whole
+  2000-byte _Alignas specifier: kept whole
+c2p: 28 passed, 0 failed
