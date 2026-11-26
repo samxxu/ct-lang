@@ -1,7 +1,8 @@
 #!/bin/sh
-# PH-72-R2 (LANG-4): a user-type subscript must fit the declared key type.
-# `char *get(char *)` receiving `j[0]` is an error; `j["k"]` is fine, and an
-# `int get(int)` accepts `j[0]`.
+# PH-72-R2 (LANG-4) / D-028: a user-type subscript must fit the declared key
+# type. `char *get(char *)` receiving `j[0]` is a compile-time error that lists
+# the candidate signature (v1.2 / S2 changed the old warning into the D-028
+# hard error); `j["k"]` is fine, and an `int get(int)` accepts `j[0]`.
 #
 # Usage: sh test/ast/p72_subscript.sh <ct-ast>
 set -u
@@ -35,7 +36,8 @@ CT
 
 out=$work/bad.out
 ( cd "$root" && "$ctast" check --types "$work/bad.ct" ) >"$out" 2>&1
-if [ $? -eq 0 ] || ! grep -q "argument 1: expected 'char \*', got 'int'" "$out"; then
+if [ $? -eq 0 ] \
+   || ! grep -qF "type 'J' has no subscript matching 'get(int)': candidates are 'char *get(char *)'" "$out"; then
     echo "FAIL p72/subscript: int index accepted by char* get" >&2
     sed 's/^/  /' "$out" | head -4 >&2
     fail=1

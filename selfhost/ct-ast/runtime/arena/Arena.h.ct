@@ -143,6 +143,11 @@ pub struct Node {
     /* Phase 53: the receiver type of an optional-chain node, kept beside the
        result type so the emitter can declare its `__ct_optN` temporary. */
     const char *text4;
+    /* D-028: the C-symbol suffix a subscript sugar resolved to for an
+       overloaded method (`$<key>`, empty for a unique name). Its own row
+       because `text4` already carries a binding conversion's target type on
+       the same N_MCALL shape. */
+    const char *suffix;
     /* PH-80 SH-102: the ownership facts the parser learned about a declaration,
        assignment or return that feeds an owning `String` / `U16String` handle.
        Bit 1 (2) = the value comes from a borrowed view, so a binding must not
@@ -265,6 +270,7 @@ impl ArenaOps for Arena {
         self->nodes[n].text2 = empty;
         self->nodes[n].text3 = empty;
         self->nodes[n].text4 = empty;
+        self->nodes[n].suffix = empty;
         return n;
     }
 

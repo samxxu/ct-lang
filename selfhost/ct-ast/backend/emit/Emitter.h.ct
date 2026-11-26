@@ -24,6 +24,7 @@ import frontend::module::MapTable::MapBind as MapBind;
 import frontend::module::MapTable;
 import frontend::module::Unit;
 import frontend::parse::Expr;
+import frontend::parse::ExprTypeText;
 import frontend::sym::Symbols::Field as Field;
 import frontend::sym::Symbols::MethodSig as MethodSig;
 import frontend::sym::Symbols::Closure as Closure;
@@ -3244,6 +3245,40 @@ static int impl_method_shadowed(struct Emitter *self, int ki, int ii, const char
     return 0;
 }
 
+/* D-028: the C-symbol suffix of an overloaded inherent method. The first
+   declaration of a name in the block keeps `<T>_<name>` (byte-identical to
+   v0-PH-52); each later one appends `$<enc(param-key)>...`, so two overloads
+   never share a C function. The generic substitution is applied first, so an
+   instance's method name is concrete. */
+static const char *emit_overload_suffix(struct Emitter *self, int impl_node, int m)
+{
+    char *buf = 0;
+    int cap = 0, n, pos, p;
+    const char *out;
+
+    if (impl_node < 0 || m < 0 || m >= self->arena->nnode) return "";
+    n = frontend::parse::ct_overload_count(impl_node, self->arena->nodes[m].text2);
+    if (n <= 1) return "";
+    pos = frontend::parse::ct_overload_pos(impl_node, m);
+    if (pos <= 0) return "";
+    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
+    for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next) {
+        const char *ty = emit_gsub_type_text(self, self->arena->nodes[p].text);
+        const char *ek;
+        if (!ty) ty = self->arena->nodes[p].text;
+        ek = frontend::parse::ct_overload_key_text(ty);
+        if (!ek) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, "$") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, ek) != 0) goto fail;
+    }
+    out = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return out ? out : "";
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
 /* One method of a template impl for one instance. An inherent method takes the
    `<Inst>_<method>` symbol and is dispatched statically; a `use` block keeps the
    `<Inst>_<Trait>_<method>` spelling plus its vtable, so the vptr path stays
@@ -3259,11 +3294,13 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     const char *tname;
     struct StructInst *ins;
     struct StructTmpl *tps;
+    struct StructImpl *im;
     int exported;
     int statik;
 
     ins = frontend::sym::ct_insts(&ninsts);
     tps = frontend::sym::ct_tmpls(&ntmpls);
+    im = frontend::sym::ct_impls(&nimpls);
     (void)nimpls;
     (void)ntmpls;
     iname = ins[ii].name;
@@ -3292,14 +3329,19 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     if (!tname[0] && impl_method_shadowed(self, ki, ii, self->arena->nodes[m].text2))
         return 0;
     mret = self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void";
+    /* D-028: the suffix needs the instance substitution, so bind before the
+       name is built. A unique method name answers "" and keeps the symbol. */
+    impl_inst_bind(self, ki, ii);
     if (tname[0])
         cname = runtime::text::ct_internf("%s_%s_%s", iname, tname,
                                           self->arena->nodes[m].text2);
-    else
-        cname = runtime::text::ct_internf("%s_%s", iname,
-                                          self->arena->nodes[m].text2);
+    else {
+        const char *suf = emit_overload_suffix(self, im[ki].node, m);
+        if (!suf) return self->fail("out of memory");
+        cname = runtime::text::ct_internf("%s_%s%s", iname,
+                                          self->arena->nodes[m].text2, suf);
+    }
     if (!cname) return self->fail("out of memory");
-    impl_inst_bind(self, ki, ii);
     g_sb.method = runtime::text::ct_intern(self->arena->nodes[m].text2);
     g_sb.recv = iname;
     if (!g_sb.method || !g_sb.recv) return self->fail("out of memory");
@@ -5390,11 +5432,13 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
             adts = frontend::sym::ct_adts(&nadts);
             if (!adts || adi >= nadts)
                 return self->fail_from(n, "the ADT row is missing");
-            fprintf(self->out, "%s_%s(", adts[adi].full,
-                    self->arena->nodes[n].text2);
+            fprintf(self->out, "%s_%s%s(", adts[adi].full,
+                    self->arena->nodes[n].text2,
+                    self->arena->nodes[n].suffix ? self->arena->nodes[n].suffix : "");
         } else {
-            fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
-                    self->arena->nodes[n].text2);
+            fprintf(self->out, "%s_%s%s(", self->sym->structs[si].name,
+                    self->arena->nodes[n].text2,
+                    self->arena->nodes[n].suffix ? self->arena->nodes[n].suffix : "");
         }
         if (self->arena->nodes[n].aux == 9
             && !(self->sym->self_mode
@@ -8124,11 +8168,17 @@ impl EmitOps for Emitter {
             }
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                 const char *owner;
+                const char *suf;
                 int is_static;
                 mret = self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void";
                 is_static = self->arena->nodes[m].c;
-                owner = runtime::text::ct_internf("%s_%s", tag,
-                                                  self->arena->nodes[m].text2);
+                /* D-028: an overloaded name carries the key suffix here, on
+                   its closure owner and on the LIR body seam, so the second
+                   overload gets its own function and its own body. */
+                suf = emit_overload_suffix(self, n, m);
+                if (!suf) return self->fail("out of memory");
+                owner = runtime::text::ct_internf("%s_%s%s", tag,
+                                                  self->arena->nodes[m].text2, suf);
                 if (!owner) return self->fail("out of memory");
                 if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
                 self->nclvar = 0;
@@ -8138,8 +8188,8 @@ impl EmitOps for Emitter {
                 if (!type_pub
                     || self->arena->nodes[m].d != 1)
                     fputs("static __attribute__((unused)) ", self->out);
-                fprintf(self->out, "%s %s_%s(", mret, tag,
-                        self->arena->nodes[m].text2);
+                fprintf(self->out, "%s %s_%s%s(", mret, tag,
+                        self->arena->nodes[m].text2, suf);
                 if (!is_static)
                     fprintf(self->out, "struct %s *self", tag);
                 k = self->arena->nodes[m].a;
@@ -8184,8 +8234,8 @@ impl EmitOps for Emitter {
                     int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
                     int printed = 0;
                     if (body_hook) {
-                        const char *key = tool::sh::ct_scratch_fmt("%s_%s", tag,
-                                self->arena->nodes[m].text2);
+                        const char *key = tool::sh::ct_scratch_fmt("%s_%s%s", tag,
+                                self->arena->nodes[m].text2, suf);
                         int new_ntmp = self->ntmp;
                         int hr = body_hook(key, self->out, 1, self->ntmp,
                                            &new_ntmp, 1);
@@ -8814,11 +8864,14 @@ impl EmitOps for Emitter {
                 tagp = self->sym->structs[si].name;
             }
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                const char *suf;
                 if (self->arena->nodes[m].d != 1) continue;
                 is_static = self->arena->nodes[m].c;
-                fprintf(self->out, "%s %s_%s(",
+                suf = emit_overload_suffix(self, n, m);
+                if (!suf) return self->fail("out of memory");
+                fprintf(self->out, "%s %s_%s%s(",
                         self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void",
-                        tagp, self->arena->nodes[m].text2);
+                        tagp, self->arena->nodes[m].text2, suf);
                 if (!is_static) fprintf(self->out, "struct %s *", tagp);
                 for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
                     if (!is_static || k != self->arena->nodes[m].a) fputs(", ", self->out);

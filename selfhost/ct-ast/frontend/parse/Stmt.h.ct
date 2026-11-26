@@ -3059,29 +3059,19 @@ impl StmtOps for Stmt {
                `set(k, v)` call. Only a plain `=` statement with an lvalue
                receiver is accepted; the generic assignment path below would
                emit `x[...] = v` (or `get(...) = v`) and lose the write. */
-            if (self->arena->nodes[e].kind == N_MCALL
-                && (self->ex->container_subscript_kind(e) == 1
-                    || self->ex->container_subscript_kind(e) == 2)) {
-                int ck = self->ex->container_subscript_kind(e);
-                int idx;
-                self->sup->lex_next();
-                self->ex->into_ok = 1;
-                rhs = self->ex->parse_expr();
-                self->ex->into_ok = 0;
-                if (rhs < 0) return -1;
-                idx = self->arena->nodes[e].b;
-                if (idx < 0) return self->sup->fail("a container subscript has no index");
-                self->arena->nodes[idx].next = rhs;
-                self->arena->nodes[e].text2 = runtime::text::ct_intern(ck == 1 ? "set" : "put");
-                if (!self->arena->nodes[e].text2) return self->sup->fail("out of memory");
-                n = self->sup->new_node(N_EXPR);
-                if (n < 0) return -1;
-                self->arena->nodes[n].a = e;
-            } else if (self->ex->container_subscript_kind(e) == 3) {
+            {
+            int csk = self->ex->container_subscript_kind(e);
+            int cform = 0;
+            /* D-028 §1.4: a custom subscript's write form is decided before
+               the generic `=` path runs. Form 2 (no matching `set`, but the
+               matching `get` answers a pointer) turns the sugar into a deref
+               lvalue so the ordinary deref assignment below writes through
+               the returned storage; the receiver/index are still evaluated
+               once. */
+            if (self->arena->nodes[e].kind == N_MCALL && csk == 3) {
                 int cl = self->arena->nodes[e].line;
                 int cc = self->arena->nodes[e].num;
                 int recv = self->arena->nodes[e].a;
-                int sm, vi, widx;
                 while (recv >= 0
                        && (self->arena->nodes[recv].kind == N_MEMBER
                            || self->arena->nodes[recv].kind == N_ARROW
@@ -3099,9 +3089,41 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(cl, cc,
                         "a custom subscript write needs a statement and an lvalue receiver",
                         self->sup->mem->path);
-                sm = self->ex->custom_index_method(self->arena->nodes[e].text,
-                                                   "set", 2, cl, cc, 1, -1);
-                if (sm < 0) return -1;
+                cform = self->ex->custom_index_write_form(e, cl, cc);
+                if (cform < 0) return -1;
+                if (cform == 2) {
+                    int dr = self->sup->new_node(N_DEREF);
+                    if (dr < 0) return -1;
+                    self->arena->nodes[dr].a = e;
+                    self->arena->nodes[dr].line = cl;
+                    self->arena->nodes[dr].num = cc;
+                    e = dr;
+                    csk = 0;
+                }
+            }
+            if (self->arena->nodes[e].kind == N_MCALL
+                && (csk == 1 || csk == 2)) {
+                int ck = csk;
+                int idx;
+                self->sup->lex_next();
+                self->ex->into_ok = 1;
+                rhs = self->ex->parse_expr();
+                self->ex->into_ok = 0;
+                if (rhs < 0) return -1;
+                idx = self->arena->nodes[e].b;
+                if (idx < 0) return self->sup->fail("a container subscript has no index");
+                self->arena->nodes[idx].next = rhs;
+                self->arena->nodes[e].text2 = runtime::text::ct_intern(ck == 1 ? "set" : "put");
+                if (!self->arena->nodes[e].text2) return self->sup->fail("out of memory");
+                n = self->sup->new_node(N_EXPR);
+                if (n < 0) return -1;
+                self->arena->nodes[n].a = e;
+            } else if (csk == 3) {
+                int cl = self->arena->nodes[e].line;
+                int cc = self->arena->nodes[e].num;
+                int vi, widx;
+                /* cform == 1 here: the set exists, matches the key and its
+                   D-028 suffix is already on the node. */
                 self->sup->lex_next();
                 self->ex->into_ok = 1;
                 rhs = self->ex->parse_expr();
@@ -3252,6 +3274,7 @@ impl StmtOps for Stmt {
                     str_escape_op(self, 3, rhs, self->arena->nodes[e].text2,
                                   hk, 0, 0, 0, 0);
                 }
+            }
             }
             }
         } else if (self->arena->nodes[e].kind == N_POST) {

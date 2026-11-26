@@ -61,6 +61,8 @@ import backend::tir::TModule::ct_tinst as ct_tinst;
 import backend::tir::TModule::ct_tmark as ct_tmark;
 import backend::tir::TModule::TModule as TModule;
 import backend::verify::Verifier;
+import frontend::parse::ExprTypeText;
+import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define CAP_LIMIT 65536
@@ -1085,7 +1087,11 @@ static int tb_target_mcall(struct TBuilder *tb, int eid, int n)
         base = trait;
         if (!base) base = "";
         if (strncmp(base, "struct ", 7) == 0) base += 7;
-        key = runtime::text::ct_internf("%s.%s", base, method ? method : "");
+        /* D-028: the parser resolved an overloaded name and recorded its C
+           suffix on the node; carry it so the LIR call prints the same symbol
+           the AST emitter prints. */
+        key = runtime::text::ct_internf("%s.%s%s", base, method ? method : "",
+                                       ar->nodes[n].suffix ? ar->nodes[n].suffix : "");
         if (!key) return -1;
         decl = tb_find_decl(m, TD_FUNC, key);
         if (decl > 0) return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, key);
@@ -2343,6 +2349,39 @@ static int tb_ensure_trait(struct TBuilder *tb, const char *name)
     return tb_trait(tb, ti);
 }
 
+/* D-028: the same suffix the parser records on a subscript call and the AST
+   emitter prints beside the definition. It is computed from the declared (AST)
+   parameter types; the template spelling keeps the symbol unique per block and
+   the per-instance symbol still carries the instance prefix. */
+static const char *tb_overload_suffix(struct TBuilder *tb, int impl_node, int m)
+{
+    struct Arena *ar;
+    char *buf = 0;
+    int cap = 0, n, pos, p;
+    const char *out;
+
+    (void)tb;
+    ar = tb_arena();
+    if (!ar || impl_node < 0 || m < 0 || m >= ar->nnode) return "";
+    n = frontend::parse::ct_overload_count(impl_node, ar->nodes[m].text2);
+    if (n <= 1) return "";
+    pos = frontend::parse::ct_overload_pos(impl_node, m);
+    if (pos <= 0) return "";
+    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
+    for (p = ar->nodes[m].a; p > 0; p = ar->nodes[p].next) {
+        const char *ek = frontend::parse::ct_overload_key_text(ar->nodes[p].text);
+        if (!ek) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, "$") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, ek) != 0) goto fail;
+    }
+    out = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return out ? out : "";
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
 static int tb_impl(struct TBuilder *tb, int n)
 {
     struct Arena *ar;
@@ -2394,12 +2433,15 @@ static int tb_impl(struct TBuilder *tb, int n)
            `cname` is the exact seam key the emitter can pass back. */
         if (impl_tmpl) m->decls[mdecl - 1].is_template = 1;
         if (si >= 0 && si < sym->nstructs) {
+            const char *msuf = (trait && trait[0]) ? ""
+                               : tb_overload_suffix(tb, n, c);
             m->decls[mdecl - 1].is_method = 1;
-            m->decls[mdecl - 1].cname = runtime::text::ct_internf("%s_%s%s%s",
+            m->decls[mdecl - 1].cname = runtime::text::ct_internf("%s_%s%s%s%s",
                 sym->structs[si].name,
                 (trait && trait[0]) ? trait : "",
                 (trait && trait[0]) ? "_" : "",
-                ar->nodes[c].text2 ? ar->nodes[c].text2 : "");
+                ar->nodes[c].text2 ? ar->nodes[c].text2 : "",
+                msuf ? msuf : "");
             if (!m->decls[mdecl - 1].cname) return -1;
         }
         if (tmod_decl_add_param(m, decl, mdecl) != 0) return -1;

@@ -29,6 +29,9 @@ import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
+/* D-028: the N_IMPL method chain holds N_METHOD nodes (cap mirror; the kind
+   number is runtime::arena::Arena::NodeKind's). */
+#define N_METHOD 29
 
 namespace frontend::parse;
 /* A stateless unit: the type exists only because a unit file is
@@ -51,9 +54,14 @@ pub int qual_at(const char *p, int prev_id);
 pub int ref_type_is_const_value(const char *t);
 pub int slice_array_len(const char *dims);
 pub int subst_tparam(const char *spell, char **names, char **vals, int n, char *out, int cap);
-/* S1a-0 C2p-10: the substitution as an interned text (NULL when the
-   spelling mentions a parameter in a shape the restricted rule cannot
-   decide). */
+/* D-028: the C-symbol suffix of an overloaded inherent method. `count` / `pos`
+   read an N_IMPL's method chain in declaration order; `key_text` turns one
+   type spelling into the injective identifier fragment used after `$`. */
+pub int ct_overload_count(int impl_node, const char *name);
+pub int ct_overload_pos(int impl_node, int m);
+pub const char *ct_overload_key_text(const char *type);
+/* S1a-0 C2p-10: the substitution as an interned text (NULL when the spelling
+   mentions a parameter in a shape the restricted rule cannot decide). */
 pub const char *subst_tparam_text(const char *spell, char **names, char **vals, int n);
 pub void tbase(const char *k, char *out, int cap);
 pub int tclass(const char *raw, const char *base);
@@ -468,4 +476,103 @@ const char *subst_tparam_text(const char *spell, char **names, char **vals, int 
         if (nv[0] && strstr(k, nv)) return (const char *)0;
     }
     return runtime::text::ct_intern(spell);
+}
+
+/* D-028: how many methods of `impl_node` carry `name`, and which of them is
+   `m`. Declaration order is the method chain order (`impl` appends), so the
+   first overload keeps the old `<T>_<name>` symbol. */
+int ct_overload_count(int impl_node, const char *name)
+{
+    struct Arena *ar;
+    int m, n;
+
+    ar = runtime::arena::arena_get();
+    if (!ar || impl_node < 0 || impl_node >= ar->nnode || !name) return 0;
+    n = 0;
+    for (m = ar->nodes[impl_node].a; m >= 0; m = ar->nodes[m].next)
+        if (ar->nodes[m].kind == N_METHOD
+            && ar->nodes[m].text2 && strcmp(ar->nodes[m].text2, name) == 0)
+            n++;
+    return n;
+}
+
+int ct_overload_pos(int impl_node, int m)
+{
+    struct Arena *ar;
+    int k, pos;
+
+    ar = runtime::arena::arena_get();
+    if (!ar || impl_node < 0 || impl_node >= ar->nnode || m < 0 || m >= ar->nnode)
+        return -1;
+    if (!ar->nodes[m].text2) return -1;
+    pos = -1;
+    for (k = ar->nodes[impl_node].a; k >= 0; k = ar->nodes[k].next) {
+        if (ar->nodes[k].kind != N_METHOD) continue;
+        if (!ar->nodes[k].text2
+            || strcmp(ar->nodes[k].text2, ar->nodes[m].text2) != 0)
+            continue;
+        pos++;
+        if (k == m) return pos;
+    }
+    return -1;
+}
+
+/* D-028: `type_key` -> one identifier fragment. `[A-Za-z0-9]` is kept, every
+   other byte is `_hh` (lower-case hex), which is injective and cannot collide
+   with a user spelling the way a plain `_` replacement could. A key whose
+   encoding would exceed 120 bytes falls back to `h` + FNV-1a 32-bit, so a
+   pathological 2000-byte type does not put a 6000-byte symbol into every call
+   site. The result is pooled: callers only compare/concatenate it. */
+const char *ct_overload_key_text(const char *type)
+{
+    const char *key;
+    const char *hex = "0123456789abcdef";
+    char *buf = 0;
+    int cap = 0, i, enc_len = 0;
+    char one[2];
+    char hexb[4];
+    unsigned int h;
+
+    key = frontend::type::type_key_text(type ? type : "");
+    if (!key) return (const char *)0;
+    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
+    for (i = 0; key[i]; i++) {
+        unsigned char c = (unsigned char)key[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+            || (c >= '0' && c <= '9')) {
+            one[0] = (char)c;
+            one[1] = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto fail;
+            enc_len += 1;
+        } else {
+            hexb[0] = '_';
+            hexb[1] = hex[(c >> 4) & 15];
+            hexb[2] = hex[c & 15];
+            hexb[3] = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, hexb) != 0) goto fail;
+            enc_len += 3;
+        }
+        if (enc_len > 120) break;
+    }
+    if (enc_len > 120) {
+        h = 2166136261u;
+        for (i = 0; key[i]; i++) {
+            h ^= (unsigned int)(unsigned char)key[i];
+            h *= 16777619u;
+        }
+        free(buf);
+        buf = 0;
+        cap = 0;
+        if (tool::sh::ct_text_init(&buf, &cap, 16) != 0) return (const char *)0;
+        if (tool::sh::ct_text_cat(&buf, &cap, tool::sh::ct_scratch_fmt("h%08x", h)) != 0)
+            goto fail;
+    }
+    {
+        const char *pooled = runtime::text::ct_intern(buf);
+        tool::sh::ct_text_free(&buf, &cap);
+        return pooled;
+    }
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
 }

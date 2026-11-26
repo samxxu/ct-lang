@@ -76,6 +76,7 @@ import frontend::parse::ExprNewObject;
 #define N_IMPL 33
 #define N_INDEX 26
 #define N_MCALL 30
+#define N_METHOD 29
 #define N_MEMBER 24
 #define N_NUM 8
 #define N_OFFSETOF 47
@@ -120,6 +121,374 @@ pub struct ExprSubscript {
     int unused;
 }
 
+/* D-028: probe results. CI_OK carries the chosen method; every other code is
+   a diagnostic the caller renders (the write-form probe stays silent). */
+#define CI_OK       0
+#define CI_NONAME   1
+#define CI_PRIVATE  2
+#define CI_STATIC   3
+#define CI_ARITY    4
+#define CI_NOMATCH  5
+#define CI_AMBIG    6
+#define CI_INFER    7
+#define CI_MAX_CAND 64
+
+static int ci_param_count(struct Expr *self, int m)
+{
+    int p, n = 0;
+
+    for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next) n++;
+    return n;
+}
+
+/* Substitute one declared type through the instance's concrete arguments
+   (the same binding `impl_inst_bind` / `ct_method_bind` use). A non-generic
+   block or a spelling that names no parameter comes back unchanged. */
+static const char *ci_subst_type(struct Expr *self, const char *bty, int row,
+                                 const char *type)
+{
+    const char *base, *pt;
+    int inst, nimpls, nins, j, k;
+    struct StructImpl *im;
+    struct StructInst *ins;
+
+    (void)self;
+    if (!type) return type;
+    pt = type;
+    if (row < 0) return pt;
+    base = (strncmp(bty, "struct ", 7) == 0) ? bty + 7 : bty;
+    inst = frontend::sym::ct_inst_find(base);
+    if (inst < 0) return pt;
+    im = frontend::sym::ct_impls(&nimpls);
+    ins = frontend::sym::ct_insts(&nins);
+    if (!im || !ins || row >= nimpls || inst >= nins) return pt;
+    for (j = 0; j < im[row].ntparams; j++) {
+        if (!im[row].tparam[j]) continue;
+        for (k = 0; k < im[row].nargs && k < ins[inst].nargs; k++) {
+            if (!im[row].pat[k] || strcmp(im[row].pat[k], im[row].tparam[j]) != 0)
+                continue;
+            if (ins[inst].ctype[k]) {
+                const char *nx = frontend::sym::ct_generic_subst_text(
+                    pt, im[row].tparam[j], ins[inst].ctype[k]);
+                if (nx) pt = nx;
+            }
+            break;
+        }
+    }
+    return pt;
+}
+
+/* The declared parameter spelling of candidate `m`, at position `pi`, after
+   the instance substitution. NULL when the method has fewer parameters. */
+static const char *ci_param_type(struct Expr *self, const char *bty, int m,
+                                 int row, int pi)
+{
+    int p, k;
+
+    p = self->arena->nodes[m].a;
+    k = 0;
+    while (p > 0 && k < pi) {
+        p = self->arena->nodes[p].next;
+        k++;
+    }
+    if (p <= 0) return (const char *)0;
+    return ci_subst_type(self, bty, row, self->arena->nodes[p].text);
+}
+
+static int ci_is_private(struct Expr *self, int m, int inode)
+{
+    const char *owner;
+
+    if (self->arena->nodes[m].d == 1) return 0;
+    owner = self->arena->nodes[inode].text3;
+    if (!owner || !owner[0]) return 1;
+    return strcmp(owner, self->sup->mem->path) != 0;
+}
+
+/* The same-name inherent candidates of `bty`, in declaration order. A generic
+   receiver contributes the most specific matching block that declares the
+   name (the `inst_inherent_method` rule); a plain struct / ADT has one
+   inherent N_IMPL node, found by its receiver spelling. */
+static int ci_collect(struct Expr *self, const char *bty, const char *name,
+                      int *om, int *orow, int *onode, int cap)
+{
+    const char *base;
+    int inst, nimpls, ii, m, ni, n = 0, best = -1, bestscore = -1;
+    struct StructImpl *im;
+
+    if (!bty || !name) return 0;
+    if (strncmp(bty, "struct ", 7) != 0) return 0;
+    base = bty + 7;
+    inst = frontend::sym::ct_inst_find(base);
+    if (inst >= 0) {
+        im = frontend::sym::ct_impls(&nimpls);
+        for (ii = 0; im && ii < nimpls; ii++) {
+            int declares = 0;
+            if (im[ii].use[0]) continue;
+            if (!frontend::sym::ct_impl_matches(ii, inst)) continue;
+            for (m = self->arena->nodes[im[ii].node].a; m >= 0;
+                 m = self->arena->nodes[m].next)
+                if (self->arena->nodes[m].kind == N_METHOD
+                    && self->arena->nodes[m].text2
+                    && strcmp(self->arena->nodes[m].text2, name) == 0) {
+                    declares = 1;
+                    break;
+                }
+            if (!declares) continue;
+            if (inst_impl_score(ii) > bestscore) {
+                bestscore = inst_impl_score(ii);
+                best = ii;
+            }
+        }
+        if (best >= 0) {
+            for (m = self->arena->nodes[im[best].node].a; m >= 0;
+                 m = self->arena->nodes[m].next) {
+                if (self->arena->nodes[m].kind != N_METHOD) continue;
+                if (!self->arena->nodes[m].text2
+                    || strcmp(self->arena->nodes[m].text2, name) != 0)
+                    continue;
+                if (n < cap) {
+                    om[n] = m;
+                    orow[n] = best;
+                    onode[n] = im[best].node;
+                }
+                n++;
+            }
+        }
+        return n;
+    }
+    for (ni = 0; ni < self->arena->nnode; ni++) {
+        if (self->arena->nodes[ni].kind != N_IMPL) continue;
+        if (self->arena->nodes[ni].aux == -1) continue;   /* template impl */
+        if (self->arena->nodes[ni].text2[0]) continue;    /* trait impl */
+        if (!self->arena->nodes[ni].text
+            || strcmp(self->arena->nodes[ni].text, bty) != 0) continue;
+        for (m = self->arena->nodes[ni].a; m >= 0; m = self->arena->nodes[m].next) {
+            if (self->arena->nodes[m].kind != N_METHOD) continue;
+            if (!self->arena->nodes[m].text2
+                || strcmp(self->arena->nodes[m].text2, name) != 0)
+                continue;
+            if (n < cap) {
+                om[n] = m;
+                orow[n] = -1;
+                onode[n] = ni;
+            }
+            n++;
+        }
+        break;
+    }
+    return n;
+}
+
+/* D-028 §1.1: name + arity + non-static + the key's static type. Returns a
+   CI_* code; on CI_OK the chosen method / impl row / impl node are stored. */
+static int ci_probe(struct Expr *self, const char *bty, const char *name,
+                    int want, int idx_node, int writable,
+                    int *out_m, int *out_row, int *out_node)
+{
+    int om[CI_MAX_CAND], orow[CI_MAX_CAND], onode[CI_MAX_CAND];
+    int cand[CI_MAX_CAND];
+    int n, i, nonstatic = 0, arity = 0, priv = 0, matches = 0, zero = 0;
+    const char *actual, *ak;
+
+    (void)writable;
+    *out_m = -1;
+    *out_row = -1;
+    *out_node = -1;
+    n = ci_collect(self, bty, name, om, orow, onode, CI_MAX_CAND);
+    if (n == 0) return CI_NONAME;
+    if (n > CI_MAX_CAND) return CI_AMBIG;
+    for (i = 0; i < n; i++)
+        if (ci_is_private(self, om[i], onode[i])) priv = 1;
+    if (priv) return CI_PRIVATE;
+    for (i = 0; i < n; i++) {
+        if (self->arena->nodes[om[i]].c) continue;
+        nonstatic++;
+        if (ci_param_count(self, om[i]) != want) continue;
+        if (arity < CI_MAX_CAND) cand[arity] = i;
+        arity++;
+    }
+    if (nonstatic == 0) return CI_STATIC;
+    if (arity == 0) return CI_ARITY;
+    if (idx_node < 0) {
+        *out_m = om[cand[0]];
+        *out_row = orow[cand[0]];
+        *out_node = onode[cand[0]];
+        return CI_OK;
+    }
+    actual = self->chk_type_text(idx_node, &zero);
+    if (!actual || !actual[0]) return CI_INFER;
+    ak = frontend::type::type_key_text(actual);
+    if (!ak) return CI_INFER;
+    for (i = 0; i < arity && i < CI_MAX_CAND; i++) {
+        const char *pt = ci_param_type(self, bty, om[cand[i]],
+                                       orow[cand[i]], 0);
+        const char *pk;
+        if (!pt || !pt[0]) continue;
+        pk = frontend::type::type_key_text(pt);
+        if (!pk || strcmp(pk, ak) != 0) continue;
+        *out_m = om[cand[i]];
+        *out_row = orow[cand[i]];
+        *out_node = onode[cand[i]];
+        matches++;
+    }
+    if (matches == 0) return CI_NOMATCH;
+    if (matches > 1) return CI_AMBIG;
+    return CI_OK;
+}
+
+/* `'int get(char *)'`: the candidate signature the no-match / ambiguous text
+   lists. Declared types are shown after the instance substitution. */
+static const char *ci_signature_text(struct Expr *self, const char *bty,
+                                     int m, int row)
+{
+    const char *ret, *pt;
+    int pi, n;
+    char *buf = 0;
+    int cap = 0;
+    const char *out;
+
+    ret = self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void";
+    ret = ci_subst_type(self, bty, row, ret);
+    if (!ret) return (const char *)0;
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    /* C declarator spacing: `char *get(...)`, `int get(...)`. */
+    if (tool::sh::ct_text_printf(
+            &buf, &cap, strchr(ret, '*') ? "%s%s(" : "%s %s(",
+            ret, self->arena->nodes[m].text2) != 0) goto fail;
+    n = ci_param_count(self, m);
+    for (pi = 0; pi < n; pi++) {
+        pt = ci_param_type(self, bty, m, row, pi);
+        if (!pt) goto fail;
+        if (pi > 0 && tool::sh::ct_text_cat(&buf, &cap, ", ") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, pt) != 0) goto fail;
+    }
+    if (tool::sh::ct_text_cat(&buf, &cap, ")") != 0) goto fail;
+    out = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return out ? out : (const char *)0;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+/* The candidate list, quoted and comma-joined. `only_matching` keeps just the
+   rows whose key equals the actual (the ambiguous case); otherwise every
+   arity-fitting non-static row is listed. */
+static const char *ci_candidates_text(struct Expr *self, const char *bty,
+                                      const char *name, int want,
+                                      int only_matching, int idx_node)
+{
+    int om[CI_MAX_CAND], orow[CI_MAX_CAND], onode[CI_MAX_CAND];
+    int n, i, no = 0, zero = 0;
+    const char *actual = 0, *ak = 0, *sig;
+    char *buf = 0;
+    int cap = 0;
+    const char *out;
+
+    if (only_matching && idx_node >= 0) {
+        actual = self->chk_type_text(idx_node, &zero);
+        if (actual && actual[0]) ak = frontend::type::type_key_text(actual);
+    }
+    n = ci_collect(self, bty, name, om, orow, onode, CI_MAX_CAND);
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    for (i = 0; i < n && i < CI_MAX_CAND; i++) {
+        const char *pt, *pk;
+        if (self->arena->nodes[om[i]].c) continue;
+        if (ci_param_count(self, om[i]) != want) continue;
+        if (only_matching) {
+            if (!ak) continue;
+            pt = ci_param_type(self, bty, om[i], orow[i], 0);
+            if (!pt || !pt[0]) continue;
+            pk = frontend::type::type_key_text(pt);
+            if (!pk || strcmp(pk, ak) != 0) continue;
+        }
+        sig = ci_signature_text(self, bty, om[i], orow[i]);
+        if (!sig) goto fail;
+        if (no > 0 && tool::sh::ct_text_cat(&buf, &cap, ", ") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, "'") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, sig) != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, "'") != 0) goto fail;
+        no++;
+    }
+    out = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return out ? out : (const char *)0;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+static int ci_emit_failure(struct Expr *self, int code, const char *bty,
+                           const char *name, int want, int writable,
+                           int idx_node, int line, int col)
+{
+    const char *label, *msg, *cands, *actual;
+    const char *path = self->sup->mem->path;
+    int zero = 0;
+
+    label = self->custom_index_label_text(bty);
+    if (!label) return self->sup->fail("out of memory");
+    if (code == CI_PRIVATE) {
+        if (writable)
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has no writable subscript: '%s' is private to its unit",
+                label, name);
+        else
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has no subscript: '%s' is private to its unit",
+                label, name);
+    } else if (code == CI_STATIC) {
+        msg = tool::sh::ct_scratch_fmt(
+            "type '%s' has no subscript: '%s' must be an instance method",
+            label, name);
+    } else if (code == CI_ARITY) {
+        if (writable)
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has no writable subscript: 'set' must take 2 parameters",
+                label);
+        else
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has no subscript: 'get' must take 1 parameter",
+                label);
+    } else if (code == CI_INFER) {
+        msg = tool::sh::ct_scratch_fmt(
+            "type '%s' has no subscript: cannot infer the subscript type; bind it to a local first",
+            label);
+    } else if (code == CI_NOMATCH || code == CI_AMBIG) {
+        cands = ci_candidates_text(self, bty, name, want,
+                                   code == CI_AMBIG, idx_node);
+        if (!cands) return self->sup->fail("out of memory");
+        if (code == CI_AMBIG) {
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has an ambiguous subscript: candidates are %s",
+                label, cands);
+        } else {
+            actual = idx_node >= 0 ? self->chk_type_text(idx_node, &zero) : 0;
+            if (!actual || !actual[0]) actual = "?";
+            if (writable)
+                msg = tool::sh::ct_scratch_fmt(
+                    "type '%s' has no writable subscript matching 'set(%s, V)': candidates are %s",
+                    label, actual, cands);
+            else
+                msg = tool::sh::ct_scratch_fmt(
+                    "type '%s' has no subscript matching 'get(%s)': candidates are %s",
+                    label, actual, cands);
+        }
+    } else {
+        /* CI_NONAME: the v0-PH-52 L52-1 / L52-2 wording, unchanged. */
+        if (writable)
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s",
+                label, label);
+        else
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has no subscript: declare 'V get(K)' in impl %s",
+                label, label);
+    }
+    return tool::diag::ct_sem_error(line, col, msg, path);
+}
+
 
 impl ExprSubscript for Expr {
     /* PH-52 D52-2: the diagnostics name the user's spelling, not the encoded
@@ -156,66 +525,105 @@ impl ExprSubscript for Expr {
         return 0;
     }
 
-    /* PH-52 D52-2 / D52-5: protocol matching is name + arity + instance
-       (never the parameter type); a miss is a hard error, never a C subscript
-       fallback. `writable` selects the set-side wording. Returns the method
-       node on success; a diagnostic has already been emitted on failure. */
+    /* PH-52 D52-2 / D52-5 / D-028: protocol matching is name + arity +
+       non-static + the index's static type; a miss is a hard error, never a C
+       subscript fallback. `writable` selects the set-side wording.
+       `idx_node` is the key expression (a negative value means "not judged"),
+       `call_node` receives the D-028 C-symbol suffix. Returns the method node
+       on success; a diagnostic has already been emitted on failure. */
     int custom_index_method(const char *bty, const char *name, int want,
-                            int line, int col, int writable, int idx_node)
+                            int line, int col, int writable, int idx_node,
+                            int call_node, int defer)
     {
-        int m, p, got = 0;
-        const char *label;
+        int m, row, inode, code;
 
-        label = self->custom_index_label_text(bty);
-        if (!label) return self->sup->fail("out of memory");
-        m = self->inst_inherent_method(bty, name);
-        if (m == -2) {
-            if (writable)
-                return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
-                    "type '%s' has no writable subscript: '%s' is private to its unit",
-                    label, name), self->sup->mem->path);
-            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
-                "type '%s' has no subscript: '%s' is private to its unit",
-                label, name), self->sup->mem->path);
+        code = ci_probe(self, bty, name, want, idx_node, writable,
+                        &m, &row, &inode);
+        if (code != CI_OK && defer) {
+            /* The key does not fit the read side, but the sugar is about to be
+               the target of a statement `=`: the write form owns the wording
+               (a matching `set` or a borrow write may still exist). */
+            if (call_node >= 0 && call_node < self->arena->nnode)
+                self->arena->nodes[call_node].suffix = "";
+            return -2;
         }
-        if (m < 0) {
-            if (writable)
-                return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
-                    "type '%s' has a read-only subscript: declare 'void set(K, V)' in impl %s",
-                    label, label), self->sup->mem->path);
-            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
-                "type '%s' has no subscript: declare 'V get(K)' in impl %s",
-                label, label), self->sup->mem->path);
+        if (code == CI_OK) {
+            const char *suf = self->custom_index_suffix(bty, m, row, inode);
+            if (!suf) return self->sup->fail("out of memory");
+            if (call_node >= 0 && call_node < self->arena->nnode)
+                self->arena->nodes[call_node].suffix = suf;
+            return m;
         }
-        if (self->arena->nodes[m].c)
-            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
-                "type '%s' has no subscript: '%s' must be an instance method",
-                label, name), self->sup->mem->path);
-        for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next)
-            got++;
-        if (got != want) {
-            if (writable)
-                return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
-                    "type '%s' has no writable subscript: 'set' must take 2 parameters",
-                    label), self->sup->mem->path);
-            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
-                "type '%s' has no subscript: 'get' must take 1 parameter",
-                label), self->sup->mem->path);
+        return ci_emit_failure(self, code, bty, name, want, writable,
+                               idx_node, line, col);
+    }
+
+    /* D-028 §1.4: the write form. 1 = the parsed read sugar `x[k]` becomes the
+       matching `set(k, v)`; 2 = there is no matching `set` but the matching
+       `get` answers `V *`, so the caller rewrites to `*x[k] = v`; a failure
+       emits the canonical diagnostic and answers -1. The C-symbol suffix is
+       stored on `e` in both success cases. */
+    int custom_index_write_form(int e, int line, int col)
+    {
+        const char *bty;
+        const char *suf;
+        int idx, m, row, inode, code, g, grow = -1, gnode = -1;
+
+        if (e < 0 || e >= self->arena->nnode) return self->sup->fail("a subscript node is missing");
+        bty = self->arena->nodes[e].text;
+        idx = self->arena->nodes[e].b;
+        code = ci_probe(self, bty, "set", 2, idx, 1, &m, &row, &inode);
+        if (code == CI_OK) {
+            suf = self->custom_index_suffix(bty, m, row, inode);
+            if (!suf) return self->sup->fail("out of memory");
+            self->arena->nodes[e].suffix = suf;
+            return 1;
         }
-        /* LANG-4: the index must also fit the declared key type. Matching only
-           name+arity let `char *get(char *)` receive an int silently. */
-        if (idx_node >= 0) {
-            int kz = 0;
-            const char *pt = self->arena->nodes[self->arena->nodes[m].a].text;
-            const char *kty = self->chk_type_text(idx_node, &kz);
-            if (kty && kty[0] && pt[0]) {
-                self->chk_line = line;
-                self->chk_col = col;
-                self->chk_arg = 1;
-                if (self->chk_assignable(pt, kty, 0, 6) != 0) return -1;
-            }
+        /* A read-only type whose `get` answers a pointer is written through
+           the returned storage: `x[k] = v` becomes `*x[k] = v`. */
+        g = ci_probe(self, bty, "get", 1, idx, 0, &m, &grow, &gnode);
+        if (g == CI_OK && self->arena->nodes[m].text[0]
+            && strchr(self->arena->nodes[m].text, '*')) {
+            suf = self->custom_index_suffix(bty, m, grow, gnode);
+            if (!suf) return self->sup->fail("out of memory");
+            self->arena->nodes[e].suffix = suf;
+            return 2;
         }
-        return m;
+        /* The set-side probe owns the wording: no set at all stays L52-2,
+           a set whose key type differs is the new no-match text. */
+        return ci_emit_failure(self, code, bty, "set", 2, 1, idx, line, col);
+    }
+
+    /* D-028 §1.3: the C-symbol suffix for the chosen method. The first
+       declaration of a name in the impl block keeps the legacy symbol; the
+       rest carry `$<enc(param-key)>...`, so two overloads never share a C
+       function. Unique names therefore emit byte-identically to v0-PH-52. */
+    const char *custom_index_suffix(const char *bty, int m, int row, int node)
+    {
+        char *buf = 0;
+        int cap = 0, n, pos, pi, k;
+        const char *out;
+
+        if (node < 0 || m < 0 || m >= self->arena->nnode) return "";
+        n = ct_overload_count(node, self->arena->nodes[m].text2);
+        if (n <= 1) return "";
+        pos = ct_overload_pos(node, m);
+        if (pos <= 0) return "";
+        if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
+        for (pi = 0; pi < ci_param_count(self, m); pi++) {
+            const char *pt = ci_param_type(self, bty, m, row, pi);
+            const char *ek = ct_overload_key_text(pt);
+            if (!ek) goto fail;
+            if (tool::sh::ct_text_cat(&buf, &cap, "$") != 0) goto fail;
+            if (tool::sh::ct_text_cat(&buf, &cap, ek) != 0) goto fail;
+        }
+        out = runtime::text::ct_intern(buf);
+        tool::sh::ct_text_free(&buf, &cap);
+        (void)k;
+        return out ? out : (const char *)0;
+fail:
+        tool::sh::ct_text_free(&buf, &cap);
+        return (const char *)0;
     }
 
 }

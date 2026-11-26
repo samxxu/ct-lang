@@ -259,15 +259,20 @@ pub trait ExprTraitInst {
 /* PH-52: the user-type subscript protocol lives in its own trait because
    `ExprOps` is at MAX_METHODS. `custom_index_label` renders `Box<int>` for an
    instance row and the bare name otherwise; `custom_index_method` matches the
-   inherent method by name + arity only (D52-2) and emits L52-1..L52-5 / L52-10
-   on failure. */
+   inherent method by name + arity + key type (D-028) and emits L52-1..L52-5 /
+   L52-10 or the D-028 no-match / ambiguous wording on failure. */
 pub trait ExprSubscript {
     int  custom_index_label(const char *bty, char *out, int cap);
     /* S1a-0 C2p-10: the pool-text label, so a 2000-byte instance/struct name
        in a subscript diagnostic is quoted whole. */
     const char *custom_index_label_text(const char *bty);
     int  custom_index_method(const char *bty, const char *name, int want,
-                             int line, int col, int writable, int idx_node);
+                             int line, int col, int writable, int idx_node,
+                             int call_node, int defer);
+    /* D-028: the write-form decision (1 = set, 2 = borrow write) and the
+       C-symbol suffix for an overloaded method. */
+    int  custom_index_write_form(int e, int line, int col);
+    const char *custom_index_suffix(const char *bty, int m, int row, int node);
 }
 
 /* Phase 53: parser-level optional chain (`?.` / `?[`). Kept out of `ExprOps`

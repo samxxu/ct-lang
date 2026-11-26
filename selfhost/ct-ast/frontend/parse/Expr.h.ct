@@ -2198,8 +2198,6 @@ impl ExprOps for Expr {
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
                     if (self->sup->expect("]") != 0) return -1;
-                    gm = self->custom_index_method(bty, "get", 1, bl, bc, 0, idx);
-                    if (gm < 0) return -1;
                     m = self->sup->new_node(N_MCALL);
                     if (m < 0) return -1;
                     self->arena->nodes[m].aux = 9;
@@ -2211,6 +2209,17 @@ impl ExprOps for Expr {
                     if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[m].a = n;
                     self->arena->nodes[m].b = idx;
+                    /* D-028: select by the key's static type and record the
+                       C-symbol suffix on this node (empty for a unique name).
+                       A `]` followed by a plain `=` means the statement write
+                       path owns the resolution, so a read-side miss defers to
+                       it instead of rejecting a legal `x[k] = v`. */
+                    {
+                        int def = (self->lex->tok == T_PUNCT && self->lex->tok_is("="));
+                        gm = self->custom_index_method(bty, "get", 1, bl, bc, 0,
+                                                       idx, m, def);
+                        if (gm < 0 && gm != -2) return -1;
+                    }
                     rt = n;
                     while (rt >= 0 && (self->arena->nodes[rt].kind == N_MEMBER
                                        || self->arena->nodes[rt].kind == N_ARROW))
