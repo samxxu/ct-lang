@@ -2383,7 +2383,7 @@ ct build sum.ct -o sum && ./sum
 - `examples/**` —— 59 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；
   其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；
   `test/cases/**` —— 每个语法点的最小快照
-- 编辑器支持：`editors/vscode/`（纯声明式高亮，零依赖）
+- 编辑器支持：独立仓 [ct-vscode](https://github.com/samxxu/ct-vscode)（纯声明式高亮、snippets、跳转索引，零运行时依赖）
 - 方言：`examples/07_dialect/` 演示「注释里的 DSL → 纯 Ct」，编译器对此零感知
 - 包管理：`ct get` / `ct update` / `ct install` / `ct verify`，清单格式见
   [phases/v0-PH-8/card.md](phases/v0-PH-8/card.md)，17.5 的增量（比较器范围、离线重解、显式索引、

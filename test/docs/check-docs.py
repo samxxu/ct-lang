@@ -312,6 +312,7 @@ def check_links(errors):
                 continue
             if rel.startswith("docs/history/reports/") and (
                 "/selfhost/ast/" in resolved or "/selfhost/src/" in resolved
+                or "/editors/vscode/" in resolved
             ):
                 continue
             errors.append(f"{rel}: dead link -> {target}")

@@ -1,4 +1,0 @@
-# Files that are useful while developing but have no place in the .vsix.
-.vscode/**
-test/**
-*.vsix

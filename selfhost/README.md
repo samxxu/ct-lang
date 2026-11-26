@@ -21,13 +21,13 @@
 
 ## 脚本（9 道硬门禁）
 
-`check-all.sh` 是聚合入口，依次跑下面 9 道硬门禁，任一失败即整体非零：
+`check-all.sh` 是聚合入口，依次跑下面 8 道硬门禁，任一失败即整体非零：
 
 | # | 门禁 | 作用 |
 | --- | --- | --- |
 | 1 | `./test/run.sh` | L0 八层套件（见 [test/README.md](../test/README.md)） |
 | — | gate 2–5 | 已随 `selfhost/l1`/`l2` 退役（SH-119 S2）；编号保留，不重排 |
-| 6 | `editors/vscode/test/check-grammar.py` | 编辑器高亮语法（179 项断言，`python3 editors/vscode/test/check-grammar.py` 实测） |
+| 6 | — | 已随编辑器插件迁出退役（现由 [ct-vscode](https://github.com/samxxu/ct-vscode) 的 `npm test` 负责）；编号保留，不重排 |
 | 7 | `test/pkg/run.sh` | 包管理器 `ct get` / `ct update` / `ct install` / `ct verify`（含比较器范围、显式索引、构建元数据） |
 | 8 | `check-ast.sh` | ct-ast 行为、语料等价、不动点、负例、缓存与诊断 |
 | 9 | `check-warnings.sh` | 全部生成 C 在 `-Wall -Wextra` 下零告警 |

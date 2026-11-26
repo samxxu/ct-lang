@@ -11,8 +11,7 @@ export CT_C_BOUNDARY=allow
 #
 # Hard gates (any failure fails the run):
 #   1. ./test/run.sh                             L0 suite (eight layers)
-#   6. editors/vscode/test/check-grammar.py      editor grammar (167 assertions,
-#                                                168 when node is on PATH)
+#   6. retired                                   editor grammar moved to samxxu/ct-vscode
 #   7. test/pkg/run.sh                           package manager (Phase 8.1 + 8.2 + 8.3)
 #   8. selfhost/check-ast.sh                     AST compiler (Phase 9.1–9.7 + 10.x–12.x +
 #                                                batches 13–40: probes, corpus equivalence,
@@ -111,7 +110,6 @@ run_gate() {
 }
 
 run_gate "1) L0 suite (test/run.sh)" ./test/run.sh
-run_gate "6) editor grammar" python3 editors/vscode/test/check-grammar.py
 run_gate "7) package manager (Phase 8.1 + 8.2 + 8.3)" bash test/pkg/run.sh
 run_gate "8) AST compiler (Phase 9.1–9.7 + 10.x–12.x + batches 13–39)" bash selfhost/check-ast.sh
 run_gate "9) generated C warning-free (-Wall -Wextra)" bash selfhost/check-warnings.sh

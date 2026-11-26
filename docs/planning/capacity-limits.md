@@ -285,7 +285,7 @@ Intern（随输出增长），改用 `ct_scratch_*` builder。已迁：`Emitter.
 （`release` 释放静态存储）；`.field` 设计符与字段路径键 `base.field` 截断。
 **证据**：S7 红在 baseline 38632c23（`9 passed, 2 failed`）、绿在实现后
 （`11 passed, 0 failed`）；`check-ast` 71 语料 / 343 诊断 / goldens / fixpoint，
-`check-seed` 两轮，warnings 559/559，sanitizers 612 项，`check-all` 9 门绿。
+`check-seed` 两轮，warnings 559/559，sanitizers 612 项，`check-all` 8 门绿。
 **剩余**：`Emitter.h.ct` 约 112 处 `char[MAX_TEXT]` 局部（`owner` 闭包键须与
 `Parser.cur_func[160]` 同批迁移）；`type_needs_layout.pat` 等仍由上游 160 行界定。
 
