@@ -9,7 +9,7 @@
 | 依据 | [`v1-PH-2` 并行轨道](../../docs/phases/v1-PH-2/card.md)、[typed-lowered-ir](../../docs/proposals/typed-lowered-ir.md)、[D-026](../../docs/decisions/D-026.md) |
 | 状态 | open |
 | 负责人 | REQ / REVIEW |
-| 处置证据 | 与 S1a-0 并行；不改 `selfhost/**`，不触发 seed |
+| 处置证据 | 2026-11-26：D1–D3 落 [tir-lir-contract](../../docs/design/tir-lir-contract.md)，D7 落 [tir-lir-fixtures](../../docs/design/tir-lir-fixtures.md)；D4/D5（S2/S3 ADR）与 D6（ADT 模式规范）未写，写法见 §7。不改 `selfhost/**`，不触发 seed。 |
 
 ## 1 目标
 
@@ -58,3 +58,18 @@
 - [D-026](../../docs/decisions/D-026.md)
 - [TEST-27](../testing/test27-feature-examples-pointer-free.md)（B 轨道，样例/文档）
 - [SH-94](../selfhost/sh94-giant-units-duplicate-constants.md)（A 轨道，编译器代码）
+
+## 7 进度（2026-11-26）
+
+| # | 交付 | 状态 | 落点 |
+| --- | --- | --- | --- |
+| D1 | TIR/LIR 契约 | **已交** | [docs/design/tir-lir-contract.md](../../docs/design/tir-lir-contract.md) §2–§4 |
+| D2 | 清理 CFG 规则 | **已交** | 同上 §4.3–§4.4（六类出口 + 错误边） |
+| D3 | 验证器与码表 | **已交（草）** | 同上 §5；`E-IR-101..110` 只在草表，S1b 与 registry 同批登记 |
+| D4 | 下标协议 ADR | 待写 | 拟 `docs/decisions/D-028.md`；编号写前再核 |
+| D5 | 函子 ADR | 待写 | 拟 `docs/decisions/D-029.md`；编号写前再核 |
+| D6 | ADT 模式规范 | 待写 | 依赖 S4 的语法草案；草案落 `docs/design/adt-patterns.md` |
+| D7 | 夹具清单 | **已交** | [docs/design/tir-lir-fixtures.md](../../docs/design/tir-lir-fixtures.md) |
+
+D4/D5 以 ADR 成文时会触发 T-8（2026-11-20 之后的 ADR 需非作者角色 `签收:`），
+所以**成文与签收同批提交**，不先落一份无签收的 ADR 让门禁变红。

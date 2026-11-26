@@ -2,6 +2,7 @@
 
 > 状态：**规划中（2026-11-26）**，排在 [`v1-PH-2`](../phases/v1-PH-2/card.md) **S8b**（IR-2 之后、strict 之前）。
 > 目标：压缩的是 **Ct 源码**；生成 C **只要求可读**，不要求变短、不要求逐字节不变。
+> **按片交付（2026-11-26）**：D1/D2/D5 的 `tool/`、`runtime/`、`frontend/sym/` 域不等 S8，可与其并行；见 §2.1。
 
 ## 0 基线（2026-11-26 实测）
 
@@ -43,6 +44,26 @@
 | D6 函子 | `typedef … (*)(…)` 的两处签名改 `(A,B) => R`（S3 落地后） | 2 | 低；收益小，最后做 |
 
 顺序：**D1 → D2 → D5 → D3 → D4 → D6**；D4 依赖 S4–S6 的 ADT 模式；D6 依赖 S3。
+
+### 2.1 按片交付：哪些片不必等 IR
+
+S8b 原来整段排在 S8（IR-2）之后，理由是源码大改会与 IR 重写抢文件。按文件集拆开之后，
+大部分片可以提前，**不改变任何验收标准**：
+
+| 域（文件集） | 最早可开工 | 理由 |
+| --- | --- | --- |
+| `tool/`、`runtime/`、`frontend/lex/`、`frontend/sym/`、`frontend/type/`、`frontend/module/` | **现在**（S1a-0 收口后的任一窗口） | S1b 只新增 `backend/tir|lir|verify`，S8 只重写 `backend/emit`；这些域不在其文件集内 |
+| `frontend/parse/`（Expr / Stmt） | S1a-1 收口后、S1b 开工前 | S1a-1 正在搬这些文件；S1b 消费 AST 但不重写 parser |
+| `backend/emit/`（D1 方法化、D3 命名构建的 emitter 段） | S8 收口后 | S8 把 emitter 改成纯打印器，提前改会重复劳动（见 [SH-94](../design/sh94-m1-core-layout.md) §4.5） |
+| `backend/mem/` | S8 收口后 | 生命周期判定迁出 emitter 时同批改 |
+| D4 判别式 | S4–S6 落地后 | 依赖模式语法 |
+| D6 函子 | S3 落地后 | 依赖函子语法 |
+
+约束（不变）：
+
+- 每片仍要「用户语料生成 C 逐字节 + `check-ast` fixpoint + seed 两轮逐字节」；
+- 与 A 轨道的文件集一旦重叠即**让行**（A 优先），一片只碰一个域；
+- 冻结 seed 每次重生成只在片末做一次，片内不反复重生成。
 
 ## 3 验收
 

@@ -9,7 +9,7 @@
 | 依据 | 所有者 2026-11-26 要求；[dogfooding](../../docs/planning/dogfooding.md)；[pointer-free-phase-plan](../../docs/planning/pointer-free-phase-plan.md) |
 | 状态 | open |
 | 负责人 | TEST / REVIEW（REQ 跟踪） |
-| 处置证据 | 排入 [`v1-PH-2` S8c](../../docs/phases/v1-PH-2/card.md)；可在 S2–S6 期间并行准备，S8c 收口 |
+| 处置证据 | 排入 [`v1-PH-2` S8c](../../docs/phases/v1-PH-2/card.md)；2026-11-26 已交首版矩阵 [feature-examples-matrix](../../docs/planning/feature-examples-matrix.md)（23 行），缺口清单 B-1…B-6；样例改写与文档同步仍待 S8c。 |
 
 ## 1 现象（2026-11-26 实测）
 
@@ -33,6 +33,11 @@
 | `defer` / `errdefer` | 3 / 2 |
 | `?;` | 1 |
 | `foreach (` | 7 |
+| 自定义下标（§4.64 的 `get`/`set`） | **0** |
+
+> 本表是首轮关键字粗测；可复现口径、逐行代表样例与判档见
+> [feature-examples-matrix](../../docs/planning/feature-examples-matrix.md) §0–§1，口径不同时以后者为准
+> （例：`ref`/`out`、`defer`、`new` 的行因匹配式不同而不同）。
 
 ### 1.2 文档
 
