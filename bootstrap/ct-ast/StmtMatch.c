@@ -1236,6 +1236,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     int arm_catch;
     int ncatch;
     int ngi;
+    int guarded;
     int guarded_catch;
     const char * arm_sig;
     const char * arm_conds;
@@ -1398,20 +1399,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
             return (-1);
         }
         arm_bind = frontend_parse_g_pat.bind_head;
-        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "if"))) {
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            _self->ex->assign_ok = 1;
-            _self->ex->try_ban++;
-            guard = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
-            _self->ex->try_ban--;
-            _self->ex->assign_ok = 0;
-            if (guard < 0) {
-                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                free(covered);
-                return (-1);
-            }
-        }
-        if (guard < 0) {
+        guarded = ((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "if"));
+        if ((!guarded)) {
             if (adt >= 0) {
                 for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
                     int v = pat_group_variant(ngi);
@@ -1462,6 +1451,19 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             free(covered);
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if (guarded) {
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            _self->ex->assign_ok = 1;
+            _self->ex->try_ban++;
+            guard = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+            _self->ex->try_ban--;
+            _self->ex->assign_ok = 0;
+            if (guard < 0) {
+                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                free(covered);
+                return (-1);
+            }
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
@@ -1678,6 +1680,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     int guard;
     int ncatch;
     int ngi;
+    int guarded;
     const char * arm_sig;
     const char * arm_conds;
     const char * tybuf = "";
@@ -1820,19 +1823,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         }
         pushed = 1;
         bind_head = frontend_parse_g_pat.bind_head;
-        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "if"))) {
-            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            _self->ex->assign_ok = 1;
-            _self->ex->try_ban++;
-            guard = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
-            _self->ex->try_ban--;
-            _self->ex->assign_ok = 0;
-            if (guard < 0) {
-                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                return (-1);
-            }
-        }
-        if (guard < 0) {
+        guarded = ((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "if"));
+        if ((!guarded)) {
             for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
                 int v = pat_group_variant(ngi);
                 if (v < 0) {
@@ -1867,6 +1859,18 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         if (((!arm_sig) || (!arm_conds))) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if (guarded) {
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            _self->ex->assign_ok = 1;
+            _self->ex->try_ban++;
+            guard = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+            _self->ex->try_ban--;
+            _self->ex->assign_ok = 0;
+            if (guard < 0) {
+                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                return (-1);
+            }
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
             return (-1);
