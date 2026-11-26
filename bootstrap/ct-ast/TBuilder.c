@@ -309,6 +309,7 @@ struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
+struct backend_emit_EmitBuf;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -354,6 +355,8 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatBind;
+struct frontend_parse_PatGroup;
 struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
@@ -1851,6 +1854,7 @@ static int tb_stmt_match_arm(struct backend_tir_TBuilder * tb, int n) {
     tb->m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
     tb->m->stmts[(sid - 1)].num = ar->nodes[n].num;
     tb->m->stmts[(sid - 1)].text2 = runtime_text_ct_intern((ar->nodes[n].text4 ? ar->nodes[n].text4 : ""));
+    tb->m->stmts[(sid - 1)].guard = ar->nodes[n].d;
 {
         char bbuf[4096];
         int bn = 0;

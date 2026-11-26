@@ -99,6 +99,7 @@
 #define PAT_WILD    4
 #define PAT_BINDER  5
 #define PAT_FIELD   6
+#define PAT_OR      7
 #define PAT_K_OTHER 0
 #define PAT_K_ADT   1
 #define PAT_K_STRUCT 2
@@ -158,6 +159,7 @@ struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
+struct backend_emit_EmitBuf;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -203,6 +205,8 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatBind;
+struct frontend_parse_PatGroup;
 struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
@@ -222,42 +226,68 @@ const struct frontend_parse_StmtMatch_vtbl frontend_parse_Stmt_frontend_parse_St
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-struct frontend_parse_PatCtx {
-    int adt;
-    const char * subject_type;
-    int is_ptr;
-    int non_adt;
-    int root_variant;
-    const char * root_cname;
-    int root_wild;
-    int root_catch;
-    int root_irref;
-    int root_head;
-    int bind_head;
+struct frontend_parse_PatBind {
+    const char * name;
+    const char * type;
+    const char * path;
+};
+struct frontend_parse_PatGroup {
     char * conds;
     int condlen;
     int condcap;
     char * sig;
     int siglen;
     int sigcap;
+    int root_form;
+    int root_variant;
+    struct frontend_parse_PatBind * binds;
+    int nbinds;
+    int bcap;
+};
+struct frontend_parse_PatCtx {
+    int adt;
+    const char * subject_type;
+    int is_ptr;
+    int non_adt;
+    int bind_head;
+    struct frontend_parse_PatGroup * grp;
+    int ngrp;
+    int grpcap;
     const char * * bname;
     const char * * btype;
     const char * * bpath;
     int nbind;
     int bcap;
+    const char * arm_conds;
+    const char * arm_sig;
     const char * cbase;
 };
 const char * frontend_parse_match_expr_type_key_text(const char *);
-static int pat_buf_put(char * *, int *, int *, const char *);
-static int pat_bind_add(const char *, const char *, const char *);
-static int pat_char_value(const char *, int);
 static int pat_int_base(const char *);
+static int pat_buf_put(char * *, int *, int *, const char *);
+static void pat_group_clear(struct frontend_parse_PatGroup *);
+static void pat_groups_clear(struct frontend_parse_PatGroup *, int);
+static int pat_group_init(struct frontend_parse_PatGroup *);
+static int pat_groups_alloc(int, struct frontend_parse_PatGroup * *);
+static int pat_group_copy(struct frontend_parse_PatGroup *, const struct frontend_parse_PatGroup *);
+static int pat_groups_copy(struct frontend_parse_PatGroup * *, int *, const struct frontend_parse_PatGroup *, int);
+static int pat_groups_append(struct frontend_parse_PatGroup * *, int *, const struct frontend_parse_PatGroup *, int);
+static int pat_cond_add(const char *);
+static int pat_sig_add(const char *);
+static void pat_root_set(int, int);
+static int pat_group_bind_add(const char *, const char *, const char *);
+static int pat_cond_bind_ok(struct frontend_sym_Symbols *, const char *);
+static int pat_bind_finish(struct frontend_parse_Stmt *, int, int);
+static int pat_group_variant(int);
+static int pat_group_mention(int);
+static int pat_group_catch(int);
+static int pat_arm_finish(int *);
+static int pat_char_value(const char *, int);
 static struct frontend_parse_PatCtx frontend_parse_g_pat;
 static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_begin(void *self, int adt, const char * subject_type, int is_ptr) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     (void)_self;
-    free(frontend_parse_g_pat.conds);
-    free(frontend_parse_g_pat.sig);
+    pat_groups_clear(frontend_parse_g_pat.grp, frontend_parse_g_pat.ngrp);
     free((void *)(frontend_parse_g_pat.bname));
     free((void *)(frontend_parse_g_pat.btype));
     free((void *)(frontend_parse_g_pat.bpath));
@@ -265,31 +295,23 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_begin(void *self, in
     frontend_parse_g_pat.subject_type = runtime_text_ct_intern((subject_type ? subject_type : ""));
     frontend_parse_g_pat.is_ptr = is_ptr;
     frontend_parse_g_pat.non_adt = (adt < 0);
-    frontend_parse_g_pat.root_variant = (-1);
-    frontend_parse_g_pat.root_cname = "";
-    frontend_parse_g_pat.root_wild = 0;
-    frontend_parse_g_pat.root_catch = 0;
-    frontend_parse_g_pat.root_irref = 0;
-    frontend_parse_g_pat.root_head = (-1);
     frontend_parse_g_pat.bind_head = (-1);
-    frontend_parse_g_pat.conds = (char *)(0);
-    frontend_parse_g_pat.condlen = 0;
-    frontend_parse_g_pat.condcap = 0;
-    frontend_parse_g_pat.sig = (char *)(0);
-    frontend_parse_g_pat.siglen = 0;
-    frontend_parse_g_pat.sigcap = 0;
+    frontend_parse_g_pat.grp = (struct frontend_parse_PatGroup *)(0);
+    frontend_parse_g_pat.ngrp = 0;
+    frontend_parse_g_pat.grpcap = 0;
     frontend_parse_g_pat.bname = (const char * *)(0);
     frontend_parse_g_pat.btype = (const char * *)(0);
     frontend_parse_g_pat.bpath = (const char * *)(0);
     frontend_parse_g_pat.nbind = 0;
     frontend_parse_g_pat.bcap = 0;
+    frontend_parse_g_pat.arm_conds = "";
+    frontend_parse_g_pat.arm_sig = "";
     frontend_parse_g_pat.cbase = "";
-    if (pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), "")) {
+    if (pat_groups_alloc(1, (&frontend_parse_g_pat.grp))) {
         return (-1);
     }
-    if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "")) {
-        return (-1);
-    }
+    frontend_parse_g_pat.ngrp = 1;
+    frontend_parse_g_pat.grpcap = 1;
     return 0;
 }
 
@@ -450,6 +472,61 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_desc(void *self, int
 
 static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self, const char * type, const char * path) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
+    struct frontend_parse_PatGroup * base;
+    struct frontend_parse_PatGroup * acc;
+    int nbase;
+    int nacc;
+    int rc;
+    if (pat_groups_copy((&base), (&nbase), frontend_parse_g_pat.grp, frontend_parse_g_pat.ngrp)) {
+        return (-1);
+    }
+    rc = _self->__frontend_parse_stmtmatch_vptr->pat_parse_atom(_self, type, path);
+    if (rc < 0) {
+        pat_groups_clear(base, nbase);
+        return (-1);
+    }
+    if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "|")))) {
+        pat_groups_clear(base, nbase);
+        return rc;
+    }
+    acc = (struct frontend_parse_PatGroup *)(0);
+    nacc = 0;
+    if (pat_groups_append((&acc), (&nacc), frontend_parse_g_pat.grp, frontend_parse_g_pat.ngrp)) {
+        pat_groups_clear(base, nbase);
+        return (-1);
+    }
+    while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "|"))) {
+        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+        pat_groups_clear(frontend_parse_g_pat.grp, frontend_parse_g_pat.ngrp);
+        frontend_parse_g_pat.grp = (struct frontend_parse_PatGroup *)(0);
+        frontend_parse_g_pat.ngrp = 0;
+        if (pat_groups_copy((&frontend_parse_g_pat.grp), (&frontend_parse_g_pat.ngrp), base, nbase)) {
+            pat_groups_clear(acc, nacc);
+            pat_groups_clear(base, nbase);
+            return (-1);
+        }
+        rc = _self->__frontend_parse_stmtmatch_vptr->pat_parse_atom(_self, type, path);
+        if (rc < 0) {
+            pat_groups_clear(acc, nacc);
+            pat_groups_clear(base, nbase);
+            return (-1);
+        }
+        if (pat_groups_append((&acc), (&nacc), frontend_parse_g_pat.grp, frontend_parse_g_pat.ngrp)) {
+            pat_groups_clear(acc, nacc);
+            pat_groups_clear(base, nbase);
+            return (-1);
+        }
+    }
+    pat_groups_clear(frontend_parse_g_pat.grp, frontend_parse_g_pat.ngrp);
+    frontend_parse_g_pat.grp = acc;
+    frontend_parse_g_pat.ngrp = nacc;
+    frontend_parse_g_pat.grpcap = nacc;
+    pat_groups_clear(base, nbase);
+    return rc;
+}
+
+static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *self, const char * type, const char * path) {
+    struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     int line;
     int col;
     int kind;
@@ -479,11 +556,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
             return (-1);
         }
         _self->arena->nodes[id].b = 1;
-        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
+        if (pat_sig_add("*")) {
             return (-1);
         }
         if (path[0] == 0) {
-            frontend_parse_g_pat.root_head = id;
+            pat_root_set(PAT_WILD, (-1));
         }
         return id;
     }
@@ -532,7 +609,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
         }
         _self->arena->nodes[id].b = 0;
         snprintf(msgbuf, sizeof(msgbuf), "#%ld", val);
-        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+        if (pat_sig_add(msgbuf)) {
             return (-1);
         }
         if (path[0] != 0) {
@@ -544,7 +621,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
             snprintf(row, need, "%s=%ld;", path, val);
-            rc = pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), row);
+            rc = pat_cond_add(row);
             free(row);
             if (rc) {
                 return (-1);
@@ -552,12 +629,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
         }
         else {
             snprintf(msgbuf, sizeof(msgbuf), "=%ld;", val);
-            if ((frontend_parse_g_pat.non_adt && pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), msgbuf))) {
+            if ((frontend_parse_g_pat.non_adt && pat_cond_add(msgbuf))) {
                 return (-1);
             }
         }
         if (path[0] == 0) {
-            frontend_parse_g_pat.root_head = id;
+            pat_root_set(PAT_LITERAL, (-1));
         }
         return id;
     }
@@ -633,7 +710,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
         first = (-1);
         last = (-1);
         snprintf(msgbuf, sizeof(msgbuf), "V%d(", v);
-        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+        if (pat_sig_add(msgbuf)) {
             return (-1);
         }
         if (path[0] != 0) {
@@ -645,7 +722,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
             snprintf(row, need, "%s.tag=%d;", path, v);
-            rc = pat_buf_put((&frontend_parse_g_pat.conds), (&frontend_parse_g_pat.condlen), (&frontend_parse_g_pat.condcap), row);
+            rc = pat_cond_add(row);
             free(row);
             if (rc) {
                 return (-1);
@@ -715,18 +792,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
             _self->arena->nodes[id].b = 0;
         }
         _self->arena->nodes[id].a = first;
-        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), ")")) {
+        if (pat_sig_add(")")) {
             return (-1);
         }
         if (path[0] == 0) {
-            frontend_parse_g_pat.root_head = id;
-            frontend_parse_g_pat.root_variant = v;
-            frontend_parse_g_pat.root_cname = runtime_text_ct_intern(adts[adt].variants[v].cname);
-            frontend_parse_g_pat.root_irref = _self->arena->nodes[id].b;
-        }
-        else {
-            if (_self->arena->nodes[id].b == 0) {
-            }
+            pat_root_set(PAT_VARIANT, v);
         }
         return id;
     }
@@ -770,7 +840,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
             return (-1);
         }
         snprintf(msgbuf, sizeof(msgbuf), "S%d{", si);
-        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+        if (pat_sig_add(msgbuf)) {
             return (-1);
         }
         seen = (int *)(calloc((size_t)(((sd->nfields > 0) ? sd->nfields : 1)), sizeof((*seen))));
@@ -856,7 +926,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
                 }
                 snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
                 child = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_BINDER, fname, sd->fields[fi].type, 0);
-                if (((child >= 0) && (pat_bind_add(fname, sd->fields[fi].type, runtime_text_ct_intern(fp)) == (-2)))) {
+                if (((child >= 0) && (pat_group_bind_add(fname, sd->fields[fi].type, runtime_text_ct_intern(fp)) == (-2)))) {
                     free(fp);
                     free(seen);
                     snprintf(msgbuf, sizeof(msgbuf), "duplicate binding '%s' in a match arm", fname);
@@ -866,7 +936,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
                 if (child >= 0) {
                     _self->arena->nodes[child].b = 1;
                 }
-                if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
+                if (pat_sig_add("*")) {
                     free(seen);
                     return (-1);
                 }
@@ -886,7 +956,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
                 any_refutable = 1;
             }
             snprintf(msgbuf, sizeof(msgbuf), "%d:", fi);
-            if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), msgbuf)) {
+            if (pat_sig_add(msgbuf)) {
                 free(seen);
                 return (-1);
             }
@@ -920,12 +990,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
         free(seen);
         _self->arena->nodes[id].b = (any_refutable ? 0 : 1);
         _self->arena->nodes[id].a = first;
-        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "}")) {
+        if (pat_sig_add("}")) {
             return (-1);
         }
         if (path[0] == 0) {
-            frontend_parse_g_pat.root_head = id;
-            frontend_parse_g_pat.root_irref = _self->arena->nodes[id].b;
+            pat_root_set(PAT_STRUCT, (-1));
         }
         return id;
     }
@@ -944,7 +1013,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
         else {
             bp = ((path[0] != 0) ? runtime_text_ct_intern(path) : "");
         }
-        rc = pat_bind_add(bname, type, bp);
+        rc = pat_group_bind_add(bname, type, bp);
     }
     if (rc == (-2)) {
         snprintf(msgbuf, sizeof(msgbuf), "duplicate binding '%s' in a match arm", bname);
@@ -953,11 +1022,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one(void *self
     if (rc < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
+    if (pat_sig_add("*")) {
         return (-1);
     }
     if (path[0] == 0) {
-        frontend_parse_g_pat.root_head = id;
+        pat_root_set(PAT_BINDER, (-1));
     }
     return id;
 }
@@ -989,52 +1058,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_top(void *self
         frontend_parse_g_pat.cbase = (frontend_parse_g_pat.subject_type ? frontend_parse_g_pat.subject_type : "");
         return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("match needs an ADT, struct, or integer-like value, but '%s' is not supported", (frontend_parse_g_pat.subject_type ? frontend_parse_g_pat.subject_type : "")), _self->mem->path);
     }
-    if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_"))) {
-        _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-        frontend_parse_g_pat.root_wild = 1;
-        frontend_parse_g_pat.root_catch = 1;
-        frontend_parse_g_pat.root_irref = 1;
-        frontend_parse_g_pat.root_head = (-1);
-        if (pat_buf_put((&frontend_parse_g_pat.sig), (&frontend_parse_g_pat.siglen), (&frontend_parse_g_pat.sigcap), "*")) {
-            return (-1);
-        }
-        return 0;
-    }
     rc = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, frontend_parse_g_pat.subject_type, "");
     if (rc < 0) {
         return (-1);
     }
-    if (frontend_parse_g_pat.root_head < 0) {
+    if (frontend_parse_g_pat.ngrp <= 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a pattern");
-    }
-    if (frontend_parse_g_pat.adt >= 0) {
-        int form;
-        form = _self->arena->nodes[frontend_parse_g_pat.root_head].aux;
-        if (form == PAT_VARIANT) {
-            frontend_parse_g_pat.root_irref = _self->arena->nodes[frontend_parse_g_pat.root_head].b;
-        }
-        else {
-            if (form == PAT_BINDER) {
-                frontend_parse_g_pat.root_catch = 1;
-                frontend_parse_g_pat.root_irref = 1;
-            }
-            else {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a pattern");
-            }
-        }
-    }
-    else {
-        int form;
-        form = _self->arena->nodes[frontend_parse_g_pat.root_head].aux;
-        frontend_parse_g_pat.root_irref = _self->arena->nodes[frontend_parse_g_pat.root_head].b;
-        if (form == PAT_BINDER) {
-            frontend_parse_g_pat.root_catch = 1;
-        }
-        else {
-            if (((form == PAT_STRUCT) && frontend_parse_g_pat.root_irref)) {
-                frontend_parse_g_pat.root_catch = 1;
-            }
-        }
     }
     return 0;
 }
@@ -1190,8 +1219,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     int col;
     int i;
     int * covered;
+    int * mention;
     int ncov;
-    int wild;
     int seen_catch;
     int is_ptr;
     int kind;
@@ -1202,6 +1231,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     int body;
     int arm_num;
     int arm_bind;
+    int guard;
+    int arm_wild;
+    int arm_catch;
+    int ncatch;
+    int ngi;
+    int guarded_catch;
     const char * arm_sig;
     const char * arm_conds;
     const char * arm_name;
@@ -1270,26 +1305,34 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
         return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
     }
     if (adt >= 0) {
+        int nv;
         adts = frontend_sym_ct_adts((&nadts));
-        covered = calloc((size_t)(((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1)), sizeof((*covered)));
+        nv = ((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1);
+        covered = (int *)(calloc((size_t)((2 * nv)), sizeof((*covered))));
         if ((!covered)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        for (i = 0; i < adts[adt].nvariants; i++) {
+        for (i = 0; i < nv; i++) {
             covered[i] = 0;
+        }
+        mention = (covered + nv);
+        for (i = 0; i < nv; i++) {
+            mention[i] = 0;
         }
     }
     else {
         adts = (struct frontend_sym_Adt *)(0);
         nadts = 0;
-        covered = (int *)(calloc(1, sizeof((*covered))));
+        covered = (int *)(calloc(2, sizeof((*covered))));
         if ((!covered)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
+        mention = (covered + 1);
+        mention[0] = 0;
     }
     ncov = 0;
-    wild = (-1);
     seen_catch = 0;
+    guarded_catch = 0;
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {
         free(covered);
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a block after match (...)");
@@ -1320,6 +1363,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
         arm_conds = "";
         arm_name = "";
         arm_bind = (-1);
+        guard = (-1);
+        arm_wild = 0;
+        arm_catch = 0;
+        ncatch = 0;
         if (_self->__frontend_parse_stmtmatch_vptr->pat_begin(_self, adt, subject, is_ptr) != 0) {
             free(covered);
             return (-1);
@@ -1328,104 +1375,126 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
             free(covered);
             return (-1);
         }
-        if (frontend_parse_g_pat.root_wild) {
-            if (seen_catch) {
-                free(covered);
+        for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
+            if (pat_group_catch(ngi)) {
+                ncatch++;
+            }
+        }
+        arm_catch = (ncatch > 0);
+        arm_wild = ((frontend_parse_g_pat.ngrp == 1) && (frontend_parse_g_pat.grp[0].root_form == PAT_WILD));
+        if (seen_catch) {
+            free(covered);
+            if (arm_wild) {
                 return tool_diag_ct_sem_error(arm_line, arm_col, "duplicate wildcard match arm", _self->mem->path);
             }
-            seen_catch = 1;
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
-                free(covered);
-                return (-1);
-            }
-            body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
-            if (body < 0) {
-                free(covered);
-                return (-1);
-            }
-            arm = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ARM);
-            if (arm < 0) {
-                free(covered);
-                return (-1);
-            }
-            _self->arena->nodes[arm].aux = 1;
-            _self->arena->nodes[arm].b = body;
-            _self->arena->nodes[arm].text4 = "";
-            _self->arena->nodes[arm].d = (-1);
-            _self->arena->nodes[arm].num = (-1);
-            _self->arena->nodes[arm].line = arm_line;
-            _self->arena->nodes[arm].attr = arm_col;
-            _self->arena->nodes[arm].num = (-1);
-            wild = arm;
+            return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
         }
-        else {
-            if (seen_catch) {
-                free(covered);
-                return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
-            }
-            if ((((adt >= 0) && (frontend_parse_g_pat.root_variant >= 0)) && frontend_parse_g_pat.root_irref)) {
-                if (covered[frontend_parse_g_pat.root_variant]) {
-                    snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, adts[adt].variants[frontend_parse_g_pat.root_variant].name);
-                    free(covered);
-                    return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
-                }
-                covered[frontend_parse_g_pat.root_variant] = 1;
-                ncov++;
-            }
-            if (frontend_parse_g_pat.root_catch) {
-                seen_catch = 1;
-            }
-            arm_num = frontend_parse_g_pat.root_variant;
-            arm_sig = runtime_text_ct_intern((frontend_parse_g_pat.sig ? frontend_parse_g_pat.sig : ""));
-            arm_conds = runtime_text_ct_intern((frontend_parse_g_pat.conds ? frontend_parse_g_pat.conds : ""));
-            if (((adt >= 0) && (arm_num >= 0))) {
-                arm_name = runtime_text_ct_intern(adts[adt].variants[arm_num].name);
-            }
-            else {
-                arm_name = runtime_text_ct_intern(subject);
-            }
-            if ((((!arm_sig) || (!arm_conds)) || (!arm_name))) {
-                free(covered);
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            if (_self->__frontend_parse_stmtmatch_vptr->pat_commit(_self) != 0) {
-                free(covered);
-                return (-1);
-            }
-            arm_bind = frontend_parse_g_pat.bind_head;
-            if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
+        if (pat_bind_finish(_self, arm_line, arm_col) != 0) {
+            free(covered);
+            return (-1);
+        }
+        if (_self->__frontend_parse_stmtmatch_vptr->pat_commit(_self) != 0) {
+            free(covered);
+            return (-1);
+        }
+        arm_bind = frontend_parse_g_pat.bind_head;
+        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "if"))) {
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            _self->ex->assign_ok = 1;
+            _self->ex->try_ban++;
+            guard = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+            _self->ex->try_ban--;
+            _self->ex->assign_ok = 0;
+            if (guard < 0) {
                 _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 free(covered);
                 return (-1);
             }
-            body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
-            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-            if (body < 0) {
-                free(covered);
-                return (-1);
-            }
-            arm = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ARM);
-            if (arm < 0) {
-                free(covered);
-                return (-1);
-            }
-            _self->arena->nodes[arm].num = arm_num;
-            _self->arena->nodes[arm].text = arm_name;
-            _self->arena->nodes[arm].text2 = arm_sig;
-            _self->arena->nodes[arm].text3 = ((adt >= 0) ? runtime_text_ct_intern(adts[adt].full) : "");
-            _self->arena->nodes[arm].text4 = arm_conds;
-            if (((((!_self->arena->nodes[arm].text) || (!_self->arena->nodes[arm].text2)) || (!_self->arena->nodes[arm].text3)) || (!_self->arena->nodes[arm].text4))) {
-                free(covered);
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            _self->arena->nodes[arm].aux = ((adt < 0) ? 4 : 0);
-            _self->arena->nodes[arm].a = arm_bind;
-            _self->arena->nodes[arm].b = body;
-            _self->arena->nodes[arm].d = (-1);
-            _self->arena->nodes[arm].c = (-1);
-            _self->arena->nodes[arm].attr = arm_col;
-            _self->arena->nodes[arm].line = arm_line;
         }
+        if (guard < 0) {
+            if (adt >= 0) {
+                for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
+                    int v = pat_group_variant(ngi);
+                    if (v < 0) {
+                        continue;
+                    }
+                    if (covered[v]) {
+                        snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, adts[adt].variants[v].name);
+                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                        free(covered);
+                        return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+                    }
+                    covered[v] = 1;
+                    ncov++;
+                }
+            }
+            if (arm_catch) {
+                seen_catch = 1;
+            }
+        }
+        else {
+            if (adt >= 0) {
+                for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
+                    int v = pat_group_mention(ngi);
+                    if (v >= 0) {
+                        mention[v] = 1;
+                    }
+                }
+            }
+            if (arm_catch) {
+                guarded_catch = 1;
+            }
+        }
+        if (pat_arm_finish((&arm_num)) != 0) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            free(covered);
+            return (-1);
+        }
+        arm_sig = frontend_parse_g_pat.arm_sig;
+        arm_conds = frontend_parse_g_pat.arm_conds;
+        if (((adt >= 0) && (arm_num >= 0))) {
+            arm_name = runtime_text_ct_intern(adts[adt].variants[arm_num].name);
+        }
+        else {
+            arm_name = runtime_text_ct_intern(subject);
+        }
+        if ((((!arm_sig) || (!arm_conds)) || (!arm_name))) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            free(covered);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            free(covered);
+            return (-1);
+        }
+        body = _self->__frontend_parse_stmtops_vptr->parse_block(_self);
+        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+        if (body < 0) {
+            free(covered);
+            return (-1);
+        }
+        arm = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_ARM);
+        if (arm < 0) {
+            free(covered);
+            return (-1);
+        }
+        _self->arena->nodes[arm].num = arm_num;
+        _self->arena->nodes[arm].text = arm_name;
+        _self->arena->nodes[arm].text2 = arm_sig;
+        _self->arena->nodes[arm].text3 = ((adt >= 0) ? runtime_text_ct_intern(adts[adt].full) : "");
+        _self->arena->nodes[arm].text4 = arm_conds;
+        if (((((!_self->arena->nodes[arm].text) || (!_self->arena->nodes[arm].text2)) || (!_self->arena->nodes[arm].text3)) || (!_self->arena->nodes[arm].text4))) {
+            free(covered);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->arena->nodes[arm].aux = ((arm_wild ? 1 : 0) | ((adt < 0) ? 4 : 0));
+        _self->arena->nodes[arm].a = arm_bind;
+        _self->arena->nodes[arm].b = body;
+        _self->arena->nodes[arm].d = guard;
+        _self->arena->nodes[arm].c = (-1);
+        _self->arena->nodes[arm].attr = arm_col;
+        _self->arena->nodes[arm].line = arm_line;
         if (arms < 0) {
             arms = arm;
         }
@@ -1443,8 +1512,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
         if ((_self->arena->nodes[a].aux & 1)) {
             continue;
         }
+        if (_self->arena->nodes[a].d >= 0) {
+            continue;
+        }
         for (b = _self->arena->nodes[a].next; b >= 0; b = _self->arena->nodes[b].next) {
             if ((_self->arena->nodes[b].aux & 1)) {
+                continue;
+            }
+            if (_self->arena->nodes[b].d >= 0) {
                 continue;
             }
             if (((_self->arena->nodes[a].text2 && _self->arena->nodes[b].text2) && (strcmp(_self->arena->nodes[a].text2, _self->arena->nodes[b].text2) == 0))) {
@@ -1455,12 +1530,17 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
         }
     }
     if (adt >= 0) {
-        if (((wild < 0) && (!seen_catch))) {
+        if ((!seen_catch)) {
             for (i = 0; i < adts[adt].nvariants; i++) {
                 if (covered[i]) {
                     continue;
                 }
-                snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (add the arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+                if (mention[i]) {
+                    snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (a guarded arm does not count as coverage;"" add an unguarded arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+                }
+                else {
+                    snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (add the arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+                }
                 free(covered);
                 return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
             }
@@ -1477,7 +1557,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     }
     else {
         if ((!seen_catch)) {
-            snprintf(msg, sizeof(msg), "match on '%s' needs a final '_ => { … }' arm", subject);
+            if (guarded_catch) {
+                snprintf(msg, sizeof(msg), "match on '%s' needs a final unguarded '_ => { … }' arm"" (a guarded arm does not count as coverage)", subject);
+            }
+            else {
+                snprintf(msg, sizeof(msg), "match on '%s' needs a final '_ => { … }' arm", subject);
+            }
             free(covered);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
@@ -1576,8 +1661,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     int col;
     int i;
     int * covered;
+    int * mention;
     int ncov;
-    int wild;
     int seen_wild;
     int is_ptr;
     int body;
@@ -1590,6 +1675,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     int ycol;
     int arm_wild;
     int arm_catch;
+    int guard;
+    int ncatch;
+    int ngi;
     const char * arm_sig;
     const char * arm_conds;
     const char * tybuf = "";
@@ -1651,15 +1739,21 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
     }
     adts = frontend_sym_ct_adts((&nadts));
-    covered = calloc((size_t)(((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1)), sizeof((*covered)));
-    if ((!covered)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
-    for (i = 0; i < adts[adt].nvariants; i++) {
-        covered[i] = 0;
+{
+        int nv = ((adts[adt].nvariants > 0) ? adts[adt].nvariants : 1);
+        covered = (int *)(calloc((size_t)((2 * nv)), sizeof((*covered))));
+        if ((!covered)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        for (i = 0; i < nv; i++) {
+            covered[i] = 0;
+        }
+        mention = (covered + nv);
+        for (i = 0; i < nv; i++) {
+            mention[i] = 0;
+        }
     }
     ncov = 0;
-    wild = (-1);
     seen_wild = 0;
     have_type = 0;
     rtype = "";
@@ -1695,6 +1789,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         pushed = 0;
         arm_wild = 0;
         arm_catch = 0;
+        ncatch = 0;
+        guard = (-1);
         arm_sig = "";
         arm_conds = "";
         if (_self->__frontend_parse_stmtmatch_vptr->pat_begin(_self, adt, tname, is_ptr) != 0) {
@@ -1703,42 +1799,74 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         if (_self->__frontend_parse_stmtmatch_vptr->pat_parse_top(_self) != 0) {
             return (-1);
         }
-        if (frontend_parse_g_pat.root_wild) {
-            if (seen_wild) {
+        for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
+            if (pat_group_catch(ngi)) {
+                ncatch++;
+            }
+        }
+        arm_catch = (ncatch > 0);
+        arm_wild = ((frontend_parse_g_pat.ngrp == 1) && (frontend_parse_g_pat.grp[0].root_form == PAT_WILD));
+        if (seen_wild) {
+            if (arm_wild) {
                 return tool_diag_ct_sem_error(arm_line, arm_col, "duplicate wildcard match arm", _self->mem->path);
             }
-            seen_wild = 1;
-            arm_wild = 1;
-            arm_catch = 1;
+            return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
         }
-        else {
-            if (seen_wild) {
-                return tool_diag_ct_sem_error(arm_line, arm_col, "a wildcard match arm must be the last arm", _self->mem->path);
-            }
-            if (((frontend_parse_g_pat.root_variant >= 0) && frontend_parse_g_pat.root_irref)) {
-                if (covered[frontend_parse_g_pat.root_variant]) {
-                    snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, adts[adt].variants[frontend_parse_g_pat.root_variant].name);
-                    return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
-                }
-                covered[frontend_parse_g_pat.root_variant] = 1;
-                ncov++;
-            }
-            if (frontend_parse_g_pat.root_catch) {
-                seen_wild = 1;
-            }
-            if (_self->__frontend_parse_stmtmatch_vptr->pat_commit(_self) != 0) {
+        if (pat_bind_finish(_self, arm_line, arm_col) != 0) {
+            return (-1);
+        }
+        if (_self->__frontend_parse_stmtmatch_vptr->pat_commit(_self) != 0) {
+            return (-1);
+        }
+        pushed = 1;
+        bind_head = frontend_parse_g_pat.bind_head;
+        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "if"))) {
+            _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+            _self->ex->assign_ok = 1;
+            _self->ex->try_ban++;
+            guard = _self->ex->__frontend_parse_exprops_vptr->parse_expr(_self->ex);
+            _self->ex->try_ban--;
+            _self->ex->assign_ok = 0;
+            if (guard < 0) {
+                _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                 return (-1);
             }
-            pushed = 1;
-            variant = frontend_parse_g_pat.root_variant;
-            bind_head = frontend_parse_g_pat.bind_head;
-            arm_wild = frontend_parse_g_pat.root_wild;
-            arm_catch = frontend_parse_g_pat.root_catch;
-            arm_sig = runtime_text_ct_intern((frontend_parse_g_pat.sig ? frontend_parse_g_pat.sig : ""));
-            arm_conds = runtime_text_ct_intern((frontend_parse_g_pat.conds ? frontend_parse_g_pat.conds : ""));
-            if (((!arm_sig) || (!arm_conds))) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if (guard < 0) {
+            for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
+                int v = pat_group_variant(ngi);
+                if (v < 0) {
+                    continue;
+                }
+                if (covered[v]) {
+                    snprintf(msg, sizeof(msg), "duplicate match arm for variant '%s.%s'", adts[adt].name, adts[adt].variants[v].name);
+                    _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                    return tool_diag_ct_sem_error(arm_line, arm_col, msg, _self->mem->path);
+                }
+                covered[v] = 1;
+                ncov++;
             }
+            if (arm_catch) {
+                seen_wild = 1;
+            }
+        }
+        else {
+            for (ngi = 0; ngi < frontend_parse_g_pat.ngrp; ngi++) {
+                int v = pat_group_mention(ngi);
+                if (v >= 0) {
+                    mention[v] = 1;
+                }
+            }
+        }
+        if (pat_arm_finish((&variant)) != 0) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            return (-1);
+        }
+        arm_sig = frontend_parse_g_pat.arm_sig;
+        arm_conds = frontend_parse_g_pat.arm_conds;
+        if (((!arm_sig) || (!arm_conds))) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "=>") != 0) {
             return (-1);
@@ -1912,7 +2040,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         _self->arena->nodes[arm].c = asg;
         _self->arena->nodes[arm].line = arm_line;
         _self->arena->nodes[arm].attr = arm_col;
-        _self->arena->nodes[arm].d = (-1);
+        _self->arena->nodes[arm].d = guard;
         _self->arena->nodes[arm].text4 = arm_conds;
         if (variant >= 0) {
             _self->arena->nodes[arm].text = runtime_text_ct_intern(adts[adt].variants[variant].name);
@@ -1925,9 +2053,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
         _self->arena->nodes[arm].text2 = arm_sig;
         if (((((!_self->arena->nodes[arm].text) || (!_self->arena->nodes[arm].text2)) || (!_self->arena->nodes[arm].text3)) || (!_self->arena->nodes[arm].text4))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-        }
-        if ((arm_wild || arm_catch)) {
-            wild = arm;
         }
         if (pushed) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
@@ -1962,12 +2087,17 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     if ((!_self->arena->nodes[s].text2)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    if (wild < 0) {
+    if ((!seen_wild)) {
         for (i = 0; i < adts[adt].nvariants; i++) {
             if (covered[i]) {
                 continue;
             }
-            snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (add the arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+            if (mention[i]) {
+                snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (a guarded arm does not count as coverage;"" add an unguarded arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+            }
+            else {
+                snprintf(msg, sizeof(msg), "match does not cover variant '%s.%s'"" (add the arm or write '_ => { … }')", adts[adt].name, adts[adt].variants[i].name);
+            }
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
     }
@@ -1987,6 +2117,7 @@ const struct frontend_parse_StmtMatch_vtbl frontend_parse_Stmt_frontend_parse_St
     .pat_classify = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_classify,
     .pat_desc = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_desc,
     .pat_parse_one = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_one,
+    .pat_parse_atom = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom,
     .pat_parse_top = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_top,
     .pat_commit = frontend_parse_Stmt_frontend_parse_StmtMatch_pat_commit,
     .match_ahead = frontend_parse_Stmt_frontend_parse_StmtMatch_match_ahead,
@@ -2043,41 +2174,455 @@ static int pat_buf_put(char * * buf, int * len, int * cap, const char * s) {
     (*buf)[(*len)] = 0;
     return 0;
 }
-static int pat_bind_add(const char * name, const char * type, const char * path) {
+static void pat_group_clear(struct frontend_parse_PatGroup * g) {
+    free(g->conds);
+    free(g->sig);
+    free((void *)(g->binds));
+    g->conds = (char *)(0);
+    g->condlen = 0;
+    g->condcap = 0;
+    g->sig = (char *)(0);
+    g->siglen = 0;
+    g->sigcap = 0;
+    g->binds = (struct frontend_parse_PatBind *)(0);
+    g->nbinds = 0;
+    g->bcap = 0;
+    g->root_form = 0;
+    g->root_variant = (-1);
+}
+static void pat_groups_clear(struct frontend_parse_PatGroup * grp, int n) {
     int i;
+    if ((!grp)) {
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        pat_group_clear((&grp[i]));
+    }
+    free(grp);
+}
+static int pat_group_init(struct frontend_parse_PatGroup * g) {
+    g->conds = (char *)(0);
+    g->condlen = 0;
+    g->condcap = 0;
+    g->sig = (char *)(0);
+    g->siglen = 0;
+    g->sigcap = 0;
+    g->binds = (struct frontend_parse_PatBind *)(0);
+    g->nbinds = 0;
+    g->bcap = 0;
+    g->root_form = 0;
+    g->root_variant = (-1);
+    if (pat_buf_put((&g->conds), (&g->condlen), (&g->condcap), "")) {
+        return (-1);
+    }
+    if (pat_buf_put((&g->sig), (&g->siglen), (&g->sigcap), "")) {
+        return (-1);
+    }
+    return 0;
+}
+static int pat_groups_alloc(int n, struct frontend_parse_PatGroup * * out) {
+    struct frontend_parse_PatGroup * g;
+    int i;
+    if (n <= 0) {
+        n = 1;
+    }
+    g = (struct frontend_parse_PatGroup *)(calloc((size_t)(n), sizeof((*g))));
+    if ((!g)) {
+        return (-1);
+    }
+    for (i = 0; i < n; i++) {
+        if (pat_group_init((&g[i]))) {
+            pat_groups_clear(g, n);
+            return (-1);
+        }
+    }
+    (*out) = g;
+    return 0;
+}
+static int pat_group_copy(struct frontend_parse_PatGroup * dst, const struct frontend_parse_PatGroup * src) {
+    dst->conds = (char *)(0);
+    dst->condlen = 0;
+    dst->condcap = 0;
+    dst->sig = (char *)(0);
+    dst->siglen = 0;
+    dst->sigcap = 0;
+    dst->binds = (struct frontend_parse_PatBind *)(0);
+    dst->nbinds = 0;
+    dst->bcap = 0;
+    dst->root_form = src->root_form;
+    dst->root_variant = src->root_variant;
+    if (pat_buf_put((&dst->conds), (&dst->condlen), (&dst->condcap), (src->conds ? src->conds : ""))) {
+        return (-1);
+    }
+    if (pat_buf_put((&dst->sig), (&dst->siglen), (&dst->sigcap), (src->sig ? src->sig : ""))) {
+        return (-1);
+    }
+    if (src->nbinds > 0) {
+        dst->binds = (struct frontend_parse_PatBind *)(malloc(((size_t)(src->nbinds) * sizeof((*dst->binds)))));
+        if ((!dst->binds)) {
+            return (-1);
+        }
+        memcpy(dst->binds, src->binds, ((size_t)(src->nbinds) * sizeof((*dst->binds))));
+        dst->nbinds = src->nbinds;
+        dst->bcap = src->nbinds;
+    }
+    return 0;
+}
+static int pat_groups_copy(struct frontend_parse_PatGroup * * out, int * nout, const struct frontend_parse_PatGroup * src, int n) {
+    struct frontend_parse_PatGroup * g;
+    int i;
+    if (n <= 0) {
+        n = 1;
+    }
+    g = (struct frontend_parse_PatGroup *)(calloc((size_t)(n), sizeof((*g))));
+    if ((!g)) {
+        return (-1);
+    }
+    for (i = 0; i < n; i++) {
+        if (pat_group_copy((&g[i]), (&src[i]))) {
+            pat_groups_clear(g, n);
+            return (-1);
+        }
+    }
+    (*out) = g;
+    (*nout) = n;
+    return 0;
+}
+static int pat_groups_append(struct frontend_parse_PatGroup * * acc, int * nacc, const struct frontend_parse_PatGroup * src, int n) {
+    struct frontend_parse_PatGroup * grown;
+    int i;
+    int base;
+    if (n <= 0) {
+        return 0;
+    }
+    grown = (struct frontend_parse_PatGroup *)(realloc((*acc), ((size_t)(((*nacc) + n)) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    base = (*nacc);
+    memset((grown + base), 0, ((size_t)(n) * sizeof((*grown))));
+    for (i = 0; i < n; i++) {
+        if (pat_group_copy((&grown[(base + i)]), (&src[i]))) {
+            pat_groups_clear((grown + base), i);
+            (*acc) = grown;
+            return (-1);
+        }
+    }
+    (*acc) = grown;
+    (*nacc) = (base + n);
+    return 0;
+}
+static int pat_cond_add(const char * row) {
+    int i;
+    for (i = 0; i < frontend_parse_g_pat.ngrp; i++) {
+        if (pat_buf_put((&frontend_parse_g_pat.grp[i].conds), (&frontend_parse_g_pat.grp[i].condlen), (&frontend_parse_g_pat.grp[i].condcap), row)) {
+            return (-1);
+        }
+    }
+    return 0;
+}
+static int pat_sig_add(const char * s) {
+    int i;
+    for (i = 0; i < frontend_parse_g_pat.ngrp; i++) {
+        if (pat_buf_put((&frontend_parse_g_pat.grp[i].sig), (&frontend_parse_g_pat.grp[i].siglen), (&frontend_parse_g_pat.grp[i].sigcap), s)) {
+            return (-1);
+        }
+    }
+    return 0;
+}
+static void pat_root_set(int form, int variant) {
+    int i;
+    for (i = 0; i < frontend_parse_g_pat.ngrp; i++) {
+        frontend_parse_g_pat.grp[i].root_form = form;
+        frontend_parse_g_pat.grp[i].root_variant = variant;
+    }
+}
+static int pat_group_bind_add(const char * name, const char * type, const char * path) {
+    int i;
+    int j;
+    for (i = 0; i < frontend_parse_g_pat.ngrp; i++) {
+        struct frontend_parse_PatGroup * g = (&frontend_parse_g_pat.grp[i]);
+        struct frontend_parse_PatBind * grown;
+        int ncap;
+        for (j = 0; j < g->nbinds; j++) {
+            if (strcmp(g->binds[j].name, name) == 0) {
+                return (-2);
+            }
+        }
+        if (g->nbinds >= g->bcap) {
+            ncap = ((g->bcap > 0) ? (g->bcap * 2) : 8);
+            if (ncap > CAP_LIMIT) {
+                return (-1);
+            }
+            grown = (struct frontend_parse_PatBind *)(realloc(g->binds, ((size_t)(ncap) * sizeof((*grown)))));
+            if ((!grown)) {
+                return (-1);
+            }
+            g->binds = grown;
+            g->bcap = ncap;
+        }
+        g->binds[g->nbinds].name = name;
+        g->binds[g->nbinds].type = type;
+        g->binds[g->nbinds].path = path;
+        g->nbinds++;
+    }
+    return 0;
+}
+static int pat_cond_bind_ok(struct frontend_sym_Symbols * sym, const char * type) {
+    const char * r;
+    if (pat_int_base(type)) {
+        return 1;
+    }
+    r = sym->__frontend_sym_symbolops_vptr->resolve_type_text(sym, type);
+    if ((r && pat_int_base(r))) {
+        return 1;
+    }
+    return 0;
+}
+static int pat_bind_finish(struct frontend_parse_Stmt * self, int line, int col) {
+    char msgbuf[3 * MAX_TEXT];
+    struct frontend_parse_PatGroup * ref;
+    int i;
+    int k;
+    int j;
     int ncap;
     const char * * grown;
-    for (i = 0; i < frontend_parse_g_pat.nbind; i++) {
-        if (strcmp(frontend_parse_g_pat.bname[i], name) == 0) {
-            return (-2);
+    frontend_parse_g_pat.nbind = 0;
+    frontend_parse_g_pat.bind_head = (-1);
+    if (frontend_parse_g_pat.ngrp <= 0) {
+        return 0;
+    }
+    ref = (&frontend_parse_g_pat.grp[0]);
+    for (i = 0; i < ref->nbinds; i++) {
+        const char * nm = ref->binds[i].name;
+        const char * ty = ref->binds[i].type;
+        const char * path = ref->binds[i].path;
+        int same = 1;
+        for (k = 1; k < frontend_parse_g_pat.ngrp; k++) {
+            struct frontend_parse_PatGroup * g = (&frontend_parse_g_pat.grp[k]);
+            int found = (-1);
+            for (j = 0; j < g->nbinds; j++) {
+                if (strcmp(g->binds[j].name, nm) == 0) {
+                    found = j;
+                    break;
+                }
+            }
+            if (found < 0) {
+                snprintf(msgbuf, sizeof(msgbuf), "or-pattern alternatives bind different names ('%s' is missing)", nm);
+                return tool_diag_ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            if (strcmp(g->binds[found].type, ty) != 0) {
+                snprintf(msgbuf, sizeof(msgbuf), "or-pattern alternatives bind '%s' as different types ('%s' and '%s')", nm, ty, g->binds[found].type);
+                return tool_diag_ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            if (strcmp(g->binds[found].path, path) != 0) {
+                same = 0;
+            }
+        }
+        for (k = 1; k < frontend_parse_g_pat.ngrp; k++) {
+            struct frontend_parse_PatGroup * g = (&frontend_parse_g_pat.grp[k]);
+            for (j = 0; j < g->nbinds; j++) {
+                int inref = 0;
+                int q;
+                for (q = 0; q < ref->nbinds; q++) {
+                    if (strcmp(ref->binds[q].name, g->binds[j].name) == 0) {
+                        inref = 1;
+                        break;
+                    }
+                }
+                if ((!inref)) {
+                    snprintf(msgbuf, sizeof(msgbuf), "or-pattern alternatives bind different names ('%s' is missing)", g->binds[j].name);
+                    return tool_diag_ct_sem_error(line, col, msgbuf, self->mem->path);
+                }
+            }
+        }
+        if ((!same)) {
+            char * enc;
+            int elen;
+            int ecap;
+            if ((!pat_cond_bind_ok(self->sym, ty))) {
+                snprintf(msgbuf, sizeof(msgbuf), "an or-pattern cannot bind '%s' of type '%s' at different offsets"" (S5: integer payloads only)", nm, ty);
+                return tool_diag_ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            enc = (char *)(0);
+            elen = 0;
+            ecap = 0;
+            for (k = 0; k < frontend_parse_g_pat.ngrp; k++) {
+                char head[32];
+                int found = (-1);
+                int q;
+                for (q = 0; q < frontend_parse_g_pat.grp[k].nbinds; q++) {
+                    if (strcmp(frontend_parse_g_pat.grp[k].binds[q].name, nm) == 0) {
+                        found = q;
+                        break;
+                    }
+                }
+                snprintf(head, sizeof(head), "%s%d:", ((k == 0) ? "?" : ","), k);
+                if ((pat_buf_put((&enc), (&elen), (&ecap), head) || pat_buf_put((&enc), (&elen), (&ecap), ((found >= 0) ? frontend_parse_g_pat.grp[k].binds[found].path : "")))) {
+                    free(enc);
+                    return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+                }
+            }
+            path = runtime_text_ct_intern((enc ? enc : ""));
+            free(enc);
+            if ((!path)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
+        }
+        if (frontend_parse_g_pat.nbind >= frontend_parse_g_pat.bcap) {
+            ncap = ((frontend_parse_g_pat.bcap > 0) ? (frontend_parse_g_pat.bcap * 2) : 8);
+            if (ncap > CAP_LIMIT) {
+                return (-1);
+            }
+            grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.bname), ((size_t)(ncap) * sizeof((*grown)))));
+            if ((!grown)) {
+                return (-1);
+            }
+            frontend_parse_g_pat.bname = grown;
+            grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.btype), ((size_t)(ncap) * sizeof((*grown)))));
+            if ((!grown)) {
+                return (-1);
+            }
+            frontend_parse_g_pat.btype = grown;
+            grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.bpath), ((size_t)(ncap) * sizeof((*grown)))));
+            if ((!grown)) {
+                return (-1);
+            }
+            frontend_parse_g_pat.bpath = grown;
+            frontend_parse_g_pat.bcap = ncap;
+        }
+        frontend_parse_g_pat.bname[frontend_parse_g_pat.nbind] = nm;
+        frontend_parse_g_pat.btype[frontend_parse_g_pat.nbind] = ty;
+        frontend_parse_g_pat.bpath[frontend_parse_g_pat.nbind] = path;
+        frontend_parse_g_pat.nbind++;
+    }
+    return 0;
+}
+static int pat_group_variant(int gi) {
+    struct frontend_parse_PatGroup * g;
+    if (((gi < 0) || (gi >= frontend_parse_g_pat.ngrp))) {
+        return (-1);
+    }
+    g = (&frontend_parse_g_pat.grp[gi]);
+    if (((g->root_form != PAT_VARIANT) || (g->root_variant < 0))) {
+        return (-1);
+    }
+    if (g->condlen != 0) {
+        return (-1);
+    }
+    return g->root_variant;
+}
+static int pat_group_mention(int gi) {
+    struct frontend_parse_PatGroup * g;
+    if (((gi < 0) || (gi >= frontend_parse_g_pat.ngrp))) {
+        return (-1);
+    }
+    g = (&frontend_parse_g_pat.grp[gi]);
+    if (((g->root_form != PAT_VARIANT) || (g->root_variant < 0))) {
+        return (-1);
+    }
+    return g->root_variant;
+}
+static int pat_group_catch(int gi) {
+    struct frontend_parse_PatGroup * g;
+    if (((gi < 0) || (gi >= frontend_parse_g_pat.ngrp))) {
+        return 0;
+    }
+    g = (&frontend_parse_g_pat.grp[gi]);
+    if (((g->root_form == PAT_WILD) || (g->root_form == PAT_BINDER))) {
+        return 1;
+    }
+    if ((((frontend_parse_g_pat.adt < 0) && (g->root_form == PAT_STRUCT)) && (g->condlen == 0))) {
+        return 1;
+    }
+    return 0;
+}
+static int pat_arm_finish(int * arm_num) {
+    struct frontend_parse_PatGroup * grp;
+    char * out;
+    int i;
+    int len;
+    int cap;
+    int all_same;
+    int firstv;
+    grp = frontend_parse_g_pat.grp;
+    (*arm_num) = (-1);
+    if (frontend_parse_g_pat.ngrp <= 0) {
+        frontend_parse_g_pat.arm_conds = runtime_text_ct_intern("");
+        frontend_parse_g_pat.arm_sig = runtime_text_ct_intern("");
+        return 0;
+    }
+    if (frontend_parse_g_pat.ngrp == 1) {
+        if (((frontend_parse_g_pat.adt >= 0) && (grp[0].root_form == PAT_VARIANT))) {
+            (*arm_num) = grp[0].root_variant;
+        }
+        frontend_parse_g_pat.arm_conds = runtime_text_ct_intern((grp[0].conds ? grp[0].conds : ""));
+        frontend_parse_g_pat.arm_sig = runtime_text_ct_intern((grp[0].sig ? grp[0].sig : ""));
+        if (((!frontend_parse_g_pat.arm_conds) || (!frontend_parse_g_pat.arm_sig))) {
+            return (-1);
+        }
+        return 0;
+    }
+    all_same = 1;
+    firstv = (-1);
+    for (i = 0; i < frontend_parse_g_pat.ngrp; i++) {
+        if (grp[i].root_form != PAT_VARIANT) {
+            all_same = 0;
+            continue;
+        }
+        if (firstv < 0) {
+            firstv = grp[i].root_variant;
+        }
+        else {
+            if (firstv != grp[i].root_variant) {
+                all_same = 0;
+            }
         }
     }
-    if (frontend_parse_g_pat.nbind >= frontend_parse_g_pat.bcap) {
-        ncap = ((frontend_parse_g_pat.bcap > 0) ? (frontend_parse_g_pat.bcap * 2) : 8);
-        if (ncap > CAP_LIMIT) {
-            return (-1);
-        }
-        grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.bname), ((size_t)(ncap) * sizeof((*grown)))));
-        if ((!grown)) {
-            return (-1);
-        }
-        frontend_parse_g_pat.bname = grown;
-        grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.btype), ((size_t)(ncap) * sizeof((*grown)))));
-        if ((!grown)) {
-            return (-1);
-        }
-        frontend_parse_g_pat.btype = grown;
-        grown = (const char * *)(realloc((void *)(frontend_parse_g_pat.bpath), ((size_t)(ncap) * sizeof((*grown)))));
-        if ((!grown)) {
-            return (-1);
-        }
-        frontend_parse_g_pat.bpath = grown;
-        frontend_parse_g_pat.bcap = ncap;
+    if (((all_same && (frontend_parse_g_pat.adt >= 0)) && (firstv >= 0))) {
+        (*arm_num) = firstv;
     }
-    frontend_parse_g_pat.bname[frontend_parse_g_pat.nbind] = name;
-    frontend_parse_g_pat.btype[frontend_parse_g_pat.nbind] = type;
-    frontend_parse_g_pat.bpath[frontend_parse_g_pat.nbind] = path;
-    frontend_parse_g_pat.nbind++;
+    out = (char *)(0);
+    len = 0;
+    cap = 0;
+    for (i = 0; i < frontend_parse_g_pat.ngrp; i++) {
+        if (((i > 0) && pat_buf_put((&out), (&len), (&cap), "|"))) {
+            free(out);
+            return (-1);
+        }
+        if (((!all_same) && (grp[i].root_form == PAT_VARIANT))) {
+            char row[64];
+            snprintf(row, sizeof(row), "%stag=%d;", (frontend_parse_g_pat.is_ptr ? "->" : "."), grp[i].root_variant);
+            if (pat_buf_put((&out), (&len), (&cap), row)) {
+                free(out);
+                return (-1);
+            }
+        }
+        if (pat_buf_put((&out), (&len), (&cap), (grp[i].conds ? grp[i].conds : ""))) {
+            free(out);
+            return (-1);
+        }
+    }
+    frontend_parse_g_pat.arm_conds = runtime_text_ct_intern((out ? out : ""));
+    free(out);
+    out = (char *)(0);
+    len = 0;
+    cap = 0;
+    for (i = 0; i < frontend_parse_g_pat.ngrp; i++) {
+        if (((i > 0) && pat_buf_put((&out), (&len), (&cap), "|"))) {
+            free(out);
+            return (-1);
+        }
+        if (pat_buf_put((&out), (&len), (&cap), (grp[i].sig ? grp[i].sig : ""))) {
+            free(out);
+            return (-1);
+        }
+    }
+    frontend_parse_g_pat.arm_sig = runtime_text_ct_intern((out ? out : ""));
+    free(out);
+    if (((!frontend_parse_g_pat.arm_conds) || (!frontend_parse_g_pat.arm_sig))) {
+        return (-1);
+    }
     return 0;
 }
 static int pat_char_value(const char * p, int len) {

@@ -162,6 +162,7 @@ struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
+struct backend_emit_EmitBuf;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -207,6 +208,8 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatBind;
+struct frontend_parse_PatGroup;
 struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
@@ -4709,9 +4712,9 @@ static int record_io_call(struct frontend_parse_Expr * e, const char * callee, i
             return 0;
         }
     }
-    if (e->nio >= 1024) {
+    if (e->nio >= 2048) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "too many distinct calls in unit '%s' (limit %d)", e->sym->__frontend_sym_symbolops_vptr->unit_name(e->sym), 1024);
+        snprintf(msg, sizeof(msg), "too many distinct calls in unit '%s' (limit %d)", e->sym->__frontend_sym_symbolops_vptr->unit_name(e->sym), 2048);
         return e->sup->__frontend_parse_supportops_vptr->fail(e->sup, msg);
     }
     snprintf(e->io_names[e->nio], 64, "%s", callee);

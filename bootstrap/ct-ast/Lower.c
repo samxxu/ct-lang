@@ -267,6 +267,7 @@ struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
+struct backend_emit_EmitBuf;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -312,6 +313,8 @@ struct frontend_parse_StmtScope;
 struct frontend_parse_LabelRow;
 struct frontend_parse_Stmt;
 struct frontend_parse_StmtDefer;
+struct frontend_parse_PatBind;
+struct frontend_parse_PatGroup;
 struct frontend_parse_PatCtx;
 struct frontend_parse_Parser;
 struct tool_cache_Cache;
@@ -1793,6 +1796,13 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                 if ((!a)) {
                     lw_abort(w, "L7820");
                     return 0;
+                }
+                for (j = 1; j < t->nkids; j++) {
+                    struct backend_tir_ct_tstmt * arm = (&w->m->stmts[(t->kids[j] - 1)]);
+                    if (((arm->guard >= 0) || (arm->text2 && strchr(arm->text2, '|')))) {
+                        lw_abort(w, "L7822");
+                        return 0;
+                    }
                 }
                 temp = backend_lir_lmod_new_temp(w->l, LTK_MATCH, lw_type(w, t->type), w->hoist_block);
                 if (temp <= 0) {
@@ -3590,6 +3600,13 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 if (((!nonadt) && (!a))) {
                     lw_abort(w, "L7830");
                     return 0;
+                }
+                for (j = 1; j < s->nkids; j++) {
+                    struct backend_tir_ct_tstmt * arm = (&w->m->stmts[(s->kids[j] - 1)]);
+                    if (((arm->guard >= 0) || (arm->text2 && strchr(arm->text2, '|')))) {
+                        lw_abort(w, "L7832");
+                        return 0;
+                    }
                 }
                 temp = backend_lir_lmod_new_temp(w->l, LTK_MATCH, 0, block);
                 if (temp <= 0) {
