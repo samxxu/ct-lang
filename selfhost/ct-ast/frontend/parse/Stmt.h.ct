@@ -1047,7 +1047,7 @@ impl StmtOps for Stmt {
            declaration once `Box` resolves as a user type. */
         if (self->lex->tok_is("box")
             || (self->lex->tok_is("Box")
-                && frontend::sym::ct_tmpl_find("Box") >= 0))
+                && frontend::sym::ct_tmpl_find("Box", -1) >= 0))
             return self->ex->tok_is_type_name();
         /* an alignment or atomic specifier may open a block-scope declaration */
         if (self->lex->tok_is("_Alignas")) return 1;
@@ -1112,9 +1112,9 @@ impl StmtOps for Stmt {
                    `(` after the chain is the qualified value/call form. A
                    generic type continues with `<`. */
                 if (*p == '<'
-                    && (frontend::sym::ct_tmpl_find(qn) >= 0
+                    && (frontend::sym::ct_tmpl_find(qn, -1) >= 0
                         || (strncmp(qn, "core_", 5) == 0
-                            && (frontend::sym::ct_tmpl_find(qn + 5) >= 0
+                            && (frontend::sym::ct_tmpl_find(qn + 5, -1) >= 0
                                 || strcmp(qn + 5, "box") == 0))))
                     return 1;
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
@@ -1127,7 +1127,7 @@ impl StmtOps for Stmt {
                 if (strncmp(qn, "core_", 5) == 0
                     && (rn = self->sym->resolve_type_text(qn + 5)) != 0
                     && (self->sym->find_type(rn) >= 0
-                        || frontend::sym::ct_tmpl_find(qn + 5) >= 0)) return 1;
+                        || frontend::sym::ct_tmpl_find(qn + 5, -1) >= 0)) return 1;
                 /* SH-120: `core::utf16::U16String` / `U16Str` in a statement
                    position maps to the bare built-in spelling. */
                 if (strncmp(qn, "core_utf16_", 11) == 0

@@ -205,6 +205,12 @@ impl ExprTry for Expr {
         if (!ins || inst >= ninst) return (const char *)0;
         if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2)
             return (const char *)0;
+        /* v1-PH-2 S6b: `?` reads the built-in Result's `ok`/`err` layout. A
+           user `enum Result<T, E>` shadowing it has a tag+union layout, so it
+           is not a `?` operand and the emitter reports its own diagnostic. */
+        if (ins[inst].tmpl_row < 0
+            || ins[inst].tmpl_row >= self->sym->builtin_tmpl_hi)
+            return (const char *)0;
         return buf;
     }
 
@@ -227,6 +233,9 @@ impl ExprTry for Expr {
         ins = frontend::sym::ct_insts(&ninst);
         if (!ins || inst < 0 || inst >= ninst) return (const char *)0;
         if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2)
+            return (const char *)0;
+        if (ins[inst].tmpl_row < 0
+            || ins[inst].tmpl_row >= self->sym->builtin_tmpl_hi)
             return (const char *)0;
         if (err) *err = ins[inst].carg[1];
         return ins[inst].ctype[0];

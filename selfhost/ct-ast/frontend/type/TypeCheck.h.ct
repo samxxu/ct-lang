@@ -570,7 +570,7 @@ impl TypeOps for TypeCheck {
         if (m < 0 || !self->arena->nodes[m].text[0]) return (const char *)0;
         ret = self->arena->nodes[m].text;
         ins = frontend::sym::ct_insts(&k);
-        ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+        ti = ins[inst].tmpl_row;
         tp = frontend::sym::ct_tmpls(&tn);
         if (ti >= 0 && tp) {
             for (j = 0; j < tp[ti].ntparams; j++) {

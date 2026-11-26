@@ -137,7 +137,7 @@ impl ExprNew for Expr {
             res = 1;
         } else if (self->lex->tok_is("Box") || self->lex->tok_is("box")) {
             res = 1;
-        } else if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
+        } else if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr(), self->cur_unit) >= 0) {
             res = 1;
         } else if (self->sym->find_type_alias(self->lex->tok_cstr()) >= 0) {
             res = 1;
@@ -214,7 +214,7 @@ impl ExprNew for Expr {
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new String' / 'new Str' is not supported; use the literal, 'to_string()' or 'as_str()'",
                 self->sup->mem->path);
-        if (frontend::sym::ct_tmpl_find("Box") < 0)
+        if (frontend::sym::ct_tmpl_find("Box", self->cur_unit) < 0)
             return self->sup->fail(
                 "the built-in `Box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {

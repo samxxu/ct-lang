@@ -322,6 +322,10 @@ type-inst    := NAME '<' type (',' type)* '>'
 
 ### 10.5 头号未决：与内置 `Option` / `Result` 撞名
 
+> **2026-11-27（S6b）裁定**：S6 的验收直接用 `Option<T>` / `Result<T,E>`，实现改为
+> **按 unit 遮蔽**内置泛型 struct（下表加一行「D」），机制与 ABI 见
+> [adt-generic §10](adt-generic.md#10-遮蔽内置-option--results6b)。A/B/C 保留为历史分析。
+
 `lib/core` 现在把 `Option<T>` / `Result<T,E>` 定义成**普通泛型 struct**
 （`lib/core/Option.h.ct:27`、`lib/core/Result.h.ct:25`），字段是 `has` / `value` / `ok` / `err`，
 且 `?` 的 lowering 直接依赖 `Result` 的这套布局（spec §4.62）。S6 卡原文写的是
@@ -332,6 +336,7 @@ type-inst    := NAME '<' type (',' type)* '>'
 | **A（推荐先做）** | S6 只实现**机制**，验收用未被占用的名字（`Maybe<T>` / `Either<T,E>`）；内置 `Option`/`Result` 保持 struct | 零破坏；机制与命名解耦 | 卡上的 `Option<T>` 名字暂不可用，需在卡里改口径 |
 | B | 把内置 `Option`/`Result` 升级为 ADT，`has`/`value`/`ok`/`err` 改为模式绑定；`?` 改 lowering | 需迁移所有 `.has` / `.value` / `ok.ok` 用法（examples、tests、docs、seed）+ 改 §4.62 | 破坏性最大；必须单独 ADR + 所有者签字 |
 | C | 双轨：内置 struct 保留，`Option` 名字让给 ADT（内置改名） | 内置层改名同样是大迁移 | 与 DOC-87 的命名迁移叠加，不建议 |
+| **D（S6b 落地）** | 按 unit 遮蔽：声明 `enum Option<T>` 的 unit 内用户 ADT 优先，其他 unit 仍用内置；C 标签 `ct_adt_*` 并存 | 解析器/发射器多一层 per-unit 模板解析与实例身份 | 已实现并验收，见 [adt-generic §10](adt-generic.md#10-遮蔽内置-option--results6b) |
 
 建议：**S6 按 A 落地机制并在 v1.2 收口前完成**；B 作为独立 ADR（拟 `D-031`）由所有者决定
 是否在 v1.2 内追加，不与 S6 的机制切片混在一起。卡 S6 的文案按裁定结果回填。

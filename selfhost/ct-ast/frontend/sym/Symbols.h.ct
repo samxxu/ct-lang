@@ -563,6 +563,13 @@ pub struct StructTmpl {
        which half owns the body; `adt` is the template's ADT registry row. */
     int  is_adt;
     int  adt;
+    /* v1-PH-2 S6b: a user template that shadows a built-in generic name
+       (`Option` / `Result`) is a separate row. `shadow` marks it; `cbase` is
+       the base its encoded instance tags are built from, so the C tag of
+       `Option<int>` in the shadowing unit cannot collide with the built-in
+       `Option_int`. */
+    int  shadow;
+    const char *cbase;
     char path[1024];
     int  line;
 }
@@ -570,6 +577,10 @@ pub struct StructTmpl {
 pub struct StructInst {
     const char *name;           /* the encoded C tag, `Stack_int` */
     const char *tmpl;           /* the template's source name */
+    /* v1-PH-2 S6b: the template row this instance was created from. It is the
+       identity that keeps a shadowing `Option<T>` and the built-in one apart
+       after the per-unit bare-name tables are gone. */
+    int  tmpl_row;
     /* The canonical type-argument spellings, in the form the encoder consumed
        (`int`, `char*`, `Vec<int>`). They are the identity of the instance: the
        encoded name is only a hash-like spelling of them (D29-6). */
@@ -597,6 +608,10 @@ pub struct StructInst *ct_insts(int *n);
    instance, so it carries the argument *pattern* rather than an instance name. */
 pub struct StructImpl {
     const char *tmpl;
+    /* v1-PH-2 S6b: the template row the block was written against. Matching
+       compares rows, so a user `impl<T> Option<T>` never covers a built-in
+       `Option<int>` instance merely because the source names agree. */
+    int  tmpl_row;
     int  ntparams;
     char **tparam;
     int  tcap;
@@ -609,7 +624,7 @@ pub struct StructImpl {
     int  line;
 }
 pub struct StructImpl *ct_impls(int *n);
-pub int ct_impl_find(const char *tmpl, int nargs, char **pats, const char *use);
+pub int ct_impl_find(const char *tmpl, int tmpl_row, int nargs, char **pats, const char *use);
 pub int ct_impl_add(const char *tmpl, int ntprm, char **tparams, int nargs,
                     char **pats, const char *use, int node, int owner, int line);
 /* 1 when the instance row `inst` is covered by the block `ii`. */
@@ -620,7 +635,12 @@ pub int ct_impl_matches(int ii, int inst);
    Returns how many were bound, or -1 when the block does not cover the
    instance. */
 pub int ct_method_bind(int ii, int inst, char **names, char **values, int cap);
-pub int ct_tmpl_find(const char *name);
+/* v1-PH-2 S6b: template lookup is per unit. `unit < 0` answers the last row
+   with that name (compile mode / a caller with no unit context); otherwise the
+   unit's own declaration wins, then a `pub` template it imports, then the
+   built-in layer. A user `enum Option<T>` therefore shadows the built-in
+   `Option` in that unit only. */
+pub int ct_tmpl_find(const char *name, int unit);
 pub int ct_tmpl_add(const char *name, const char *full, int ntprm, char **tparams, char **bounds, int is_pub, int owner, const char *path, int line);
 pub int ct_inst_find(const char *name);
 pub int ct_inst_add(const char *name, const char *tmpl, int nargs, char **args, char **cargs, int owner, int carried, int line, int col);
@@ -762,6 +782,12 @@ pub struct Symbols {
     const char **type_target;
     int  ntype;
     int  typecap;
+    /* v1-PH-2 S6b: every template row below this index was declared by the
+       built-in layer (loaded as units before the program). In compile mode
+       both sides have owner 0, so the row index -- not the owner -- is what
+       tells a built-in template from a user one. `Module` and the compile
+       driver set it once, before the program is parsed. */
+    int  builtin_tmpl_hi;
     struct Trait *traits;
     int  ntraits;
     int  traitscap;
@@ -2762,13 +2788,49 @@ struct StructInst *ct_insts(int *n)
     return g_insts;
 }
 
-int ct_tmpl_find(const char *name)
+int ct_tmpl_find(const char *name, int unit)
 {
-    int i, n;
-    struct StructTmpl *t = ct_tmpls(&n);
+    int i, n, b, ntb;
+    struct Symbols *sym;
+    struct StructTmpl *t;
 
-    for (i = 0; i < n; i++)
-        if (strcmp(t[i].name, name) == 0) return i;
+    if (!name || !name[0]) return -1;
+    t = ct_tmpls(&n);
+    sym = symbols_get();
+    if (!t || !sym) return -1;
+    /* 1. This unit's own declaration wins, including a shadow row. Rows below
+       `builtin_tmpl_hi` are the built-in layer's: compile mode gives both
+       sides owner 0, so the row index is the discriminator there. */
+    for (i = n - 1; i >= 0; i--)
+        if (t[i].owner == unit && i >= sym->builtin_tmpl_hi
+            && strcmp(t[i].name, name) == 0) return i;
+    /* 2. A `pub` template of a directly imported unit. The per-unit bare-name
+       table already holds exactly the exported types this unit imports; the
+       template's `full` is the C tag that table names. */
+    if (unit >= 0) {
+        ntb = sym->ntb;
+        for (b = ntb - 1; b >= 0; b--) {
+            if (!sym->tbare[b] || strcmp(sym->tbare[b], name) != 0) continue;
+            for (i = n - 1; i >= 0; i--)
+                if (t[i].full && sym->tfull[b]
+                    && strcmp(t[i].full, sym->tfull[b]) == 0) return i;
+        }
+    }
+    /* 3. The built-in layer, for every unit that does not shadow it. */
+    for (i = n - 1; i >= 0; i--)
+        if (i < sym->builtin_tmpl_hi && strcmp(t[i].name, name) == 0) return i;
+    /* 4. No unit context (compile mode's emitter): the last row wins, which is
+       the user's own declaration in the one-unit case. */
+    if (unit < 0) {
+        for (i = n - 1; i >= 0; i--)
+            if (strcmp(t[i].name, name) == 0) return i;
+    }
+    /* 5. Pre-S6b compatibility: a template that shadows nothing stays visible
+       build-wide, so a transitively imported non-shadow template keeps
+       resolving exactly as it did. A shadow row is deliberately left out --
+       it must never leak into a unit that did not declare or import it. */
+    for (i = n - 1; i >= 0; i--)
+        if (!t[i].shadow && strcmp(t[i].name, name) == 0) return i;
     return -1;
 }
 
@@ -2776,11 +2838,30 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
                 char **tparams, char **bounds,
                 int is_pub, int owner, const char *path, int line)
 {
-    int i, n, k;
+    int i, n, k, shadow;
+    struct Symbols *sym;
     struct StructTmpl *t;
 
-    i = ct_tmpl_find(name);
-    if (i >= 0) return i;
+    sym = symbols_get();
+    t = ct_tmpls(&n);
+    /* A declaration in this unit: return the row it already made. While the
+       built-in layer itself is parsed the boundary is the ceiling, so every
+       row is a candidate; afterwards only the user rows are. */
+    for (i = n - 1; t && i >= 0; i--)
+        if (t[i].owner == owner && i >= (sym ? sym->builtin_tmpl_hi : 0)
+            && strcmp(t[i].name, name) == 0) return i;
+    i = ct_tmpl_find(name, owner);
+    shadow = 0;
+    if (i >= 0) {
+        /* v1-PH-2 S6b: only the two built-in generic structs that the S6
+           acceptance names may be shadowed; every other built-in template name
+           keeps the hard conflict its own declaration layer reports. */
+        if (sym && i < sym->builtin_tmpl_hi
+            && (strcmp(name, "Option") == 0 || strcmp(name, "Result") == 0))
+            shadow = 1;
+        else
+            return i;
+    }
     if (ntprm < 0 || ntprm > CAP_LIMIT) return -1;
     if (tmpls_grow(g_ntmpls + 1) != 0) return -1;
     t = ct_tmpls(&n);
@@ -2807,6 +2888,19 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
     t[n].owner = owner;
     t[n].is_adt = 0;
     t[n].adt = -1;
+    t[n].shadow = shadow;
+    /* The encoded base of a shadow row is compiler-generated and starts with
+       `ct_adt_`, so its instances can never collide with the built-in
+       `Option_int` / `Result_int_char_p` -- and never match the C-tag prefix
+       heuristics that recognise the built-in containers (`Option_`, `Vec_`).
+       A namespaced declaration keeps its mangled tag
+       (`ct_adt_app_Option_int`). */
+    t[n].cbase = t[n].name;
+    if (shadow) {
+        t[n].cbase = runtime::text::ct_internf("ct_adt_%s",
+                                               full && full[0] ? full : name);
+        if (!t[n].cbase) return -1;
+    }
     snprintf(t[n].path, 1024, "%s", path);
     t[n].line = line;
     g_ntmpls++;
@@ -2827,10 +2921,11 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
                 char **args, char **cargs,
                 int owner, int carried, int line, int col)
 {
-    int i, n, k;
+    int i, n, k, row;
     struct StructInst *t;
 
     if (nargs < 0 || nargs > CAP_LIMIT) return -1;
+    row = ct_tmpl_find(tmpl, owner);
     i = ct_inst_find(name);
     t = ct_insts(&n);
     if (i >= 0) {
@@ -2840,6 +2935,7 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
             if (!t[i].carg[k] || !args || !args[k]
                 || strcmp(t[i].carg[k], args[k]) != 0) return -2;
         }
+        if (t[i].tmpl_row < 0 && row >= 0) t[i].tmpl_row = row;
         if (carried && !t[i].carried) t[i].carried = 1;
         return i;
     }
@@ -2851,6 +2947,7 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
     if (!t[n].name) return -1;
     t[n].tmpl = runtime::text::ct_intern(tmpl);
     if (!t[n].tmpl) return -1;
+    t[n].tmpl_row = row;
     t[n].nargs = nargs;
     t[n].carg = ct_rows_reserve(t[n].carg, t[n].acap, nargs, &t[n].acap);
     if (nargs > 0 && (!t[n].carg || t[n].acap < nargs)) return -1;
@@ -2908,13 +3005,14 @@ struct StructImpl *ct_impls(int *n)
     return g_impls;
 }
 
-int ct_impl_find(const char *tmpl, int nargs, char **pats, const char *use)
+int ct_impl_find(const char *tmpl, int tmpl_row, int nargs, char **pats, const char *use)
 {
     int i, n, k, ok;
     struct StructImpl *t = ct_impls(&n);
 
     for (i = 0; i < n; i++) {
         if (strcmp(t[i].tmpl, tmpl) != 0) continue;
+        if (t[i].tmpl_row != tmpl_row) continue;
         if (t[i].nargs != nargs) continue;
         ok = 1;
         for (k = 0; k < nargs; k++)
@@ -2934,12 +3032,13 @@ int ct_impl_add(const char *tmpl, int ntprm, char **tparams,
                 int nargs, char **pats, const char *use,
                 int node, int owner, int line)
 {
-    int i, n, k;
+    int i, n, k, row;
     struct StructImpl *t = ct_impls(&n);
 
     if (ntprm < 0 || ntprm > CAP_LIMIT
         || nargs < 0 || nargs > CAP_LIMIT) return -1;
-    i = ct_impl_find(tmpl, nargs, pats, use);
+    row = ct_tmpl_find(tmpl, owner);
+    i = ct_impl_find(tmpl, row, nargs, pats, use);
     if (i >= 0) return i;
     if (impls_grow(g_nimpls + 1) != 0) return -1;
     t = ct_impls(&n);
@@ -2947,6 +3046,7 @@ int ct_impl_add(const char *tmpl, int ntprm, char **tparams,
     n = g_nimpls;
     t[n].tmpl = runtime::text::ct_intern(tmpl);
     if (!t[n].tmpl) return -1;
+    t[n].tmpl_row = row;
     t[n].ntparams = ntprm;
     t[n].tparam = ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, &t[n].tcap);
     if (ntprm > 0 && (!t[n].tparam || t[n].tcap < ntprm)) return -1;
@@ -3039,6 +3139,10 @@ int ct_impl_matches(int ii, int inst)
 
     if (!t || !ins || ii < 0 || ii >= n || inst < 0 || inst >= nins) return 0;
     if (strcmp(t[ii].tmpl, ins[inst].tmpl) != 0) return 0;
+    /* v1-PH-2 S6b: two templates may share a source name (a shadowing
+       `Option<T>` and the built-in one). The block belongs to the row it was
+       written against, so the name comparison alone would cross them. */
+    if (t[ii].tmpl_row != ins[inst].tmpl_row) return 0;
     if (t[ii].nargs != ins[inst].nargs) return 0;
     nt = t[ii].ntparams;
     set = 0;
@@ -3115,6 +3219,25 @@ int ct_inst_resolve(const char *in, char *out, int cap)
     enc = ct_inst_encode_text(name, nargs, args);
     if (!enc) return -1;
     found = ct_inst_find(enc);
+    if (found < 0) {
+        /* v1-PH-2 S6b: a shadowing template's instances carry the `__adt`
+           suffix (`ct_adt_Option_int`), so a source spelling still has to try
+           those encodings before the C-argument walk below. */
+        int sti, stn;
+        struct StructTmpl *stps = ct_tmpls(&stn);
+        for (sti = stn - 1; stps && sti >= 0; sti--) {
+            const char *senc;
+            if (!stps[sti].shadow || !stps[sti].cbase
+                || strcmp(stps[sti].name, name) != 0) continue;
+            senc = ct_inst_encode_text(stps[sti].cbase, nargs, args);
+            if (!senc) continue;
+            found = ct_inst_find(senc);
+            if (found >= 0) {
+                enc = senc;
+                break;
+            }
+        }
+    }
     if (found < 0) {
         /* Phase 31 O2: a nested spelling arrives with C arguments
            (`Vec<struct Vec_int>`), while rows are encoded from the source

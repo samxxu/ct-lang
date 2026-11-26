@@ -19,7 +19,7 @@
 | `Box<Opt<int>>` / `Vec<Opt<int>>` | 做 | 实例是普通 ADT 值；owning 负载触发实例 retain/release |
 | 递归 | 按值拒绝 | 指针 / 容器可以递归 |
 | 泛型 C enum | 仍拒绝 | 保持 L34-3 的 `generic enums are not supported` |
-| 与内置 `Option` / `Result` 同名 | 拒绝 | 内置层已是泛型 struct；同名会在实例表里冲突 |
+| 与内置 `Option` / `Result` 同名 | 遮蔽（S6b） | unit 内用户 ADT 优先；C 标签 `ct_adt_*` 与内置 `Option_int` 并存 |
 
 ## 2 数据模型
 
@@ -30,6 +30,11 @@
 - 模板同时登记进 `StructTmpl`（`is_adt = 1`、`adt = <模板行>`），这样
   `parse_type_text` 的 `Name<args>` 分支、`ct_inst_add` 的实例身份和泛型 impl 查找
   都复用泛型 struct 的既有机制。
+- S6b：`StructTmpl` 增加 `shadow` / `cbase`。用户声明 `Option<T>` / `Result<T, E>`
+  时，`ct_tmpl_add` 在既有内置行之后**追加**一行（`shadow = 1`），`cbase` 是
+  `ct_adt_<full>`；`ct_tmpl_find(name, unit)` 按「本 unit 声明 → 直接 import 的 `pub`
+  模板（`tbare`/`tfull`）→ 内置行」解析。`StructInst.tmpl_row` / `StructImpl.tmpl_row`
+  记录实例与 impl 属于哪一行，`ct_impl_matches` 先比行再比名字。
 
 ## 3 实例化
 
@@ -89,6 +94,8 @@ struct Opt_int {
   - `generic ADT '<N>' needs type arguments in a type position`
   - `generic ADT '<N>' takes <n> type arguments, <m> given`
   - `generic ADT '<N>' conflicts with an existing generic type of the same name`
+    （S6b 起只对不可遮蔽的名字报：`Vec` / `Map` / `MapEntry` / `Box`、用户模板与
+    导入模板；`Option` / `Result` 走遮蔽）
   - `ADT '<N>_…' is recursive by value; store a pointer or a container instead`（沿用
     布局闭包的既有文本）
 - 泛型 C enum 仍报 `generic enums are not supported`（L34-3）。
@@ -102,14 +109,40 @@ struct Opt_int {
 | `test/ast/310_adt_generic_nested` | `Opt<Pair<int>>`、`Opt<Opt<int>>`、嵌套布局 |
 | `test/ast/311_adt_generic_box_vec` | `Vec<Opt<int>>`、`Box<Opt<int>>`、`at()` |
 | `test/ast/312_adt_generic_methods` | `impl<T> Opt<T>` 方法、静态方法、下标读 |
-| `test/ast/p86_adt_generic.sh` | 去重、容器、裸类型、元数、`void`、递归、泛型 C enum、同名冲突 |
+| `test/ast/313_adt_shadow_option` | `enum Option<T>` 遮蔽内置：构造/模式/方法/嵌套 `Box`/`Vec`，同 unit 内置 `Result` 不变 |
+| `test/ast/314_adt_shadow_result` | `enum Result<T, E>` 遮蔽内置：双参数、方法、嵌套 `Box`/`Vec`，同 unit 内置 `Option` 不变 |
+| `test/modules/s6b_shadow` | 跨单元：`optlib.h.ct` 的 `pub enum Option<T>` + `legacy.h.ct` 的内置 `Option`/`Result` 同程序运行，C 标签分开 |
+| `test/ast/p86_adt_generic.sh` | 去重、容器、裸类型、元数、`void`、递归、泛型 C enum、遮蔽标签、`Vec` 不可遮蔽 |
 | `test/ast/cap_adt.sh` | 70 个泛型 ADT 模板跨旧容量 |
 
 ## 9 边界（诚实登记）
 
 - 内置 `Option` / `Result` 是泛型 **struct**（`{1, v}` 初始化、`has`/`value` 字段）；
-  同名泛型 ADT 会与既有泛型类型冲突，S6 报硬错而不是合并两套实例。
+  S6b 起同名泛型 ADT 按 unit 遮蔽它们（§10），但两套布局不互换：内置值没有
+  `tag`/`union`，用户 ADT 值也没有 `has`/`value`，互相赋值或 `match` 都会报错。
+- `?` 的 lowering 依赖内置 `Result` 的 `ok`/`err` 布局，所以 `?` 只认内置 `Result`；
+  用户 `Result` 值写 `?` 报 `'?' needs a Result operand`。
 - 泛型 typedef ADT 未扩展；`typedef enum Opt<T> { … } Alias;` 仍只得到具体别名。
 - 泛型 ADT 的模式里 `Type<...>` 只接受类型实参；结构体模式 `S<...> { … }` 不在 S6。
 - 下标写（`a[0] = v`）仍按 ADT 固有 `set` 方法；负载按值绑定，方法内改绑定不会回写，
   与非泛型 ADT 相同。
+
+## 10 遮蔽内置 `Option` / `Result`（S6b）
+
+- **解析优先级**：`ct_tmpl_find(name, unit)` 依次查本 unit 自己的行、直接 import 的
+  `pub` 模板（`tbare`/`tfull` 已按 unit 重建）、内置行。用户 `enum Option<T>` 的行在
+  内置行之后追加，因此只在声明它的 unit（及其 importer）里胜出；compile 模式用
+  `ct_tmpl_add` 时的行号界 `builtin_tmpl_hi` 区分内置行与用户行（两侧 owner 都是 0）。
+- **可遮蔽名字**：只有 `Option` / `Result`。其他内置泛型名仍走原冲突诊断；导入模板
+  与用户模板同名也仍是冲突。
+- **C 标签**：被遮蔽模板的 `cbase = "ct_adt_" + full`，实例名为
+  `ct_adt_Option_int` / `ct_adt_app_Option_int`。内置实例仍是 `Option_int`，两套
+  可以在同一程序里并存；`Box`/`Vec` 的 owning 判定按 `tmpl_row` 是否内置，而不是
+  名字前缀（`Option_` 前缀启发式不再误伤用户实例）。
+- **实例与 impl 身份**：`StructInst.tmpl_row` 在 `ct_inst_add` 时解析并保存；
+  `StructImpl.tmpl_row` 在 `ct_impl_add` 时保存；`ct_impl_matches` 先比行。这样
+  `impl<T> Option<T>` 只覆盖用户 ADT 实例，内置 `Option<T>` 自己的 impl 也只覆盖
+  内置实例。
+- **compile 模式**：内置层先解析，`builtin_tmpl_hi` 在内置层解析期间取上限（供
+  `String.h.ct` 引用 `Map` 之类的跨文件内置名），解析完写真实行数；随后用户 unit
+  的 `Option` 声明才创建 shadow 行。

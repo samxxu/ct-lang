@@ -1296,7 +1296,7 @@ static int check_struct_bounds(struct Parser *self)
         const char *tbase;
         char *arg;
         if (ins[i].owner != self->cur_unit || ins[i].line <= 0) continue;
-        ti = frontend::sym::ct_tmpl_find(ins[i].tmpl);
+        ti = ins[i].tmpl_row;
         if (ti < 0) continue;
         for (k = 0; k < ins[i].nargs; k++) {
             if (!tp[ti].bound[k][0]) continue;
@@ -3322,8 +3322,20 @@ impl ParseOps for Parser {
            `adt` is patched below. */
         if (templ && pre_adt && name[0]) {
             struct StructTmpl *tps_e;
-            int tn_e;
-            if (frontend::sym::ct_tmpl_find(name) >= 0)
+            int tn_e, tbx_e, shadowable_e;
+            /* v1-PH-2 S6b: `Option` / `Result` may shadow the built-in generic
+               struct of the same name in this unit; every other visible
+               template of that name is still a hard conflict. */
+            tbx_e = frontend::sym::ct_tmpl_find(name, self->cur_unit);
+            tps_e = frontend::sym::ct_tmpls(&tn_e);
+            shadowable_e = tbx_e >= 0 && tbx_e < self->sym->builtin_tmpl_hi
+                           && (strcmp(name, "Option") == 0
+                               || strcmp(name, "Result") == 0);
+            if (tbx_e >= 0
+                && (!tps_e
+                    || (tps_e[tbx_e].owner == self->cur_unit
+                        && tbx_e >= self->sym->builtin_tmpl_hi)
+                    || !shadowable_e))
                 return tool::diag::ct_sem_error(ltline, ltcol,
                     tool::sh::ct_scratch_fmt(
                         "generic ADT '%s' conflicts with an existing generic type of the same name",
@@ -3543,12 +3555,25 @@ impl ParseOps for Parser {
                 /* The row was registered before the body when the pre-scan
                    saw an ADT; only its ADT index was unknown. A declaration
                    the scan missed still gets its row here. */
-                if (early_ti < 0 && frontend::sym::ct_tmpl_find(name) >= 0)
-                    return tool::diag::ct_sem_error(tline, tcol,
-                        tool::sh::ct_scratch_fmt(
-                            "generic ADT '%s' conflicts with an existing generic type of the same name",
-                            name),
-                        self->mem->path);
+                if (early_ti < 0) {
+                    int tbx_l = frontend::sym::ct_tmpl_find(name, self->cur_unit);
+                    int tn_l;
+                    struct StructTmpl *tps_l = frontend::sym::ct_tmpls(&tn_l);
+                    int shadowable_l = tbx_l >= 0
+                        && tbx_l < self->sym->builtin_tmpl_hi
+                        && (strcmp(name, "Option") == 0
+                            || strcmp(name, "Result") == 0);
+                    if (tbx_l >= 0
+                        && (!tps_l
+                            || (tps_l[tbx_l].owner == self->cur_unit
+                                && tbx_l >= self->sym->builtin_tmpl_hi)
+                            || !shadowable_l))
+                        return tool::diag::ct_sem_error(tline, tcol,
+                            tool::sh::ct_scratch_fmt(
+                                "generic ADT '%s' conflicts with an existing generic type of the same name",
+                                name),
+                            self->mem->path);
+                }
                 if (early_ti < 0) {
                     ti5 = frontend::sym::ct_tmpl_add(name, qname, nt, tparam, bound,
                                                      is_pub, self->cur_unit,
@@ -5078,7 +5103,7 @@ impl ParseOps for Parser {
            reads one bound, the same limit a generic function has. */
         self->ex->in_generic_bound = "";
         {
-            int tbi = frontend::sym::ct_tmpl_find(tmpl);
+            int tbi = frontend::sym::ct_tmpl_find(tmpl, self->cur_unit);
             int tbn, kb;
             struct StructTmpl *tps = frontend::sym::ct_tmpls(&tbn);
             (void)tbn;
@@ -5106,7 +5131,7 @@ impl ParseOps for Parser {
            name the template's variants. The emitted C still spells the
            receiver `void *` and casts, exactly like the bounded-struct path. */
         {
-            int tbi2 = frontend::sym::ct_tmpl_find(tmpl);
+            int tbi2 = frontend::sym::ct_tmpl_find(tmpl, self->cur_unit);
             int tbn2;
             struct StructTmpl *tps2 = frontend::sym::ct_tmpls(&tbn2);
             (void)tbn2;
@@ -5161,7 +5186,7 @@ impl ParseOps for Parser {
                 } else {
                     /* v1-PH-2 S6: a generic ADT template has no struct row;
                        its ADT row carries the `pub` flag. */
-                    int tbi3 = frontend::sym::ct_tmpl_find(tmpl);
+                    int tbi3 = frontend::sym::ct_tmpl_find(tmpl, self->cur_unit);
                     int tbn3;
                     struct StructTmpl *tps3 = frontend::sym::ct_tmpls(&tbn3);
                     if (tbi3 >= 0 && tps3 && tps3[tbi3].is_adt) {

@@ -723,8 +723,15 @@ static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target
             "cannot resolve the source type of this conversion", self->sup->mem->path);
     {
         char *aa[1];
+        const char *obase = "Option";
+        int oti, otn;
+        struct StructTmpl *otp;
         aa[0] = (char *)target;
-        enc = frontend::sym::ct_inst_encode_text("Option", 1, aa);
+        oti = frontend::sym::ct_tmpl_find("Option", self->cur_unit);
+        otp = frontend::sym::ct_tmpls(&otn);
+        if (oti >= 0 && otp && otp[oti].shadow && otp[oti].cbase)
+            obase = otp[oti].cbase;
+        enc = frontend::sym::ct_inst_encode_text(obase, 1, aa);
         if (!enc)
             return tool::diag::ct_sem_error(line, col,
                 "the strict conversion target is too long", self->sup->mem->path);
@@ -3496,9 +3503,9 @@ impl ExprOps for Expr {
                spelling, so the emitter writes `<Inst>_<method>(...)`. The
                cursor is still on the template name, so `parse_inst_type` reads
                `Vec<int>` exactly as a type position would. */
-            if ((frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0
+            if ((frontend::sym::ct_tmpl_find(self->lex->tok_cstr(), self->cur_unit) >= 0
                  || (self->lex->tok_is("box")
-                     && frontend::sym::ct_tmpl_find("Box") >= 0))
+                     && frontend::sym::ct_tmpl_find("Box", self->cur_unit) >= 0))
                 && self->static_call_ahead()) {
                 const char *ibase;
                 const char *sm;

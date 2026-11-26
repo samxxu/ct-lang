@@ -3435,10 +3435,24 @@ Res<int, char *> r = Res<int, char *>.Err("bad");
   按具体实例的负载判定。
 - **上限**：ADT 表、模板表、实例表都倍增到 `CAP_LIMIT`（65536），旧 64/128 初始容量
   不再是硬错。
-- **边界（诚实登记）**：内置 `Option` / `Result` 已经是泛型 **struct**（`has`/`value`
-  字段、`{1, v}` 初始化），同名泛型 ADT 重声明会与既有泛型类型冲突而硬错
-  `generic ADT '<N>' conflicts with an existing generic type of the same name`；
-  泛型 typedef ADT 与非泛型一样只支持具体别名。
+- **遮蔽内置 `Option` / `Result`（`v1-PH-2` S6b）**：一个 unit 自己声明
+  `enum Option<T>` / `enum Result<T, E>` 时，该 unit 内所有 `Option` / `Result`
+  拼写（类型、构造器、模式、`impl<T>` 方法）都解析到用户的泛型 ADT，内置的泛型
+  struct 在该 unit 内被遮蔽；未声明的 unit 继续用内置 `has` / `value` / `ok` / `err`
+  布局与 `{1, v}` / `{1, v, err}` 初始化，语义与字节级输出不变。跨单元时，声明为
+  `pub` 的模板经 import 进入消费者（导入名优先于内置），未导入的 unit 仍用内置。
+  `?` 仍只接受内置 `Result`；对用户的 `Result` 值写 `?` 报 `'?' needs a Result operand`。
+  其余内置泛型名（`Vec` / `Map` / `MapEntry` / `Box` 等）不可遮蔽。
+- **C 标签去歧义（ABI 边界）**：内置实例保持 `Option_int` / `Result_int_char_p`；
+  被遮蔽模板的实例改用编译器生成的 `ct_adt_<模板 C 标签>_<实参>`，例如
+  `ct_adt_Option_int`、`ct_adt_Result_int_char_p`；命名空间模板保留其 mangled 前缀
+  （`ct_adt_app_Option_int`）。两套布局同名实参可以在同一程序里并存（一个 unit 用
+  内置、另一个用用户 ADT），C 侧无重定义。用户 ADT 的 `enum Option<T>` 自身标签仍是
+  源码名（`Option`），实例标签才是编码名；`?` 的判别、`Box`/`Vec` 胶水的 owning 判定
+  按实例模板是内置还是用户 ADT 区分，不靠名字前缀。
+- **边界（诚实登记）**：内置 `Option` / `Result` 是泛型 **struct**，用户 ADT 与其
+  布局不同（tag + union vs `has`/`value`），二者不互相赋值、不互相 `match`；泛型
+  typedef ADT 与非泛型一样只支持具体别名。
 
 #### 布局与 ABI（冻结）
 

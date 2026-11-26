@@ -577,7 +577,7 @@ impl ExprTypeParse for Expr {
                     self->sup->lex_next();
                     /* Phase 29: `struct Stack<int>` is the same type as
                        `Stack<int>`; the instance reader owns the spelling. */
-                    if (self->lex->tok == T_ID && frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
+                    if (self->lex->tok == T_ID && frontend::sym::ct_tmpl_find(self->lex->tok_cstr(), self->cur_unit) >= 0) {
                         if (self->parse_inst_type(out, cap) != 0) return -1;
                         n = (int)strlen(out);
                         continue;
@@ -668,7 +668,7 @@ impl ExprTypeParse for Expr {
                                    deprecated alias as the root spelling. */
                                 if (strcmp(resq, "box") == 0)
                                     return self->sup->fail("'box<T>' is no longer supported; write 'Box<T>'");
-                                if (frontend::sym::ct_tmpl_find(resq) >= 0) {
+                                if (frontend::sym::ct_tmpl_find(resq, self->cur_unit) >= 0) {
                                     g_expr_inst_override = runtime::text::ct_intern(resq);
                                     if (!g_expr_inst_override)
                                         return self->sup->fail("out of memory");
@@ -734,14 +734,14 @@ impl ExprTypeParse for Expr {
                         }
                     }
                     if (!bclosed) break;
-                    if (frontend::sym::ct_tmpl_find("Box") < 0) break;
+                    if (frontend::sym::ct_tmpl_find("Box", self->cur_unit) < 0) break;
                     if (self->parse_inst_type(out, cap) != 0) return -1;
                     n = (int)strlen(out);
                     continue;
                 }
                 /* Phase 29: `Name<arg[, arg]>` names one monomorphised instance
                    of a generic struct; the reader lives in `parse_inst_type`. */
-                if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr()) >= 0) {
+                if (frontend::sym::ct_tmpl_find(self->lex->tok_cstr(), self->cur_unit) >= 0) {
                     if (self->parse_inst_type(out, cap) != 0) return -1;
                     n = (int)strlen(out);
                     continue;
@@ -1085,7 +1085,7 @@ impl ExprTypeParse for Expr {
         if (!tname[0]) return self->sup->fail("expected a generic type name");
         if (strcmp(tname, "box") == 0)
             return self->sup->fail("'box<T>' is no longer supported; write 'Box<T>'");
-        ti2 = frontend::sym::ct_tmpl_find(tname);
+        ti2 = frontend::sym::ct_tmpl_find(tname, self->cur_unit);
         tp = frontend::sym::ct_tmpls(&tn);
         if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");
         nt2 = tp[ti2].ntparams;
@@ -1234,7 +1234,12 @@ impl ExprTypeParse for Expr {
                      "Map does not support key type '%s' (key types: int, long, char *, String)",
                      carg[0]));
         }
-        enc = frontend::sym::ct_inst_encode_text(tname, nargs, carg);
+        /* v1-PH-2 S6b: a shadowing template encodes its instances with the
+           `__adt` base, so the built-in `Option_int` / `Result_int_char_p` and
+           the user's layout never share a C tag. */
+        enc = frontend::sym::ct_inst_encode_text(
+                  (tp[ti2].shadow && tp[ti2].cbase) ? tp[ti2].cbase : tname,
+                  nargs, carg);
         if (!enc) return self->sup->fail("out of memory");
         if (self->inst_make(tname, nargs, carg, ctype,
                             &enc, 0, pline, pcol) != 0)

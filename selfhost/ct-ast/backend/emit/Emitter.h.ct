@@ -545,7 +545,7 @@ static const char *sb_expr_type_text(struct Emitter *self, int n)
                     struct StructInst *ins2 = frontend::sym::ct_insts(&nt);
                     int k2 = ins2 ? frontend::sym::ct_inst_find(self->sym->structs[si].name) : -1;
                     if (k2 >= 0) {
-                        int tm = frontend::sym::ct_tmpl_find(ins2[k2].tmpl);
+                        int tm = ins2[k2].tmpl_row;
                         int ntm, tf;
                         struct StructTmpl *tps2 = frontend::sym::ct_tmpls(&ntm);
                         if (tm >= 0 && tps2) {
@@ -3153,7 +3153,7 @@ static int emit_struct_insts(struct Emitter *self, int u, int header)
     for (i = 0; i < n; i++) {
         int via_hdr;
         if (insts[i].emitted) continue;
-        tmpl = frontend::sym::ct_tmpl_find(insts[i].tmpl);
+        tmpl = insts[i].tmpl_row;
         if (tmpl < 0) continue;
         via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
                   && self->units[tps[tmpl].owner].is_hdr;
@@ -3322,7 +3322,7 @@ static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int hea
     (void)nimpls;
     (void)ntmpls;
     iname = ins[ii].name;
-    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     exported = tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0
                && self->units[tps[tmpl].owner].is_hdr;
     /* Phase 33 O3: a consumer copy is private to the unit that writes it, so it
@@ -3608,7 +3608,7 @@ static int inst_elem_foreign(struct Emitter *self, int ii)
         && strcmp(ins[ii].tmpl, "MapEntry") != 0
         && strcmp(ins[ii].tmpl, "Option") != 0 && strcmp(ins[ii].tmpl, "Result") != 0)
         return 0;
-    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     if (tmpl < 0 || tps[tmpl].owner < 0) return 0;
     e1 = ins[ii].ctype[0];
     e2 = ((strcmp(ins[ii].tmpl, "Map") == 0 || strcmp(ins[ii].tmpl, "MapEntry") == 0)
@@ -3648,7 +3648,7 @@ static int inst_visible_in_unit(struct Emitter *self, int ii)
     if (self->cur_unit < 0) return 1;
     ins = frontend::sym::ct_insts(&n);
     if (!ins || ii < 0 || ii >= n) return 0;
-    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     tps = frontend::sym::ct_tmpls(&tn);
     if (!(tps && tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0
           && self->units[tps[tmpl].owner].is_hdr
@@ -3841,7 +3841,7 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
         }
     }
     for (ki = 0; ki < nimpls; ki++) {
-        tmpl = frontend::sym::ct_tmpl_find(im[ki].tmpl);
+        tmpl = im[ki].tmpl_row;
         if (header) {
             int via_hdr;
             if (tmpl < 0 || (u >= 0 && im[ki].owner != u)) continue;
@@ -4123,7 +4123,7 @@ static int shell_owned_here(struct Emitter *self, int ii)
     ins = frontend::sym::ct_insts(&n);
     tps = frontend::sym::ct_tmpls(&tn);
     if (!ins || !tps || ii < 0 || ii >= n) return 0;
-    tmpl = frontend::sym::ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     if (tmpl < 0) return 0;
     already = tps[tmpl].is_pub && tps[tmpl].owner >= 0
               && self->units[tps[tmpl].owner].is_hdr

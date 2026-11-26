@@ -451,7 +451,7 @@ static int cycle_is_builtin_Box(struct Module *m, const char *name)
     if (inst < 0) return 0;
     ins = frontend::sym::ct_insts(&tn);
     if (!ins) return 0;
-    ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+    ti = ins[inst].tmpl_row;
     tps = frontend::sym::ct_tmpls(&tn);
     if (ti < 0 || !tps) return 0;
     return strstr(tps[ti].path, "lib/core/Box.h.ct") != 0
@@ -2417,6 +2417,12 @@ impl ModuleOps for Module {
            into `Str.h.ct` / `String.h.ct` / `utf16/U16Str.h.ct` /
            `utf16/U16String.h.ct` (eight slots). Each found file joins the
            layer. */
+        /* v1-PH-2 S6b: while the built-in layer itself is being parsed, every
+           template row in the table belongs to it. The ceiling makes the
+           per-unit lookup fall through to the built-in rows for the layer's
+           own cross-file references (`String.h.ct` names `Map`); the real
+           boundary is written once the loop below finishes. */
+        self->sym->builtin_tmpl_hi = CAP_LIMIT;
         self->nbuiltin = 0;
         self->computed_live = 0;
         self->builtin_live[0] = 0;
@@ -2476,6 +2482,15 @@ impl ModuleOps for Module {
                 fprintf(stderr, "ctc: %d error(s) generated\n", tool::diag::ct_diag_nsem());
                 return 1;
             }
+        }
+
+        /* v1-PH-2 S6b: every template row created so far belongs to the
+           built-in layer. A user unit's `enum Option<T>` may shadow only these
+           rows; the index boundary survives the per-unit table resets. */
+        {
+            int btn;
+            frontend::sym::ct_tmpls(&btn);
+            self->sym->builtin_tmpl_hi = btn;
         }
 
         /* P36 S4a2: the built-in layer's functions do not count against the

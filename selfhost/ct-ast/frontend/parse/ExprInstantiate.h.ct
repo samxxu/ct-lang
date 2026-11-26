@@ -298,7 +298,7 @@ impl ExprInstantiate for Expr {
             inst = frontend::sym::ct_inst_find(base);
             if (inst >= 0) {
                 ins = frontend::sym::ct_insts(&k);
-                ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+                ti = ins[inst].tmpl_row;
                 tp = frontend::sym::ct_tmpls(&tn);
                 if (ti >= 0 && tp) {
                     for (k = 0; k < tp[ti].ntparams; k++) {
@@ -346,7 +346,7 @@ impl ExprInstantiate for Expr {
         inst = frontend::sym::ct_inst_find(base);
         if (inst < 0) return 0;
         ins = frontend::sym::ct_insts(&k);
-        ti2 = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+        ti2 = ins[inst].tmpl_row;
         if (ti2 < 0 || tps[ti2].owner < 0) return 0;
         if (tps[ti2].owner == tps[container_tmpl].owner) return 0;
         /* A container element always needs the per-instance helpers; a plain
@@ -365,7 +365,7 @@ impl ExprInstantiate for Expr {
         const char *enc;
         int tn, ti2, k, si2, fi2, pi2, nt2, carried2;
 
-        ti2 = frontend::sym::ct_tmpl_find(tname);
+        ti2 = frontend::sym::ct_tmpl_find(tname, self->cur_unit);
         tp = frontend::sym::ct_tmpls(&tn);
         if (!tp || ti2 < 0) return self->sup->fail("internal: template row vanished");
         nt2 = tp[ti2].ntparams;
@@ -406,7 +406,11 @@ impl ExprInstantiate for Expr {
                     return self->sup->fail(
                         "a container of interface pointers is not supported; store the interface value itself");
         }
-        enc = frontend::sym::ct_inst_encode_text(tname, nargs, args);
+        /* v1-PH-2 S6b: the shadow row's encoded base keeps its instances off
+           the built-in C tag (`Option__adt_int` vs `Option_int`). */
+        enc = frontend::sym::ct_inst_encode_text(
+                  (tp[ti2].shadow && tp[ti2].cbase) ? tp[ti2].cbase : tname,
+                  nargs, args);
         if (!enc) return self->sup->fail("out of memory");
         /* S20b follow-up: the encoded tag is a C struct name, so it may not
            name a struct the user declared. Without this the two definitions
@@ -575,9 +579,16 @@ impl ExprInstantiate for Expr {
                 || frontend::sym::ct_row_set(cargs, k, canon) != 0)
                 return 0;
         }
-        ti2 = frontend::sym::ct_tmpl_find(name);
+        ti2 = frontend::sym::ct_tmpl_find(name, self->cur_unit);
         if (ti2 < 0) return 0;
-        enc = frontend::sym::ct_inst_encode_text(name, nargs, cargs);
+        {
+            int tn2;
+            struct StructTmpl *tp2 = frontend::sym::ct_tmpls(&tn2);
+            if (!tp2) return 0;
+            enc = frontend::sym::ct_inst_encode_text(
+                      (tp2[ti2].shadow && tp2[ti2].cbase) ? tp2[ti2].cbase : name,
+                      nargs, cargs);
+        }
         if (!enc) return 0;
         if (frontend::sym::ct_inst_find(enc) >= 0) return 0;
         return self->inst_make(name, nargs, cargs, cargs, &enc, depth,

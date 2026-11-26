@@ -63,6 +63,8 @@ impl EmitterTryOps for Emitter {
         ins = frontend::sym::ct_insts(&ninst);
         if (!ins || inst >= ninst) return (const char *)0;
         if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return (const char *)0;
+        if (ins[inst].tmpl_row < 0
+            || ins[inst].tmpl_row >= self->sym->builtin_tmpl_hi) return (const char *)0;
         return runtime::text::ct_intern(buf);
     }
 
@@ -77,6 +79,8 @@ impl EmitterTryOps for Emitter {
         ins = frontend::sym::ct_insts(&ninst);
         if (!ins || inst < 0 || inst >= ninst) return 0;
         if (strcmp(ins[inst].tmpl, "Result") != 0 || ins[inst].nargs != 2) return 0;
+        if (ins[inst].tmpl_row < 0
+            || ins[inst].tmpl_row >= self->sym->builtin_tmpl_hi) return 0;
         if (snprintf(val, (size_t)vcap, "%s", ins[inst].ctype[0]) >= vcap) return 0;
         if (snprintf(err, (size_t)ecap, "%s", ins[inst].carg[1]) >= ecap) return 0;
         return 1;

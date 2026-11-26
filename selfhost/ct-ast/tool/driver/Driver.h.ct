@@ -949,6 +949,11 @@ impl DriverOps for Driver {
         self->p->nparams = 0;
         self->p->ncalls = 0;
         self->p->cur_func = "";
+        /* v1-PH-2 S6b: the layer's own cross-file references (`String` names
+           `Map`, which lives in `Vec.h.ct`) must see the built-in rows while
+           the layer is parsed; the ceiling is replaced with the real count
+           right after the loop. */
+        self->sym->builtin_tmpl_hi = 65536;
         /* Phase 29: the built-in container layer is parsed first so `Vec` /
            `Map` need neither an import nor an `-I`; its nodes are spliced in
            front of the input's below. A missing layer is not an error. */
@@ -958,6 +963,15 @@ impl DriverOps for Driver {
         if (stdprog == -2) {
             frontend::parse::ct_parse_report();
             return 1;
+        }
+        /* v1-PH-2 S6b: compile mode has one unit, so the built-in layer's rows
+           are marked by index. A user `enum Option<T>` in this file can then
+           shadow the built-in `Option` without touching the other units of a
+           multi-file build (which never enter this path). */
+        {
+            int btn;
+            frontend::sym::ct_tmpls(&btn);
+            self->sym->builtin_tmpl_hi = btn;
         }
         /* P36 S4a2: the built-in layer's functions do not count against the
            user program's `MAX_FUNCS` budget. */

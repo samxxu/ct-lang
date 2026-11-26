@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=11065 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=86930 io_cap=2048
+     emitted_before=48223 emitted_after=87080 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -250,6 +250,10 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   预发射与 `adt_row_for_emit` 的模板→实例映射），发射 C 86371 → 86930
   （+552：模板/实例注册、嵌套实例解析与泛型 impl 的 `self` 类型；`--ir=on`
   与 AST 路径逐字节相同）。切片清单仍为 76；实例表随 `CAP_LIMIT` 增长。
+- **v1-PH-2 S6b（按 unit 遮蔽内置 Option/Result）后的 live 校准**：发射 C
+  86930 → 87080（+150：模板行按 unit 解析、`StructInst`/`StructImpl` 的
+  `tmpl_row` 身份、阴影实例的 `ct_adt_*` 编码与 `?` 的内置判定，以及不遮蔽
+  模板的 build-wide 兼容回退；`Emitter.h.ct` 行数不变，切片清单仍为 76）。
 - **v1-PH-2 S5（ADT 模式 B：or / 守卫）后的 live 校准**：`Emitter.h.ct`
   10525 → 10944 行（+419：or-pattern 的 DNF 条件组、按组选绑定访问器、
   守卫 arm 的 flag 形状与 `emit_match_arm_ext`），发射 C 85158 → 86371

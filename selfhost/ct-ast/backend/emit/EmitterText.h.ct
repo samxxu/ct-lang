@@ -221,7 +221,7 @@ const char *elem_ret_ctype(int inst, const char *text)
 
     ins = frontend::sym::ct_insts(&k);
     if (!ins || inst < 0 || inst >= k) return (const char *)0;
-    ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+    ti = ins[inst].tmpl_row;
     tps = frontend::sym::ct_tmpls(&tn);
     /* S1a-0 C2p-8: substitution and instance resolution run on pool texts, so
        a 2000-byte declared return type is not refused by a 160-byte row. */

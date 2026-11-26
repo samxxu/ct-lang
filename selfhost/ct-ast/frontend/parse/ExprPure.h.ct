@@ -154,7 +154,7 @@ pub int expr_is_builtin_Box_type(const char *type)
     if (inst < 0) return 0;
     ins = frontend::sym::ct_insts(&tn);
     if (!ins) return 0;
-    ti = frontend::sym::ct_tmpl_find(ins[inst].tmpl);
+    ti = ins[inst].tmpl_row;
     tps = frontend::sym::ct_tmpls(&tn);
     if (ti < 0 || !tps) return 0;
     return strstr(tps[ti].path, "lib/core/Box.h.ct") != 0

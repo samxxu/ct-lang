@@ -673,7 +673,7 @@ impl ExprStaticType for Expr {
                field). Recognise only a balanced `<...>` after the name, so
                `Box < 3` / `box < 3` stay comparisons. */
             if ((self->lex->tok_is("Box") || self->lex->tok_is("box"))
-                && frontend::sym::ct_tmpl_find("Box") >= 0) {
+                && frontend::sym::ct_tmpl_find("Box", self->cur_unit) >= 0) {
                 size_t p2 = self->lex->pos;
                 int d2 = 0;
                 int closed = 0;
