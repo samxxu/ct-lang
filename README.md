@@ -166,6 +166,37 @@ int main(void)
 实测 `hello, ct`。逐章解释见 tutorial §15（`ref`/`out`）、§17（`Box`/`new`）、§18（`match`）、§22（`String`/`Str`）、§23（切片）。
 运行任一 example：`ct build examples/50_ref_out/prog.ct -o /tmp/e50 && /tmp/e50`。
 
+#### 0.5.1 ADT / `match`：穷尽判别的最小样例
+
+`enum` 成员带负载即 ADT；`match` 必须覆盖全部变体，绑定是 payload 的视图/引用，owning payload 由作者显式释放：
+
+```ct
+// source: docs/snippets/README/0.9_match_adt.ct
+enum Msg {
+    Text(String body),
+    Empty(),
+}
+
+int main(void)
+{
+    Msg m = Msg.Text(str_concat("h", "i"));
+
+    match (m) {
+        Msg.Text(body) => {
+            printf("%s\n", body.cstr());
+            body.release();
+        }
+        Msg.Empty() => {
+            printf("empty\n");
+        }
+    }
+    return 0;
+}
+```
+
+`ct build docs/snippets/README/0.9_match_adt.ct --c-boundary=allow -o /tmp/m09 && /tmp/m09`
+实测 `hi`。完整多分支样例见 [examples/53_match_adt](examples/53_match_adt/prog.ct)。
+
 #### 0.6 驱动初始化：`defer` / `errdefer` / `?` 的成对回滚
 
 `?` 把失败沿返回值传播；`defer` 与 `errdefer` 按 LIFO 收尾，成功时只跑 `defer`，失败时先回滚再释放：
