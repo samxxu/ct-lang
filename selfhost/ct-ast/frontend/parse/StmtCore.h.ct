@@ -111,6 +111,22 @@ pub trait StmtMatch {
     int  expr_match_ahead(void);
 
     int  parse_match_expr(void);
+
+    /* v1-PH-2 S4: the pattern grammar. `pat_begin` clears the scratch context
+       for one arm (subject kind/type), `pat_parse_top` reads the pattern and
+       records its bindings / tests, and `pat_commit` opens the arm scope and
+       declares the bindings. The caller parses the arm body and pops. */
+    int  pat_begin(int adt, const char *subject_type, int is_ptr);
+
+    int  pat_parse_top(void);
+
+    int  pat_commit(void);
+
+    int  pat_classify(const char *type, int *adt_out, int *si_out, int *is_ptr_out);
+
+    int  pat_desc(int form, const char *text, const char *text2, long num);
+
+    int  pat_parse_one(const char *type, const char *path);
 }
 
 

@@ -1565,15 +1565,36 @@ static int lw_expr(struct Lower *w, int teid)
                 if (sub <= 0) return 0;
                 if (lmod_expr_add_kid(w->l, e, sub) != 0) { w->hard = 1; return 0; }
             }
-            for (j = 1; j < t->nkids; j++) {
-                struct ct_tstmt *arm = &w->m->stmts[t->kids[j] - 1];
-                int blk = lw_match_arm_block(w, t->kids[j], temp, 1, 0);
-                if (blk <= 0) { lw_abort(w, "L7821"); return 0; }
-                if (lmod_expr_add_kid(w->l, e, (int)arm->num) != 0
-                    || lmod_expr_add_kid(w->l, e, blk) != 0) {
-                    w->hard = 1;
-                    return 0;
+            {
+                char *cacc;
+                int clen, ccap;
+                cacc = (char *)0;
+                clen = 0;
+                ccap = 0;
+                for (j = 1; j < t->nkids; j++) {
+                    struct ct_tstmt *arm = &w->m->stmts[t->kids[j] - 1];
+                    int blk;
+                    if (lw_conds_put(&cacc, &clen, &ccap, arm->text2) != 0) {
+                        free(cacc);
+                        w->hard = 1;
+                        return 0;
+                    }
+                    blk = lw_match_arm_block(w, t->kids[j], temp, 1, 0);
+                    if (blk <= 0) {
+                        free(cacc);
+                        lw_abort(w, "L7821");
+                        return 0;
+                    }
+                    if (lmod_expr_add_kid(w->l, e, (int)arm->num) != 0
+                        || lmod_expr_add_kid(w->l, e, blk) != 0) {
+                        free(cacc);
+                        w->hard = 1;
+                        return 0;
+                    }
                 }
+                w->l->exprs[e - 1].extra = runtime::text::ct_intern(
+                    cacc ? cacc : "");
+                free(cacc);
             }
             return e;
         }
@@ -2018,8 +2039,7 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out);
    block), then the statements. An expression arm's single yield assignment is
    replaced by `__ct_mresN = <expr>;`. */
 static int lw_match_bind_stmt(struct Lower *w, const char *type, const char *name,
-                              const char *field, const char *cname,
-                              int match_temp)
+                              const char *path, int match_temp)
 {
     int sid;
     int k;
@@ -2028,13 +2048,42 @@ static int lw_match_bind_stmt(struct Lower *w, const char *type, const char *nam
     if (sid <= 0) { w->hard = 1; return -1; }
     w->l->stmts[sid - 1].spelling = runtime::text::ct_intern(type ? type : "");
     w->l->stmts[sid - 1].name = runtime::text::ct_intern(name ? name : "");
-    w->l->stmts[sid - 1].member = runtime::text::ct_intern(field ? field : "");
-    w->l->stmts[sid - 1].fname = runtime::text::ct_intern(cname ? cname : "");
+    /* v1-PH-2 S4: the full accessor after the match temporary (`.` / `->`,
+       or `*` for a pointer subject bound whole). */
+    w->l->stmts[sid - 1].member = runtime::text::ct_intern(path ? path : "");
+    w->l->stmts[sid - 1].fname = "";
     w->l->stmts[sid - 1].target = match_temp;
     k = lw_is_string_value(type);
     w->l->stmts[sid - 1].aux = k;
     return sid;
 }
+
+/* v1-PH-2 S4: the arms' serialised pattern tests travel as one newline
+   separated string (one line per arm). The printer resolves the match
+   temporary and writes the same ` && (path == value)` shape the AST path
+   writes, so `--ir=on` stays byte-identical. */
+static int lw_conds_put(char **buf, int *len, int *cap, const char *s)
+{
+    int n, need, ncap;
+    char *grown;
+
+    n = (int)strlen(s ? s : "");
+    need = *len + n + 2;
+    if (need > *cap) {
+        ncap = *cap > 0 ? *cap : 128;
+        while (ncap < need) ncap *= 2;
+        grown = (char *)realloc(*buf, (size_t)ncap);
+        if (!grown) return -1;
+        *buf = grown;
+        *cap = ncap;
+    }
+    if (n > 0) memcpy(*buf + *len, s, (size_t)n);
+    *len += n;
+    (*buf)[(*len)++] = '\n';
+    (*buf)[*len] = 0;
+    return 0;
+}
+
 
 static int lw_match_arm_block(struct Lower *w, int arm_tsid, int match_temp,
                               int is_expr, int parent)
@@ -2089,8 +2138,7 @@ static int lw_match_arm_block(struct Lower *w, int arm_tsid, int match_temp,
         ty[c] = 0;
         if (*enc == ';') enc++;
         {
-            int bs = lw_match_bind_stmt(w, ty, nm, fl, arm->text2,
-                                        match_temp);
+            int bs = lw_match_bind_stmt(w, ty, nm, fl, match_temp);
             int ok2 = lw_own_kind(w, ty);
             if (bs <= 0) {
                 if (getenv("CT_LIR_DEBUG")) fprintf(stderr, "lir: arm bind fail\n");
@@ -2906,9 +2954,13 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             return 0;
         }
         case TS_MATCH: {
-            struct ct_tadt *a = lw_adt_row(w, s->text);
-            int temp, j;
-            if (!a) { lw_abort(w, "L7830"); return 0; }
+            struct ct_tadt *a;
+            int temp, j, nonadt;
+            char *cacc;
+            int clen, ccap;
+            nonadt = s->aux & 4;
+            a = nonadt ? (struct ct_tadt *)0 : lw_adt_row(w, s->text);
+            if (!nonadt && !a) { lw_abort(w, "L7830"); return 0; }
             temp = lmod_new_temp(w->l, LTK_MATCH, 0, block);
             if (temp <= 0) { w->hard = 1; return 0; }
             sid = lmod_new_stmt(w->l, LS_MATCH, s->span.file, s->span.line,
@@ -2917,19 +2969,37 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             e = lw_expr(w, s->kids[0]);
             if (e <= 0) return 0;
             w->l->stmts[sid - 1].expr = e;
-            w->l->stmts[sid - 1].name = a->full;
+            w->l->stmts[sid - 1].name = nonadt
+                ? (s->text2 ? s->text2 : "") : a->full;
             w->l->stmts[sid - 1].origin = temp;
             w->l->stmts[sid - 1].aux = s->aux;
+            cacc = (char *)0;
+            clen = 0;
+            ccap = 0;
             for (j = 1; j < s->nkids; j++) {
                 struct ct_tstmt *arm = &w->m->stmts[s->kids[j] - 1];
-                int blk = lw_match_arm_block(w, s->kids[j], temp, 0, block);
-                if (blk <= 0) { lw_abort(w, "L7831"); return 0; }
+                int blk;
+                if (lw_conds_put(&cacc, &clen, &ccap, arm->text2) != 0) {
+                    free(cacc);
+                    w->hard = 1;
+                    return 0;
+                }
+                blk = lw_match_arm_block(w, s->kids[j], temp, 0, block);
+                if (blk <= 0) {
+                    free(cacc);
+                    lw_abort(w, "L7831");
+                    return 0;
+                }
                 if (lmod_stmt_add_kid(w->l, sid, (int)arm->num) != 0
                     || lmod_stmt_add_kid(w->l, sid, blk) != 0) {
+                    free(cacc);
                     w->hard = 1;
                     return 0;
                 }
             }
+            w->l->stmts[sid - 1].spelling = runtime::text::ct_intern(
+                cacc ? cacc : "");
+            free(cacc);
             *out = sid;
             return 0;
         }
@@ -3349,6 +3419,26 @@ pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base)
 #define PW_INLINE 3
 
 static FILE *g_lir_out;
+
+static int lw_pw_conds(const char *m, const char *seg)
+{
+    while (seg && *seg) {
+        const char *eq;
+        const char *semi;
+
+        eq = strchr(seg, '=');
+        semi = strchr(seg, ';');
+        if (!eq || !semi || eq > semi) return -1;
+        fputs(" && (", g_lir_out);
+        fputs(m, g_lir_out);
+        fwrite(seg, 1, (size_t)(eq - seg), g_lir_out);
+        fputs(" == ", g_lir_out);
+        fwrite(eq + 1, 1, (size_t)(semi - eq - 1), g_lir_out);
+        fputs(")", g_lir_out);
+        seg = semi + 1;
+    }
+    return 0;
+}
 static int g_lir_range_k;   /* the range initialiser's current index */
 
 static void lw_ind(int ind)
@@ -3602,6 +3692,7 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
             int k = lmod_temp_num(w->l, kn, w->tmp_delta);
             const char *m = lmod_temp_name(w->l, kn, w->tmp_delta);
             int narm = (e->nkids - 1) / 2, j;
+            const char *cs = e->extra ? e->extra : "";
             fprintf(g_lir_out, "({ struct %s %s = (", e->text ? e->text : "", m);
             if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
             fprintf(g_lir_out, "); %s __ct_mres%d = (%s){0}; ",
@@ -3610,14 +3701,27 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
             for (j = 0; j < narm; j++) {
                 int variant = e->kids[1 + 2 * j];
                 int blk = e->kids[2 + 2 * j];
+                const char *line_end;
+                line_end = strchr(cs, '\n');
                 if (j == narm - 1) {
                     if (narm > 1) fputs("else ", g_lir_out);
                 } else {
+                    char seg[4096];
+                    const char *line = cs;
+                    int sn;
                     fputs(j == 0 ? "if (" : "else if (", g_lir_out);
-                    fprintf(g_lir_out, "%s%stag == %d) ", m,
-                            e->op ? "->" : ".", variant);
+                    fprintf(g_lir_out, "%s%stag == %d", m,
+                            (e->op & 1) ? "->" : ".", variant);
+                    sn = 0;
+                    while (line < (line_end ? line_end : cs + strlen(cs))
+                           && sn < (int)sizeof(seg) - 1)
+                        seg[sn++] = *line++;
+                    seg[sn] = 0;
+                    if (lw_pw_conds(m, seg) != 0) return -1;
+                    fputs(") ", g_lir_out);
                 }
                 if (lw_pw_block(w, blk, 0) != 0) return -1;
+                cs = line_end ? line_end + 1 : cs + strlen(cs);
             }
             fprintf(g_lir_out, "__ct_mres%d; })", k);
             return 0;
@@ -4128,28 +4232,53 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
         case LS_MATCH: {
             const char *m = lmod_temp_name(w->l, s->origin, w->tmp_delta);
             int narm = s->nkids / 2, j;
+            int nonadt = s->aux & 4;
+            int ptr = s->aux & 1;
+            const char *cs = s->spelling ? s->spelling : "";
             lw_ind(ind);
-            fprintf(g_lir_out, "struct %s %s __attribute__((unused)) = (",
-                    s->name ? s->name : "", m);
+            if (nonadt)
+                fprintf(g_lir_out, "%s%s%s __attribute__((unused)) = (",
+                        s->name ? s->name : "", ptr ? " *" : " ", m);
+            else
+                fprintf(g_lir_out, "struct %s%s%s __attribute__((unused)) = (",
+                        s->name ? s->name : "", ptr ? " *" : " ", m);
             if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
             fputs(");\n", g_lir_out);
             for (j = 0; j < narm; j++) {
                 int variant = s->kids[2 * j];
                 int blk = s->kids[2 * j + 1];
+                const char *line;
+                const char *line_end;
+                line = cs;
+                line_end = strchr(cs, '\n');
                 lw_ind(ind);
                 if (j == narm - 1) {
                     if (narm > 1) fputs("else ", g_lir_out);
                 } else {
                     fputs(j == 0 ? "if (" : "else if (", g_lir_out);
-                    fprintf(g_lir_out, "%s%stag == %d) ", m,
-                            s->aux ? "->" : ".", variant);
+                    if (nonadt) fputs("1", g_lir_out);
+                    else fprintf(g_lir_out, "%s%stag == %d", m,
+                                 ptr ? "->" : ".", variant);
+                    {
+                        char seg[4096];
+                        int sn;
+                        sn = 0;
+                        while (line < (line_end ? line_end : cs + strlen(cs))
+                               && sn < (int)sizeof(seg) - 1)
+                            seg[sn++] = *line++;
+                        seg[sn] = 0;
+                        if (lw_pw_conds(m, seg) != 0) return -1;
+                    }
+                    fputs(") ", g_lir_out);
                 }
                 if (lw_pw_block(w, blk, ind) != 0) return -1;
+                cs = line_end ? line_end + 1 : cs + strlen(cs);
             }
             return 0;
         }
         case LS_MATCHBIND: {
             const char *m = lmod_temp_name(w->l, s->target, w->tmp_delta);
+            const char *path = s->member ? s->member : "";
             lw_ind(ind);
             fprintf(g_lir_out, "%s %s __attribute__((unused)) = ",
                     s->spelling ? s->spelling : "int",
@@ -4157,8 +4286,10 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             if (s->aux == 1 || s->aux == 2)
                 fprintf(g_lir_out, "%s_retain(&(",
                         s->aux == 2 ? "U16String" : "String");
-            fprintf(g_lir_out, "%s.u.%s.%s", m, s->fname ? s->fname : "",
-                    s->member ? s->member : "");
+            if (strcmp(path, "*") == 0)
+                fprintf(g_lir_out, "(*%s)", m);
+            else
+                fprintf(g_lir_out, "%s%s", m, path);
             if (s->aux == 1 || s->aux == 2) fputs("))", g_lir_out);
             fputs(";\n", g_lir_out);
             return 0;

@@ -1722,18 +1722,18 @@ static int tb_stmt_match_arm(struct TBuilder *tb, int n)
     tb->m->stmts[sid - 1].aux = ar->nodes[n].aux;
     tb->m->stmts[sid - 1].num = ar->nodes[n].num;
     tb->m->stmts[sid - 1].text2 = runtime::text::ct_intern(
-        ar->nodes[n].text2 ? ar->nodes[n].text2 : "");
+        ar->nodes[n].text4 ? ar->nodes[n].text4 : "");
     {
-        /* The binding declarations: `field|name|type;` each, in source order.
-           The emitter builds the initialiser path at print time, so TIR only
-           records the three spellings. */
+        /* The binding declarations: `path|name|type;` each, in source order.
+           `path` is the accessor after the match temporary (`.` / `->` / `*`);
+           the lowers print the temporary at their own numbering. */
         char bbuf[4096];
         int bn = 0, bc;
         for (bc = ar->nodes[n].a; bc >= 0; bc = ar->nodes[bc].next) {
             int bd = ar->nodes[bc].a;
             const char *fld, *bnm, *bty;
             if (bd < 0) continue;
-            fld = ar->nodes[bc].text3 ? ar->nodes[bc].text3 : "";
+            fld = ar->nodes[bc].text4 ? ar->nodes[bc].text4 : "";
             bnm = ar->nodes[bd].text2 ? ar->nodes[bd].text2 : "";
             bty = ar->nodes[bd].text ? ar->nodes[bd].text : "";
             if (bn > 0) bbuf[bn++] = ';';
@@ -1991,6 +1991,10 @@ static int tb_stmt(struct TBuilder *tb, int n)
             m->stmts[sid - 1].aux = ar->nodes[n].aux;
             /* the emitted C tag, for `struct <full> __ct_matchN` */
             m->stmts[sid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            /* v1-PH-2 S4: a non-ADT statement subject carries its C type
+               spelling here; the lowering declares `%s __ct_matchN`. */
+            m->stmts[sid - 1].text2 = runtime::text::ct_intern(
+                ar->nodes[n].text2 ? ar->nodes[n].text2 : "");
             tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
             for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
                 t = tb_stmt_match_arm(tb, c);

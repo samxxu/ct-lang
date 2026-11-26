@@ -4265,6 +4265,37 @@ static int emit_adt_decl(struct Emitter *self, int n, int ind, int with_semi)
    N_RAW initialiser carries the accessor, then lets the ordinary block writer
    emit the block: scope release, `defer` and AutoDrop behave exactly as in a
    hand-written block. The chain is restored after the write. */
+/* v1-PH-2 S4: the arm's extra runtime tests. The parser serialises them as
+   `path=value;` rows (path empty = the subject itself, otherwise an accessor
+   beginning with `.` or `->`). The tag test of a root variant is emitted by
+   the caller; everything nested or literal lands here. */
+static int emit_arm_conds(struct Emitter *self, int arm, int k, int *ncond)
+{
+    const char *enc;
+
+    *ncond = 0;
+    enc = self->arena->nodes[arm].text4;
+    if (!enc || !enc[0]) return 0;
+    while (*enc) {
+        const char *eq;
+        const char *semi;
+
+        eq = strchr(enc, '=');
+        semi = strchr(enc, ';');
+        if (!eq || !semi || eq > semi)
+            return self->fail_from(arm, "malformed match pattern test");
+        fputs(" && (", self->out);
+        fprintf(self->out, "__ct_match%d", k);
+        fwrite(enc, 1, (size_t)(eq - enc), self->out);
+        fputs(" == ", self->out);
+        fwrite(eq + 1, 1, (size_t)(semi - eq - 1), self->out);
+        fputs(")", self->out);
+        (*ncond)++;
+        enc = semi + 1;
+    }
+    return 0;
+}
+
 static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr)
 {
     int b, i, first, last, save, r;
@@ -4273,6 +4304,7 @@ static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr
 
     (void)adts;
     (void)nadts;
+    (void)ptr;
     b = self->arena->nodes[arm].b;
     if (b < 0) return self->fail_from(arm, "the match arm has no body");
     /* LANG-29 S4 / B5: bit 1 is the wildcard; bit 2 marks an expression-match
@@ -4285,7 +4317,19 @@ static int emit_match_arm(struct Emitter *self, int arm, int ind, int k, int ptr
         int decl = self->arena->nodes[i].a;
         int raw = self->arena->nodes[i].b;
         if (decl < 0 || raw < 0) continue;
-        self->arena->nodes[raw].text = runtime::text::ct_internf("__ct_match%d%su.%s.%s", k, ptr ? "->" : ".", self->arena->nodes[arm].text2, self->arena->nodes[i].text3);
+        {
+            const char *path;
+            path = self->arena->nodes[i].text4;
+            if (path && strcmp(path, "*") == 0)
+                self->arena->nodes[raw].text = runtime::text::ct_internf(
+                    "(*__ct_match%d)", k);
+            else if (path && path[0])
+                self->arena->nodes[raw].text = runtime::text::ct_internf(
+                    "__ct_match%d%s", k, path);
+            else
+                self->arena->nodes[raw].text = runtime::text::ct_internf(
+                    "__ct_match%d", k);
+        }
         if (!self->arena->nodes[raw].text) return self->fail("out of memory");
         self->arena->nodes[decl].next = -1;
         if (first < 0) first = decl;
@@ -6824,9 +6868,12 @@ static int match_expr_emit(struct Emitter *self, int n)
         if (idx < narm - 1) {
             if (self->arena->nodes[arm].aux & 1)
                 return self->fail_from(arm, "a wildcard match arm must be the last arm");
+            int exncond;
             fputs(idx == 0 ? "if (" : "else if (", self->out);
-            fprintf(self->out, "__ct_match%d%stag == %d) ",
+            fprintf(self->out, "__ct_match%d%stag == %d",
                     k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+            if (emit_arm_conds(self, arm, k, &exncond) != 0) return -1;
+            fputs(") ", self->out);
         } else if (narm > 1) {
             fputs("else ", self->out);
         }
@@ -6843,33 +6890,39 @@ static int em_node_match(struct Emitter *self, int n, int ind, int nk)
 {
     (void)nk;
 
-
-    int k, arm, narm, idx, ptr, tagi;
+    int k, arm, narm, idx, ptr, tagi, nonadt, ncond, self_deref;
     struct Adt *adts;
     int nadts;
+
     adts = frontend::sym::ct_adts(&nadts);
-    tagi = frontend::sym::ct_adt_find(self->arena->nodes[n].text);
-    if (!adts || tagi < 0 || tagi >= nadts)
-        return self->fail_from(n, "the ADT row is missing");
+    tagi = -1;
+    nonadt = self->arena->nodes[n].aux & 4;
+    if (!nonadt) {
+        tagi = frontend::sym::ct_adt_find(self->arena->nodes[n].text);
+        if (!adts || tagi < 0 || tagi >= nadts)
+            return self->fail_from(n, "the ADT row is missing");
+    }
     k = self->ntmp;
     self->ntmp++;
-    ptr = self->arena->nodes[n].aux;
+    ptr = self->arena->nodes[n].aux & 1;
+    self_deref = self->sym->self_mode
+        && self->arena->nodes[n].a >= 0
+        && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
+        && strcmp(self->arena->nodes[self->arena->nodes[n].a].text2,
+                  "self") == 0;
     self->emit_indent(ind);
-    fprintf(self->out, "struct %s%s__ct_match%d __attribute__((unused)) = (",
-            adts[tagi].full, ptr ? " *" : " ", k);
+    if (nonadt)
+        fprintf(self->out, "%s%s__ct_match%d __attribute__((unused)) = (",
+                self->arena->nodes[n].text2, ptr ? " *" : " ", k);
+    else
+        fprintf(self->out, "struct %s%s__ct_match%d __attribute__((unused)) = (",
+                adts[tagi].full, ptr ? " *" : " ", k);
     /* LANG-29 S3 / B2: inside an inherent (or trait) method the source `self`
        is a value, but `self_mode` spells it `_self`, a pointer. A match over
        that receiver keeps the value form and dereferences here, so the same
        body compiles inside and outside an impl. */
-    {
-        int self_deref = self->sym->self_mode
-            && self->arena->nodes[n].a >= 0
-            && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR
-            && strcmp(self->arena->nodes[self->arena->nodes[n].a].text2,
-                      "self") == 0;
-        if (self_deref) fputs("*(_self)", self->out);
-        else if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-    }
+    if (self_deref) fputs("*(_self)", self->out);
+    else if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
     fputs(");\n", self->out);
     narm = 0;
     for (arm = self->arena->nodes[n].b; arm >= 0; arm = self->arena->nodes[arm].next)
@@ -6878,12 +6931,17 @@ static int em_node_match(struct Emitter *self, int n, int ind, int nk)
     for (arm = self->arena->nodes[n].b; arm >= 0;
          arm = self->arena->nodes[arm].next, idx++) {
         if (idx < narm - 1) {
-            if (self->arena->nodes[arm].aux)
+            if (self->arena->nodes[arm].aux & 1)
                 return self->fail_from(arm, "a wildcard match arm must be the last arm");
             self->emit_indent(ind);
             fputs(idx == 0 ? "if (" : "else if (", self->out);
-            fprintf(self->out, "__ct_match%d%stag == %d) ",
-                    k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+            if (!nonadt && self->arena->nodes[arm].num >= 0)
+                fprintf(self->out, "__ct_match%d%stag == %d",
+                        k, ptr ? "->" : ".", (int)self->arena->nodes[arm].num);
+            else
+                fputs("1", self->out);
+            if (emit_arm_conds(self, arm, k, &ncond) != 0) return -1;
+            fputs(") ", self->out);
         } else if (narm > 1) {
             self->emit_indent(ind);
             fputs("else ", self->out);

@@ -128,7 +128,881 @@ pub const char *match_expr_type_key_text(const char *in)
     return runtime::text::ct_intern(k);
 }
 
+/* ------------------------------------------------------------------------- */
+/* v1-PH-2 S4: the pattern scratch.                                           */
+/*                                                                            */
+/* One arm at a time: the subject kind is fixed by `pat_begin`, the recursive */
+/* reader appends bindings (name/type/access path) and runtime tests (a       */
+/* `path=value;` row per literal/tag test), and `pat_commit` turns the        */
+/* bindings into the N_BIND -> N_DECL/N_RAW chain the emitter already reads.  */
+/* The pattern descriptors are N_BIND rows hung off `N_ARM.d` only; no        */
+/* statement or expression walker reaches them.                               */
+/* ------------------------------------------------------------------------- */
+#define PAT_VARIANT 1
+#define PAT_STRUCT  2
+#define PAT_LITERAL 3
+#define PAT_WILD    4
+#define PAT_BINDER  5
+#define PAT_FIELD   6
+
+#define PAT_K_OTHER 0
+#define PAT_K_ADT   1
+#define PAT_K_STRUCT 2
+#define PAT_K_INT   3
+#define PAT_K_PTR   4
+
+struct PatCtx {
+    int adt;                    /* subject ADT row, -1 for a non-ADT subject */
+    const char *subject_type;   /* the subject type spelling */
+    int is_ptr;                 /* the subject spelling ended in `*` */
+    int non_adt;                /* statement match on a struct / integer value */
+    int root_variant;           /* root variant index, -1 */
+    const char *root_cname;     /* root variant's union member */
+    int root_wild;              /* the root is `_` */
+    int root_catch;             /* the root catches every value of the subject */
+    int root_irref;             /* the root pattern is irrefutable */
+    int root_head;              /* descriptor tree root, -1 for `_` */
+    int bind_head;
+    char *conds;                /* `path=value;` rows, in source order */
+    int condlen;
+    int condcap;
+    char *sig;                  /* canonical spelling for duplicate detection */
+    int siglen;
+    int sigcap;
+    const char **bname;
+    const char **btype;
+    const char **bpath;
+    int nbind;
+    int bcap;
+    const char *cbase;          /* pat_classify's stripped base, pooled */
+};
+
+static struct PatCtx g_pat;
+
+static int pat_buf_put(char **buf, int *len, int *cap, const char *s)
+{
+    int n, need, ncap;
+    char *grown;
+
+    n = (int)strlen(s);
+    need = *len + n + 1;
+    if (need > *cap) {
+        ncap = *cap > 0 ? *cap : 128;
+        while (ncap < need && ncap < CAP_LIMIT) ncap *= 2;
+        if (ncap < need) return -1;
+        grown = (char *)realloc(*buf, (size_t)ncap);
+        if (!grown) return -1;
+        *buf = grown;
+        *cap = ncap;
+    }
+    memcpy(*buf + *len, s, (size_t)n);
+    *len += n;
+    (*buf)[*len] = 0;
+    return 0;
+}
+
+static int pat_bind_add(const char *name, const char *type, const char *path)
+{
+    int i, ncap;
+    const char **grown;
+
+    for (i = 0; i < g_pat.nbind; i++)
+        if (strcmp(g_pat.bname[i], name) == 0) return -2;   /* duplicate */
+    if (g_pat.nbind >= g_pat.bcap) {
+        ncap = g_pat.bcap > 0 ? g_pat.bcap * 2 : 8;
+        if (ncap > CAP_LIMIT) return -1;
+        grown = (const char **)realloc((void *)g_pat.bname,
+                                       (size_t)ncap * sizeof(*grown));
+        if (!grown) return -1;
+        g_pat.bname = grown;
+        grown = (const char **)realloc((void *)g_pat.btype,
+                                       (size_t)ncap * sizeof(*grown));
+        if (!grown) return -1;
+        g_pat.btype = grown;
+        grown = (const char **)realloc((void *)g_pat.bpath,
+                                       (size_t)ncap * sizeof(*grown));
+        if (!grown) return -1;
+        g_pat.bpath = grown;
+        g_pat.bcap = ncap;
+    }
+    g_pat.bname[g_pat.nbind] = name;
+    g_pat.btype[g_pat.nbind] = type;
+    g_pat.bpath[g_pat.nbind] = path;
+    g_pat.nbind++;
+    return 0;
+}
+
+/* A single-byte character literal: `'a'`, `'\n'`, `'\0'`. Returns the byte
+   value, or -1 when the spelling is not one character / a known escape. */
+static int pat_char_value(const char *p, int len)
+{
+    char c;
+
+    if (len < 3 || p[0] != '\'' || p[len - 1] != '\'') return -1;
+    if (len == 3) return (unsigned char)p[1];
+    if (p[1] != '\\' || len != 4) return -1;
+    c = p[2];
+    if (c == 'n') return '\n';
+    if (c == 't') return '\t';
+    if (c == 'r') return '\r';
+    if (c == '0') return 0;
+    if (c == '\\') return '\\';
+    if (c == '\'') return '\'';
+    if (c == '"') return '"';
+    if (c == 'a') return 7;
+    if (c == 'b') return 8;
+    if (c == 'f') return 12;
+    if (c == 'v') return 11;
+    return -1;
+}
+
+/* Is the stripped base spelling an integer-family C type? The list is the
+   type surface `match` accepts for a literal pattern; a typedef alias that
+   resolves to one of these reaches the same row through `resolve_type_text`
+   only for the spellings Ct itself emits. */
+static int pat_int_base(const char *b)
+{
+    static const char *names[] = {
+        "int", "char", "bool", "_Bool", "short", "long", "signed",
+        "unsigned", "int8_t", "int16_t", "int32_t", "int64_t",
+        "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+        "size_t", "ssize_t", "ptrdiff_t", "intptr_t", "uintptr_t",
+        "char16_t", "char32_t", (const char *)0
+    };
+    int i, j;
+    char buf[256];
+    int n;
+
+    n = (int)strlen(b);
+    if (n <= 0 || n >= (int)sizeof(buf)) return 0;
+    for (i = 0; i <= n; i++) {
+        char c = (i < n) ? b[i] : ' ';
+        buf[i] = (c == '\t' || c == '\n' || c == '\r') ? ' ' : c;
+    }
+    /* collapse repeated spaces so `unsigned   long` matches the table */
+    j = 0;
+    for (i = 0; i < n; i++) {
+        if (buf[i] == ' ' && j > 0 && buf[j - 1] == ' ') continue;
+        buf[j++] = buf[i];
+    }
+    buf[j] = 0;
+    while (j > 0 && buf[j - 1] == ' ') buf[--j] = 0;
+    for (i = 0; names[i]; i++)
+        if (strcmp(buf, names[i]) == 0) return 1;
+    /* the multi-word integer spellings */
+    if (strcmp(buf, "unsigned int") == 0 || strcmp(buf, "unsigned char") == 0
+        || strcmp(buf, "unsigned short") == 0 || strcmp(buf, "unsigned long") == 0
+        || strcmp(buf, "long long") == 0 || strcmp(buf, "unsigned long long") == 0
+        || strcmp(buf, "signed int") == 0 || strcmp(buf, "signed char") == 0
+        || strcmp(buf, "signed short") == 0 || strcmp(buf, "signed long") == 0
+        || strcmp(buf, "long int") == 0 || strcmp(buf, "short int") == 0)
+        return 1;
+    return 0;
+}
+
 impl StmtMatch for Stmt {
+    int pat_begin(int adt, const char *subject_type, int is_ptr)
+    {
+        free(g_pat.conds);
+        free(g_pat.sig);
+        free((void *)g_pat.bname);
+        free((void *)g_pat.btype);
+        free((void *)g_pat.bpath);
+        g_pat.adt = adt;
+        g_pat.subject_type = runtime::text::ct_intern(subject_type ? subject_type : "");
+        g_pat.is_ptr = is_ptr;
+        g_pat.non_adt = adt < 0;
+        g_pat.root_variant = -1;
+        g_pat.root_cname = "";
+        g_pat.root_wild = 0;
+        g_pat.root_catch = 0;
+        g_pat.root_irref = 0;
+        g_pat.root_head = -1;
+        g_pat.bind_head = -1;
+        g_pat.conds = (char *)0;
+        g_pat.condlen = 0;
+        g_pat.condcap = 0;
+        g_pat.sig = (char *)0;
+        g_pat.siglen = 0;
+        g_pat.sigcap = 0;
+        g_pat.bname = (const char **)0;
+        g_pat.btype = (const char **)0;
+        g_pat.bpath = (const char **)0;
+        g_pat.nbind = 0;
+        g_pat.bcap = 0;
+        g_pat.cbase = "";
+        if (pat_buf_put(&g_pat.conds, &g_pat.condlen, &g_pat.condcap, "")) return -1;
+        if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "")) return -1;
+        return 0;
+    }
+
+    /* The kind of `type` (PAT_K_*) and its stripped base in g_pat.cbase.
+       `adt_out` / `si_out` get the ADT / struct row and `is_ptr_out` the
+       trailing-`*` fact. The base is what a struct pattern names and what an
+       ADT row is looked up by. */
+    int pat_classify(const char *type, int *adt_out, int *si_out, int *is_ptr_out)
+    {
+        char *buf;
+        int n, adt, si, ptr, result;
+        const char *b;
+        const char *res;
+
+        adt = -1;
+        si = -1;
+        ptr = 0;
+        if (!type) type = "";
+        n = (int)strlen(type);
+        buf = (char *)malloc((size_t)n + 1);
+        if (!buf) return PAT_K_OTHER;
+        memcpy(buf, type, (size_t)n + 1);
+        while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '\t'
+                         || buf[n - 1] == '\n' || buf[n - 1] == '\r')) buf[--n] = 0;
+        while (n > 0 && buf[n - 1] == '*') {
+            ptr = 1;
+            buf[--n] = 0;
+            while (n > 0 && (buf[n - 1] == ' ' || buf[n - 1] == '\t')) buf[--n] = 0;
+        }
+        b = buf;
+        for (;;) {
+            if (strncmp(b, "const ", 6) == 0) { b += 6; continue; }
+            if (strncmp(b, "volatile ", 9) == 0) { b += 9; continue; }
+            if (strncmp(b, "restrict ", 9) == 0) { b += 9; continue; }
+            break;
+        }
+        while (*b == ' ' || *b == '\t') b++;
+        *adt_out = -1;
+        *si_out = -1;
+        *is_ptr_out = ptr;
+        result = PAT_K_OTHER;
+        /* an ADT tag is `struct T` too, so try the whole spelling first */
+        adt = frontend::sym::ct_adt_from_type(b);
+        if (adt < 0) {
+            res = self->sym->resolve_type_text(b);
+            if (res && res[0]) {
+                const char *r = res;
+                if (strncmp(r, "struct ", 7) == 0) r += 7;
+                else if (strncmp(r, "union ", 6) == 0) r += 6;
+                else if (strncmp(r, "enum ", 5) == 0) r += 5;
+                adt = frontend::sym::ct_adt_from_type(r);
+                if (adt < 0) si = self->sym->find_struct(r);
+            }
+        }
+        if (adt < 0 && si < 0) {
+            if (strncmp(b, "struct ", 7) == 0) {
+                const char *base = b + 7;
+                si = self->sym->find_struct(base);
+                if (si < 0) {
+                    const char *rr = self->sym->resolve_type_text(base);
+                    if (rr && strncmp(rr, "struct ", 7) == 0)
+                        si = self->sym->find_struct(rr + 7);
+                }
+                g_pat.cbase = runtime::text::ct_intern(base);
+            } else if (strncmp(b, "union ", 6) == 0 || strncmp(b, "enum ", 5) == 0) {
+                g_pat.cbase = runtime::text::ct_intern(b);
+            } else {
+                si = self->sym->find_struct(b);
+                g_pat.cbase = runtime::text::ct_intern(b);
+            }
+        } else {
+            const char *tag = b;
+            if (strncmp(tag, "struct ", 7) == 0) tag += 7;
+            g_pat.cbase = runtime::text::ct_intern(tag);
+        }
+        if (!g_pat.cbase) { free(buf); return PAT_K_OTHER; }
+        *adt_out = adt;
+        *si_out = si;
+        if (adt >= 0) result = PAT_K_ADT;
+        else if (si >= 0) result = PAT_K_STRUCT;
+        else if (ptr) result = PAT_K_PTR;
+        else if (pat_int_base(b)) result = PAT_K_INT;
+        free(buf);
+        return result;
+    }
+
+    int pat_desc(int form, const char *text, const char *text2, long num)
+    {
+        int id;
+
+        id = self->sup->new_node(N_BIND);
+        if (id < 0) return -1;
+        self->arena->nodes[id].aux = form;
+        self->arena->nodes[id].text = text ? text : "";
+        self->arena->nodes[id].text2 = text2 ? text2 : "";
+        self->arena->nodes[id].num = num;
+        self->arena->nodes[id].a = -1;
+        self->arena->nodes[id].b = 0;
+        self->arena->nodes[id].next = -1;
+        self->arena->nodes[id].line = self->lex->tokline;
+        self->arena->nodes[id].num = num;
+        return id;
+    }
+
+    /* One pattern at `path` (empty = the subject itself, otherwise `.f` /
+       `->f` accessors). Sets nodes[root].b to the irrefutability flag and
+       appends the runtime test rows to g_pat.conds. */
+    int pat_parse_one(const char *type, const char *path)
+    {
+        int line, col, kind, adt, si, ptr, id, first, last, i, rc;
+        const char *bname;
+        char msgbuf[3 * MAX_TEXT];
+        char lit[64];
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        kind = self->pat_classify(type, &adt, &si, &ptr);
+        if (kind == PAT_K_PTR) {
+            /* a pointer payload can only be bound whole or ignored */
+            if (self->lex->tok != T_ID)
+                return tool::diag::ct_sem_error(line, col,
+                    "a pointer payload cannot be matched by a pattern (use '_' or bind the whole value)",
+                    self->mem->path);
+        }
+        if (self->lex->tok == T_ID && self->lex->tok_is("_")) {
+            self->sup->lex_next();
+            id = self->pat_desc(PAT_WILD, "", "", 0);
+            if (id < 0) return -1;
+            self->arena->nodes[id].b = 1;
+            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) return -1;
+            if (path[0] == 0) g_pat.root_head = id;
+            return id;
+        }
+        if (self->lex->tok == T_NUM
+            || (self->lex->tok == T_PUNCT && self->lex->tok_is("-"))
+            || (self->lex->tok == T_STR
+                && self->lex->tokstr.len > 0
+                && self->lex->tokstr.ptr[0] == '\'')) {
+            long val;
+            int is_char, neg;
+
+            neg = 0;
+            if (self->lex->tok == T_PUNCT && self->lex->tok_is("-")) {
+                neg = 1;
+                self->sup->lex_next();
+                if (self->lex->tok != T_NUM)
+                    return self->sup->fail("expected an integer after '-' in a pattern");
+            }
+            is_char = !neg && self->lex->tok == T_STR;
+            if (is_char) {
+                char cview[MAX_TEXT];
+                val = pat_char_value(self->lex->tokstr.ptr, self->lex->tokstr.len);
+                if (val < 0)
+                    return self->sup->fail("expected a one-character pattern literal");
+                if (self->lex->tok_copy(cview, (int)sizeof cview) != 0)
+                    return self->sup->fail("a character pattern literal is too long");
+                snprintf(lit, sizeof lit, "'%s'", cview);
+            } else {
+                if (self->lex->tokfloat)
+                    return self->sup->fail("a floating literal cannot be a pattern");
+                val = self->lex->toknum;
+                if (neg) val = -val;
+                snprintf(lit, sizeof lit, "%ld", val);
+            }
+            if (kind != PAT_K_INT) {
+                snprintf(msgbuf, sizeof msgbuf,
+                         "literal pattern '%s' does not match type '%s'", lit, type);
+                return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            self->sup->lex_next();
+            id = self->pat_desc(PAT_LITERAL, runtime::text::ct_intern(lit), "", val);
+            if (id < 0) return -1;
+            self->arena->nodes[id].b = 0;
+            snprintf(msgbuf, sizeof msgbuf, "#%ld", val);
+            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) return -1;
+            if (path[0] != 0) {
+                size_t need;
+                char *row;
+                need = strlen(path) + strlen(msgbuf) + 4;
+                row = (char *)malloc(need);
+                if (!row) return self->sup->fail("out of memory");
+                snprintf(row, need, "%s=%ld;", path, val);
+                rc = pat_buf_put(&g_pat.conds, &g_pat.condlen, &g_pat.condcap, row);
+                free(row);
+                if (rc) return -1;
+            } else {
+                snprintf(msgbuf, sizeof msgbuf, "=%ld;", val);
+                if (g_pat.non_adt && pat_buf_put(&g_pat.conds, &g_pat.condlen,
+                                                 &g_pat.condcap, msgbuf)) return -1;
+            }
+            if (path[0] == 0) g_pat.root_head = id;
+            return id;
+        }
+        if (self->lex->tok == T_STR && self->lex->tokstr.len > 0
+            && self->lex->tokstr.ptr[0] == '"')
+            return tool::diag::ct_sem_error(line, col,
+                "string literal patterns are not supported (S4: int/char/bool only)",
+                self->mem->path);
+        if (self->lex->tok != T_ID)
+            return tool::diag::ct_sem_error(line, col, "expected a pattern",
+                                            self->mem->path);
+        bname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                             self->lex->tokstr.len);
+        if (!bname) return self->sup->fail("out of memory");
+        self->sup->lex_next();
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(".")) {
+            /* a variant pattern */
+            const char *vname;
+            int v;
+            struct Adt *adts;
+            int nadts;
+
+            if (kind != PAT_K_ADT) {
+                int other;
+                other = frontend::sym::ct_adt_from_type(bname);
+                if (other < 0)
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "match arm names '%s', which is not an ADT", bname);
+                else
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "match arm names ADT '%s', but the subject is '%s'",
+                             bname, type);
+                return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            {
+                const char *rn;
+                int other;
+                rn = self->sym->resolve_type_text(bname);
+                if (!rn) rn = bname;
+                other = frontend::sym::ct_adt_from_type(rn);
+                if (other < 0) {
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "match arm names '%s', which is not an ADT", bname);
+                    return tool::diag::ct_sem_error(line, col, msgbuf,
+                                                    self->mem->path);
+                }
+                if (other != adt) {
+                    adts = frontend::sym::ct_adts(&nadts);
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "match arm names ADT '%s', but the subject is '%s'",
+                             adts[other].name, adts[adt].name);
+                    return tool::diag::ct_sem_error(line, col, msgbuf,
+                                                    self->mem->path);
+                }
+            }
+            self->sup->lex_next();
+            if (self->lex->tok != T_ID)
+                return self->sup->fail("expected a variant name");
+            vname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                 self->lex->tokstr.len);
+            if (!vname) return self->sup->fail("out of memory");
+            v = frontend::sym::ct_adt_variant(adt, vname);
+            if (v < 0) {
+                adts = frontend::sym::ct_adts(&nadts);
+                snprintf(msgbuf, sizeof msgbuf, "unknown variant '%s' of ADT '%s'",
+                         vname, adts[adt].name);
+                return tool::diag::ct_sem_error(
+                    self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1, msgbuf,
+                    self->mem->path);
+            }
+            adts = frontend::sym::ct_adts(&nadts);
+            self->sup->lex_next();
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
+                return self->sup->fail("expected '(' after a variant name");
+            self->sup->lex_next();
+            id = self->pat_desc(PAT_VARIANT, vname,
+                                adts[adt].variants[v].cname, v);
+            if (id < 0) return -1;
+            first = -1;
+            last = -1;
+            snprintf(msgbuf, sizeof msgbuf, "V%d(", v);
+            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) return -1;
+            if (path[0] != 0) {
+                /* the inner tag test goes before the payload tests so the C
+                   union read always follows its discriminator */
+                size_t need;
+                char *row;
+                need = strlen(path) + 32;
+                row = (char *)malloc(need);
+                if (!row) return self->sup->fail("out of memory");
+                snprintf(row, need, "%s.tag=%d;", path, v);
+                rc = pat_buf_put(&g_pat.conds, &g_pat.condlen, &g_pat.condcap, row);
+                free(row);
+                if (rc) return -1;
+            }
+            for (i = 0; i < adts[adt].variants[v].nfields; i++) {
+                char *cp;
+                size_t need;
+                const char *sep;
+                int child;
+
+                if (i > 0) {
+                    if (!self->sup->accept(",")) {
+                        snprintf(msgbuf, sizeof msgbuf,
+                                 "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s",
+                                 adts[adt].name, vname, i, i == 1 ? "" : "s",
+                                 adts[adt].variants[v].nfields,
+                                 adts[adt].variants[v].nfields == 1 ? "" : "s");
+                        return tool::diag::ct_sem_error(line, col, msgbuf,
+                                                        self->mem->path);
+                    }
+                }
+                sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
+                need = strlen(path) + strlen(sep) + strlen(adts[adt].variants[v].cname)
+                       + strlen(adts[adt].variants[v].fields[i].name) + 8;
+                cp = (char *)malloc(need);
+                if (!cp) return self->sup->fail("out of memory");
+                snprintf(cp, need, "%s%su.%s.%s", path, sep,
+                         adts[adt].variants[v].cname,
+                         adts[adt].variants[v].fields[i].name);
+                child = self->pat_parse_one(adts[adt].variants[v].fields[i].type, cp);
+                free(cp);
+                if (child < 0) return -1;
+                if (first < 0) first = child;
+                else self->arena->nodes[last].next = child;
+                last = child;
+                if (!self->arena->nodes[child].b) self->arena->nodes[id].b = 0;
+                else if (i == 0 && adts[adt].variants[v].nfields > 0) {
+                    /* keep the flag; a later refutable child clears it */
+                }
+            }
+            if (self->sup->accept(",")) { /* trailing comma */ }
+            if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
+                snprintf(msgbuf, sizeof msgbuf,
+                         "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s",
+                         adts[adt].name, vname,
+                         adts[adt].variants[v].nfields + 1,
+                         adts[adt].variants[v].nfields + 1 == 1 ? "" : "s",
+                         adts[adt].variants[v].nfields,
+                         adts[adt].variants[v].nfields == 1 ? "" : "s");
+                return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            if (self->sup->expect(")") != 0) return -1;
+            if (adts[adt].variants[v].nfields > 0) {
+                int all = 1;
+                int q;
+                for (q = first; q >= 0; q = self->arena->nodes[q].next) {
+                    if (!self->arena->nodes[q].b) all = 0;
+                }
+                self->arena->nodes[id].b = all;
+            } else {
+                self->arena->nodes[id].b = 1;
+            }
+            /* A nested variant pattern is refutable unless the inner ADT has a
+               single variant: `One(Val.Leaf(n))` says nothing about the other
+               `Val` variants. At the arm root the flag means "covers this
+               variant", so the single-variant restriction does not apply. */
+            if (path[0] != 0 && adts[adt].nvariants > 1)
+                self->arena->nodes[id].b = 0;
+            self->arena->nodes[id].a = first;
+            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, ")")) return -1;
+            if (path[0] == 0) {
+                g_pat.root_head = id;
+                g_pat.root_variant = v;
+                g_pat.root_cname = runtime::text::ct_intern(adts[adt].variants[v].cname);
+                g_pat.root_irref = self->arena->nodes[id].b;
+            } else if (self->arena->nodes[id].b == 0) {
+                /* irrefutability is folded by the parent */
+            }
+            return id;
+        }
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
+            /* a struct pattern */
+            struct StructDef *sd;
+            int seen_n, rest, any_refutable;
+            int *seen;
+
+            if (kind != PAT_K_STRUCT) {
+                int other;
+                other = self->sym->find_struct(bname);
+                if (other < 0)
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "struct pattern names '%s', which is not a declared struct",
+                             bname);
+                else
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "struct pattern names '%s', but the subject is '%s'",
+                             bname, type);
+                return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            sd = &self->sym->structs[si];
+            if (strcmp(bname, sd->name) != 0 && strcmp(bname, g_pat.cbase) != 0) {
+                /* an alias spelling (`typedef struct Point P`) is legal too */
+                const char *rr;
+                char rbase[512];
+                rr = self->sym->resolve_type_text(bname);
+                if (!rr) rr = bname;
+                if (strncmp(rr, "struct ", 7) == 0) rr += 7;
+                snprintf(rbase, sizeof rbase, "%s", rr);
+                if (strcmp(rbase, sd->name) != 0) {
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "struct pattern names '%s', but the subject is '%s'",
+                             bname, type);
+                    return tool::diag::ct_sem_error(line, col, msgbuf,
+                                                    self->mem->path);
+                }
+            }
+            self->sup->lex_next();
+            id = self->pat_desc(PAT_STRUCT, sd->name, type, 0);
+            if (id < 0) return -1;
+            snprintf(msgbuf, sizeof msgbuf, "S%d{", si);
+            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) return -1;
+            seen = (int *)calloc((size_t)(sd->nfields > 0 ? sd->nfields : 1),
+                                 sizeof(*seen));
+            if (!seen) return self->sup->fail("out of memory");
+            first = -1;
+            last = -1;
+            seen_n = 0;
+            rest = 0;
+            any_refutable = 0;
+            for (;;) {
+                int fi, child, wrap;
+                const char *fname;
+
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("..")) {
+                    self->sup->lex_next();
+                    rest = 1;
+                    break;
+                }
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is("}")) break;
+                if (self->lex->tok != T_ID) {
+                    free(seen);
+                    return self->sup->fail("expected a struct pattern field");
+                }
+                fname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!fname) { free(seen); return self->sup->fail("out of memory"); }
+                fi = -1;
+                {
+                    int q;
+                    for (q = 0; q < sd->nfields; q++)
+                        if (strcmp(sd->fields[q].name, fname) == 0) { fi = q; break; }
+                }
+                if (fi < 0) {
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "unknown field '%s' in a struct pattern for '%s'",
+                             fname, sd->name);
+                    free(seen);
+                    return tool::diag::ct_sem_error(
+                        self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1, msgbuf,
+                        self->mem->path);
+                }
+                if (seen[fi]) {
+                    snprintf(msgbuf, sizeof msgbuf,
+                             "duplicate field '%s' in a struct pattern", fname);
+                    free(seen);
+                    return tool::diag::ct_sem_error(
+                        self->lex->tokline,
+                        self->lex->tokstart - self->lex->lstart + 1, msgbuf,
+                        self->mem->path);
+                }
+                seen[fi] = 1;
+                seen_n++;
+                self->sup->lex_next();
+                if (self->lex->tok == T_PUNCT && self->lex->tok_is(":")) {
+                    char *fp;
+                    size_t need;
+                    const char *sep;
+                    self->sup->lex_next();
+                    sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
+                    need = strlen(path) + strlen(sep) + strlen(sd->fields[fi].name) + 8;
+                    fp = (char *)malloc(need);
+                    if (!fp) { free(seen); return self->sup->fail("out of memory"); }
+                    snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                    child = self->pat_parse_one(sd->fields[fi].type, fp);
+                    free(fp);
+                } else {
+                    char *fp;
+                    size_t need;
+                    const char *sep;
+                    sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
+                    need = strlen(path) + strlen(sep) + strlen(sd->fields[fi].name) + 8;
+                    fp = (char *)malloc(need);
+                    if (!fp) { free(seen); return self->sup->fail("out of memory"); }
+                    snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                    child = self->pat_desc(PAT_BINDER, fname, sd->fields[fi].type, 0);
+                    if (child >= 0 && pat_bind_add(fname, sd->fields[fi].type,
+                                                   runtime::text::ct_intern(fp)) == -2) {
+                        free(fp);
+                        free(seen);
+                        snprintf(msgbuf, sizeof msgbuf,
+                                 "duplicate binding '%s' in a match arm", fname);
+                        return tool::diag::ct_sem_error(line, col, msgbuf,
+                                                        self->mem->path);
+                    }
+                    free(fp);
+                    if (child >= 0) self->arena->nodes[child].b = 1;
+                    if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) {
+                        free(seen);
+                        return -1;
+                    }
+                }
+                if (child < 0) { free(seen); return -1; }
+                wrap = self->pat_desc(PAT_FIELD, fname, sd->fields[fi].type, fi);
+                if (wrap < 0) { free(seen); return -1; }
+                self->arena->nodes[wrap].a = child;
+                self->arena->nodes[wrap].b = self->arena->nodes[child].b;
+                if (!self->arena->nodes[child].b) any_refutable = 1;
+                snprintf(msgbuf, sizeof msgbuf, "%d:", fi);
+                if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, msgbuf)) {
+                    free(seen);
+                    return -1;
+                }
+                if (first < 0) first = wrap;
+                else self->arena->nodes[last].next = wrap;
+                last = wrap;
+                if (self->sup->accept(",")) continue;
+                break;
+            }
+            if (self->sup->expect("}") != 0) { free(seen); return -1; }
+            if (!rest && seen_n != sd->nfields) {
+                int q;
+                for (q = 0; q < sd->nfields; q++)
+                    if (!seen[q]) break;
+                snprintf(msgbuf, sizeof msgbuf,
+                         "struct pattern for '%s' is missing field '%s' (name it or write '..')",
+                         sd->name, sd->fields[q].name);
+                free(seen);
+                return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+            }
+            free(seen);            /* A struct pattern is irrefutable when every field is constrained
+               by an irrefutable subpattern; `..` leaves the rest unconstrained
+               and is therefore still irrefutable. */
+            self->arena->nodes[id].b = any_refutable ? 0 : 1;
+            self->arena->nodes[id].a = first;
+            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "}")) return -1;
+            if (path[0] == 0) {
+                g_pat.root_head = id;
+                g_pat.root_irref = self->arena->nodes[id].b;
+            }
+            return id;
+        }
+        /* a binder */
+        if (kind == PAT_K_ADT || kind == PAT_K_STRUCT) {
+            /* a bare name binds the whole value; this is allowed */
+        }
+        id = self->pat_desc(PAT_BINDER, bname, type, 0);
+        if (id < 0) return -1;
+        self->arena->nodes[id].b = 1;
+        {
+            const char *bp;
+            if (path[0] == 0 && g_pat.is_ptr) bp = "*";
+            else bp = path[0] != 0 ? runtime::text::ct_intern(path) : "";
+            rc = pat_bind_add(bname, type, bp);
+        }
+        if (rc == -2) {
+            snprintf(msgbuf, sizeof msgbuf,
+                     "duplicate binding '%s' in a match arm", bname);
+            return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
+        }
+        if (rc < 0) return self->sup->fail("out of memory");
+        if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) return -1;
+        if (path[0] == 0) g_pat.root_head = id;
+        return id;
+    }
+
+    int pat_parse_top(void)
+    {
+        int rc, kind, adt, si, ptr;
+        int line, col;
+
+        line = self->lex->tokline;
+        col = self->lex->tokstart - self->lex->lstart + 1;
+        if (g_pat.adt >= 0) {
+            struct Adt *adts;
+            int nadts;
+            const char *ctag;
+            adts = frontend::sym::ct_adts(&nadts);
+            ctag = runtime::text::ct_internf("struct %s", adts[g_pat.adt].full);
+            if (!ctag) return self->sup->fail("out of memory");
+            /* a root binder declares the subject as a C value, so the stored
+               spelling must carry the `struct` tag */
+            g_pat.subject_type = ctag;
+        }
+        kind = self->pat_classify(g_pat.subject_type, &adt, &si, &ptr);
+        if (kind == PAT_K_OTHER || kind == PAT_K_PTR) {
+            g_pat.cbase = g_pat.subject_type ? g_pat.subject_type : "";
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
+                    "match needs an ADT, struct, or integer-like value, but '%s' is not supported",
+                    g_pat.subject_type ? g_pat.subject_type : ""),
+                self->mem->path);
+        }
+        if (self->lex->tok == T_ID && self->lex->tok_is("_")) {
+            self->sup->lex_next();
+            g_pat.root_wild = 1;
+            g_pat.root_catch = 1;
+            g_pat.root_irref = 1;
+            g_pat.root_head = -1;
+            if (pat_buf_put(&g_pat.sig, &g_pat.siglen, &g_pat.sigcap, "*")) return -1;
+            return 0;
+        }
+        rc = self->pat_parse_one(g_pat.subject_type, "");
+        if (rc < 0) return -1;
+        if (g_pat.root_head < 0) return self->sup->fail("expected a pattern");
+        if (g_pat.adt >= 0) {
+            int form;
+            form = self->arena->nodes[g_pat.root_head].aux;
+            if (form == PAT_VARIANT) {
+                g_pat.root_irref = self->arena->nodes[g_pat.root_head].b;
+            } else if (form == PAT_BINDER) {
+                g_pat.root_catch = 1;
+                g_pat.root_irref = 1;
+            } else {
+                return self->sup->fail("expected a pattern");
+            }
+        } else {
+            int form;
+            form = self->arena->nodes[g_pat.root_head].aux;
+            g_pat.root_irref = self->arena->nodes[g_pat.root_head].b;
+            if (form == PAT_BINDER) g_pat.root_catch = 1;
+            else if (form == PAT_STRUCT && g_pat.root_irref) g_pat.root_catch = 1;
+        }
+        return 0;
+    }
+
+    /* Turn the recorded bindings into the N_BIND -> N_DECL/N_RAW chain and
+       open the arm's scope. The caller parses the body and pops the scope. */
+    int pat_commit(void)
+    {
+        int i, first, last, tail;
+
+        if (self->sup->push_scope() != 0) return -1;
+        first = -1;
+        last = -1;
+        for (i = 0; i < g_pat.nbind; i++) {
+            int bind, decl, raw, vi;
+            bind = self->sup->new_node(N_BIND);
+            decl = self->sup->new_node(N_DECL);
+            raw = self->sup->new_node(N_RAW);
+            if (bind < 0 || decl < 0 || raw < 0) {
+                self->sup->pop_scope();
+                return -1;
+            }
+            self->arena->nodes[bind].text = runtime::text::ct_intern(g_pat.bname[i]);
+            self->arena->nodes[bind].text2 = runtime::text::ct_intern(g_pat.btype[i]);
+            self->arena->nodes[bind].text3 = runtime::text::ct_intern(g_pat.bname[i]);
+            self->arena->nodes[bind].text4 = runtime::text::ct_intern(g_pat.bpath[i]);
+            if (!self->arena->nodes[bind].text || !self->arena->nodes[bind].text2
+                || !self->arena->nodes[bind].text3 || !self->arena->nodes[bind].text4) {
+                self->sup->pop_scope();
+                return self->sup->fail("out of memory");
+            }
+            if (self->sym->declare_var(self->arena->nodes[bind].text,
+                                       self->arena->nodes[bind].text2) != 0) {
+                const char *e = self->sym->last_error();
+                self->sup->pop_scope();
+                return self->sup->fail(e);
+            }
+            vi = self->sym->find_var(self->arena->nodes[bind].text);
+            if (vi >= 0) self->sym->vars[vi].initialized = 1;
+            self->arena->nodes[decl].text = runtime::text::ct_intern(g_pat.btype[i]);
+            self->arena->nodes[decl].text2 = runtime::text::ct_intern(g_pat.bname[i]);
+            self->arena->nodes[decl].aux = 3;
+            self->arena->nodes[decl].a = raw;
+            self->arena->nodes[raw].aux = 0;
+            self->arena->nodes[bind].a = decl;
+            self->arena->nodes[bind].b = raw;
+            self->arena->nodes[bind].next = -1;
+            if (first < 0) first = bind;
+            else self->arena->nodes[last].next = bind;
+            last = bind;
+        }
+        g_pat.bind_head = first;
+        (void)tail;
+        return 0;
+    }
+
     int match_ahead(void)
     {
         const char *p;
@@ -181,15 +1055,16 @@ impl StmtMatch for Stmt {
 
     int parse_match(void)
     {
-        int s, e, arms, tail, arm, adt, v, line, col, i;
+        int s, e, arms, tail, arm, adt, line, col, i;
         int *covered;
-        int ncov, wild, seen_wild, is_ptr, a2;
-        int aline, acol;
+        int ncov, wild, seen_catch, is_ptr, kind, si, ptr;
+        int arm_line, arm_col, body;
+        int arm_num, arm_bind;
+        const char *arm_sig, *arm_conds, *arm_name;
+        int a, b;
         const char *tybuf = "";
-        const char *tname = "";
-        const char *aname = "";
-        const char *rn = "";
-        const char *vname;
+        const char *subject = "";
+        char *subjbuf;
         char msg[3 * MAX_TEXT];
         struct Adt *adts;
         int nadts;
@@ -210,47 +1085,68 @@ impl StmtMatch for Stmt {
             return tool::diag::ct_sem_error(line, col,
                 "cannot determine the type of the match subject", self->mem->path);
         {
-            const char *b;
+            const char *bp;
             size_t n;
-            b = tybuf;
-            while (*b == ' ' || *b == '\t') b++;
-            n = strlen(b);
+            bp = tybuf;
+            while (*bp == ' ' || *bp == '\t') bp++;
+            n = strlen(bp);
             is_ptr = 0;
-            while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '*')) {
-                if (b[n - 1] == '*') is_ptr = 1;
+            while (n > 0 && (bp[n - 1] == ' ' || bp[n - 1] == '*')) {
+                if (bp[n - 1] == '*') is_ptr = 1;
                 n--;
             }
-            if (n >= 7 && strncmp(b, "struct ", 7) == 0) {
-                b += 7;
-                n -= 7;
-            }
-            tname = runtime::text::ct_intern_len(b, (int)n);
-            if (!tname) return self->sup->fail("out of memory");
+            subjbuf = (char *)malloc(n + 1);
+            if (!subjbuf) return self->sup->fail("out of memory");
+            memcpy(subjbuf, bp, n);
+            subjbuf[n] = 0;
+            subject = runtime::text::ct_intern(subjbuf);
+            free(subjbuf);
+            if (!subject) return self->sup->fail("out of memory");
         }
-        adt = frontend::sym::ct_adt_from_type(tname);
-        if (adt < 0) {
-            snprintf(msg, sizeof msg, "match needs an ADT value, but '%s' is not an ADT",
+        adt = frontend::sym::ct_adt_from_type(subject);
+        kind = self->pat_classify(subject, &adt, &si, &ptr);
+        if (kind != PAT_K_OTHER && kind != PAT_K_PTR
+            && is_ptr && adt < 0 && kind != PAT_K_STRUCT) {
+            /* a pointer to a scalar has no pattern surface (a pointer to a
+               struct is read through `->`; an ADT pointer keeps its variants) */
+            kind = PAT_K_PTR;
+        }
+        if (kind == PAT_K_OTHER || kind == PAT_K_PTR) {
+            snprintf(msg, sizeof msg,
+                     "match needs an ADT, struct, or integer-like value, but '%s' is not supported",
                      tybuf);
             return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
         }
-        adts = frontend::sym::ct_adts(&nadts);
-        /* S1a-0 C3: the variant count is dynamic, so the coverage scratch grows
-           with it instead of stopping at a fixed 96 rows. */
-        covered = calloc((size_t)(adts[adt].nvariants > 0 ? adts[adt].nvariants : 1),
-                         sizeof(*covered));
-        if (!covered) return self->sup->fail("out of memory");
-        for (i = 0; i < adts[adt].nvariants; i++) covered[i] = 0;
+        if (adt >= 0) {
+            adts = frontend::sym::ct_adts(&nadts);
+            covered = calloc((size_t)(adts[adt].nvariants > 0 ? adts[adt].nvariants : 1),
+                             sizeof(*covered));
+            if (!covered) return self->sup->fail("out of memory");
+            for (i = 0; i < adts[adt].nvariants; i++) covered[i] = 0;
+        } else {
+            adts = (struct Adt *)0;
+            nadts = 0;
+            covered = (int *)calloc(1, sizeof(*covered));
+            if (!covered) return self->sup->fail("out of memory");
+        }
         ncov = 0;
         wild = -1;
-        seen_wild = 0;
-        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{")))
+        seen_catch = 0;
+        if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("{"))) {
+            free(covered);
             return self->sup->fail("expected a block after match (...)");
+        }
         self->sup->lex_next();
         s = self->sup->new_node(N_MATCH);
-        if (s < 0) return -1;
-        self->arena->nodes[s].text = runtime::text::ct_intern(adts[adt].full);
-        if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
-        self->arena->nodes[s].aux = is_ptr;
+        if (s < 0) { free(covered); return -1; }
+        self->arena->nodes[s].text = adt >= 0
+            ? runtime::text::ct_intern(adts[adt].full) : "";
+        self->arena->nodes[s].text2 = adt >= 0 ? "" : subject;
+        if (!self->arena->nodes[s].text || !self->arena->nodes[s].text2) {
+            free(covered);
+            return self->sup->fail("out of memory");
+        }
+        self->arena->nodes[s].aux = (is_ptr ? 1 : 0) | (adt < 0 ? 4 : 0);
         self->arena->nodes[s].a = e;
         self->arena->nodes[s].line = line;
         self->arena->nodes[s].num = col;
@@ -258,214 +1154,151 @@ impl StmtMatch for Stmt {
         tail = -1;
         while (self->lex->tok != T_EOF
                && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
-            int arm_line, arm_col;
             arm_line = self->lex->tokline;
             arm_col = self->lex->tokstart - self->lex->lstart + 1;
-            if (self->lex->tok == T_ID && self->lex->tok_is("_")) {
-                int body;
-                if (seen_wild)
+            arm_num = -1;
+            arm_sig = "";
+            arm_conds = "";
+            arm_name = "";
+            arm_bind = -1;
+            if (self->pat_begin(adt, subject, is_ptr) != 0) { free(covered); return -1; }
+            if (self->pat_parse_top() != 0) { free(covered); return -1; }
+            if (g_pat.root_wild) {
+                if (seen_catch) {
+                    free(covered);
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "duplicate wildcard match arm", self->mem->path);
-                seen_wild = 1;
-                self->sup->lex_next();
-                if (self->sup->expect("=>") != 0) return -1;
+                }
+                seen_catch = 1;
+                if (self->sup->expect("=>") != 0) { free(covered); return -1; }
                 body = self->parse_block();
-                if (body < 0) return -1;
+                if (body < 0) { free(covered); return -1; }
                 arm = self->sup->new_node(N_ARM);
-                if (arm < 0) return -1;
+                if (arm < 0) { free(covered); return -1; }
                 self->arena->nodes[arm].aux = 1;
                 self->arena->nodes[arm].b = body;
+                self->arena->nodes[arm].text4 = "";
+                self->arena->nodes[arm].d = -1;
+                self->arena->nodes[arm].num = -1;
                 self->arena->nodes[arm].line = arm_line;
-                self->arena->nodes[arm].num = arm_col;
+                self->arena->nodes[arm].attr = arm_col;
+                self->arena->nodes[arm].num = -1;
                 wild = arm;
             } else {
-                int body, nb, first_bind, last_bind, w;
-                int nbind;
-                const char **bind_names;
-                if (seen_wild)
+                if (seen_catch) {
+                    free(covered);
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
-                if (self->lex->tok != T_ID) return self->sup->fail("expected a match arm");
-                aname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                     self->lex->tokstr.len);
-                if (!aname) return self->sup->fail("out of memory");
-                aline = self->lex->tokline;
-                acol = self->lex->tokstart - self->lex->lstart + 1;
-                rn = self->sym->resolve_type_text(aname);
-                if (!rn)
-                    return self->sup->fail("unknown ADT type in a match arm");
-                a2 = frontend::sym::ct_adt_from_type(rn);
-                if (a2 < 0) {
-                    snprintf(msg, sizeof msg,
-                             "match arm names '%s', which is not an ADT", aname);
-                    return tool::diag::ct_sem_error(aline, acol, msg, self->mem->path);
                 }
-                if (a2 != adt) {
-                    snprintf(msg, sizeof msg,
-                             "match arm names ADT '%s', but the subject is '%s'",
-                             adts[a2].name, adts[adt].name);
-                    return tool::diag::ct_sem_error(aline, acol, msg, self->mem->path);
-                }
-                self->sup->lex_next();
-                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
-                    return self->sup->fail("expected '.' after the ADT name");
-                self->sup->lex_next();
-                if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name");
-                vname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                     self->lex->tokstr.len);
-                if (!vname) return self->sup->fail("out of memory");
-                v = frontend::sym::ct_adt_variant(adt, vname);
-                if (v < 0) {
-                    snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'",
-                             vname, adts[adt].name);
-                    return tool::diag::ct_sem_error(self->lex->tokline,
-                        self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
-                }
-                if (covered[v]) {
-                    snprintf(msg, sizeof msg, "duplicate match arm for variant '%s.%s'",
-                             adts[adt].name, vname);
-                    return tool::diag::ct_sem_error(aline, acol, msg, self->mem->path);
-                }
-                covered[v] = 1;
-                ncov++;
-                self->sup->lex_next();
-                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
-                    return self->sup->fail("expected '(' after a variant name");
-                self->sup->lex_next();
-                first_bind = -1;
-                last_bind = -1;
-                nb = 0;
-                /* S1a-0 C3: the binding-name block grows on demand. It starts
-                   above the old 8-slot fixed array, and it is NOT bounded by
-                   the payload field count: a mismatched arm must still reach
-                   the arity diagnostic below ("binds 2 names, but the variant
-                   has 1 field"), not a generic capacity failure. */
-                nbind = adts[adt].variants[v].nfields > 8
-                            ? adts[adt].variants[v].nfields : 8;
-                /* S1a-0 C2p-7: the binding names are pool texts in a grown
-                   pointer row, so a 2000-byte binding name is declared whole
-                   (the old `calloc(nbind, MAX_TEXT)` + `tok_copy` cut it). */
-                bind_names = frontend::sym::ct_text_rows_reserve((const char **)0,
-                                                              0, nbind, &nbind);
-                if (!bind_names && nbind <= 0) return self->sup->fail("out of memory");
-                while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
-                    int ncap;
-                    const char *bname;
-                    if (self->lex->tok != T_ID)
-                        return self->sup->fail("expected a binding name");
-                    if (nb >= nbind) {
-                        ncap = nbind > CAP_LIMIT / 2
-                                   ? CAP_LIMIT : nbind * 2;
-                        if (nb >= ncap)
-                            return self->sup->fail("too many bindings in one match arm");
-                        bind_names = frontend::sym::ct_text_rows_reserve(
-                            bind_names, nbind, ncap, &ncap);
-                        nbind = ncap;
+                if (adt >= 0 && g_pat.root_variant >= 0 && g_pat.root_irref) {
+                    if (covered[g_pat.root_variant]) {
+                        snprintf(msg, sizeof msg,
+                                 "duplicate match arm for variant '%s.%s'",
+                                 adts[adt].name,
+                                 adts[adt].variants[g_pat.root_variant].name);
+                        free(covered);
+                        return tool::diag::ct_sem_error(arm_line, arm_col, msg,
+                                                        self->mem->path);
                     }
-                    bname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                         self->lex->tokstr.len);
-                    if (!bname) return self->sup->fail("out of memory");
-                    for (w = 0; w < nb; w++)
-                        if (strcmp(bind_names[w], bname) == 0) {
-                            return tool::diag::ct_sem_error(self->lex->tokline,
-                                self->lex->tokstart - self->lex->lstart + 1,
-                                tool::sh::ct_scratch_fmt(
-                                    "duplicate binding '%s' in a match arm", bname),
-                                self->mem->path);
-                        }
-                    bind_names[nb] = bname;
-                    w = self->sup->new_node(N_BIND);
-                    if (w < 0) return -1;
-                    self->arena->nodes[w].text = bname;
-                    if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
-                    if (first_bind < 0) first_bind = w;
-                    else self->arena->nodes[last_bind].next = w;
-                    last_bind = w;
-                    nb++;
-                    self->sup->lex_next();
-                    if (self->sup->accept(",")) continue;
-                    break;
+                    covered[g_pat.root_variant] = 1;
+                    ncov++;
                 }
-                if (self->sup->expect(")") != 0) return -1;
-                if (nb != adts[adt].variants[v].nfields) {
-                    snprintf(msg, sizeof msg,
-                             "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s",
-                             adts[adt].name, vname, nb, nb == 1 ? "" : "s",
-                             adts[adt].variants[v].nfields,
-                             adts[adt].variants[v].nfields == 1 ? "" : "s");
-                    return tool::diag::ct_sem_error(aline, acol, msg, self->mem->path);
+                if (g_pat.root_catch) seen_catch = 1;
+                /* The arm body may hold a nested match, whose parser reuses
+                   this same scratch. Freeze the arm's facts before the body. */
+                arm_num = g_pat.root_variant;
+                arm_sig = runtime::text::ct_intern(g_pat.sig ? g_pat.sig : "");
+                arm_conds = runtime::text::ct_intern(g_pat.conds ? g_pat.conds : "");
+                if (adt >= 0 && arm_num >= 0)
+                    arm_name = runtime::text::ct_intern(adts[adt].variants[arm_num].name);
+                else
+                    arm_name = runtime::text::ct_intern(subject);
+                if (!arm_sig || !arm_conds || !arm_name) {
+                    free(covered);
+                    return self->sup->fail("out of memory");
                 }
-                if (self->sup->expect("=>") != 0) return -1;
-                if (self->sup->push_scope() != 0) return -1;
-                w = 0;
-                for (i = first_bind; i >= 0; i = self->arena->nodes[i].next, w++) {
-                    int vi, decl, raw;
-                    self->arena->nodes[i].text2 = runtime::text::ct_intern(adts[adt].variants[v].fields[w].type);
-                    if (!self->arena->nodes[i].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[i].text3 = runtime::text::ct_intern(adts[adt].variants[v].fields[w].name);
-                    if (!self->arena->nodes[i].text3) return self->sup->fail("out of memory");
-                    if (self->sym->declare_var(self->arena->nodes[i].text,
-                                               self->arena->nodes[i].text2) != 0) {
-                        self->sup->pop_scope();
-                        return self->sup->fail(self->sym->last_error());
-                    }
-                    vi = self->sym->find_var(self->arena->nodes[i].text);
-                    if (vi >= 0) self->sym->vars[vi].initialized = 1;
-                    decl = self->sup->new_node(N_DECL);
-                    raw = self->sup->new_node(N_RAW);
-                    if (decl < 0 || raw < 0) {
-                        self->sup->pop_scope();
-                        return -1;
-                    }
-                    self->arena->nodes[decl].text = runtime::text::ct_intern(self->arena->nodes[i].text2);
-                    if (!self->arena->nodes[decl].text) return self->sup->fail("out of memory");
-                    self->arena->nodes[decl].text2 = runtime::text::ct_intern(self->arena->nodes[i].text);
-                    if (!self->arena->nodes[decl].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[decl].aux = 3;   /* unused marker */
-                    self->arena->nodes[decl].a = raw;
-                    self->arena->nodes[raw].aux = 0;
-                    self->arena->nodes[i].a = decl;
-                    self->arena->nodes[i].b = raw;
+                if (self->pat_commit() != 0) { free(covered); return -1; }
+                arm_bind = g_pat.bind_head;
+                if (self->sup->expect("=>") != 0) {
+                    self->sup->pop_scope();
+                    free(covered);
+                    return -1;
                 }
                 body = self->parse_block();
                 self->sup->pop_scope();
-                if (body < 0) return -1;
+                if (body < 0) { free(covered); return -1; }
                 arm = self->sup->new_node(N_ARM);
-                if (arm < 0) return -1;
-                self->arena->nodes[arm].text = runtime::text::ct_intern(vname);
-                if (!self->arena->nodes[arm].text) return self->sup->fail("out of memory");
-                self->arena->nodes[arm].text2 = runtime::text::ct_intern(adts[adt].variants[v].cname);
-                if (!self->arena->nodes[arm].text2) return self->sup->fail("out of memory");
-                self->arena->nodes[arm].text3 = runtime::text::ct_intern(adts[adt].full);
-                if (!self->arena->nodes[arm].text3) return self->sup->fail("out of memory");
-                self->arena->nodes[arm].num = v;
-                self->arena->nodes[arm].a = first_bind;
+                if (arm < 0) { free(covered); return -1; }
+                self->arena->nodes[arm].num = arm_num;
+                self->arena->nodes[arm].text = arm_name;
+                self->arena->nodes[arm].text2 = arm_sig;
+                self->arena->nodes[arm].text3 = adt >= 0
+                    ? runtime::text::ct_intern(adts[adt].full) : "";
+                self->arena->nodes[arm].text4 = arm_conds;
+                if (!self->arena->nodes[arm].text || !self->arena->nodes[arm].text2
+                    || !self->arena->nodes[arm].text3 || !self->arena->nodes[arm].text4) {
+                    free(covered);
+                    return self->sup->fail("out of memory");
+                }
+                self->arena->nodes[arm].aux = (adt < 0 ? 4 : 0);
+                self->arena->nodes[arm].a = arm_bind;
                 self->arena->nodes[arm].b = body;
-                self->arena->nodes[arm].line = aline;
+                self->arena->nodes[arm].d = -1;   /* the descriptor tree is parse-time only */
+                self->arena->nodes[arm].c = -1;
+                self->arena->nodes[arm].attr = arm_col;
+                self->arena->nodes[arm].line = arm_line;
             }
             if (arms < 0) arms = arm;
             else self->arena->nodes[tail].next = arm;
             tail = arm;
         }
-        if (self->sup->expect("}") != 0) return -1;
+        if (self->sup->expect("}") != 0) { free(covered); return -1; }
         self->arena->nodes[s].b = arms;
-        /* exhaustiveness: `_` is the only fallback, and it has to be written */
-        if (wild < 0) {
-            for (i = 0; i < adts[adt].nvariants; i++) {
-                if (covered[i]) continue;
-                snprintf(msg, sizeof msg, "match does not cover variant '%s.%s'"
-                         " (add the arm or write '_ => { … }')",
-                         adts[adt].name, adts[adt].variants[i].name);
-                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        /* the same complete pattern twice is a mistake even when it is not an
+           irrefutable variant arm (e.g. two `Circle(0)` arms) */
+        for (a = arms; a >= 0; a = self->arena->nodes[a].next) {
+            if (self->arena->nodes[a].aux & 1) continue;
+            for (b = self->arena->nodes[a].next; b >= 0; b = self->arena->nodes[b].next) {
+                if (self->arena->nodes[b].aux & 1) continue;
+                if (self->arena->nodes[a].text2 && self->arena->nodes[b].text2
+                    && strcmp(self->arena->nodes[a].text2,
+                              self->arena->nodes[b].text2) == 0) {
+                    snprintf(msg, sizeof msg, "duplicate match arm pattern '%s'",
+                             self->arena->nodes[b].text2);
+                    free(covered);
+                    return tool::diag::ct_sem_error(self->arena->nodes[b].line,
+                        self->arena->nodes[b].attr, msg, self->mem->path);
+                }
             }
-        } else if (self->ex->types_mode && *self->ex->types_mode && ncov == adts[adt].nvariants) {
-            /* R84-2: the wildcard hides a variant being added later */
-            snprintf(msg, sizeof msg,
-                     "match covers every variant of '%s'; the wildcard arm is unnecessary",
-                     adts[adt].name);
-            if (tool::diag::ct_type_warn(line, col, "", msg, self->mem->path) != 0)
-                return -1;
         }
+        if (adt >= 0) {
+            /* exhaustiveness: `_` / a root binder is the only catch-all */
+            if (wild < 0 && !seen_catch) {
+                for (i = 0; i < adts[adt].nvariants; i++) {
+                    if (covered[i]) continue;
+                    snprintf(msg, sizeof msg, "match does not cover variant '%s.%s'"
+                             " (add the arm or write '_ => { … }')",
+                             adts[adt].name, adts[adt].variants[i].name);
+                    free(covered);
+                    return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                }
+            } else if (self->ex->types_mode && *self->ex->types_mode
+                       && ncov == adts[adt].nvariants) {
+                snprintf(msg, sizeof msg,
+                         "match covers every variant of '%s'; the wildcard arm is unnecessary",
+                         adts[adt].name);
+                if (tool::diag::ct_type_warn(line, col, "", msg, self->mem->path) != 0) {
+                    free(covered);
+                    return -1;
+                }
+            }
+        } else if (!seen_catch) {
+            snprintf(msg, sizeof msg,
+                     "match on '%s' needs a final '_ => { … }' arm", subject);
+            free(covered);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+        free(covered);
         return s;
     }
 
@@ -521,16 +1354,15 @@ impl StmtMatch for Stmt {
 
     int parse_match_expr(void)
     {
-        int s, e, arms, tail, arm, adt, v, line, col, i;
+        int s, e, arms, tail, arm, adt, line, col, i;
         int *covered;
-        int ncov, wild, seen_wild, is_ptr, a2;
+        int ncov, wild, seen_wild, is_ptr;
         int body, asg, yexpr, have_type, ytyped, block_form;
         int yline, ycol;
+        int arm_wild, arm_catch;
+        const char *arm_sig, *arm_conds;
         const char *tybuf = "";
         const char *tname = "";
-        const char *aname = "";
-        const char *rn = "";
-        const char *vname;
         char msg[3 * MAX_TEXT];
         const char *rtype = "";
         const char *rkey = "";
@@ -607,170 +1439,53 @@ impl StmtMatch for Stmt {
                && !(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
             int arm_line, arm_col, variant;
             int bind_head;
+            int pushed;
             arm_line = self->lex->tokline;
             arm_col = self->lex->tokstart - self->lex->lstart + 1;
-            bind_head = -1;
             variant = -1;
-            if (self->lex->tok == T_ID && self->lex->tok_is("_")) {
+            bind_head = -1;
+            pushed = 0;
+            arm_wild = 0;
+            arm_catch = 0;
+            arm_sig = "";
+            arm_conds = "";
+            if (self->pat_begin(adt, tname, is_ptr) != 0) return -1;
+            if (self->pat_parse_top() != 0) return -1;
+            if (g_pat.root_wild) {
                 if (seen_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "duplicate wildcard match arm", self->mem->path);
                 seen_wild = 1;
-                self->sup->lex_next();
+                arm_wild = 1;
+                arm_catch = 1;
             } else {
-                int nb, first_bind, last_bind, w;
-                int nbind;
-                const char **bind_names;
                 if (seen_wild)
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
-                if (self->lex->tok != T_ID) return self->sup->fail("expected a match arm");
-                aname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                     self->lex->tokstr.len);
-                if (!aname) return self->sup->fail("out of memory");
-                rn = self->sym->resolve_type_text(aname);
-                if (!rn)
-                    return self->sup->fail("unknown ADT type in a match arm");
-                a2 = frontend::sym::ct_adt_from_type(rn);
-                if (a2 < 0) {
-                    snprintf(msg, sizeof msg,
-                             "match arm names '%s', which is not an ADT", aname);
-                    return tool::diag::ct_sem_error(arm_line, arm_col, msg, self->mem->path);
-                }
-                if (a2 != adt) {
-                    snprintf(msg, sizeof msg,
-                             "match arm names ADT '%s', but the subject is '%s'",
-                             adts[a2].name, adts[adt].name);
-                    return tool::diag::ct_sem_error(arm_line, arm_col, msg, self->mem->path);
-                }
-                self->sup->lex_next();
-                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
-                    return self->sup->fail("expected '.' after the ADT name");
-                self->sup->lex_next();
-                if (self->lex->tok != T_ID) return self->sup->fail("expected a variant name");
-                vname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                     self->lex->tokstr.len);
-                if (!vname) return self->sup->fail("out of memory");
-                v = frontend::sym::ct_adt_variant(adt, vname);
-                if (v < 0) {
-                    snprintf(msg, sizeof msg, "unknown variant '%s' of ADT '%s'",
-                             vname, adts[adt].name);
-                    return tool::diag::ct_sem_error(self->lex->tokline,
-                        self->lex->tokstart - self->lex->lstart + 1, msg, self->mem->path);
-                }
-                if (covered[v]) {
-                    snprintf(msg, sizeof msg, "duplicate match arm for variant '%s.%s'",
-                             adts[adt].name, vname);
-                    return tool::diag::ct_sem_error(arm_line, arm_col, msg, self->mem->path);
-                }
-                covered[v] = 1;
-                ncov++;
-                self->sup->lex_next();
-                if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
-                    return self->sup->fail("expected '(' after a variant name");
-                self->sup->lex_next();
-                first_bind = -1;
-                last_bind = -1;
-                nb = 0;
-                /* S1a-0 C3: the binding-name block grows on demand. It starts
-                   above the old 8-slot fixed array, and it is NOT bounded by
-                   the payload field count: a mismatched arm must still reach
-                   the arity diagnostic below ("binds 2 names, but the variant
-                   has 1 field"), not a generic capacity failure. */
-                nbind = adts[adt].variants[v].nfields > 8
-                            ? adts[adt].variants[v].nfields : 8;
-                /* S1a-0 C2p-7: the binding names are pool texts in a grown
-                   pointer row, so a 2000-byte binding name is declared whole
-                   (the old `calloc(nbind, MAX_TEXT)` + `tok_copy` cut it). */
-                bind_names = frontend::sym::ct_text_rows_reserve((const char **)0,
-                                                              0, nbind, &nbind);
-                if (!bind_names && nbind <= 0) return self->sup->fail("out of memory");
-                while (!(self->lex->tok == T_PUNCT && self->lex->tok_is(")"))) {
-                    int ncap;
-                    const char *bname;
-                    if (self->lex->tok != T_ID)
-                        return self->sup->fail("expected a binding name");
-                    if (nb >= nbind) {
-                        ncap = nbind > CAP_LIMIT / 2
-                                   ? CAP_LIMIT : nbind * 2;
-                        if (nb >= ncap)
-                            return self->sup->fail("too many bindings in one match arm");
-                        bind_names = frontend::sym::ct_text_rows_reserve(
-                            bind_names, nbind, ncap, &ncap);
-                        nbind = ncap;
+                if (g_pat.root_variant >= 0 && g_pat.root_irref) {
+                    if (covered[g_pat.root_variant]) {
+                        snprintf(msg, sizeof msg,
+                                 "duplicate match arm for variant '%s.%s'",
+                                 adts[adt].name,
+                                 adts[adt].variants[g_pat.root_variant].name);
+                        return tool::diag::ct_sem_error(arm_line, arm_col, msg,
+                                                        self->mem->path);
                     }
-                    bname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
-                                                         self->lex->tokstr.len);
-                    if (!bname) return self->sup->fail("out of memory");
-                    for (w = 0; w < nb; w++)
-                        if (strcmp(bind_names[w], bname) == 0) {
-                            return tool::diag::ct_sem_error(self->lex->tokline,
-                                self->lex->tokstart - self->lex->lstart + 1,
-                                tool::sh::ct_scratch_fmt(
-                                    "duplicate binding '%s' in a match arm", bname),
-                                self->mem->path);
-                        }
-                    bind_names[nb] = bname;
-                    w = self->sup->new_node(N_BIND);
-                    if (w < 0) return -1;
-                    self->arena->nodes[w].text = bname;
-                    if (!self->arena->nodes[w].text) return self->sup->fail("out of memory");
-                    if (first_bind < 0) first_bind = w;
-                    else self->arena->nodes[last_bind].next = w;
-                    last_bind = w;
-                    nb++;
-                    self->sup->lex_next();
-                    if (self->sup->accept(",")) continue;
-                    break;
+                    covered[g_pat.root_variant] = 1;
+                    ncov++;
                 }
-                if (self->sup->expect(")") != 0) return -1;
-                if (nb != adts[adt].variants[v].nfields) {
-                    snprintf(msg, sizeof msg,
-                             "match arm for '%s.%s' binds %d name%s, but the variant has %d field%s",
-                             adts[adt].name, vname, nb, nb == 1 ? "" : "s",
-                             adts[adt].variants[v].nfields,
-                             adts[adt].variants[v].nfields == 1 ? "" : "s");
-                    return tool::diag::ct_sem_error(arm_line, arm_col, msg, self->mem->path);
-                }
-                variant = v;
-                bind_head = first_bind;
-                (void)last_bind;
+                if (g_pat.root_catch) seen_wild = 1;
+                if (self->pat_commit() != 0) return -1;
+                pushed = 1;
+                variant = g_pat.root_variant;
+                bind_head = g_pat.bind_head;
+                arm_wild = g_pat.root_wild;
+                arm_catch = g_pat.root_catch;
+                arm_sig = runtime::text::ct_intern(g_pat.sig ? g_pat.sig : "");
+                arm_conds = runtime::text::ct_intern(g_pat.conds ? g_pat.conds : "");
+                if (!arm_sig || !arm_conds) return self->sup->fail("out of memory");
             }
             if (self->sup->expect("=>") != 0) return -1;
-            if (variant >= 0) {
-                int w;
-                if (self->sup->push_scope() != 0) return -1;
-                w = 0;
-                for (i = bind_head; i >= 0; i = self->arena->nodes[i].next, w++) {
-                    int vi, decl, raw;
-                    self->arena->nodes[i].text2 = runtime::text::ct_intern(adts[adt].variants[variant].fields[w].type);
-                    if (!self->arena->nodes[i].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[i].text3 = runtime::text::ct_intern(adts[adt].variants[variant].fields[w].name);
-                    if (!self->arena->nodes[i].text3) return self->sup->fail("out of memory");
-                    if (self->sym->declare_var(self->arena->nodes[i].text,
-                                               self->arena->nodes[i].text2) != 0) {
-                        self->sup->pop_scope();
-                        return self->sup->fail(self->sym->last_error());
-                    }
-                    vi = self->sym->find_var(self->arena->nodes[i].text);
-                    if (vi >= 0) self->sym->vars[vi].initialized = 1;
-                    decl = self->sup->new_node(N_DECL);
-                    raw = self->sup->new_node(N_RAW);
-                    if (decl < 0 || raw < 0) {
-                        self->sup->pop_scope();
-                        return -1;
-                    }
-                    self->arena->nodes[decl].text = runtime::text::ct_intern(self->arena->nodes[i].text2);
-                    if (!self->arena->nodes[decl].text) return self->sup->fail("out of memory");
-                    self->arena->nodes[decl].text2 = runtime::text::ct_intern(self->arena->nodes[i].text);
-                    if (!self->arena->nodes[decl].text2) return self->sup->fail("out of memory");
-                    self->arena->nodes[decl].aux = 3;   /* unused marker */
-                    self->arena->nodes[decl].a = raw;
-                    self->arena->nodes[raw].aux = 0;
-                    self->arena->nodes[i].a = decl;
-                    self->arena->nodes[i].b = raw;
-                }
-            }
             yexpr = -1;
             ytyped = 0;
             block_form = 0;
@@ -782,7 +1497,7 @@ impl StmtMatch for Stmt {
                 self->match_arm_pending = 1;
                 body = self->parse_block();
                 if (body < 0) {
-                    if (variant >= 0) self->sup->pop_scope();
+                    if (pushed) self->sup->pop_scope();
                     return -1;
                 }
                 /* A `defer` / `own` in the arm would run before the value
@@ -794,7 +1509,7 @@ impl StmtMatch for Stmt {
                         || self->arena->nodes[q].kind == N_DELETE)
                         deferring = 1;
                 if (deferring && self->last_yield_count > 0) {
-                    if (variant >= 0) self->sup->pop_scope();
+                    if (pushed) self->sup->pop_scope();
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "defer / own is not supported inside an expression-match arm",
                         self->mem->path);
@@ -814,7 +1529,7 @@ impl StmtMatch for Stmt {
                                       || self->arena->nodes[last].kind == N_CONT)) {
                         yexpr = -1;             /* diverging arm */
                     } else {
-                        if (variant >= 0) self->sup->pop_scope();
+                        if (pushed) self->sup->pop_scope();
                         return tool::diag::ct_sem_error(arm_line, arm_col,
                             "an expression-match arm must yield a value (add 'yield <expr>;' or end with 'return')",
                             self->mem->path);
@@ -829,7 +1544,7 @@ impl StmtMatch for Stmt {
                 self->ex->try_ban--;
                 self->ex->assign_ok = 0;
                 if (yexpr < 0) {
-                    if (variant >= 0) self->sup->pop_scope();
+                    if (pushed) self->sup->pop_scope();
                     return -1;
                 }
                 {
@@ -837,7 +1552,7 @@ impl StmtMatch for Stmt {
                     if (self->sup->expr_type_text(yexpr, &ytype) != 0) {
                         ytype = self->ex->chk_type_text(yexpr, &yz);
                         if (!ytype) {
-                            if (variant >= 0) self->sup->pop_scope();
+                            if (pushed) self->sup->pop_scope();
                             return tool::diag::ct_sem_error(yline, ycol,
                                 "cannot determine the type yielded by this match arm",
                                 self->mem->path);
@@ -847,7 +1562,7 @@ impl StmtMatch for Stmt {
                 }
                 body = self->sup->new_node(N_BLOCK);
                 if (body < 0) {
-                    if (variant >= 0) self->sup->pop_scope();
+                    if (pushed) self->sup->pop_scope();
                     return -1;
                 }
                 self->arena->nodes[body].a = -1;
@@ -855,7 +1570,7 @@ impl StmtMatch for Stmt {
             asg = -1;
             if (yexpr >= 0) {
                 if (!ytyped) {
-                    if (variant >= 0) self->sup->pop_scope();
+                    if (pushed) self->sup->pop_scope();
                     return tool::diag::ct_sem_error(yline, ycol,
                         "cannot determine the type yielded by this match arm",
                         self->mem->path);
@@ -870,7 +1585,7 @@ impl StmtMatch for Stmt {
                     rkey = ykey;
                     have_type = 1;
                 } else if (strcmp(ykey, rkey) != 0) {
-                    if (variant >= 0) self->sup->pop_scope();
+                    if (pushed) self->sup->pop_scope();
                     snprintf(msg, sizeof msg,
                              "match arm yields '%s', but an earlier arm yields '%s'",
                              ytype, rtype);
@@ -884,7 +1599,7 @@ impl StmtMatch for Stmt {
                     tv = self->sup->new_node(N_VAR);
                     asg = self->sup->new_node(N_ASSIGN);
                     if (tv < 0 || asg < 0) {
-                        if (variant >= 0) self->sup->pop_scope();
+                        if (pushed) self->sup->pop_scope();
                         return -1;
                     }
                     self->arena->nodes[tv].text2 = runtime::text::ct_intern("__ct_mres");
@@ -906,26 +1621,32 @@ impl StmtMatch for Stmt {
             }
             arm = self->sup->new_node(N_ARM);
             if (arm < 0) {
-                if (variant >= 0) self->sup->pop_scope();
+                if (pushed) self->sup->pop_scope();
                 return -1;
             }
-            self->arena->nodes[arm].aux = (variant < 0 ? 1 : 0) | 2;
+            self->arena->nodes[arm].aux = ((variant < 0 && arm_wild) ? 1 : 0) | 2;
             self->arena->nodes[arm].num = variant;
             self->arena->nodes[arm].a = bind_head;
             self->arena->nodes[arm].b = body;
             self->arena->nodes[arm].c = asg;
             self->arena->nodes[arm].line = arm_line;
-            self->arena->nodes[arm].num = (variant < 0) ? -1 : variant;
+            self->arena->nodes[arm].attr = arm_col;
+            self->arena->nodes[arm].d = -1;   /* the descriptor tree is parse-time only */
+            self->arena->nodes[arm].text4 = arm_conds;
             if (variant >= 0) {
-                self->arena->nodes[arm].text = runtime::text::ct_intern(vname);
-                if (!self->arena->nodes[arm].text) return self->sup->fail("out of memory");
-                self->arena->nodes[arm].text2 = runtime::text::ct_intern(adts[adt].variants[variant].cname);
-                if (!self->arena->nodes[arm].text2) return self->sup->fail("out of memory");
+                self->arena->nodes[arm].text = runtime::text::ct_intern(
+                    adts[adt].variants[variant].name);
                 self->arena->nodes[arm].text3 = runtime::text::ct_intern(adts[adt].full);
-                if (!self->arena->nodes[arm].text3) return self->sup->fail("out of memory");
+            } else {
+                self->arena->nodes[arm].text = runtime::text::ct_intern(tname);
+                self->arena->nodes[arm].text3 = runtime::text::ct_intern(adts[adt].full);
             }
-            if (variant < 0) wild = arm;
-            if (variant >= 0) self->sup->pop_scope();
+            self->arena->nodes[arm].text2 = arm_sig;
+            if (!self->arena->nodes[arm].text || !self->arena->nodes[arm].text2
+                || !self->arena->nodes[arm].text3 || !self->arena->nodes[arm].text4)
+                return self->sup->fail("out of memory");
+            if (arm_wild || arm_catch) wild = arm;
+            if (pushed) self->sup->pop_scope();
             if (arms < 0) arms = arm;
             else self->arena->nodes[tail].next = arm;
             tail = arm;
