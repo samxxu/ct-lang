@@ -1,0 +1,9 @@
+struct P { int x; int y; }
+enum E { V(P p), N() }
+int f(E e)
+{
+    match (e) {
+        E.V(0) => { return 1; }
+        _ => { return 0; }
+    }
+}

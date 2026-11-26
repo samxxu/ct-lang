@@ -1,0 +1,55 @@
+/* 304: S4 nested variant patterns (v1-PH-2).
+   A payload position may hold another variant pattern; a pointer subject and
+   the expression form share the same pattern grammar. The coverage rule is
+   conservative: a refutable nested arm does not cover its outer variant, so
+   the `Box.One(_)` fallback is written out. */
+#include <stdio.h>
+
+enum Val { Leaf(int n), Pair(int a, int b), None() }
+enum Box { One(Val v), Zero() }
+
+int sum(Box b)
+{
+    match (b) {
+        Box.One(Val.Leaf(0)) => { return 100; }
+        Box.One(Val.Leaf(n)) => { return n; }
+        Box.One(Val.Pair(0, _)) => { return 200; }
+        Box.One(Val.Pair(a, b)) => { return a + b; }
+        Box.One(Val.None()) => { return 300; }
+        Box.One(_) => { return 400; }
+        Box.Zero() => { return -1; }
+    }
+}
+
+int sum_ptr(Box *b)
+{
+    match (b) {
+        Box.One(Val.Leaf(n)) => { return n + 10; }
+        Box.One(Val.Pair(a, b)) => { return a + b + 20; }
+        Box.One(_) => { return 0; }
+        Box.Zero() => { return -1; }
+    }
+}
+
+int expr(Box b)
+{
+    return match (b) {
+        Box.One(Val.Leaf(0)) => 1,
+        Box.One(Val.Leaf(n)) => n + 1,
+        Box.One(Val.Pair(a, b)) => a + b + 2,
+        Box.One(_) => 0,
+        Box.Zero() => -1,
+    };
+}
+
+int main(void)
+{
+    printf("%d %d %d %d\n", sum(Box.One(Val.Leaf(0))), sum(Box.One(Val.Leaf(5))),
+           sum(Box.One(Val.Pair(0, 3))), sum(Box.One(Val.Pair(2, 3))));
+    printf("%d %d\n", sum(Box.One(Val.None())), sum(Box.Zero()));
+    Box p = Box.One(Val.Pair(4, 5));
+    printf("%d %d\n", sum_ptr(&p), sum_ptr(&p));
+    printf("%d %d %d\n", expr(Box.One(Val.Leaf(0))), expr(Box.One(Val.Leaf(5))),
+           expr(Box.One(Val.Pair(2, 3))));
+    return 0;
+}

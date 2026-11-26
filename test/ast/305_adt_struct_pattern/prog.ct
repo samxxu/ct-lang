@@ -1,0 +1,51 @@
+/* 305: S4 struct patterns (v1-PH-2).
+   A struct value or a struct payload can be destructured by field: an explicit
+   subpattern (`x: 0`), a shorthand binding (`y`), and `..` for the rest. A
+   pointer-to-struct subject reads the same fields through the match temp. */
+#include <stdio.h>
+
+struct Point { int x; int y; }
+enum Shape { At(Point p), Away() }
+
+int where(Shape s)
+{
+    match (s) {
+        Shape.At(Point { x: 0, y: 0 }) => { return 1; }
+        Shape.At(Point { x: 0, y }) => { return y; }
+        Shape.At(Point { x, y: 2 }) => { return x + 40; }
+        Shape.At(p) => { return p.x + p.y + 70; }
+        Shape.Away() => { return -2; }
+    }
+}
+
+int point(struct Point p)
+{
+    match (p) {
+        Point { x: 0, y } => { return y; }
+        Point { x, y: 2 } => { return x + 30; }
+        Point { .. } => { return 60; }
+    }
+}
+
+int point_ptr(Point *p)
+{
+    match (p) {
+        Point { x: 0, .. } => { return 100; }
+        _ => { return 200; }
+    }
+}
+
+int main(void)
+{
+    printf("%d %d %d %d\n", where(Shape.At((Point){0, 0})),
+           where(Shape.At((Point){0, 9})), where(Shape.At((Point){7, 2})),
+           where(Shape.At((Point){1, 1})));
+    printf("%d %d\n", where(Shape.Away()),
+           where(Shape.At((Point){3, 4})));
+    printf("%d %d %d\n", point((Point){0, 5}), point((Point){8, 2}),
+           point((Point){3, 4}));
+    Point a = {0, 1};
+    Point b = {5, 1};
+    printf("%d %d\n", point_ptr(&a), point_ptr(&b));
+    return 0;
+}

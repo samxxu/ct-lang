@@ -1,0 +1,8 @@
+struct P { int x; int y; }
+int f(P p)
+{
+    match (p) {
+        P { x: 1, z: 2 } => { return 1; }
+        _ => { return 0; }
+    }
+}

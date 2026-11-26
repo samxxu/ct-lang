@@ -1,0 +1,8 @@
+enum E { V(int *p), N() }
+int f(E e)
+{
+    match (e) {
+        E.V(0) => { return 1; }
+        _ => { return 0; }
+    }
+}

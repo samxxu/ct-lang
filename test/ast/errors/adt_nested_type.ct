@@ -1,0 +1,11 @@
+enum A { X(int n), Y() }
+enum B { Z(int n), W() }
+enum Box { One(A a), Zero() }
+int f(Box b)
+{
+    match (b) {
+        Box.One(B.Z(n)) => { return n; }
+        Box.One(_) => { return 0; }
+        Box.Zero() => { return -1; }
+    }
+}

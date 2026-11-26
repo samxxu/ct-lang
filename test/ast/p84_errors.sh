@@ -4,7 +4,9 @@
 # Exhaustiveness is the point of the construct, so every way of losing it is a
 # hard error at the offending position: a missing variant without `_`, a
 # duplicate arm, a variant from another ADT, a binding count that disagrees with
-# the payload, a wildcard that is not last, and a subject that is not an ADT.
+# the payload, a wildcard that is not last, and a subject outside the S4
+# surface (ADT / struct / integer family; the non-ADT cases below use a
+# floating value and a pointer, which S4 still rejects).
 #
 # Usage: bash test/ast/p84_errors.sh <ct-ast>
 #   E84-3 (missing / duplicate / unknown branches are positioned errors)
@@ -163,23 +165,23 @@ CT
 bad_case "a duplicate binding is an error" "$tmp/dupbind.ct" \
     "duplicate binding 'x' in a match arm" 6
 
-# ---- a subject that is not an ADT ------------------------------------------
+# ---- a subject outside the S4 surface -------------------------------------
 cat >"$tmp/nonadt.ct" <<'CT'
-int f(int n)
+int f(double n)
 {
     match (n) {
         _ => { return 0; }
     }
-    return n;
+    return 0;
 }
 
 int main(void)
 {
-    return f(1);
+    return f(1.0);
 }
 CT
-bad_case "a non-ADT subject is an error" "$tmp/nonadt.ct" \
-    "match needs an ADT value, but 'int' is not an ADT" 3
+bad_case "a floating subject is an error" "$tmp/nonadt.ct" \
+    "match needs an ADT, struct, or integer-like value, but 'double' is not supported" 3
 
 # ---- a pointer-to-non-ADT subject ------------------------------------------
 cat >"$tmp/nonadtp.ct" <<'CT'
@@ -198,7 +200,7 @@ int main(void)
 }
 CT
 bad_case "a pointer to a non-ADT is an error" "$tmp/nonadtp.ct" \
-    "match needs an ADT value, but 'int *' is not an ADT" 3
+    "match needs an ADT, struct, or integer-like value, but 'int *' is not supported" 3
 
 # ---- the alias subject reaches the ordinary missing-variant diagnostic ----
 cat >"$tmp/aliasmissing.ct" <<'CT'
@@ -233,7 +235,7 @@ int main(void)
 }
 CT
 bad_case "an alias of a non-ADT subject is an error" "$tmp/aliasint.ct" \
-    "match needs an ADT value, but 'Num' is not an ADT" 5
+    "match needs an ADT, struct, or integer-like value, but 'Num' is not supported" 5
 
 # ---- every diagnostic is the only one (no fallback cascade) -----------------
 if [ "$(grep -c 'error:' "$tmp/o")" -gt 2 ]; then

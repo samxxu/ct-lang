@@ -1,0 +1,67 @@
+/* 303: S4 literal patterns (v1-PH-2).
+   `match` on an integer-family value takes integer / character literal arms
+   and needs an explicit `_` fallback. The same literals are accepted inside a
+   variant payload, in statement and expression form. */
+#include <stdio.h>
+#include <stdbool.h>
+
+enum Mode { Off(), Level(int n) }
+
+int classify(int n)
+{
+    match (n) {
+        0 => { return 10; }
+        1 => { return 11; }
+        -1 => { return 12; }
+        _ => { return 99; }
+    }
+}
+
+int letter(char c)
+{
+    match (c) {
+        'a' => { return 1; }
+        'b' => { return 2; }
+        _ => { return 0; }
+    }
+}
+
+int flag(bool b)
+{
+    match (b) {
+        1 => { return 7; }
+        0 => { return 8; }
+        _ => { return 9; }
+    }
+}
+
+int mode(Mode m)
+{
+    match (m) {
+        Mode.Off() => { return 0; }
+        Mode.Level(0) => { return 100; }
+        Mode.Level(1) => { return 101; }
+        Mode.Level(_) => { return 200; }
+    }
+}
+
+int expr(Mode m)
+{
+    return match (m) {
+        Mode.Off() => 0,
+        Mode.Level(0) => 5,
+        Mode.Level(_) => 6,
+    };
+}
+
+int main(void)
+{
+    printf("%d %d %d %d\n", classify(0), classify(1), classify(-1), classify(7));
+    printf("%d %d %d\n", letter('a'), letter('b'), letter('c'));
+    printf("%d %d\n", flag(1), flag(0));
+    printf("%d %d %d %d\n", mode(Mode.Off()), mode(Mode.Level(0)),
+           mode(Mode.Level(1)), mode(Mode.Level(9)));
+    printf("%d %d %d\n", expr(Mode.Off()), expr(Mode.Level(0)),
+           expr(Mode.Level(9)));
+    return 0;
+}
