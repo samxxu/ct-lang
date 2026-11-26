@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 import backend::emit::Emitter;
+import backend::tir::TBuilder;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Unit;
@@ -2478,6 +2479,15 @@ impl ModuleOps for Module {
             if (tool::diag::ct_diag_leaks_failed()) {
                 tool::diag::ct_diag_emit(self->diag_json, 1);
                 return 1;
+            }
+            /* S1b-S1: the TIR shadow (CT_TIR=1). Every unit is built and
+               V1-V4 verified before the first product is opened, so a failure
+               writes no `.c`/`.h`. The default path is untouched. */
+            if (backend::tir::ct_tir_shadow_on()) {
+                for (u = 0; u < self->nunits; u++) {
+                    if (backend::tir::ct_tir_shadow_unit((void *)&self->units[u], u) != 0)
+                        return 1;
+                }
             }
             if (self->lib_mode) {
                 const char *od = self->outdir_opt ? self->outdir_opt : ".ctbuild";

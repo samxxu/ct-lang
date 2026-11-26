@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "Module.h"
 #include "Emitter.h"
+#include "TBuilder.h"
 #include "Memory.h"
 #include "Lexer.h"
 #include "Unit.h"
@@ -95,6 +96,25 @@ struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
+struct backend_tir_ct_tspan;
+struct backend_tir_ct_tunit;
+struct backend_tir_ct_tdecl;
+struct backend_tir_ct_ttype;
+struct backend_tir_ct_texpr;
+struct backend_tir_ct_tstmt;
+struct backend_tir_ct_tscope;
+struct backend_tir_ct_tvar;
+struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tinst;
+struct backend_tir_ct_tmember;
+struct backend_tir_ct_troot;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_tedge;
+struct backend_tir_ct_tgraph;
+struct backend_tir_ct_tmark;
+struct backend_tir_TModule;
+struct backend_verify_Verifier;
+struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -2050,6 +2070,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         if (tool_diag_ct_diag_leaks_failed()) {
             tool_diag_ct_diag_emit(_self->diag_json, 1);
             return 1;
+        }
+        if (backend_tir_ct_tir_shadow_on()) {
+            for (u = 0; u < _self->nunits; u++) {
+                if (backend_tir_ct_tir_shadow_unit((void *)((&_self->units[u])), u) != 0) {
+                    return 1;
+                }
+            }
         }
         if (_self->lib_mode) {
             const char * od = (_self->outdir_opt ? _self->outdir_opt : ".ctbuild");

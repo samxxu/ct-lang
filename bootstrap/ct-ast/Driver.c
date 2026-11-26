@@ -3,6 +3,7 @@
 #include "Driver.h"
 #include "ModuleBoundary.h"
 #include "Emitter.h"
+#include "TBuilder.h"
 #include "Memory.h"
 #include "Lexer.h"
 #include "Module.h"
@@ -72,6 +73,25 @@ struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
+struct backend_tir_ct_tspan;
+struct backend_tir_ct_tunit;
+struct backend_tir_ct_tdecl;
+struct backend_tir_ct_ttype;
+struct backend_tir_ct_texpr;
+struct backend_tir_ct_tstmt;
+struct backend_tir_ct_tscope;
+struct backend_tir_ct_tvar;
+struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tinst;
+struct backend_tir_ct_tmember;
+struct backend_tir_ct_troot;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_tedge;
+struct backend_tir_ct_tgraph;
+struct backend_tir_ct_tmark;
+struct backend_tir_TModule;
+struct backend_verify_Verifier;
+struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -808,6 +828,9 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
             return 1;
         }
         return 0;
+    }
+    if ((backend_tir_ct_tir_shadow_on() && (backend_tir_ct_tir_shadow_program(prog, in, _self->p->c_base, "", _self->p->unit_is_hdr, _self->p->unit_is_map) != 0))) {
+        return 1;
     }
     f = fopen(out, "w");
     if ((!f)) {

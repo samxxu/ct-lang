@@ -135,6 +135,25 @@ struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
+struct backend_tir_ct_tspan;
+struct backend_tir_ct_tunit;
+struct backend_tir_ct_tdecl;
+struct backend_tir_ct_ttype;
+struct backend_tir_ct_texpr;
+struct backend_tir_ct_tstmt;
+struct backend_tir_ct_tscope;
+struct backend_tir_ct_tvar;
+struct backend_tir_ct_tcleanup;
+struct backend_tir_ct_tinst;
+struct backend_tir_ct_tmember;
+struct backend_tir_ct_troot;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_tedge;
+struct backend_tir_ct_tgraph;
+struct backend_tir_ct_tmark;
+struct backend_tir_TModule;
+struct backend_verify_Verifier;
+struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -817,8 +836,8 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
                 }
                 else {
                     if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "map"))) {
-                        struct frontend_parse_MapBuild * __ct_tmp10 = frontend_parse_mapbuild_get();
-                        n = __ct_tmp10->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp10, _self->cur_unit);
+                        struct frontend_parse_MapBuild * __ct_tmp12 = frontend_parse_mapbuild_get();
+                        n = __ct_tmp12->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp12, _self->cur_unit);
                     }
                     else {
                         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "enum"))) {

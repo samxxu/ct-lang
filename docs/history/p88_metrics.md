@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10317 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=68663 io_cap=1024
+     emitted_before=48223 emitted_after=73692 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -214,6 +214,10 @@
       删除 40 个 `*_MAX` 镜像宏并各留一个 `CAP_LIMIT`；`Emitter.h.ct` 10321 -> 10317，
       发射 C 68745 -> 68663 行（仅 .c；差值是每单元少掉的 `#define ..._MAX` 行），
       切片清单仍为 76，判别式仍各读 1 次)
+     (S1b-S1 后复测：新增 `backend/tir/TModule` / `TBuilder` 与
+      `backend/verify/Verifier` 三个单元（TIR typed shadow，只读 AST、默认
+      不参与发射），Emitter.h.ct 不变，发射 C 68663 -> 73692（+5029：三个
+      新单元的 .c/.h + 每个既有单元头部的三行前向声明），切片清单仍为 76)
 -->
 
 ## 1 切片清单
@@ -247,6 +251,11 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   57158 → 57769（+611：四个 Core 与三个方法子单元的头/前置声明和单元边界；
   Expr/Stmt 的方法组同批）。切片清单仍为 76，判别式仍各读 1 次。方法与布局见
   [sh94-m1-core-layout](../design/sh94-m1-core-layout.md)。
+- **v1-PH-2 S1b-S1（TIR typed shadow）后的 live 校准**：`Emitter.h.ct` 不变
+  （10317），发射 C 68663 → 73692 行（+5029：`backend/tir/TModule`、
+  `backend/tir/TBuilder`、`backend/verify/Verifier` 三个新单元的 `.c`/`.h`，
+  外加每个既有单元头部的三行前向声明；TIR 默认关闭，用户语料生成物逐字节
+  不变）。切片清单仍为 76，判别式仍各读 1 次。
 - **LANG-29 S4/B4（v1-PH-1 S2b）后的 live 校准**：`Emitter.h.ct` 11173 → 11257 行
   （+84：`map binding` 的 aux 12 recipe 展开、pair 键归一、候选歧义诊断与
   `--emit-map` registry 跳过），发射 C 56258 → 56610（+352：同一代码的生成物）。

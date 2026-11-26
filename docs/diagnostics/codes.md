@@ -11,7 +11,7 @@
 | 段 | 规则 |
 | --- | --- |
 | 前缀 | `E` = 默认 error，`W` = 默认 warning；它是**编译/构建模式的默认严重级**，`ct check` 仍可按既有策略把同一码升为 `error`，码本身不变 |
-| 域 | 大写下划线，当前为 `PARSE` / `DRIVER` / `LOWER` / `TYPE` / `TRAIT` / `NAME` / `MEM` / `LANG` |
+| 域 | 大写下划线，当前为 `PARSE` / `DRIVER` / `LOWER` / `TYPE` / `TRAIT` / `NAME` / `MEM` / `LANG` / `IR` |
 | 编号 | `001`–`899` 为具体码；`999` 是**该域的未分类兜底**，一个域只允许一个 |
 | 稳定性 | 码只追加，不重编号、不复用；删掉一条诊断时把码标 `retired` 并保留行，编号永久空缺 |
 
@@ -60,6 +60,10 @@ $ ct-ast --diagnostics=json prog.ct -o /tmp/x.c
 | E-LOWER-005 | error | SH-111 I2：同一条边上 defer 晚于释放 | v0.88.3+（未发版） | `error: lowering invariant I2: ...` | test/ast/p111_invariants.sh |
 | E-LOWER-006 | error | SH-111 I3：errdefer 出现在正常出口 | v0.88.3+（未发版） | `error: lowering invariant I3: ...` | test/ast/p111_invariants.sh |
 | E-LOWER-007 | error | SH-111 I4：接收者临时缺失或重名 | v0.88.3+（未发版） | `error: lowering invariant I4: ...` | test/ast/p111_invariants.sh |
+| E-IR-101 | error | TIR V1：表达式/声明缺 `TypeId`，或类型参数逃出模板体（`v1.2.0+` 未发版） | v1.2.0+（未发版） | `error: TIR expression has no type id` | test/ir/run.sh |
+| E-IR-102 | error | TIR V2：值类别不合法（赋值目标 / `++`/`--` / 取址要求 place） | v1.2.0+（未发版） | `error: assignment target is not a place` | test/ir/run.sh |
+| E-IR-103 | error | TIR V3：调用无解析目标，或虚槽不属于接收者 trait、recipe 无 key | v1.2.0+（未发版） | `error: call has no resolved target` | test/ir/run.sh |
+| E-IR-104 | error | TIR V4：实例缺模板/实参，或实例闭包成环 | v1.2.0+（未发版） | `error: instance has no open template` | test/ir/run.sh |
 | W-TYPE-001 | warning | 实参个数与签名不符；`ct check` 升为 error | v0.88.3+（未发版） | `warning: arity mismatch: 'f' takes 2 argument(s), 1 given` | test/ast/p_lang25.sh |
 | W-TYPE-002 | warning | 实参类型与签名不符；`ct check` 升为 error | v0.88.3+（未发版） | `warning: type mismatch: 'f' argument 1: ...` | test/ast/p_lang25.sh |
 | W-TRAIT-001 | warning | 两个 trait 同名方法，取 `use` 顺序首个 | v0.88.3+（未发版） | `warning: ambiguous method: 'f' declared by 'A' and 'B'` | test/ast/p_lang25.sh |

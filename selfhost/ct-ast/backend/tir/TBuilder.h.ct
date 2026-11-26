@@ -1,0 +1,2250 @@
+/*
+ * TBuilder.h.ct - AST -> TIR (S1b-S1, docs/design/tir-lir-contract.md §1-§3).
+ *
+ * The builder is the one place that knows how an AST node becomes a typed TIR
+ * row. It reads the node pool, the symbol tables and the type pass, and it
+ * writes only into TModule. Nothing here emits C and nothing may touch the
+ * node pool: the shadow is read-only with respect to the AST -> C path, which
+ * is why `CT_TIR=1` provably does not change one output byte.
+ *
+ * Scope handling: the parser pops locals and parameters when a function ends,
+ * so by the time TIR runs the symbol table only has file-scope rows. The
+ * builder therefore re-walks declarations in source order and keeps its own
+ * scope stack, exactly the shape the emitter's shadow bindings use. A local
+ * `T` reference resolves to a `ct_tvar` id (RT_VAR); a global resolves to its
+ * TDecl.
+ *
+ * Ownership: the parser appends one `delete v;` for every `own` (and one for
+ * `borrow`) at the block exit, and copies the declaration's line onto it
+ * (StmtDefer.h.ct autodrop_append). S1 uses that line match to attribute a
+ * delete to the declaration and to register the matching drop / handback
+ * cleanup entry; a user-written `delete` keeps its own line and stays an
+ * ordinary statement. This is recorded as a fact, not guessed at emit time.
+ *
+ * Fault injection: `CT_TIR_FAULT=<key>` is the test seam for the verifier
+ * negatives (contract §5.2). It appends one deliberately malformed TIR row
+ * before verification and exists only under the shadow switch, so it can
+ * never affect a normal compile.
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+import runtime::text::Intern;
+import runtime::arena::Arena;
+import frontend::module::Unit;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::Fn as Fn;
+import frontend::sym::Symbols::Var as Var;
+import frontend::sym::Symbols::Trait as Trait;
+import frontend::sym::Symbols::MethodSig as MethodSig;
+import frontend::sym::Symbols::Closure as Closure;
+import frontend::sym::Symbols::StructDef as StructDef;
+import frontend::sym::Symbols::Field as Field;
+import frontend::sym::Symbols::GenericInst as GenericInst;
+import frontend::sym::Symbols::StructInst as StructInst;
+import frontend::sym::Symbols::StructTmpl as StructTmpl;
+import frontend::type::TypeCheck;
+import backend::tir::TModule;
+import backend::tir::TModule::ct_tunit as ct_tunit;
+import backend::tir::TModule::ct_tdecl as ct_tdecl;
+import backend::tir::TModule::ct_ttype as ct_ttype;
+import backend::tir::TModule::ct_texpr as ct_texpr;
+import backend::tir::TModule::ct_tstmt as ct_tstmt;
+import backend::tir::TModule::ct_tscope as ct_tscope;
+import backend::tir::TModule::ct_tvar as ct_tvar;
+import backend::tir::TModule::ct_tcleanup as ct_tcleanup;
+import backend::tir::TModule::ct_tinst as ct_tinst;
+import backend::tir::TModule::ct_tmark as ct_tmark;
+import backend::tir::TModule::TModule as TModule;
+import backend::verify::Verifier;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define CAP_LIMIT 65536
+#define MAX_TEXT 160
+
+/* node kinds: the values Arena.h.ct assigns and every consumer dispatches on */
+#define N_PROG     1
+#define N_FUNC     3
+#define N_BLOCK    4
+#define N_RET      5
+#define N_EXPR     6
+#define N_CALL     7
+#define N_NUM      8
+#define N_STR      9
+#define N_VAR      10
+#define N_BIN      11
+#define N_DECL     12
+#define N_ASSIGN   13
+#define N_IF       14
+#define N_WHILE    15
+#define N_FOR      16
+#define N_UNARY    17
+#define N_POST     18
+#define N_PARAM    19
+#define N_STRUCT   20
+#define N_TYPEDEF  21
+#define N_GLOBAL   22
+#define N_FIELD    23
+#define N_MEMBER   24
+#define N_ARROW    25
+#define N_INDEX    26
+#define N_ADDR     27
+#define N_DEREF    28
+#define N_METHOD   29
+#define N_MCALL    30
+#define N_RAW      31
+#define N_IMPL     33
+#define N_BOX      34
+#define N_CAST     35
+#define N_SIZEOF   36
+#define N_TERN     37
+#define N_BREAK    38
+#define N_CONT     39
+#define N_DECLS    40
+#define N_DELETE   41
+#define N_SWITCH   42
+#define N_CASE     43
+#define N_DOWHILE  44
+#define N_ENUM     45
+#define N_ENUMVAL  46
+#define N_OFFSETOF 47
+#define N_UNION    48
+#define N_LABEL    49
+#define N_GOTO     50
+#define N_COMPOUND 51
+#define N_EMPTY    52
+#define N_VAARG    53
+#define N_FNUM     54
+#define N_SASSERT  55
+#define N_FIELDS   56
+#define N_PRE      57
+#define N_RAW_TEXT 58
+#define N_CLOSURE  59
+#define N_LOOP     60
+#define N_INIT_RANGE 61
+#define N_FOREACH  62
+#define N_INTO     63
+#define N_INTO_SELF 64
+#define N_INIT_BRACE 65
+#define N_INIT_ITEM 66
+#define N_INIT_MBRACE 67
+#define N_DEFER    69
+#define N_DEFER_RUN 70
+#define N_TRY      71
+#define N_OPT      72
+#define N_MATSEQ   73
+#define N_SLICE_INDEX 74
+#define N_SLICE_RANGE 75
+#define N_SLICE_GET 76
+#define N_NEWOBJ   77
+#define N_MATCH    78
+#define N_ARM      79
+#define N_BIND     80
+#define N_ADTCTOR  81
+
+/* binary / unary / postfix operator codes */
+#define B_ADD     1
+#define B_SUB     2
+#define B_MUL     3
+#define B_DIV     4
+#define B_LT      5
+#define B_GT      6
+#define B_LE      7
+#define B_GE      8
+#define B_EQ      9
+#define B_NE      10
+#define B_MOD     11
+#define B_AND     12
+#define B_OR      13
+#define B_XOR     14
+#define B_BAND    15
+#define B_BOR     16
+#define B_SHL     17
+#define B_SHR     18
+#define B_COMMA   19
+#define U_NEG     1
+#define U_NOT     2
+#define U_BNOT    3
+#define P_INC     1
+
+/* TIR vocabularies: mirrors of TModule.h.ct; test/ir/run.sh compares them. */
+#define TK_LITERAL           1
+#define TK_NAME_LOCAL        2
+#define TK_NAME_GLOBAL       3
+#define TK_FIELD             4
+#define TK_INDEX             5
+#define TK_DEREF             6
+#define TK_ADDR              7
+#define TK_CAST              8
+#define TK_UNARY             9
+#define TK_BINARY           10
+#define TK_CALL             11
+#define TK_INTRINSIC        12
+#define TK_STRING_LIT       13
+#define TK_CLOSURE          14
+#define TK_OPTIONAL_CHAIN   15
+#define TK_INTO_TARGET      16
+#define TK_TRY_EXPR         17
+#define TK_MATCH_ARM        18
+#define TK_ADT_CTOR         19
+#define TK_RAW              20
+#define TK_BOX              21
+#define TK_NEWOBJ           22
+#define TK_COMPOUND         23
+#define TK_SIZEOF           24
+#define TK_TERNARY          25
+#define TK_ASSIGN           26
+#define TK_POSTFIX          27
+#define TK_PREFIX           28
+#define TK_VAARG            29
+#define TK_SLICE            30
+#define TK_MATSEQ           31
+#define TK_INTO_SELF        32
+#define TK_OTHER            33
+
+#define VC_NONE             0
+#define VC_PLACE            1
+#define VC_VALUE            2
+#define VC_RVALUE           3
+#define VC_OPTIONAL         4
+
+#define OA_NONE             0
+#define OA_MOVE             1
+#define OA_COPY             2
+#define OA_RETAIN           3
+#define OA_RELEASE          4
+#define OA_DROP_AT_EXIT     5
+#define OA_HANDBACK_AT_EXIT 6
+#define OA_TRANSFER         7
+
+#define RT_NONE             0
+#define RT_DIRECT           1
+#define RT_INDIRECT         2
+#define RT_VIRTUAL          3
+#define RT_INTRINSIC        4
+#define RT_RECIPE           5
+#define RT_CLOSURE          6
+#define RT_BUILTIN          7
+#define RT_VAR              8
+
+#define BI_NONE             0
+#define BI_EXTERNAL         1
+#define BI_IO               2
+#define BI_ALLOC            3
+#define BI_STRING           4
+#define BI_CONTAINER        5
+#define BI_ADT_CTOR         6
+#define BI_RETAIN           7
+#define BI_RELEASE          8
+#define BI_RAW              9
+
+#define TD_FUNC             1
+#define TD_GLOBAL           2
+#define TD_STRUCT           3
+#define TD_UNION            4
+#define TD_ENUM             5
+#define TD_TYPEDEF          6
+#define TD_TRAIT            7
+#define TD_IMPL             8
+#define TD_ADT              9
+#define TD_RECIPE          10
+
+#define TU_CT               1
+#define TU_HDR              2
+#define TU_MAP              3
+
+#define TY_PTR              3
+
+#define SC_FUNC             1
+#define SC_BLOCK            2
+#define SC_FOR              3
+#define SC_ARM              4
+#define SC_UNIT             5
+
+#define CL_DEFER            1
+#define CL_ERRDEFER         2
+#define CL_DROP             3
+#define CL_RELEASE          4
+#define CL_HANDBACK         5
+
+#define TS_BLOCK            1
+#define TS_EXPR             2
+#define TS_DECL             3
+#define TS_DECLS            4
+#define TS_RET              5
+#define TS_IF               6
+#define TS_WHILE            7
+#define TS_FOR              8
+#define TS_LOOP             9
+#define TS_FOREACH         10
+#define TS_SWITCH          11
+#define TS_CASE            12
+#define TS_BREAK           13
+#define TS_CONT            14
+#define TS_GOTO            15
+#define TS_LABEL           16
+#define TS_DO              17
+#define TS_MATCH           18
+#define TS_ARM             19
+#define TS_DELETE          20
+#define TS_SASSERT         21
+#define TS_EMPTY           22
+#define TS_INTO            23
+#define TS_MATSEQ          24
+#define TS_DEFER_BODY      25
+#define TS_OTHER           26
+
+#define GN_UNIT             1
+#define GN_DECL             2
+#define GN_TMPL             3
+#define GN_INST             4
+#define GN_LAYER            5
+#define GN_RECIPE           6
+#define GN_HEADER           7
+
+#define TE_CONTAINS         1
+#define TE_TYPE_REF         2
+#define TE_CALL             3
+#define TE_DISPATCH         4
+#define TE_INSTANTIATE      5
+#define TE_RECIPE           6
+#define TE_LAYER_NEEDS      7
+#define TE_EXPORT           8
+
+#define TR_ENTRY            1
+#define TR_IMPORT           2
+#define TR_ABI_EXPORT       3
+
+namespace backend::tir;
+
+/* One build's transient state. The pools themselves live in TModule. */
+pub struct TBuilder {
+    struct TModule *m;
+    int unit;           /* current TUnit id */
+    int file;           /* current span file id */
+    int scope;          /* current TScope id */
+    int func_decl;      /* current function TDecl id, 0 at file scope */
+    int self_type;      /* TypeId of `self` inside an impl body, 0 outside */
+    int in_template;    /* >0 while a generic template body is walked */
+    int ret_type;       /* declared return TypeId of the current function */
+    int mod_unit;       /* module unit index (-1 in compile mode) */
+    int *stack;         /* TScope ids, innermost at nstack - 1 */
+    int nstack;
+    int stackcap;
+    int failed;         /* a pool refused a row: never a silent truncation */
+}
+
+static struct TBuilder g_tb;
+
+pub int ct_tir_shadow_on(void);
+pub int ct_tir_shadow_unit(void *up, int mod_unit);
+pub int ct_tir_shadow_program(int prog, const char *path, const char *base,
+                              const char *ns, int is_hdr, int is_map);
+
+/* ------------------------------------------------------------------------- */
+/* Small helpers                                                             */
+/* ------------------------------------------------------------------------- */
+static int tb_reserve(void **slot, int *cap, int need, int row)
+{
+    int ncap;
+    void *grown;
+
+    if (need <= *cap) return 0;
+    ncap = *cap > 0 ? *cap * 2 : 32;
+    while (ncap < need && ncap < CAP_LIMIT) ncap *= 2;
+    if (ncap > CAP_LIMIT) ncap = CAP_LIMIT;
+    if (need > ncap) return -1;
+    grown = realloc(*slot, (size_t)ncap * (size_t)row);
+    if (!grown) return -1;
+    memset((char *)grown + (size_t)(*cap) * (size_t)row, 0,
+           (size_t)(ncap - *cap) * (size_t)row);
+    *slot = grown;
+    *cap = ncap;
+    return 0;
+}
+
+static struct Arena *tb_arena(void)
+{
+    return runtime::arena::arena_get();
+}
+
+static struct Symbols *tb_sym(void)
+{
+    return frontend::sym::symbols_get();
+}
+
+static struct TypeCheck *tb_ty(void)
+{
+    return frontend::type::type_get();
+}
+
+static int tb_line(int n)
+{
+    if (n < 0) return 0;
+    return tb_arena()->nodes[n].line;
+}
+
+static int tb_col(int n)
+{
+    if (n < 0) return 0;
+    return tb_arena()->nodes[n].num;
+}
+
+/* The latest declaration of a kind with this exact name, or 0. A linear
+   search is enough for a shadow over one program (a few hundred rows) and it
+   keeps the maps out of the builder's state. */
+static int tb_find_decl(struct TModule *m, int kind, const char *name)
+{
+    int i;
+
+    if (!name) return 0;
+    for (i = m->ndecls - 1; i >= 0; i--) {
+        if (m->decls[i].kind != kind) continue;
+        if (strcmp(m->decls[i].name, name) == 0) return m->decls[i].id;
+    }
+    return 0;
+}
+
+static int tb_find_unit(struct TModule *m, const char *name)
+{
+    int i;
+
+    if (!name) return -1;
+    for (i = 0; i < m->nunits; i++)
+        if (strcmp(m->units[i].name, name) == 0) return i + 1;
+    return -1;
+}
+
+static int tb_push_scope(struct TBuilder *tb, int kind)
+{
+    int sc;
+
+    sc = tmod_new_scope(tb->m, tb->scope, kind);
+    if (sc < 0) return -1;
+    if (tb_reserve((void **)&tb->stack, &tb->stackcap, tb->nstack + 1,
+                   (int)sizeof(int)) != 0) return -1;
+    tb->stack[tb->nstack] = sc;
+    tb->nstack++;
+    tb->scope = sc;
+    return sc;
+}
+
+static void tb_pop_scope(struct TBuilder *tb)
+{
+    if (tb->nstack <= 0) {
+        tb->scope = 0;
+        return;
+    }
+    tb->nstack--;
+    tb->scope = tb->nstack > 0 ? tb->stack[tb->nstack - 1] : 0;
+}
+
+/* Nearest binding of `name` in the current function, or 0. */
+static int tb_find_var(struct TBuilder *tb, const char *name)
+{
+    struct TModule *m;
+    int s, i, j, vid;
+
+    m = tb->m;
+    for (s = tb->nstack - 1; s >= 0; s--) {
+        i = tb->stack[s] - 1;
+        if (i < 0 || i >= m->nscopes) continue;
+        for (j = m->scopes[i].nvars - 1; j >= 0; j--) {
+            vid = m->scopes[i].vars[j];
+            if (vid <= 0 || vid > m->nvars) continue;
+            if (strcmp(m->vars[vid - 1].name, name) == 0) return vid;
+        }
+    }
+    return 0;
+}
+
+/* The owning spelling test the ownership column needs. A pointer, a String /
+   U16String handle, a Box and a container are owning; everything else is a
+   plain value. */
+static int tb_place_kind(int k)
+{
+    return k == N_VAR || k == N_MEMBER || k == N_ARROW || k == N_INDEX
+        || k == N_DEREF || k == N_SLICE_INDEX;
+}
+
+static int tb_owns(const char *t)
+{
+    size_t n;
+
+    if (!t) return 0;
+    if (strstr(t, "String") || strstr(t, "Box<")) return 1;
+    n = strlen(t);
+    if (n > 0 && t[n - 1] == '*') return 1;
+    return 0;
+}
+
+/* Peel one pointer star; a non-pointer spelling is returned unchanged. */
+static const char *tb_peel_star(const char *s)
+{
+    size_t n;
+
+    if (!s) return "";
+    n = strlen(s);
+    while (n > 0 && (s[n - 1] == '*' || s[n - 1] == ' ' || s[n - 1] == '\t')) n--;
+    return runtime::text::ct_intern_len(s, (int)n);
+}
+
+/* `struct S` / `union U` / `enum E` tag without the keyword. */
+static const char *tb_tag_of(const char *s)
+{
+    if (!s) return "";
+    if (strncmp(s, "struct ", 7) == 0) return s + 7;
+    if (strncmp(s, "union ", 6) == 0) return s + 6;
+    if (strncmp(s, "enum ", 5) == 0) return s + 5;
+    return s;
+}
+
+static int tb_intrinsic_class(const char *name)
+{
+    if (!name || !name[0]) return BI_NONE;
+    if (strcmp(name, "malloc") == 0 || strcmp(name, "calloc") == 0
+        || strcmp(name, "realloc") == 0 || strcmp(name, "free") == 0)
+        return BI_ALLOC;
+    if (strcmp(name, "printf") == 0 || strcmp(name, "fprintf") == 0
+        || strcmp(name, "fputs") == 0 || strcmp(name, "fputc") == 0
+        || strcmp(name, "puts") == 0 || strcmp(name, "putchar") == 0
+        || strcmp(name, "snprintf") == 0 || strcmp(name, "vsnprintf") == 0
+        || strcmp(name, "fopen") == 0 || strcmp(name, "fclose") == 0
+        || strcmp(name, "fread") == 0 || strcmp(name, "fwrite") == 0
+        || strcmp(name, "fgets") == 0 || strcmp(name, "getline") == 0
+        || strcmp(name, "fflush") == 0 || strcmp(name, "perror") == 0
+        || strcmp(name, "scanf") == 0 || strcmp(name, "sscanf") == 0
+        || strcmp(name, "fseek") == 0 || strcmp(name, "ftell") == 0
+        || strcmp(name, "feof") == 0 || strcmp(name, "ferror") == 0
+        || strcmp(name, "remove") == 0 || strcmp(name, "rename") == 0)
+        return BI_IO;
+    if (strncmp(name, "str_", 4) == 0 || strncmp(name, "vec_", 4) == 0
+        || strncmp(name, "map_", 4) == 0 || strncmp(name, "option_", 7) == 0
+        || strncmp(name, "result_", 7) == 0)
+        return BI_CONTAINER;
+    if (strcmp(name, "strlen") == 0 || strcmp(name, "strcmp") == 0
+        || strcmp(name, "strncmp") == 0 || strcmp(name, "strcpy") == 0
+        || strcmp(name, "strncpy") == 0 || strcmp(name, "strchr") == 0
+        || strcmp(name, "strrchr") == 0 || strcmp(name, "strstr") == 0
+        || strcmp(name, "memcpy") == 0 || strcmp(name, "memset") == 0
+        || strcmp(name, "memmove") == 0 || strcmp(name, "memcmp") == 0)
+        return BI_STRING;
+    if (strstr(name, "_retain")) return BI_RETAIN;
+    if (strstr(name, "_release")) return BI_RELEASE;
+    return BI_EXTERNAL;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Type inference                                                            */
+/* ------------------------------------------------------------------------- */
+static int tb_type_of(struct TBuilder *tb, int n, int hint);
+
+/* The declared type of struct/union member `field` when `base` names one. */
+static const char *tb_member_type(const char *base, const char *field, int arrow)
+{
+    (void)arrow;
+    struct Symbols *sym;
+    const char *tag;
+    int si, fi;
+
+    if (!base || !field) return (const char *)0;
+    sym = tb_sym();
+    /* Ct spells member access on a pointer with `.` too (object-style), so
+       both forms may present a pointer base. */
+    base = tb_peel_star(base);
+    tag = tb_tag_of(base);
+    si = sym->find_struct(tag);
+    if (si < 0) return (const char *)0;
+    for (fi = 0; fi < sym->structs[si].nfields; fi++) {
+        if (strcmp(sym->structs[si].fields[fi].name, field) != 0) continue;
+        return sym->structs[si].fields[fi].type;
+    }
+    return (const char *)0;
+}
+
+/* A function's declared return type, by the name the call site spells. */
+static const char *tb_call_ret(const char *name)
+{
+    struct Symbols *sym;
+    int fi;
+
+    if (!name || !name[0]) return (const char *)0;
+    sym = tb_sym();
+    fi = sym->find_func(name);
+    if (fi < 0) return (const char *)0;
+    return sym->funcs[fi].ret;
+}
+
+/* The trait table's canonical spelling: the parser records a namespace-mangled
+   name in some receiver positions, while the TDecl row uses the table name. */
+static const char *tb_trait_canon(const char *name)
+{
+    int ti;
+
+    if (!name || !name[0]) return name;
+    ti = tb_sym()->find_trait(name);
+    if (ti < 0) return name;
+    return tb_sym()->traits[ti].name;
+}
+
+/* A trait method's return type, or 0. */
+static const char *tb_trait_ret(const char *trait, const char *method, int *slot)
+{
+    struct Symbols *sym;
+    int ti, mi;
+
+    if (slot) *slot = -1;
+    if (!trait || !method) return (const char *)0;
+    sym = tb_sym();
+    ti = sym->find_trait(trait);
+    if (ti < 0) return (const char *)0;
+    for (mi = 0; mi < sym->traits[ti].nm; mi++) {
+        if (strcmp(sym->traits[ti].m[mi].name, method) != 0) continue;
+        if (slot) *slot = mi;
+        return sym->traits[ti].m[mi].ret;
+    }
+    return (const char *)0;
+}
+
+static int tb_type_of(struct TBuilder *tb, int n, int hint)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TypeCheck *ty;
+    const char *s;
+    const char *sp;
+    int k, t, aux;
+
+    if (n < 0) return hint > 0 ? hint : 0;
+    ar = tb_arena();
+    sym = tb_sym();
+    ty = tb_ty();
+    k = ar->nodes[n].kind;
+    aux = ar->nodes[n].aux;
+
+    if (k == N_VAR) {
+        int vi;
+        vi = tb_find_var(tb, ar->nodes[n].text2);
+        if (vi > 0) return tb->m->vars[vi - 1].type;
+        vi = sym->find_var(ar->nodes[n].text2);
+        if (vi >= 0) {
+            sp = sym->vars[vi].type;
+            return tmod_type(tb->m, sp,
+                             tb->in_template || tmod_spelling_free(sp));
+        }
+        if (hint > 0) return hint;
+        tb->m->stat_void_expr++;
+        return tmod_type_void(tb->m);
+    }
+    /* The type pass answers the shapes whose type it can recover from the
+       symbol tables (members of a known struct, calls, casts, ...). Locals
+       are already popped, so those fall through to the walker below. */
+    s = "";
+    if (ty->expr_type_text(n, &s) == 0 && s && s[0])
+        return tmod_type(tb->m, s, tb->in_template);
+
+    switch (k) {
+        case N_NUM:
+            if (strchr(ar->nodes[n].text, 'L') || strchr(ar->nodes[n].text, 'l'))
+                return tmod_type(tb->m, strchr(ar->nodes[n].text, 'U')
+                                       ? "unsigned long" : "long", 0);
+            if (strchr(ar->nodes[n].text, 'U'))
+                return tmod_type(tb->m, "unsigned int", 0);
+            return tmod_type(tb->m, "int", 0);
+        case N_FNUM:
+            sp = ar->nodes[n].text;
+            if (sp[0] && (sp[strlen(sp) - 1] == 'f' || sp[strlen(sp) - 1] == 'F'))
+                return tmod_type(tb->m, "float", 0);
+            if (sp[0] && (sp[strlen(sp) - 1] == 'l' || sp[strlen(sp) - 1] == 'L'))
+                return tmod_type(tb->m, "long double", 0);
+            return tmod_type(tb->m, "double", 0);
+        case N_STR:
+            if (aux == 1) return tmod_type(tb->m, "String", 0);
+            if (aux == 2) return tmod_type(tb->m, "Str", 0);
+            return tmod_type(tb->m, "char *", 0);
+        case N_BIN:
+            if (aux >= B_LT && aux <= B_NE) return tmod_type(tb->m, "int", 0);
+            if (aux == B_AND || aux == B_OR) return tmod_type(tb->m, "int", 0);
+            if (aux == B_COMMA) return tb_type_of(tb, ar->nodes[n].b, hint);
+            t = tb_type_of(tb, ar->nodes[n].a, 0);
+            if (t > 0) return t;
+            return tb_type_of(tb, ar->nodes[n].b, hint);
+        case N_ASSIGN:
+        case N_POST:
+        case N_PRE:
+            return tb_type_of(tb, ar->nodes[n].a, hint);
+        case N_UNARY:
+            if (aux == U_NOT) return tmod_type(tb->m, "int", 0);
+            return tb_type_of(tb, ar->nodes[n].a, hint);
+        case N_TERN:
+            return tb_type_of(tb, ar->nodes[n].b, hint);
+        case N_ADDR: {
+            const char *bt;
+            t = tb_type_of(tb, ar->nodes[n].a, 0);
+            if (t <= 0) break;
+            bt = tmod_cspell(tb->m, t);
+            return tmod_type(tb->m, runtime::text::ct_internf("%s%s*", bt,
+                         (bt[0] && bt[strlen(bt) - 1] == '*') ? "" : " "),
+                         tb->in_template);
+        }
+        case N_INDEX: {
+            const char *bt;
+            t = tb_type_of(tb, ar->nodes[n].a, 0);
+            if (t <= 0) break;
+            bt = tmod_cspell(tb->m, t);
+            if (tb->m->types[t - 1].kind == TY_PTR || strchr(bt, '*'))
+                return tmod_type(tb->m, tb_peel_star(bt), tb->in_template);
+            return t;
+        }
+        case N_DEREF: {
+            const char *bt;
+            if (ar->nodes[n].text[0])
+                return tmod_type(tb->m, ar->nodes[n].text, tb->in_template);
+            t = tb_type_of(tb, ar->nodes[n].a, 0);
+            if (t <= 0) break;
+            bt = tmod_cspell(tb->m, t);
+            if (tb->m->types[t - 1].free_param) return t;
+            return tmod_type(tb->m, tb_peel_star(bt), tb->in_template);
+        }
+        case N_MEMBER:
+        case N_ARROW: {
+            const char *bt;
+            t = tb_type_of(tb, ar->nodes[n].a, 0);
+            if (t <= 0) break;
+            if (tb->m->types[t - 1].free_param) return t;
+            bt = tmod_cspell(tb->m, t);
+            sp = tb_member_type(bt, ar->nodes[n].text2, k == N_ARROW);
+            if (sp && sp[0]) return tmod_type(tb->m, sp, tb->in_template);
+            /* a field of a struct that is only forward-declared here: keep
+               the member's spelling unknown rather than inventing one */
+            break;
+        }
+        case N_CALL:
+            sp = tb_call_ret(ar->nodes[n].text2);
+            if (sp && sp[0]) return tmod_type(tb->m, sp, tb->in_template);
+            if (aux == 2) return tb_type_of(tb, ar->nodes[n].b, hint);
+            sp = ar->nodes[n].text;
+            if (sp && sp[0]) return tmod_type(tb->m, sp, tb->in_template);
+            return hint > 0 ? hint : tmod_type(tb->m, "void", 0);
+        case N_MCALL: {
+            const char *tr;
+            int slot;
+            sp = ar->nodes[n].text;
+            tr = tb_trait_ret(sp, ar->nodes[n].text2, &slot);
+            if (tr && tr[0]) return tmod_type(tb->m, tr, tb->in_template);
+            if (aux >= 9 && aux <= 11) {
+                const char *base;
+                const char *mr;
+                base = ar->nodes[n].text;
+                if (strncmp(base, "struct ", 7) == 0) base += 7;
+                mr = ty->inst_method_ret_text(base, ar->nodes[n].text2);
+                if (mr && mr[0]) return tmod_type(tb->m, mr, tb->in_template);
+            }
+            return hint > 0 ? hint : tmod_type(tb->m, "void", 0);
+        }
+        case N_OPT:
+            sp = ar->nodes[n].text2;
+            if (sp && sp[0]) return tmod_type(tb->m, sp, tb->in_template);
+            break;
+        case N_CAST:
+        case N_COMPOUND:
+        case N_VAARG:
+        case N_SLICE_INDEX:
+        case N_SLICE_RANGE:
+        case N_SLICE_GET:
+        case N_INTO:
+        case N_INTO_SELF:
+            sp = ar->nodes[n].text;
+            if (sp && sp[0]) return tmod_type(tb->m, sp, tb->in_template);
+            break;
+        case N_SIZEOF:
+        case N_OFFSETOF:
+            return tmod_type(tb->m, "unsigned long", 0);
+        case N_CLOSURE: {
+            struct Closure *c;
+            int ci;
+            const char *params;
+            ci = (int)ar->nodes[n].num;
+            if (ci < 0 || ci >= sym->nclosure) break;
+            c = &sym->closures[ci];
+            params = "";
+            {
+                int pi;
+                char buf[MAX_TEXT];
+                size_t used;
+                used = 0;
+                buf[0] = 0;
+                for (pi = 0; pi < c->nparams && pi < 16; pi++) {
+                    size_t pl;
+                    pl = strlen(c->ptype[pi]);
+                    if (used + pl + 3 >= sizeof(buf)) break;
+                    if (pi > 0) { buf[used] = ','; used++; buf[used] = ' '; used++; }
+                    memcpy(buf + used, c->ptype[pi], pl);
+                    used += pl;
+                    buf[used] = 0;
+                }
+                params = runtime::text::ct_intern(buf);
+                if (!params) break;
+            }
+            return tmod_type(tb->m, runtime::text::ct_internf("%s (*)(%s)",
+                             c->ret[0] ? c->ret : "void", params), tb->in_template);
+        }
+        case N_NEWOBJ:
+            return tmod_type(tb->m, runtime::text::ct_internf("struct %s *",
+                             ar->nodes[n].text2), tb->in_template);
+        case N_MATSEQ:
+            return tb_type_of(tb, ar->nodes[n].b, hint);
+        case N_RAW:
+        case N_RAW_TEXT:
+        case N_INIT_RANGE:
+        case N_INIT_BRACE:
+        case N_INIT_ITEM:
+        case N_INIT_MBRACE:
+            if (hint > 0) return hint;
+            break;
+        default:
+            break;
+    }
+    if (k == N_RAW || k == N_RAW_TEXT) {
+        /* a raw code fragment: its type comes from the declaration/member
+           context when there is one, otherwise it is explicitly opaque */
+        if (hint > 0) return hint;
+        tb->m->stat_raw_expr++;
+        return tmod_type_void(tb->m);
+    }
+    tb->m->stat_fallback_type++;
+    if (getenv("CT_TIR_DEBUG"))
+        fprintf(stderr, "tir-debug: no type for node kind %d line %d\n",
+                k, tb_line(n));
+    if (hint > 0) return hint;
+    tb->m->stat_void_expr++;
+    return tmod_type_void(tb->m);
+}
+
+static int tb_vclass(int k)
+{
+    switch (k) {
+        case N_VAR:
+        case N_MEMBER:
+        case N_ARROW:
+        case N_INDEX:
+        case N_DEREF:
+        case N_SLICE_INDEX:
+        case N_INTO:
+        case N_INTO_SELF:
+            return VC_PLACE;
+        case N_OPT:
+            return VC_OPTIONAL;
+        default:
+            return VC_RVALUE;
+    }
+}
+
+static int tb_expr_kind(int k)
+{
+    switch (k) {
+        case N_NUM:
+        case N_FNUM:
+            return TK_LITERAL;
+        case N_STR:
+            return TK_STRING_LIT;
+        case N_VAR:
+            return TK_NAME_LOCAL;      /* fixed up to NAME_GLOBAL by the builder */
+        case N_MEMBER:
+        case N_ARROW:
+            return TK_FIELD;
+        case N_INDEX:
+            return TK_INDEX;
+        case N_DEREF:
+            return TK_DEREF;
+        case N_ADDR:
+            return TK_ADDR;
+        case N_CAST:
+            return TK_CAST;
+        case N_UNARY:
+            return TK_UNARY;
+        case N_BIN:
+            return TK_BINARY;
+        case N_CALL:
+            return TK_CALL;
+        case N_MCALL:
+            return TK_CALL;
+        case N_CLOSURE:
+            return TK_CLOSURE;
+        case N_OPT:
+            return TK_OPTIONAL_CHAIN;
+        case N_INTO:
+            return TK_INTO_TARGET;
+        case N_INTO_SELF:
+            return TK_INTO_SELF;
+        case N_TRY:
+            return TK_TRY_EXPR;
+        case N_MATCH:
+            return TK_MATCH_ARM;
+        case N_ADTCTOR:
+            return TK_ADT_CTOR;
+        case N_RAW:
+        case N_RAW_TEXT:
+            return TK_RAW;
+        case N_BOX:
+            return TK_BOX;
+        case N_NEWOBJ:
+            return TK_NEWOBJ;
+        case N_COMPOUND:
+            return TK_COMPOUND;
+        case N_SIZEOF:
+        case N_OFFSETOF:
+            return TK_SIZEOF;
+        case N_TERN:
+            return TK_TERNARY;
+        case N_ASSIGN:
+            return TK_ASSIGN;
+        case N_POST:
+            return TK_POSTFIX;
+        case N_PRE:
+            return TK_PREFIX;
+        case N_VAARG:
+            return TK_VAARG;
+        case N_SLICE_INDEX:
+        case N_SLICE_RANGE:
+        case N_SLICE_GET:
+            return TK_SLICE;
+        case N_MATSEQ:
+            return TK_MATSEQ;
+        default:
+            return TK_OTHER;
+    }
+}
+
+/* The ownership action the context implies. The delete attribution (parser
+   AutoDrop vs. a user delete) is handled by the statement walker. */
+static int tb_own_of(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    const char *name;
+    int k, aux, t;
+
+    ar = tb_arena();
+    k = ar->nodes[n].kind;
+    aux = ar->nodes[n].aux;
+    if (k == N_ASSIGN && ar->nodes[n].a >= 0) {
+        t = tb_type_of(tb, ar->nodes[n].a, 0);
+        if (t > 0 && tb_owns(tmod_cspell(tb->m, t))) {
+            if (tb_place_kind(ar->nodes[ar->nodes[n].b].kind)) return OA_MOVE;
+            if (tmod_cspell(tb->m, t) && strstr(tmod_cspell(tb->m, t), "String"))
+                return OA_RETAIN;
+            return OA_MOVE;
+        }
+        return OA_COPY;
+    }
+    if (k == N_DELETE) {
+        if (aux == 1) return OA_HANDBACK_AT_EXIT;
+        return OA_RELEASE;
+    }
+    if (k == N_RET && tb->ret_type > 0 && tb_owns(tmod_cspell(tb->m, tb->ret_type)))
+        return OA_TRANSFER;
+    if (k == N_CALL) {
+        name = ar->nodes[n].text2;
+        if (name && strstr(name, "_retain")) return OA_RETAIN;
+        if (name && strstr(name, "_release")) return OA_RELEASE;
+    }
+    if (k == N_DECL && ar->nodes[n].a >= 0) {
+        /* an `own` initialiser moves its allocation into the binding; the
+           delete attribution later refines this to drop_at_exit */
+        t = tb_type_of(tb, ar->nodes[n].a, 0);
+        if (t > 0 && tb_owns(tmod_cspell(tb->m, t))) return OA_MOVE;
+    }
+    return OA_NONE;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Targets                                                                   */
+/* ------------------------------------------------------------------------- */
+static int tb_set_target(struct TModule *m, int eid, int kind, int a, int b,
+                         const char *key)
+{
+    const char *pooled;
+
+    if (eid <= 0 || eid > m->nexprs) return -1;
+    pooled = runtime::text::ct_intern(key ? key : "");
+    if (!pooled) return -1;
+    m->exprs[eid - 1].target_kind = kind;
+    m->exprs[eid - 1].target_a = a;
+    m->exprs[eid - 1].target_b = b;
+    m->exprs[eid - 1].target_key = pooled;
+    if (kind == RT_NONE) m->stat_unknown_target++;
+    return 0;
+}
+
+/* Direct call: the callee name matches a function the unit declared, so the
+   target is that TDecl. A name with no declaration is a C symbol (an
+   intrinsic, libc, or a built-in layer helper) and is classified, never left
+   unresolved -- "the C compiler will find it" is a resolution, not a guess. */
+static int tb_target_call(struct TBuilder *tb, int eid, int n)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TModule *m;
+    const char *name;
+    int fi, decl, bi;
+    int aux;
+
+    ar = tb_arena();
+    sym = tb_sym();
+    m = tb->m;
+    aux = ar->nodes[n].aux;
+    name = ar->nodes[n].text2;
+    if (aux == 1) {
+        /* `p(args)` through a function-pointer variable */
+        return tb_set_target(m, eid, RT_INDIRECT, tb_type_of(tb, n, 0), BI_NONE, name);
+    }
+    if (aux == 2) {
+        return tb_set_target(m, eid, RT_INDIRECT, tb_type_of(tb, ar->nodes[n].b, 0),
+                             BI_NONE, name);
+    }
+    if (!name || !name[0])
+        return tb_set_target(m, eid, RT_NONE, 0, BI_NONE, "");
+    fi = sym->find_func(name);
+    if (fi >= 0) {
+        const char *fn;
+        fn = sym->funcs[fi].name;
+        decl = tb_find_decl(m, TD_FUNC, fn);
+        if (decl <= 0) {
+            fn = sym->funcs[fi].cname;
+            decl = tb_find_decl(m, TD_FUNC, fn);
+        }
+        if (decl > 0) return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, name);
+    }
+    /* a function-pointer local: the variable's type names the signature */
+    {
+        int vi;
+        vi = tb_find_var(tb, name);
+        if (vi > 0) {
+            const char *vt;
+            vt = tmod_cspell(m, m->vars[vi - 1].type);
+            if (vt && strstr(vt, "(*)"))
+                return tb_set_target(m, eid, RT_INDIRECT, m->vars[vi - 1].type,
+                                     BI_NONE, name);
+        }
+    }
+    bi = tb_intrinsic_class(name);
+    if (bi == BI_EXTERNAL && strncmp(name, "__ct_", 5) == 0)
+        return tb_set_target(m, eid, RT_BUILTIN, bi, BI_NONE, name);
+    if (bi == BI_ALLOC || bi == BI_IO || bi == BI_STRING || bi == BI_CONTAINER
+        || bi == BI_RETAIN || bi == BI_RELEASE)
+        return tb_set_target(m, eid, RT_INTRINSIC, 0, bi, name);
+    return tb_set_target(m, eid, RT_BUILTIN, 0, bi, name);
+}
+
+/* Method call. The parser records the trait for dynamic dispatch (aux 0..4),
+   the struct/type-host for a recipe (aux 5/6/12) and the instantiated owner
+   for an inherent call (aux 9/10/11); the target follows that form. */
+static int tb_target_mcall(struct TBuilder *tb, int eid, int n)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TModule *m;
+    const char *trait;
+    const char *method;
+    const char *base;
+    int aux, ti, slot, decl, tdecl;
+    const char *key;
+    int fid;
+
+    ar = tb_arena();
+    sym = tb_sym();
+    m = tb->m;
+    aux = ar->nodes[n].aux;
+    method = ar->nodes[n].text2;
+    trait = ar->nodes[n].text;
+    if (aux == 5 || aux == 6 || aux == 12) {
+        trait = tb_trait_canon(trait);
+        key = runtime::text::ct_internf("%s.%s", trait ? trait : "", method ? method : "");
+        if (!key) return -1;
+        tdecl = tb_ensure_trait(tb, trait);
+        return tb_set_target(m, eid, RT_RECIPE, tdecl, BI_NONE, key);
+    }
+    if (aux == 9 || aux == 10 || aux == 11) {
+        base = trait;
+        if (!base) base = "";
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        key = runtime::text::ct_internf("%s.%s", base, method ? method : "");
+        if (!key) return -1;
+        decl = tb_find_decl(m, TD_FUNC, key);
+        if (decl > 0) return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, key);
+        fid = sym->find_func(key);
+        if (fid >= 0) return tb_set_target(m, eid, RT_BUILTIN, 0, BI_CONTAINER, key);
+        return tb_set_target(m, eid, RT_BUILTIN, 0, BI_EXTERNAL, key);
+    }
+    /* dynamic dispatch: the parser recorded the trait name in `text` */
+    ti = trait ? sym->find_trait(trait) : -1;
+    if (ti >= 0) {
+        slot = -1;
+        if (tb_trait_ret(trait, method, &slot) != (const char *)0 || slot >= 0) {
+            const char *canon;
+            canon = tb_trait_canon(trait);
+            tdecl = tb_ensure_trait(tb, trait);
+            return tb_set_target(m, eid, RT_VIRTUAL, tdecl, slot,
+                                 runtime::text::ct_internf("%s.%s", canon, method));
+        }
+    }
+    /* a bounded-template call (aux 7/8) records the bound trait in `text` */
+    if (ti < 0 && trait && trait[0]) {
+        const char *canon;
+        canon = tb_trait_canon(trait);
+        key = runtime::text::ct_internf("%s.%s", canon, method ? method : "");
+        if (!key) return -1;
+        decl = tb_ensure_trait(tb, trait);
+        return tb_set_target(m, eid, RT_RECIPE, decl, BI_NONE, key);
+    }
+    return tb_set_target(m, eid, RT_NONE, 0, BI_NONE, "");
+}
+
+/* A variable reference: local -> its ct_tvar, a global -> its TDecl, an enum
+   member that has no declaration row -> an internal constant. */
+static int tb_target_var(struct TBuilder *tb, int eid, int n)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TModule *m;
+    int vi, decl;
+
+    ar = tb_arena();
+    sym = tb_sym();
+    m = tb->m;
+    vi = tb_find_var(tb, ar->nodes[n].text2);
+    if (vi > 0) return tb_set_target(m, eid, RT_VAR, vi, BI_NONE, "");
+    vi = sym->find_var(ar->nodes[n].text2);
+    if (vi >= 0) {
+        decl = tb_find_decl(m, TD_GLOBAL, sym->vars[vi].name);
+        if (decl <= 0) decl = tb_find_decl(m, TD_GLOBAL, sym->vars[vi].cname);
+        if (decl > 0) return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, "");
+        return tb_set_target(m, eid, RT_BUILTIN, 0, BI_EXTERNAL,
+                             ar->nodes[n].text2);
+    }
+    return tb_set_target(m, eid, RT_NONE, 0, BI_NONE, "");
+}
+
+static int tb_target(struct TBuilder *tb, int eid, int n)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int k, decl;
+    const char *sp;
+
+    ar = tb_arena();
+    m = tb->m;
+    k = ar->nodes[n].kind;
+    switch (k) {
+        case N_CALL:
+            return tb_target_call(tb, eid, n);
+        case N_MCALL:
+            return tb_target_mcall(tb, eid, n);
+        case N_VAR:
+            return tb_target_var(tb, eid, n);
+        case N_ADTCTOR:
+            sp = ar->nodes[n].text;
+            return tb_set_target(m, eid, RT_BUILTIN, 0, BI_ADT_CTOR, sp);
+        case N_NEWOBJ:
+            decl = tb_find_decl(m, TD_STRUCT, ar->nodes[n].text2);
+            if (decl > 0) return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, "");
+            return tb_set_target(m, eid, RT_BUILTIN, 0, BI_EXTERNAL,
+                                 ar->nodes[n].text2);
+        default:
+            return 0;
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Expressions                                                               */
+/* ------------------------------------------------------------------------- */
+static int tb_expr(struct TBuilder *tb, int n, int hint);
+
+/* Append one child expression id and keep the parent row address fresh (the
+   pool may move under the append). */
+static int tb_expr_kid(struct TBuilder *tb, int parent, int kid)
+{
+    if (kid <= 0) return 0;
+    return tmod_expr_add_kid(tb->m, parent, kid);
+}
+
+/* Statement-bodied children of an expression (into-block, closure body,
+   match arms) become TStmt rows; the convention is recorded in TModule: the
+   kind of `kids[]` follows the parent's TExprKind. */
+static int tb_stmt(struct TBuilder *tb, int n);
+
+static int tb_expr_children(struct TBuilder *tb, int eid, int n)
+{
+    struct Arena *ar;
+    int k, c, t;
+
+    ar = tb_arena();
+    k = ar->nodes[n].kind;
+    switch (k) {
+        case N_RAW:
+        case N_RAW_TEXT:
+        case N_NUM:
+        case N_STR:
+        case N_FNUM:
+        case N_VAARG:
+        case N_SIZEOF:
+        case N_OFFSETOF:
+            return 0;
+        case N_INTO:
+            /* receiver, then the spliced statement block */
+            tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
+            t = tb_stmt(tb, ar->nodes[n].b);
+            if (t > 0) tmod_expr_add_kid(tb->m, eid, t);
+            return 0;
+        case N_INTO_SELF:
+            return 0;
+        case N_CLOSURE:
+            t = tb_stmt(tb, ar->nodes[n].a);
+            if (t > 0) tmod_expr_add_kid(tb->m, eid, t);
+            return 0;
+        case N_MATCH: {
+            /* subject, then one TS_ARM per arm */
+            tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
+            for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next)
+                tmod_expr_add_kid(tb->m, eid, tb_stmt(tb, c));
+            return 0;
+        }
+        case N_OPT:
+            tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
+            tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].b, 0));
+            return 0;
+        case N_MATSEQ:
+            for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+                tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[c].b, 0));
+                tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[c].a, 0));
+            }
+            tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].b, 0));
+            return 0;
+        case N_INIT_RANGE:
+        case N_INIT_BRACE:
+        case N_INIT_MBRACE:
+            for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next)
+                tb_expr_kid(tb, eid, tb_expr(tb, c, 0));
+            return 0;
+        case N_INIT_ITEM:
+            tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
+            tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].b, 0));
+            return 0;
+        default:
+            break;
+    }
+    /* Generic expression: the four child slots, in source order. */
+    tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
+    tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].b, 0));
+    tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].c, 0));
+    tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].d, 0));
+    return 0;
+}
+
+static int tb_expr(struct TBuilder *tb, int n, int hint)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int k, tk, eid, t;
+
+    if (n < 0) return 0;
+    ar = tb_arena();
+    m = tb->m;
+    k = ar->nodes[n].kind;
+    tk = tb_expr_kind(k);
+    if (k == N_VAR) {
+        struct Symbols *sym;
+        sym = tb_sym();
+        if (tb_find_var(tb, ar->nodes[n].text2) <= 0
+            && sym->find_var(ar->nodes[n].text2) >= 0)
+            tk = TK_NAME_GLOBAL;
+    }
+    /* a call to a C/built-in symbol rather than a declared function reads as
+       an intrinsic, not as a user call */
+    if (k == N_CALL && ar->nodes[n].a >= 0) {
+        const char *nm;
+        nm = ar->nodes[n].text2;
+        if (nm && nm[0] && tb_sym()->find_func(nm) < 0
+            && tb_intrinsic_class(nm) != BI_EXTERNAL)
+            tk = TK_INTRINSIC;
+    }
+    eid = tmod_new_expr(m, tk, tb->file, tb_line(n), tb_col(n));
+    if (eid < 0) {
+        tb->failed = 1;
+        return -1;
+    }
+    t = tb_type_of(tb, n, hint);
+    if (t <= 0) t = hint > 0 ? hint : tmod_type_void(m);
+    m->exprs[eid - 1].type = t;
+    m->exprs[eid - 1].vclass = tb_vclass(k);
+    m->exprs[eid - 1].own = tb_own_of(tb, n);
+    if (tb_target(tb, eid, n) != 0) return -1;
+    if (tb_expr_children(tb, eid, n) != 0) return -1;
+    return eid;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Statements                                                                */
+/* ------------------------------------------------------------------------- */
+static int tb_block(struct TBuilder *tb, int n, int kind);
+
+/* Declare one local and record the binding in the current scope. Returns the
+   ct_tvar id, 0 when the declaration carries no name. */
+static int tb_declare(struct TBuilder *tb, int n, int is_param, int is_self)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    const char *name;
+    const char *spelling;
+    int tyid, ownk, vid;
+
+    ar = tb_arena();
+    m = tb->m;
+    name = ar->nodes[n].text2;
+    if (!name || !name[0]) return 0;
+    if (is_self) {
+        spelling = tmod_cspell(m, tb->self_type);
+    } else {
+        spelling = ar->nodes[n].text;
+    }
+    tyid = tmod_type(m, spelling, tb->in_template);
+    ownk = OA_NONE;
+    vid = tmod_scope_add_var(m, tb->scope, name, tyid, ownk, 0, is_param);
+    if (vid < 0) return -1;
+    if (tb->func_decl > 0 && tb->scope > 0)
+        m->vars[vid - 1].decl_stmt = 0;
+    return vid;
+}
+
+/* `own` / `borrow` attribution: the parser's AutoDrop delete carries the
+   declaration's line (see the header comment). Returns the cleanup kind, or
+   0 when this delete is a user statement. */
+static int tb_attr_delete(struct TBuilder *tb, int n, int *outvid)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int target, vid, vi, ds;
+    const char *name;
+
+    if (outvid) *outvid = 0;
+    ar = tb_arena();
+    m = tb->m;
+    if (ar->nodes[n].kind != N_DELETE) return 0;
+    target = ar->nodes[n].a;
+    if (target < 0 || ar->nodes[target].kind != N_VAR) return 0;
+    name = ar->nodes[target].text2;
+    vid = tb_find_var(tb, name);
+    if (vid <= 0) return 0;
+    vi = vid - 1;
+    ds = m->vars[vi].decl_stmt;
+    if (ds <= 0 || ds > m->nstmts) return 0;
+    /* parser-generated: the AutoDrop copy carries the declaration's line */
+    if (m->stmts[ds - 1].span.line != ar->nodes[n].line) return 0;
+    if (outvid) *outvid = vid;
+    return ar->nodes[n].aux == 1 ? CL_HANDBACK : CL_DROP;
+}
+
+
+/* One `N_DECL` (or the head of an `N_DECLS` chain) as a TS_DECL. */
+static int tb_stmt_decl(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int sid, vid, init, t;
+
+    ar = tb_arena();
+    m = tb->m;
+    sid = tmod_new_stmt(m, TS_DECL, tb->file, tb_line(n), tb_col(n), tb->scope);
+    if (sid < 0) return -1;
+    vid = tb_declare(tb, n, 0, 0);
+    if (vid < 0) return -1;
+    m->stmts[sid - 1].aux = vid;
+    if (vid > 0) m->vars[vid - 1].decl_stmt = sid;
+    init = ar->nodes[n].a;
+    if (init >= 0) {
+        t = tmod_type(m, ar->nodes[n].text, tb->in_template);
+        if (t <= 0) t = 0;
+        tmod_stmt_add_kid(m, sid, tb_expr(tb, init, t));
+    }
+    return sid;
+}
+
+static int tb_stmt_decls(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    int sid, c, sub;
+
+    ar = tb_arena();
+    sid = tmod_new_stmt(tb->m, TS_DECLS, tb->file, tb_line(n), tb_col(n), tb->scope);
+    if (sid < 0) return -1;
+    for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+        sub = tb_stmt_decl(tb, c);
+        if (sub < 0) return -1;
+        if (sub > 0) tmod_stmt_add_kid(tb->m, sid, sub);
+    }
+    return sid;
+}
+
+/* `defer` / `errdefer`: not a statement, a cleanup entry on the scope. */
+static int tb_stmt_defer(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    int kind, body;
+
+    ar = tb_arena();
+    kind = ar->nodes[n].aux == 1 ? CL_ERRDEFER : CL_DEFER;
+    body = tb_stmt(tb, ar->nodes[n].a);
+    if (body < 0) return -1;
+    if (tmod_scope_add_cleanup(tb->m, tb->scope, kind, body,
+                               kind == CL_ERRDEFER ? 1 : 0,
+                               tb->file, tb_line(n), tb_col(n)) < 0)
+        return -1;
+    return 0;
+}
+
+/* Bindings of one match arm: each N_BIND names a local and a raw accessor. */
+static int tb_arm_bindings(struct TBuilder *tb, int arm)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int c, decl, vid, t;
+
+    ar = tb_arena();
+    m = tb->m;
+    for (c = ar->nodes[arm].a; c >= 0; c = ar->nodes[c].next) {
+        decl = ar->nodes[c].a;
+        if (decl < 0) continue;
+        vid = tb_declare(tb, decl, 0, 0);
+        if (vid < 0) return -1;
+        if (ar->nodes[c].b >= 0) {
+            t = tmod_type(m, ar->nodes[decl].text, tb->in_template);
+            tb_expr(tb, ar->nodes[c].b, t);
+        }
+    }
+    return 0;
+}
+
+static int tb_stmt_match_arm(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    int sid, saved;
+
+    ar = tb_arena();
+    sid = tmod_new_stmt(tb->m, TS_ARM, tb->file, tb_line(n), tb_col(n), tb->scope);
+    if (sid < 0) return -1;
+    tb->m->stmts[sid - 1].aux = ar->nodes[n].aux;
+    saved = tb->scope;
+    if (tb_push_scope(tb, SC_ARM) < 0) return -1;
+    if (tb_arm_bindings(tb, n) != 0) return -1;
+    if (ar->nodes[n].c >= 0) tb_expr_kid(tb, sid, tb_expr(tb, ar->nodes[n].c, 0));
+    if (ar->nodes[n].b >= 0) {
+        int b;
+        b = tb_stmt(tb, ar->nodes[n].b);
+        if (b > 0) tmod_stmt_add_kid(tb->m, sid, b);
+    }
+    tb_pop_scope(tb);
+    tb->scope = saved;
+    return sid;
+}
+
+static int tb_stmt(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int k, sid, c, t, saved, kind;
+
+    if (n < 0) return 0;
+    ar = tb_arena();
+    m = tb->m;
+    k = ar->nodes[n].kind;
+    switch (k) {
+        case N_DEFER:
+            return tb_stmt_defer(tb, n);
+        case N_DEFER_RUN:
+            /* an exit copy: the owning block registers the cleanup entry */
+            return 0;
+        case N_DECL:
+            return tb_stmt_decl(tb, n);
+        case N_DECLS:
+            return tb_stmt_decls(tb, n);
+        case N_BLOCK:
+            return tb_block(tb, n, TS_BLOCK);
+        case N_EXPR:
+            sid = tmod_new_stmt(m, TS_EXPR, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            if (ar->nodes[n].a >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            return sid;
+        case N_RET:
+            sid = tmod_new_stmt(m, TS_RET, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            m->stmts[sid - 1].aux = ar->nodes[n].aux;
+            if (ar->nodes[n].b >= 0) {
+                for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
+                    t = tb_stmt(tb, c);
+                    if (t > 0) tmod_stmt_add_kid(m, sid, t);
+                }
+            }
+            if (ar->nodes[n].a >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, tb->ret_type));
+            return sid;
+        case N_IF:
+            sid = tmod_new_stmt(m, TS_IF, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            if (ar->nodes[n].b >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].b));
+            if (ar->nodes[n].c >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].c));
+            return sid;
+        case N_WHILE:
+            sid = tmod_new_stmt(m, TS_WHILE, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            if (ar->nodes[n].b >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].b));
+            return sid;
+        case N_DOWHILE:
+            sid = tmod_new_stmt(m, TS_DO, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            if (ar->nodes[n].b >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].b));
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            return sid;
+        case N_FOR: {
+            sid = tmod_new_stmt(m, TS_FOR, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            saved = tb->scope;
+            if (tb_push_scope(tb, SC_FOR) < 0) return -1;
+            if (ar->nodes[n].a >= 0) {
+                if (ar->nodes[ar->nodes[n].a].kind == N_DECL
+                    || ar->nodes[ar->nodes[n].a].kind == N_DECLS)
+                    tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].a));
+                else
+                    tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            }
+            if (ar->nodes[n].b >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].b, 0));
+            if (ar->nodes[n].c >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].c, 0));
+            if (ar->nodes[n].d >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].d));
+            tb_pop_scope(tb);
+            tb->scope = saved;
+            return sid;
+        }
+        case N_LOOP:
+            sid = tmod_new_stmt(m, TS_LOOP, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            if (ar->nodes[n].b >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].b, 0));
+            if (ar->nodes[n].d >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].d));
+            return sid;
+        case N_FOREACH: {
+            int item_type;
+            sid = tmod_new_stmt(m, TS_FOREACH, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            m->stmts[sid - 1].aux = ar->nodes[n].aux;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            saved = tb->scope;
+            if (tb_push_scope(tb, SC_BLOCK) < 0) return -1;
+            item_type = tmod_type(m, ar->nodes[n].text, tb->in_template);
+            if (tmod_scope_add_var(m, tb->scope, "item", item_type, OA_NONE, 0, 0) < 0)
+                return -1;
+            if (ar->nodes[n].aux != 2
+                && tmod_scope_add_var(m, tb->scope, "i",
+                                      tmod_type(m, "int", 0), OA_NONE, 0, 0) < 0)
+                return -1;
+            if (ar->nodes[n].d >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].d));
+            tb_pop_scope(tb);
+            tb->scope = saved;
+            return sid;
+        }
+        case N_SWITCH:
+            sid = tmod_new_stmt(m, TS_SWITCH, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            if (ar->nodes[n].b >= 0)
+                tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].b));
+            return sid;
+        case N_CASE:
+            sid = tmod_new_stmt(m, TS_CASE, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            m->stmts[sid - 1].aux = ar->nodes[n].aux;
+            if (ar->nodes[n].b >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].b, 0));
+            if (ar->nodes[n].c >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].c, 0));
+            for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+                t = tb_stmt(tb, c);
+                if (t > 0) tmod_stmt_add_kid(m, sid, t);
+            }
+            return sid;
+        case N_BREAK:
+        case N_CONT:
+            sid = tmod_new_stmt(m, k == N_BREAK ? TS_BREAK : TS_CONT,
+                                tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            m->stmts[sid - 1].aux = ar->nodes[n].text2[0] ? 1 : 0;
+            for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
+                t = tb_stmt(tb, c);
+                if (t > 0) tmod_stmt_add_kid(m, sid, t);
+            }
+            return sid;
+        case N_GOTO:
+            sid = tmod_new_stmt(m, TS_GOTO, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            m->stmts[sid - 1].aux = 1;
+            return sid;
+        case N_LABEL:
+            sid = tmod_new_stmt(m, TS_LABEL, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+                t = tb_stmt(tb, c);
+                if (t > 0) tmod_stmt_add_kid(m, sid, t);
+            }
+            return sid;
+        case N_MATCH:
+            /* a match statement has the same guts as the expression form */
+            sid = tmod_new_stmt(m, TS_MATCH, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            m->stmts[sid - 1].aux = ar->nodes[n].aux;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
+                t = tb_stmt_match_arm(tb, c);
+                if (t > 0) tmod_stmt_add_kid(m, sid, t);
+            }
+            return sid;
+        case N_ARM:
+            return tb_stmt_match_arm(tb, n);
+        case N_DELETE: {
+            int attr, dvid;
+            attr = tb_attr_delete(tb, n, &dvid);
+            if (attr > 0) {
+                /* An AutoDrop / borrow release is a scope cleanup, never a
+                   statement. Copies sit in every exit chain; only the copy
+                   whose current scope is the declaring scope registers the
+                   entry (the others are the same object seen again). */
+                if (dvid > 0 && dvid <= m->nvars
+                    && m->vars[dvid - 1].scope == tb->scope
+                    && m->vars[dvid - 1].own_kind == OA_NONE) {
+                    int cid, init;
+                    init = ar->nodes[n].a >= 0
+                           ? tb_expr(tb, ar->nodes[n].a,
+                                     m->vars[dvid - 1].type) : 0;
+                    cid = tmod_scope_add_cleanup(m, tb->scope, attr, init, 0,
+                                                 tb->file, tb_line(n), tb_col(n));
+                    if (cid < 0) return -1;
+                    m->vars[dvid - 1].own_kind =
+                        attr == CL_HANDBACK ? OA_HANDBACK_AT_EXIT
+                                            : OA_DROP_AT_EXIT;
+                    if (init > 0 && m->exprs[init - 1].own == OA_NONE)
+                        m->exprs[init - 1].own = m->vars[dvid - 1].own_kind;
+                    if (attr == CL_HANDBACK) {
+                        int ds2;
+                        ds2 = m->vars[dvid - 1].decl_stmt;
+                        if (ds2 > 0 && ds2 <= m->nstmts
+                            && m->stmts[ds2 - 1].nkids > 0) {
+                            int ik = m->stmts[ds2 - 1].kids[0];
+                            if (ik > 0 && ik <= m->nexprs)
+                                m->exprs[ik - 1].own = OA_HANDBACK_AT_EXIT;
+                        }
+                    }
+                }
+                return 0;
+            }
+            sid = tmod_new_stmt(m, TS_DELETE, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            m->stmts[sid - 1].aux = ar->nodes[n].aux;
+            if (ar->nodes[n].a >= 0) {
+                int vt;
+                vt = tb_type_of(tb, ar->nodes[n].a, 0);
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, vt));
+            }
+            return sid;
+        }
+        case N_SASSERT:
+            sid = tmod_new_stmt(m, TS_SASSERT, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            return sid;
+        case N_EMPTY:
+            return tmod_new_stmt(m, TS_EMPTY, tb->file, tb_line(n), tb_col(n),
+                                 tb->scope);
+        case N_INTO:
+        case N_MATSEQ:
+            sid = tmod_new_stmt(m, k == N_INTO ? TS_INTO : TS_MATSEQ,
+                                tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) return -1;
+            tmod_stmt_add_kid(m, sid, tb_expr(tb, n, 0));
+            return sid;
+        default:
+            /* A statement-shaped node the walker does not know still keeps
+               its position and children, so the coverage report can name it. */
+            sid = tmod_new_stmt(m, TS_OTHER, tb->file, tb_line(n), tb_col(n),
+                                tb->scope);
+            if (sid < 0) return -1;
+            kind = k;
+            (void)kind;
+            if (ar->nodes[n].a >= 0)
+                tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+            return sid;
+    }
+}
+
+/* One source block: its own TScope, statements in source order. */
+static int tb_block(struct TBuilder *tb, int n, int kind)
+{
+    struct Arena *ar;
+    int sid, c, t, saved;
+
+    ar = tb_arena();
+    sid = tmod_new_stmt(tb->m, kind, tb->file, tb_line(n), tb_col(n), tb->scope);
+    if (sid < 0) return -1;
+    saved = tb->scope;
+    if (tb_push_scope(tb, SC_BLOCK) < 0) return -1;
+    tb->m->stmts[sid - 1].scope = tb->scope;
+    for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+        if (ar->nodes[c].kind == N_DEFER_RUN) {
+            /* The parser links a `defer` body before each exit as N_DEFER_RUN
+               and no N_DEFER node reaches the block chain (the original stays
+               in its private table). The block-end copy is the one that owns
+               the scope entry; return/break copies are skipped in tb_stmt. */
+            int ck, cbody;
+            ck = ar->nodes[c].aux == 1 ? CL_ERRDEFER : CL_DEFER;
+            cbody = tb_stmt(tb, ar->nodes[c].a);
+            if (cbody < 0) return -1;
+            if (tmod_scope_add_cleanup(tb->m, tb->scope, ck, cbody,
+                                       ck == CL_ERRDEFER ? 1 : 0,
+                                       tb->file, ar->nodes[c].line,
+                                       ar->nodes[c].num) < 0)
+                return -1;
+            continue;
+        }
+        t = tb_stmt(tb, c);
+        if (t < 0) return -1;
+        if (t > 0) tmod_stmt_add_kid(tb->m, sid, t);
+    }
+    tb_pop_scope(tb);
+    tb->scope = saved;
+    return sid;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Declarations                                                              */
+/* ------------------------------------------------------------------------- */
+
+/* One function (free function or impl method). `name` is the TIR-level name:
+   a free function keeps its source name, an impl method is `<recv>.<method>`
+   so two structs may own the same method spelling. */
+static int tb_func_decl(struct TBuilder *tb, int n, const char *name, int recv_type,
+                        int impl_decl)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TModule *m;
+    int decl, ret, c, fscope;
+    int saved_scope, saved_func, saved_ret, saved_self, saved_tmpl;
+    int tmpl, fi;
+
+    ar = tb_arena();
+    sym = tb_sym();
+    m = tb->m;
+    decl = tmod_new_decl(m, TD_FUNC, name, tb->file, tb_line(n), tb_col(n), tb->unit);
+    if (decl < 0) return -1;
+    fi = sym->find_func(ar->nodes[n].text2);
+    tmpl = (fi >= 0 && sym->funcs[fi].ntparams > 0) ? 1 : 0;
+    if (tmod_spelling_free(ar->nodes[n].text)) tmpl = 1;
+    if (recv_type > 0 && tmod_spelling_free(tmod_cspell(m, recv_type))) tmpl = 1;
+    for (c = ar->nodes[n].a; c > 0; c = ar->nodes[c].next)
+        if (tmod_spelling_free(ar->nodes[c].text)) tmpl = 1;
+    saved_tmpl = tb->in_template;
+    tb->in_template += tmpl;
+    ret = tmod_type(m, ar->nodes[n].text, tb->in_template);
+    m->decls[decl - 1].type = ret;
+    (void)impl_decl;
+    saved_scope = tb->scope;
+    saved_func = tb->func_decl;
+    saved_ret = tb->ret_type;
+    saved_self = tb->self_type;
+    tb->scope = 0;
+    if (tb_push_scope(tb, SC_FUNC) < 0) return -1;
+    fscope = tb->scope;
+    m->decls[decl - 1].scope = fscope;
+    tb->func_decl = decl;
+    tb->ret_type = ret;
+    if (recv_type > 0) {
+        tb->self_type = recv_type;
+        if (tmod_scope_add_var(m, fscope, "self", recv_type, OA_NONE, 0, 1) < 0)
+            return -1;
+    }
+    for (c = ar->nodes[n].a; c > 0; c = ar->nodes[c].next) {
+        int pt;
+        pt = tmod_type(m, ar->nodes[c].text, tb->in_template);
+        if (tmod_decl_add_param(m, decl, pt) != 0) return -1;
+        if (tb_declare(tb, c, 1, 0) < 0) return -1;
+    }
+    if (ar->nodes[n].b >= 0 && tb_stmt(tb, ar->nodes[n].b) < 0) return -1;
+    tb_pop_scope(tb);
+    tb->scope = saved_scope;
+    tb->func_decl = saved_func;
+    tb->ret_type = saved_ret;
+    tb->self_type = saved_self;
+    tb->in_template = saved_tmpl;
+    return decl;
+}
+
+static int tb_struct(struct TBuilder *tb, int n, int kind)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TModule *m;
+    const char *name;
+    const char *sp;
+    int decl, tyid, c, si, u, tmpl;
+
+    ar = tb_arena();
+    sym = tb_sym();
+    m = tb->m;
+    name = ar->nodes[n].text2;
+    decl = tmod_new_decl(m, kind, name, tb->file, tb_line(n), tb_col(n), tb->unit);
+    if (decl < 0) return -1;
+    si = sym->find_struct(name);
+    tmpl = (si >= 0 && sym->structs[si].is_template) ? 1 : 0;
+    for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next)
+        if (ar->nodes[c].kind == N_FIELD && tmod_spelling_free(ar->nodes[c].text))
+            tmpl = 1;
+    tb->in_template += tmpl;
+    sp = runtime::text::ct_internf("struct %s", name);
+    tyid = tmod_type(m, sp, tb->in_template);
+    m->decls[decl - 1].type = tyid;
+    for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+        int ft;
+        if (ar->nodes[c].kind != N_FIELD) continue;
+        ft = tmod_type(m, ar->nodes[c].text, tb->in_template);
+        if (tmod_decl_add_param(m, decl, ft) != 0) return -1;
+        if (tmod_new_member(m, decl, ar->nodes[c].text2, ft, 0,
+                            ar->nodes[c].line) < 0) return -1;
+    }
+    if (si >= 0) {
+        for (u = 0; u < sym->structs[si].nuse; u++) {
+            int td;
+            td = tb_ensure_trait(tb, sym->structs[si].use[u]);
+            if (td > 0) tmod_decl_add_trait(m, decl, td);
+        }
+    }
+    tb->in_template -= tmpl;
+    return decl;
+}
+
+static int tb_enum(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TModule *m;
+    const char *name;
+    int decl, tyid, c, adt, kind;
+
+    ar = tb_arena();
+    sym = tb_sym();
+    m = tb->m;
+    name = ar->nodes[n].text2;
+    adt = (ar->nodes[n].aux & 2) ? 1 : 0;
+    kind = adt ? TD_ADT : TD_ENUM;
+    decl = tmod_new_decl(m, kind, name, tb->file, tb_line(n), tb_col(n), tb->unit);
+    if (decl < 0) return -1;
+    if (adt) tyid = tmod_type(m, runtime::text::ct_internf("struct %s", name), 0);
+    else tyid = tmod_type(m, runtime::text::ct_internf("enum %s", name), 0);
+    m->decls[decl - 1].type = tyid;
+    if (adt) {
+        int adi, nad, v;
+        struct Adt *adts;
+        adts = frontend::sym::ct_adts(&nad);
+        adi = frontend::sym::ct_adt_find(name);
+        for (v = 0; adts && adi >= 0 && v < adts[adi].nvariants; v++) {
+            if (tmod_new_member(m, decl, adts[adi].variants[v].name,
+                                tyid, v, ar->nodes[n].line) < 0) return -1;
+        }
+    } else {
+        int it;
+        it = tmod_type(m, "int", 0);
+        for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+            int val;
+            val = 0;
+            if (ar->nodes[c].a >= 0
+                && ar->nodes[ar->nodes[c].a].kind == N_NUM)
+                val = (int)ar->nodes[ar->nodes[c].a].num;
+            if (tmod_new_member(m, decl, ar->nodes[c].text2, it, val,
+                                ar->nodes[c].line) < 0) return -1;
+        }
+    }
+    (void)sym;
+    return decl;
+}
+
+static int tb_typedef(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int decl;
+
+    ar = tb_arena();
+    m = tb->m;
+    decl = tmod_new_decl(m, TD_TYPEDEF, ar->nodes[n].text2, tb->file,
+                         tb_line(n), tb_col(n), tb->unit);
+    if (decl < 0) return -1;
+    m->decls[decl - 1].type = tmod_type(m, ar->nodes[n].text, 0);
+    return decl;
+}
+
+static int tb_global(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    struct TModule *m;
+    int decl, tyid;
+
+    ar = tb_arena();
+    m = tb->m;
+    decl = tmod_new_decl(m, TD_GLOBAL, ar->nodes[n].text2, tb->file,
+                         tb_line(n), tb_col(n), tb->unit);
+    if (decl < 0) return -1;
+    tyid = tmod_type(m, ar->nodes[n].text,
+                     tb->in_template || tmod_spelling_free(ar->nodes[n].text));
+    m->decls[decl - 1].type = tyid;
+    if (ar->nodes[n].a >= 0) tb_expr(tb, ar->nodes[n].a, tyid);
+    return decl;
+}
+
+/* One `trait` row (there is no AST node for a trait declaration). */
+static int tb_trait(struct TBuilder *tb, int ti)
+{
+    struct Symbols *sym;
+    struct TModule *m;
+    struct Trait *tr;
+    int decl, mi;
+
+    sym = tb_sym();
+    m = tb->m;
+    tr = &sym->traits[ti];
+    decl = tmod_new_decl(m, TD_TRAIT, tr->name, tb->file, tr->line, 0, tb->unit);
+    if (decl < 0) return -1;
+    for (mi = 0; mi < tr->nm; mi++) {
+        int mt;
+        mt = tmod_type(m, tr->m[mi].ret, 1);
+        if (tmod_decl_add_param(m, decl, mt) != 0) return -1;
+        if (tmod_new_member(m, decl, tr->m[mi].name, mt, mi,
+                            tr->m[mi].line) < 0) return -1;
+    }
+    return decl;
+}
+
+/* A trait row is created on first reference, not per declaring unit: build
+   mode visits units in load order, so an importer can be processed before the
+   unit that declares the trait. The row is complete (signature + slot names)
+   from the symbol table, so a lazily created trait is indistinguishable. */
+static int tb_ensure_trait(struct TBuilder *tb, const char *name)
+{
+    int ti, decl;
+
+    ti = tb_sym()->find_trait(name);
+    if (ti < 0) return 0;
+    decl = tb_find_decl(tb->m, TD_TRAIT, tb_sym()->traits[ti].name);
+    if (decl > 0) return decl;
+    return tb_trait(tb, ti);
+}
+
+static int tb_impl(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+    struct Symbols *sym;
+    struct TModule *m;
+    const char *trait;
+    const char *recv;
+    const char *key;
+    int si, decl, tyid, c, td, saved_self, impl_tmpl;
+
+    ar = tb_arena();
+    sym = tb_sym();
+    m = tb->m;
+    si = ar->nodes[n].aux;
+    trait = ar->nodes[n].text2;
+    recv = ar->nodes[n].text;
+    if ((!recv || !recv[0]) && si >= 0 && si < sym->nstructs)
+        recv = runtime::text::ct_internf("struct %s", sym->structs[si].name);
+    if (!recv) recv = "";
+    decl = tmod_new_decl(m, TD_IMPL, runtime::text::ct_internf("impl %s for %s",
+                         trait ? trait : "", recv), tb->file, tb_line(n),
+                         tb_col(n), tb->unit);
+    if (decl < 0) return -1;
+    tyid = tmod_type(m, recv, tb->in_template);
+    m->decls[decl - 1].type = tyid;
+    if (trait && trait[0]) {
+        td = tb_ensure_trait(tb, trait);
+        if (td > 0) tmod_decl_add_trait(m, decl, td);
+    }
+    saved_self = tb->self_type;
+    impl_tmpl = 0;
+    if (si < 0) impl_tmpl = 1;
+    if (tmod_spelling_free(recv)) impl_tmpl = 1;
+    tb->in_template += impl_tmpl;
+    tb->self_type = tmod_type(m, runtime::text::ct_internf("%s *", recv),
+                              tb->in_template);
+    for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+        int mdecl;
+        const char *base;
+        base = recv;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        key = runtime::text::ct_internf("%s.%s", base, ar->nodes[c].text2);
+        if (!key) return -1;
+        mdecl = tb_func_decl(tb, c, key, tb->self_type, decl);
+        if (mdecl < 0) return -1;
+        if (tmod_decl_add_param(m, decl, mdecl) != 0) return -1;
+        if (tmod_new_member(m, decl, ar->nodes[c].text2,
+                            tmod_type(m, ar->nodes[c].text, tb->in_template),
+                            mdecl, ar->nodes[c].line) < 0) return -1;
+    }
+    tb->self_type = saved_self;
+    tb->in_template -= impl_tmpl;
+    return decl;
+}
+
+static int tb_top_decl(struct TBuilder *tb, int n)
+{
+    struct Arena *ar;
+
+    ar = tb_arena();
+    switch (ar->nodes[n].kind) {
+        case N_FUNC:
+            return tb_func_decl(tb, n, ar->nodes[n].text2, 0, 0);
+        case N_GLOBAL:
+            return tb_global(tb, n);
+        case N_STRUCT:
+            return tb_struct(tb, n, TD_STRUCT);
+        case N_UNION:
+            return tb_struct(tb, n, TD_UNION);
+        case N_ENUM:
+            return tb_enum(tb, n);
+        case N_TYPEDEF:
+            return tb_typedef(tb, n);
+        case N_IMPL:
+            return tb_impl(tb, n);
+        default:
+            return 0;
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Generic instances (V4 input)                                              */
+/* ------------------------------------------------------------------------- */
+static int tb_find_inst(struct TModule *m, int tmpl, int *args, int nargs)
+{
+    int i, j;
+
+    for (i = 0; i < m->ninsts; i++) {
+        if (m->insts[i].tmpl != tmpl) continue;
+        if (m->insts[i].nargs != nargs) continue;
+        for (j = 0; j < nargs; j++)
+            if (m->insts[i].args[j] != args[j]) break;
+        if (j == nargs) return m->insts[i].id;
+    }
+    return 0;
+}
+
+static int tb_add_inst(struct TBuilder *tb, int tmpl, int *args, int nargs)
+{
+    struct TModule *m;
+    int iid, from, to, i;
+
+    m = tb->m;
+    if (tmpl <= 0) return 0;
+    if (tb_find_inst(m, tmpl, args, nargs) > 0) return 0;
+    iid = tmod_new_inst(m, tmpl, tb->unit);
+    if (iid < 0) return -1;
+    for (i = 0; i < nargs; i++)
+        if (tmod_inst_add_arg(m, iid, args[i]) != 0) return -1;
+    from = tmod_graph_node(m, GN_INST, iid);
+    to = tmod_graph_node(m, GN_TMPL, tmpl);
+    if (from < 0 || to < 0) return -1;
+    if (tmod_graph_edge(m, from, to, TE_INSTANTIATE, "", 0) != 0) return -1;
+    return iid;
+}
+
+static int tb_instances(struct TBuilder *tb)
+{
+    struct Symbols *sym;
+    struct TModule *m;
+    struct StructInst *sins;
+    int i, j, nins, tmpl, n, args[16];
+
+    sym = tb_sym();
+    m = tb->m;
+    for (i = 0; i < sym->nginsts; i++) {
+        struct GenericInst *g;
+        g = &sym->ginsts[i];
+        if (g->func < 0 || g->func >= sym->nfunc) continue;
+        tmpl = tb_find_decl(m, TD_FUNC, sym->funcs[g->func].name);
+        if (tmpl <= 0) tmpl = tb_find_decl(m, TD_FUNC, sym->funcs[g->func].cname);
+        if (tmpl <= 0) continue;
+        args[0] = tmod_type(m, g->targ, 1);
+        if (args[0] <= 0) continue;
+        if (tb_add_inst(tb, tmpl, args, 1) < 0) return -1;
+    }
+    sins = frontend::sym::ct_insts(&nins);
+    for (i = 0; i < nins; i++) {
+        tmpl = tb_find_decl(m, TD_STRUCT, sins[i].tmpl);
+        if (tmpl <= 0) continue;
+        n = sins[i].nargs;
+        if (n > 16) n = 16;
+        for (j = 0; j < n; j++)
+            args[j] = tmod_type(m, sins[i].carg[j], 1);
+        if (tb_add_inst(tb, tmpl, args, n) < 0) return -1;
+    }
+    return 0;
+}
+
+/* Test seam for the verifier negatives. Only the shadow switch reaches this;
+   every row appended here is deliberately malformed. */
+static int tb_fault(struct TBuilder *tb)
+{
+    struct TModule *m;
+    const char *f;
+    int eid, lhs, rhs;
+
+    m = tb->m;
+    f = getenv("CT_TIR_FAULT");
+    if (!f || !f[0]) return 0;
+    if (strcmp(f, "ir-v1-missing-type") == 0) {
+        eid = tmod_new_expr(m, TK_LITERAL, tb->file, 0, 0);
+        if (eid < 0) return -1;
+        return 0;
+    }
+    if (strcmp(f, "ir-v2-rvalue-assign") == 0) {
+        lhs = tmod_new_expr(m, TK_NAME_LOCAL, tb->file, 0, 0);
+        rhs = tmod_new_expr(m, TK_LITERAL, tb->file, 0, 0);
+        eid = tmod_new_expr(m, TK_ASSIGN, tb->file, 0, 0);
+        if (lhs < 0 || rhs < 0 || eid < 0) return -1;
+        m->exprs[lhs - 1].vclass = VC_RVALUE;
+        m->exprs[lhs - 1].type = tmod_type_void(m);
+        m->exprs[rhs - 1].type = tmod_type_void(m);
+        m->exprs[eid - 1].type = tmod_type_void(m);
+        if (tmod_expr_add_kid(m, eid, lhs) != 0) return -1;
+        if (tmod_expr_add_kid(m, eid, rhs) != 0) return -1;
+        return 0;
+    }
+    if (strcmp(f, "ir-v3-unresolved-call") == 0) {
+        eid = tmod_new_expr(m, TK_CALL, tb->file, 0, 0);
+        if (eid < 0) return -1;
+        m->exprs[eid - 1].type = tmod_type_void(m);
+        return 0;
+    }
+    if (strcmp(f, "ir-v4-open-instance") == 0
+        || strcmp(f, "ir-v4-instance-cycle") == 0) {
+        if (tmod_new_inst(m, 0, tb->unit) < 0) return -1;
+        return 0;
+    }
+    fprintf(stderr, "tir: unknown fault key '%s'\n", f);
+    return 0;
+}
+
+/* Build one unit's slice: declarations in source order, then instances, then
+   the test seam, then verification of exactly the rows this slice appended.
+   A failure is reported by the verifier and the caller writes no C. */
+static int tb_build(int prog, const char *path, const char *base, const char *ns,
+                    int is_hdr, int is_map, int mod_unit, int ndep,
+                    const char *dep)
+{
+    struct TBuilder *tb;
+    struct TModule *m;
+    struct ct_tmark mark;
+    struct Arena *ar;
+    clock_t t0, t1;
+    int u, n, i, kind, from, to, decl;
+
+    t0 = clock();
+    m = tmod_get();
+    tb = &g_tb;
+    memset(tb, 0, sizeof(struct TBuilder));
+    tb->m = m;
+    tb->mod_unit = mod_unit;
+    tb->file = tmod_file(m, path);
+    if (tb->file < 0) return 1;
+    kind = is_map ? TU_MAP : (is_hdr ? TU_HDR : TU_CT);
+    u = tmod_new_unit(m, base ? base : "", ns ? ns : "", kind, prog);
+    if (u < 0) return 1;
+    tb->unit = u;
+    if (tmod_add_root(m, TR_ENTRY, u, base) != 0) return 1;
+    from = tmod_graph_node(m, GN_UNIT, u);
+    for (i = 0; dep && i < ndep; i++) {
+        const char *dn;
+        int du;
+        dn = dep + (size_t)i * MAX_TEXT;
+        du = tb_find_unit(m, dn);
+        if (tmod_unit_add_import(m, u, dn) != 0) return 1;
+        if (tmod_add_root(m, TR_IMPORT, du, dn) != 0) return 1;
+    }
+    tmod_mark(m, &mark);
+    ar = tb_arena();
+    for (n = ar->nodes[prog].a; n >= 0; n = ar->nodes[n].next) {
+        decl = tb_top_decl(tb, n);
+        if (decl < 0) return 1;
+        if (decl <= 0) continue;
+        if (tmod_unit_add_decl(m, u, decl) != 0) return 1;
+        if (from < 0) continue;
+        to = tmod_graph_node(m, GN_DECL, decl);
+        if (to >= 0 && tmod_graph_edge(m, from, to, TE_CONTAINS, "", 0) != 0) return 1;
+    }
+    if (tb_instances(tb) != 0) return 1;
+    if (tb->failed) {
+        fprintf(stderr, "tir: a TIR pool refused a row (capacity or OOM)\n");
+        return 1;
+    }
+    if (tb_fault(tb) != 0) return 1;
+    if (backend::verify::ct_verifier_run(m, u, &mark) != 0) return 1;
+    t1 = clock();
+    tmod_report(m, base, ((double)(t1 - t0)) * 1000.0 / (double)CLOCKS_PER_SEC);
+    return 0;
+}
+
+/* `CT_TIR=1` (or `shadow`) turns the TIR shadow on; unset, `0` and `off` keep
+   the historical path. `CT_TIR_FAULT` implies the shadow so the verifier
+   negatives need one variable, not two. */
+pub int ct_tir_shadow_on(void)
+{
+    const char *e;
+
+    e = getenv("CT_TIR");
+    if (e && e[0] && strcmp(e, "0") != 0 && strcmp(e, "off") != 0) return 1;
+    e = getenv("CT_TIR_FAULT");
+    if (e && e[0]) return 1;
+    return 0;
+}
+
+/* Compile mode: one unit, no import rows. */
+pub int ct_tir_shadow_program(int prog, const char *path, const char *base,
+                              const char *ns, int is_hdr, int is_map)
+{
+    if (!ct_tir_shadow_on()) return 0;
+    return tb_build(prog, path, base, ns, is_hdr, is_map, -1, 0,
+                    (const char *)0);
+}
+
+/* Build mode: `up` is the module layer's `struct Unit *`. Its dependency rows
+   are the explicit import roots; `mod_unit` filters the trait table to the
+   rows the unit declared. */
+pub int ct_tir_shadow_unit(void *up, int mod_unit)
+{
+    struct Unit *u;
+
+    if (!ct_tir_shadow_on()) return 0;
+    u = (struct Unit *)up;
+    if (!u) return 0;
+    return tb_build(u->prog, u->path, u->base, u->ns, u->is_hdr, u->is_map,
+                    mod_unit, u->ndep, u->dep);
+}

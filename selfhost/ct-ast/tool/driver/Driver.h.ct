@@ -23,6 +23,7 @@
 import frontend::module::ModuleBoundary;
 
 import backend::emit::Emitter;
+import backend::tir::TBuilder;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Module;
@@ -1054,6 +1055,13 @@ impl DriverOps for Driver {
             if (tool::diag::ct_diag_nwarn() > 0) return 1;
             return 0;
         }
+        /* S1b-S1: the TIR shadow (CT_TIR=1) is built and V1-V4 verified here,
+           before the output file is opened; a failure leaves no `.c`. */
+        if (backend::tir::ct_tir_shadow_on()
+            && backend::tir::ct_tir_shadow_program(prog, in, self->p->c_base,
+                                                   "", self->p->unit_is_hdr,
+                                                   self->p->unit_is_map) != 0)
+            return 1;
         f = fopen(out, "w");
         if (!f) {
             fprintf(stderr, "ctc: cannot write '%s'%s\n", out,

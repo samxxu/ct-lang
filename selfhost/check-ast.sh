@@ -2109,6 +2109,16 @@ for ct in test/cases/*.ct examples/*/*.ct; do
 done
 
 echo
+echo "== TIR typed shadow (S1b-S1: V1-V4, byte-identical) =="
+if bash test/ir/run.sh "$work/ct-ast" >"$work/ir.out" 2>"$work/ir.err"; then
+    ok "S1b-S1 TIR shadow ($(tail -1 "$work/ir.out"))"
+else
+    bad "S1b-S1 TIR shadow" \
+        "$(tail -6 "$work/ir.out" "$work/ir.err" 2>/dev/null | tr '\n' ' ')"
+    sed 's/^/    /' "$work/ir.out" "$work/ir.err" 2>/dev/null | head -20
+fi
+
+echo
 echo "== module cases (build -> cc -> run -> compare) =="
 mod="$work/mod"
 rm -rf "$mod-split"
