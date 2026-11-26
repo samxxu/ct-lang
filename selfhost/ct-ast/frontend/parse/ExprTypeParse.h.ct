@@ -212,7 +212,197 @@ pub int type_only_qualifiers(const char *spell)
     return 1;
 }
 
+
+/* D-029: does the `(` at the cursor open `( ... ) =>`, the functor type
+   sugar? The token stream cannot be rewound, so the answer comes from the raw
+   source: scan to the matching `)`, skipping strings, chars and comments, and
+   look for `=>`. This mirrors Expr.h.ct's `closure_ahead`; the type parser is
+   a separate unit, so it cannot share that static. Nothing is consumed. */
+static int functor_ahead(struct Expr *self)
+{
+    const char *s = self->lex->src;
+    int i = self->lex->tokstart;
+    int depth = 0;
+
+    if (s[i] != '(') return 0;
+    for (; s[i]; i++) {
+        char c = s[i];
+        if (c == '"' || c == '\'') {
+            char q = c;
+            i++;
+            while (s[i] && s[i] != q) {
+                if (s[i] == '\\' && s[i + 1]) i++;
+                i++;
+            }
+            if (!s[i]) return 0;
+            continue;
+        }
+        if (c == '/' && s[i + 1] == '/') {
+            while (s[i] && s[i] != '\n') i++;
+            if (!s[i]) return 0;
+            continue;
+        }
+        if (c == '/' && s[i + 1] == '*') {
+            i += 2;
+            while (s[i] && !(s[i] == '*' && s[i + 1] == '/')) i++;
+            if (!s[i]) return 0;
+            i++;
+            continue;
+        }
+        if (c == '(' || c == '[' || c == '{') depth++;
+        else if (c == ')' || c == ']' || c == '}') {
+            depth--;
+            if (depth == 0) {
+                i++;
+                break;
+            }
+        }
+    }
+    while (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') i++;
+    return s[i] == '=' && s[i + 1] == '>';
+}
+
+/* D-029: a broken functor spelling still carries an arrow on the same
+   declaration. The type reader would otherwise report the generic "expected a
+   type" at the `(`; naming the shape is the actionable diagnostic. A
+   terminator (`;`, `{`, `}`) or the end of the line ends the search, so a
+   later initializer's closure arrow is never blamed on the type. */
+static int functor_arrow_on_line(struct Expr *self)
+{
+    const char *s = self->lex->src + self->lex->tokstart;
+
+    if (*s != '(') return 0;
+    for (; *s; s++) {
+        char c = *s;
+        if (c == '\n' || c == ';' || c == '{' || c == '}') return 0;
+        if (c == '"' || c == '\'') {
+            char q = c;
+            s++;
+            while (*s && *s != q) {
+                if (*s == '\\' && s[1]) s++;
+                s++;
+            }
+            if (!*s) return 0;
+            continue;
+        }
+        if (c == '/' && s[1] == '/') {
+            while (*s && *s != '\n') s++;
+            if (!*s) return 0;
+            continue;
+        }
+        if (c == '/' && s[1] == '*') {
+            s += 2;
+            while (*s && !(*s == '*' && s[1] == '/')) s++;
+            if (!*s) return 0;
+            s++;
+            continue;
+        }
+        if (c == '=' && s[1] == '>') return 1;
+    }
+    return 0;
+}
+
+/* D-029: read the parenthesized parameter list of `(A, B) => R` and return
+   the canonical C list. Names are optional and dropped: the list is a type,
+   not a declaration. `()` / `(void)` both answer `void`; `...` keeps the
+   existing variadic rule. */
+static int functor_params(struct Expr *self, const char **plist_out)
+{
+    const char *plist = "";
+    int pn = 0;
+
+    *plist_out = "void";
+    if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
+        self->sup->lex_next();
+        return 0;
+    }
+    for (;;) {
+        const char *pt;
+        const char *joiner;
+
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("...")) {
+            if (pn == 0 || strcmp(plist, "void") == 0)
+                return self->sup->fail("a variadic functor type needs a parameter before '...'");
+            plist = runtime::text::ct_intern_join(plist, ", ...");
+            if (!plist) return self->sup->fail("out of memory");
+            self->sup->lex_next();
+            break;
+        }
+        if (self->parse_type_text(&pt) != 0) return -1;
+        if (self->fnptr_state || strstr(pt, "(*)"))
+            return self->sup->fail("nested function pointers are not supported");
+        if (strcmp(pt, "void") == 0) {
+            if (self->lex->tok != T_PUNCT
+                || !(self->lex->tok_is(",") || self->lex->tok_is(")")))
+                return self->sup->fail("a 'void' functor parameter must be the only parameter");
+            if (self->lex->tok_is(","))
+                return self->sup->fail("a 'void' functor parameter must be the only parameter");
+        }
+        /* the optional parameter name is documentation only */
+        if (self->lex->tok == T_ID) self->sup->lex_next();
+        joiner = (pn > 0) ? ", " : "";
+        if (joiner[0]) {
+            plist = runtime::text::ct_intern_join(plist, joiner);
+            if (!plist) return self->sup->fail("out of memory");
+        }
+        plist = runtime::text::ct_intern_join(plist, pt);
+        if (!plist) return self->sup->fail("out of memory");
+        pn++;
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
+            self->sup->lex_next();
+            continue;
+        }
+        break;
+    }
+    if (self->sup->expect(")") != 0) return -1;
+    if (pn == 0) plist = "void";
+    *plist_out = plist;
+    return 0;
+}
+
+/* D-029: `(A, B) => R` parses to the same abstract declarator as
+   `R (*)(A, B)`. The caller has already matched `functor_ahead`, and the
+   cursor sits on `(`. The sugar is a complete type: `fnptr_state` stays 0 so
+   the declaration entries read the name, dimensions and initializer exactly
+   as they do for an ordinary type. */
+static int functor_parse(struct Expr *self, char *out, int cap, int *n)
+{
+    const char *plist;
+    const char *rt;
+    const char *sig;
+
+    if (self->functor_depth > 0)
+        return self->sup->fail("nested function pointers are not supported");
+    self->functor_depth++;
+    self->sup->lex_next();                       /* the `(` */
+    if (functor_params(self, &plist) != 0) return -1;
+    if (self->sup->expect("=>") != 0) return -1;
+    if (self->parse_type_text(&rt) != 0) return -1;
+    if (self->fnptr_state || strstr(rt, "(*)"))
+        return self->sup->fail("nested function pointers are not supported");
+    sig = runtime::text::ct_internf("(*)(%s)", plist);
+    if (!sig) return self->sup->fail("out of memory");
+    if (self->type_append(out, cap, n, rt) != 0) return -1;
+    if (self->type_append(out, cap, n, sig) != 0) return -1;
+    self->fnptr_state = 0;
+    self->fnptr_name = "";
+    self->fnptr_dims = "";
+    self->functor_depth--;
+    return 0;
+}
+
 impl ExprTypeParse for Expr {
+    int functor_type_ahead(void)
+    {
+        if (self->lex->tok != T_PUNCT || !self->lex->tok_is("(")) return 0;
+        /* A well-formed sugar opens a declaration. A malformed one that still
+           writes the arrow on the declaration line is routed to the type
+           reader too, so it gets the shape diagnostic instead of being misread
+           as a parenthesised expression. */
+        if (functor_ahead(self)) return 1;
+        return functor_arrow_on_line(self);
+    }
+
     int is_type_word(const char *w)
     {
         (void)self;
@@ -268,6 +458,26 @@ impl ExprTypeParse for Expr {
         self->fnptr_name = "";
         self->fnptr_dims = "";
         self->last_bare_tag = "";
+        /* D-029: a broken functor spelling carries the arrow on the
+           declaration line; name the shape at the `(` instead of the generic
+           "expected a type". Checked before the `(*)` lookahead restores the
+           token. */
+        if (!self->type_no_ptr
+            && self->lex->tok == T_PUNCT && self->lex->tok_is("(")
+            && !functor_ahead(self) && functor_arrow_on_line(self))
+            return self->sup->fail("a functor type needs a '(A, B) => R' shape");
+        /* D-029: `(A, B) => R` is the function-pointer type in another
+           spelling. It is a complete type, so the declarator name, array
+           dimensions and initializer are read by the existing callers exactly
+           as for `R (*)(A, B)`. */
+        if (!self->type_no_ptr
+            && self->lex->tok == T_PUNCT && self->lex->tok_is("(")
+            && functor_ahead(self)) {
+            int fn = 0;
+            if (functor_parse(self, out, cap, &fn) != 0) return -1;
+            if (fn == 0) return self->sup->fail("expected a type");
+            return 0;
+        }
         for (;;) {
             /* Phase 41 B′: `atomic` is a contextual modifier, not a reserved
                keyword. It only enters the type when one of the four supported
@@ -810,6 +1020,13 @@ impl ExprTypeParse for Expr {
             }
         }
         if (n == 0) {
+            /* D-029: a malformed functor spelling (`(int, int => int`) still
+               writes the arrow on the declaration; name the shape instead of
+               the generic "expected a type". */
+            if (!self->type_no_ptr
+                && self->lex->tok == T_PUNCT && self->lex->tok_is("(")
+                && functor_arrow_on_line(self))
+                return self->sup->fail("a functor type needs a '(A, B) => R' shape");
             return self->sup->fail(runtime::text::ct_internf(
                 "expected a type (tok %d '%.*s')", self->lex->tok,
                 self->lex->tokstr.len, self->lex->tokstr.ptr));

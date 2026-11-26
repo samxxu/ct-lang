@@ -1232,6 +1232,14 @@ impl ExprOps for Expr {
             right = self->parse_expr();
             self->into_ok = 0;
             if (right < 0) return -1;
+            /* D-029: the value-position assignment follows the same
+               function-pointer signature rule as the statement form. */
+            if (op == 0 && k2 == N_VAR) {
+                const char *lt = self->sym->var_type_text(
+                    self->arena->nodes[left].text2);
+                if (lt && self->fnptr_sig_check(lt, right, aline, acol) != 0)
+                    return -1;
+            }
             /* L29-9: assigning one container binding to another copies it,
                which the container protocol forbids. */
             if (op == 0 && k2 == N_VAR

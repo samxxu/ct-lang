@@ -3993,8 +3993,11 @@ static int lw_pw_decl(struct Lower *w, struct ct_lstmt *s, int ind, int inline_f
         if (star) {
             /* `int (*)(…)` takes the name inside the parentheses, the same
                position the emitter's declarator writer uses. */
-            fprintf(g_lir_out, "%.*s(*%s)%s", (int)(star - sp), sp,
-                    s->name ? s->name : "", star + 3);
+            /* D-029/S3: a function-pointer array keeps its dimensions inside
+               the declarator (`int (*tbl[2])(int)`), exactly like the AST
+               emitter; dropping them printed a scalar for an array. */
+            fprintf(g_lir_out, "%.*s(*%s%s)%s", (int)(star - sp), sp,
+                    s->name ? s->name : "", s->dims ? s->dims : "", star + 3);
         } else {
             fprintf(g_lir_out, "%s %s%s", sp, s->name ? s->name : "",
                     s->dims ? s->dims : "");

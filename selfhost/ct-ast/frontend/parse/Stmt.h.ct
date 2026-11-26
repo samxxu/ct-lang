@@ -1036,6 +1036,11 @@ impl StmtOps for Stmt {
         };
         (void)self;
 
+        /* D-029: `(int, int) => int f = add;` opens with a type, not with an
+           expression. The raw-source lookahead tells it from a parenthesised
+           expression and from a closure literal. */
+        if (self->lex->tok == T_PUNCT && self->lex->tok_is("("))
+            return self->ex->functor_type_ahead();
         if (self->lex->tok != T_ID) return 0;
         /* P-7.2 / LANG-24: `Box<T> name` (and its deprecated `box<T>` alias)
            is a declaration shape; a bare `Box box;` stays an ordinary
@@ -2736,6 +2741,13 @@ impl StmtOps for Stmt {
                     self->ex->into_ok = 0;
                     self->ex->fnval_ok = 0;
                     if (e < 0) return -1;
+                    /* D-029: a function-pointer (or functor) declaration with a
+                       deducible function actual must agree on arity / return
+                       type; the sugar is the same type as the hand-written
+                       pointer, so the same rule applies to both. */
+                    if (!is_slice
+                        && self->ex->fnptr_sig_check(typebuf, e, iline, icol) != 0)
+                        return -1;
                     /* PH-80: bind a bare literal to String / Str (and refuse an
                        implicit UTF-16 literal) before the optional type pass. */
                     if (self->ex->lit_coerce(typebuf, e) != 0) return -1;
@@ -3188,6 +3200,12 @@ impl StmtOps for Stmt {
             self->ex->into_ok = 0;
             self->ex->fnval_ok = 0;
             if (rhs < 0) return -1;
+            /* D-029: assigning a function / function pointer to a function
+               pointer target follows the same signature rule as the
+               declaration initializer. */
+            if (k == N_VAR && tt[0]
+                && self->ex->fnptr_sig_check(tt, rhs, rline, rcol) != 0)
+                return -1;
             /* PH-80: the same expected-type binding on a plain assignment. */
             if (tt[0] && self->ex->lit_coerce(tt, rhs) != 0) return -1;
             /* LANG-26: a plain assignment is a binding site. */

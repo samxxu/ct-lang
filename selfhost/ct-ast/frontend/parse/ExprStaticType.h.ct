@@ -409,6 +409,64 @@ pub const char *ctype_slice_range(struct Expr *self, int n, int *array_depth, in
     return runtime::text::ct_intern("struct __ct_slice");
 }
 
+
+/* D-029: split the abstract function-pointer spelling `R (*)(A, B)` into its
+   return type and parenthesised parameter list. Only one non-nested abstract
+   declarator is accepted; anything else answers 0 and the checker stays
+   silent. */
+static int fnptr_sig_parts(const char *t, const char **ret, const char **params)
+{
+    const char *p;
+    const char *q;
+    const char *lp;
+    int len, depth;
+
+    if (!t) return 0;
+    p = strstr(t, "(*)");
+    if (!p || p == t) return 0;
+    len = (int)(p - t);
+    while (len > 0 && (t[len - 1] == ' ' || t[len - 1] == '\t')) len--;
+    if (len <= 0) return 0;
+    q = p + 3;
+    while (*q == ' ' || *q == '\t') q++;
+    if (*q != '(') return 0;
+    lp = q;
+    depth = 0;
+    for (; *q; q++) {
+        if (*q == '(') depth++;
+        else if (*q == ')') {
+            depth--;
+            if (depth == 0) break;
+        }
+    }
+    if (depth != 0) return 0;
+    *ret = runtime::text::ct_intern_len(t, len);
+    *params = runtime::text::ct_intern_len(lp + 1, (int)(q - lp - 1));
+    if (!*ret || !*params) return 0;
+    return 1;
+}
+
+/* D-029: `(void)` / `()` count as zero parameters; otherwise a list splits on
+   top-level commas so a nested aggregate spelling stays one row. */
+static int fnptr_param_count(const char *ps)
+{
+    const char *p;
+    int n, depth, seen;
+
+    if (!ps || !ps[0]) return 0;
+    p = ps;
+    while (*p == ' ' || *p == '\t') p++;
+    if (strcmp(p, "void") == 0) return 0;
+    n = 1; depth = 0; seen = 0;
+    for (; *p; p++) {
+        if (*p == '(' || *p == '[' || *p == '<') depth++;
+        else if (*p == ')' || *p == ']' || *p == '>') depth--;
+        else if (*p == ',' && depth == 0) n++;
+        if (*p != ' ' && *p != '\t') seen = 1;
+    }
+    return seen ? n : 0;
+}
+
 impl ExprStaticType for Expr {
     int parse_array_dims(int n)
     {
@@ -1054,5 +1112,110 @@ impl ExprStaticType for Expr {
         as = self->sym->find_struct(ab + 6);
         if (fs < 0 || as < 0) return -1;
         return fs == as ? 0 : 1;
+    }
+
+    /* D-029: the abstract signature an initializer / assignment right side
+       names. A named function answers `R (*)(A, B)`; a function-pointer
+       variable answers its declared spelling; `&f` looks through. Closures,
+       C library names, aliases, `ref`/`out` and variadic functions answer 0:
+       the checker must not guess. */
+    const char *expr_fnptr_sig(int e)
+    {
+        int k, vi, fi, i, n;
+        const char *name;
+        char *buf;
+        int cap;
+        const char *pooled;
+
+        buf = 0;
+        cap = 0;
+
+        if (e < 0) return (const char *)0;
+        k = self->arena->nodes[e].kind;
+        if (k == N_ADDR) return self->expr_fnptr_sig(self->arena->nodes[e].a);
+        if (k == N_RAW) {
+            /* a bare function name is emitted as an N_RAW carrying its C name */
+            name = self->arena->nodes[e].text;
+            fi = self->sym->find_func(name);
+            if (fi < 0) return (const char *)0;
+            goto named_func;
+        }
+        if (k != N_VAR) return (const char *)0;
+        name = self->arena->nodes[e].text2;
+        vi = self->sym->find_var(name);
+        if (vi >= 0) {
+            if (self->sym->vars[vi].is_closure) return (const char *)0;
+            if (self->sym->vars[vi].type
+                && strstr(self->sym->vars[vi].type, "(*)"))
+                return self->sym->vars[vi].type;
+            return (const char *)0;
+        }
+        fi = self->sym->find_func(name);
+        if (fi < 0) return (const char *)0;
+    named_func:
+        if (self->sym->funcs[fi].variadic) return (const char *)0;
+        n = self->sym->funcs[fi].nparams;
+        for (i = 0; i < n; i++) {
+            if (self->sym->funcs[fi].pann[i]) return (const char *)0;
+            if (self->sym->funcs[fi].pdim[i] && self->sym->funcs[fi].pdim[i][0])
+                return (const char *)0;
+        }
+        if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+        if (tool::sh::ct_text_cat(&buf, &cap, self->sym->funcs[fi].ret) != 0)
+            goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, " (*)(") != 0) goto fail;
+        for (i = 0; i < n; i++) {
+            if (i > 0 && tool::sh::ct_text_cat(&buf, &cap, ", ") != 0) goto fail;
+            if (tool::sh::ct_text_cat(&buf, &cap,
+                                      self->sym->funcs[fi].ptype[i]) != 0)
+                goto fail;
+        }
+        if (n == 0 && tool::sh::ct_text_cat(&buf, &cap, "void") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, ")") != 0) goto fail;
+        pooled = runtime::text::ct_intern(buf);
+        tool::sh::ct_text_free(&buf, &cap);
+        return pooled;
+    fail:
+        tool::sh::ct_text_free(&buf, &cap);
+        return (const char *)0;
+    }
+
+    /* D-029: the sugar is the same type as a hand-written function pointer, so
+       a mismatch between the declared signature and a deducible actual is a
+       positioned error. Only arity and return type are judged here; parameter
+       spellings are left to C (a typedef alias is not expanded by the parser,
+       and a false positive would be worse than the C compiler's own error). */
+    int fnptr_sig_check(const char *formal, int e, int line, int col)
+    {
+        const char *actual;
+        const char *fret;
+        const char *fps;
+        const char *aret;
+        const char *aps;
+        const char *fk;
+        const char *ak;
+        int fn, an;
+
+        if (!formal || !strstr(formal, "(*)")) return 0;
+        actual = self->expr_fnptr_sig(e);
+        if (!actual) return 0;
+        if (!fnptr_sig_parts(formal, &fret, &fps)) return 0;
+        if (!fnptr_sig_parts(actual, &aret, &aps)) return 0;
+        fn = fnptr_param_count(fps);
+        an = fnptr_param_count(aps);
+        if (fn != an)
+            return tool::diag::ct_sem_error(line, col,
+                runtime::text::ct_internf(
+                    "function pointer arity mismatch: expected '%s', got '%s'",
+                    formal, actual), self->sup->mem->path);
+        fk = frontend::type::type_key_text(fret);
+        ak = frontend::type::type_key_text(aret);
+        if (!fk || !ak) return 0;
+        if (strcmp(fk, ak) != 0)
+            return tool::diag::ct_sem_error(line, col,
+                runtime::text::ct_internf(
+                    "function pointer type mismatch: expected '%s', got '%s': return type differs",
+                    formal, actual), self->sup->mem->path);
+        return 0;
     }
 }

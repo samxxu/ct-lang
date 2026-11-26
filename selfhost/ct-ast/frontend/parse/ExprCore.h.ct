@@ -81,6 +81,18 @@ pub trait ExprStaticType {
     const char *static_ctype_text(int n, int *array_depth, int depth);
     const char *ctype_expand_text(const char *in, int depth);
     const char *fnptr_ret_text(const char *ftype);
+
+    /* D-029: the abstract `R (*)(A, B)` spelling an initializer / assignment
+       right side names, or 0 when it is not decidable (a closure, a C name, an
+       alias, a ref/out or variadic function). Used by the functor-sugar
+       compatibility check; it never guesses. */
+    const char *expr_fnptr_sig(int e);
+
+    /* D-029: when `formal` is a function-pointer type and `e` names a function
+       or another function pointer, compare arity and return type. Emits a
+       positioned diagnostic on a mismatch and returns -1; every undecidable
+       shape returns 0. */
+    int fnptr_sig_check(const char *formal, int e, int line, int col);
     const char *peel_ptr_text(const char *ty);
 
     /* `typedef` alias -> the spelling it was declared with (name lookup). */
@@ -124,6 +136,11 @@ pub trait ExprStaticType {
 
 pub trait ExprTypeParse {
     int  is_type_word(const char *w);
+
+    /* D-029: the `(` at the cursor opens `(A, B) => R`, so the statement and
+       top-level dispatchers must route it to the declaration reader instead of
+       the expression / closure reader. Raw-source lookahead; consumes nothing. */
+    int  functor_type_ahead(void);
 
     int  type_append(char *out, int cap, int *n, const char *tok);
 
@@ -426,6 +443,10 @@ pub struct Expr {
        declaration entries copy them into the node's `text3` (D-5). */
     const char *fnptr_dims;   /* S1a-0 C2p-5: pool text */
     int  fnptr_state;
+    /* D-029: nesting depth while `parse_type` reads a `(A,B) => R` functor
+       spelling. The sugar is a complete type and cannot nest, so a nonzero
+       depth makes the second `(` the existing nested-function-pointer error. */
+    int  functor_depth;
     /* Phase 41: the type just read used the contextual `atomic` modifier.
        Contexts that cannot hold an atomic value (return type, typedef) reset
        this before parse_type and reject it afterwards. */

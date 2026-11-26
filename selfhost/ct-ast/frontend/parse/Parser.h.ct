@@ -2050,6 +2050,10 @@ impl ParseOps for Parser {
                 } else {
                     e = self->ex->parse_expr();
                     if (e < 0) return -1;
+                    /* D-029: a file-scope function-pointer initializer follows
+                       the same signature rule as a local one. */
+                    if (self->ex->fnptr_sig_check(ret, e, func_line, func_col) != 0)
+                        return -1;
                     /* PH-80: a file-scope `String g = "x"` / `Str g = "x"` is
                        the same literal binding as a local declaration. */
                     if (self->ex->lit_coerce(ret, e) != 0) return -1;
@@ -2076,6 +2080,14 @@ impl ParseOps for Parser {
         if (self->ex->saw_atomic)
             return tool::diag::ct_sem_error(func_line, func_col,
                 "an atomic value cannot be a return type", self->mem->path);
+        /* D-029: the functor sugar is a function-pointer type, and a C
+           function cannot return one. The spelling `(A,B) => R ret` used as a
+           return type would otherwise emit `R (*)(A, B) f(...)`, which is not
+           C. A file-scope function-pointer *variable* took the branch above. */
+        if (strstr(ret, "(*)"))
+            return tool::diag::ct_sem_error(func_line, func_col,
+                "a function cannot return a function pointer; use a struct field or an 'out' parameter",
+                self->mem->path);
         if (self->sup->push_scope() != 0) return -1;
         /* Parameter types written bare `T` must read as the type parameter,
            even when a struct/union/enum with that tag exists (SH-63). */
@@ -2505,11 +2517,17 @@ impl ParseOps for Parser {
             if (seen_ref) self->arena->nodes[p].aux = 2;
             else if (seen_out) self->arena->nodes[p].aux = 3;
             if (self->ex->parse_array_dims(p) != 0) return -1;
+            /* D-029: the functor sugar is the same abstract declarator as a
+               hand-written function pointer, so its array shape is refused by
+               the same parameter rule. */
+            if (strstr(typebuf, "(*)") && self->arena->nodes[p].text3[0])
+                return self->sup->fail("function-pointer arrays are not supported as parameters");
             /* The pointer form is a scalar C parameter; an array or function
                pointer declarator cannot be spelled `T *` without changing the
                meaning, so both shapes are refused here. */
             if ((seen_ref || seen_out)
-                && (self->arena->nodes[p].text3[0] || self->ex->fnptr_state))
+                && (self->arena->nodes[p].text3[0] || self->ex->fnptr_state
+                    || strstr(typebuf, "(*)")))
                 return self->sup->fail("ref/out parameters cannot be arrays or function pointers");
             if (seen_ref && seen_borrow)
                 return self->sup->fail("a parameter cannot be both 'borrow' and 'ref'");
