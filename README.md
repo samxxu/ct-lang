@@ -409,6 +409,72 @@ int main(void)
 实测 `2 40 7 6 2 3 4 4 7 2`。它覆盖 `Pair<T>`、`best<T: Score>`、`Next<T>` 泛型 trait、
 `(int, int) => int` 函子、`int[]` 切片、`ref`/`out`、`Box<T>`/`new` 与 `Map`。
 
+#### 0.11 `map` 绑定：把 trait 挂到改不动的实例上
+
+`map trait ... for instance` 给一个已有全局实例生成 trait 包装与 vtable；调用点仍按接口写：
+
+```ct
+// source: docs/snippets/README/0.11_map_binding.ct
+//@ct-requires: ct-ast
+/*
+ * 08 — `map`: bind a trait to an instance you cannot change.
+ *
+ * A driver library hands you a struct and a function that takes it; there is no
+ * `use Controller` to add and no method to rename. `map` names a global instance
+ * and binds every trait method to an ordinary call, so the instance can be boxed
+ * into a trait value and dispatched like any other implementation.
+ *
+ * Requires ct-ast (the installed `ct`): the L0 seed does not know `map`.
+ */
+#include <stdio.h>
+
+trait Controller {
+    int send(char *buf, int len);
+}
+
+struct Uart {
+    int fd;
+    int sent;
+};
+
+struct Uart uart1;
+struct Uart uart2;
+
+/* the library's own entry point: it knows nothing about Controller */
+static int uart_write(struct Uart *u, char *buf, int len) {
+    (void)buf;
+    u->sent = u->sent + len;
+    return u->fd + len;
+}
+
+/* one binding per instance: each gets its own wrapper and its own vtable */
+map trait Controller for instance uart1 {
+    send(buf, len) -> uart_write(&uart1, buf, len);
+}
+
+map trait Controller for instance uart2 {
+    send(buf, len) -> uart_write(&uart2, buf, len);
+}
+
+int main(void) {
+    Controller a;
+    Controller b;
+
+    uart1.fd = 3;
+    uart2.fd = 7;
+    a = uart1;                   /* boxing picks the instance-level vtable */
+    b = uart2;
+
+    printf("uart1 -> %d\n", a.send("xx", 2));
+    printf("uart2 -> %d\n", b.send("xxx", 3));
+    printf("sent %d + %d\n", uart1.sent, uart2.sent);
+    return 0;
+}
+```
+
+`ct build docs/snippets/README/0.11_map_binding.ct --c-boundary=allow -o /tmp/mapb && /tmp/mapb`
+实测三行：`uart1 -> 5` / `uart2 -> 10` / `sent 2 + 3`。
+
 ### 1. 快速开始
 
 0.1 的静态宿主链就是本仓库的第一个完整样例：

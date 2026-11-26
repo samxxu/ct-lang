@@ -51,7 +51,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 14 | `Box<T>` / `new` | 4 / `examples/52_box_new` | 53 | spec §4.71；README §0.10 | 有 |
 | 15 | 可选链 `?.` | 1 / `examples/58_optional_chain`（2026-11-26 补） | 10（`test/ast/p53_eval_once`） | spec §4.65；README §0.8 | 薄 |
 | 16 | `Map` / map 构造 | 7 / `examples/34_map_literal` | 49 | spec §4.51.1；README §0.10 | 有 |
-| 17 | `map` 绑定 | 20（含 `.m.ct`）/ `examples/08_map_binding` | 52 | spec §4.10 | 有 |
+| 17 | `map` 绑定 | 20（含 `.m.ct`）/ `examples/08_map_binding` | 52 | spec §4.10；README §0.11 | 有 |
 | 18 | `foreach` | 7 / `examples/20_foreach_statement` | 29 | spec §4.49；README §0.3 | 有 |
 | 19 | `defer` | 5 / `examples/42_defer`、`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup` | 23 | spec §4.9.1；README §0.6 | 有 |
 | 20 | `errdefer` | 4 / `examples/43_errdefer`、`45_error_return_contract`、`61_errdefer_vs_return`、`62_try_cleanup` | 22 | spec §4.58；README §0.6 | 有 |
