@@ -644,7 +644,7 @@ int main(void)
 }
 CT
 if run_product c2p6_gen "$work/c2p6_gen.ct"; then
-    if grep -qF "$long" "$work/c2p6_gen.c" && ! grep -qE '(^|[^A-Za-z_])T([^A-Za-z_]|$)' "$work/c2p6_gen.c"; then
+    if grep -qF "$long" "$work/c2p6_gen.c" && ! grep -qE '(^|[^A-Za-z_/])T([^A-Za-z_/]|$)' "$work/c2p6_gen.c"; then
         ok; printf '  2000-byte generic argument: prototype and definition carry the whole type\n'
     else
         bad "the generated C kept the template parameter T or cut the 2000-byte argument"
