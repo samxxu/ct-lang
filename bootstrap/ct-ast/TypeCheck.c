@@ -3,6 +3,7 @@
 #include "TypeCheck.h"
 #include "SymbolsTypeText.h"
 #include "Intern.h"
+#include "Sh.h"
 #include "Lexer.h"
 #include "MapTable.h"
 #include "Symbols.h"
@@ -120,6 +121,7 @@ extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
 void frontend_type_type_key(const char *, char *, int);
+const char * frontend_type_type_key_text(const char *);
 struct frontend_type_TypeCheck * frontend_type_type_get(void);
 static int tc_expr_adtctor(struct frontend_type_TypeCheck *, int, char *, int);
 static int tc_expr_var(struct frontend_type_TypeCheck *, int, char *, int);
@@ -2071,6 +2073,101 @@ const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_Ty
     .rewrite_init_names = frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names
 };
 
+const char * frontend_type_type_key_text(const char * in) {
+    char * raw = 0;
+    char * w = 0;
+    char one[2];
+    int rawcap = 0;
+    int wcap = 0;
+    const char * p = (in ? in : "");
+    const char * pooled;
+    one[1] = 0;
+    if (tool_sh_ct_text_init((&raw), (&rawcap), 32) != 0) {
+        return (const char *)(0);
+    }
+    while ((*p)) {
+        if ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
+            p++;
+            continue;
+        }
+        if ((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || ((*p) == '_'))) {
+            if (tool_sh_ct_text_reset((&w), (&wcap), 32) != 0) {
+                goto fail;
+            }
+            while (((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_'))) {
+                one[0] = (*p);
+                if (tool_sh_ct_text_cat((&w), (&wcap), one) != 0) {
+                    goto fail;
+                }
+                p++;
+            }
+            if (((strcmp(w, "const") == 0) || (strcmp(w, "volatile") == 0))) {
+                continue;
+            }
+            if (tool_sh_ct_text_cat((&raw), (&rawcap), w) != 0) {
+                goto fail;
+            }
+            continue;
+        }
+        one[0] = (*p);
+        if (tool_sh_ct_text_cat((&raw), (&rawcap), one) != 0) {
+            goto fail;
+        }
+        p++;
+    }
+    pooled = 0;
+    if ((((strchr(raw, '*') == 0) && (strchr(raw, '[') == 0)) && (strchr(raw, '(') == 0))) {
+        if (((!strcmp(raw, "signed")) || (!strcmp(raw, "signedint")))) {
+            pooled = runtime_text_ct_intern("int");
+        }
+        else {
+            if ((!strcmp(raw, "unsignedint"))) {
+                pooled = runtime_text_ct_intern("unsigned");
+            }
+            else {
+                if ((((!strcmp(raw, "longint")) || (!strcmp(raw, "signedlong"))) || (!strcmp(raw, "signedlongint")))) {
+                    pooled = runtime_text_ct_intern("long");
+                }
+                else {
+                    if ((!strcmp(raw, "unsignedlongint"))) {
+                        pooled = runtime_text_ct_intern("unsignedlong");
+                    }
+                    else {
+                        if ((((!strcmp(raw, "longlongint")) || (!strcmp(raw, "signedlonglong"))) || (!strcmp(raw, "signedlonglongint")))) {
+                            pooled = runtime_text_ct_intern("longlong");
+                        }
+                        else {
+                            if ((!strcmp(raw, "unsignedlonglongint"))) {
+                                pooled = runtime_text_ct_intern("unsignedlonglong");
+                            }
+                            else {
+                                if ((((!strcmp(raw, "shortint")) || (!strcmp(raw, "signedshort"))) || (!strcmp(raw, "signedshortint")))) {
+                                    pooled = runtime_text_ct_intern("short");
+                                }
+                                else {
+                                    if ((!strcmp(raw, "unsignedshortint"))) {
+                                        pooled = runtime_text_ct_intern("unsignedshort");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ((!pooled)) {
+        pooled = runtime_text_ct_intern(raw);
+    }
+    tool_sh_ct_text_free((&w), (&wcap));
+    tool_sh_ct_text_free((&raw), (&rawcap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&w), (&wcap));
+        tool_sh_ct_text_free((&raw), (&rawcap));
+        return (const char *)(0);
+}
 void frontend_type_type_key(const char * in, char * out, int cap) {
     char raw[MAX_TEXT];
     char w[MAX_TEXT];
@@ -2225,16 +2322,19 @@ static int tc_expr_mcall(struct frontend_type_TypeCheck * self, int n, char * ou
         return 0;
     }
     if (self->arena->nodes[n].aux == 6) {
-        char rt[MAX_TEXT];
-        char rk[MAX_TEXT];
-        char tk[MAX_TEXT];
+        const char * rt;
+        const char * rk;
+        const char * tk;
         int i;
         int j;
-        snprintf(rt, sizeof(rt), "%s", self->arena->nodes[n].text);
-        if ((!rt[0])) {
+        rt = self->arena->nodes[n].text;
+        if (((!rt) || (!rt[0]))) {
             return (-1);
         }
-        frontend_type_type_key(rt, rk, MAX_TEXT);
+        rk = frontend_type_type_key_text(rt);
+        if ((!rk)) {
+            return (-1);
+        }
         for (i = 0; i < (*self->nmaps); i++) {
             if ((*self->maps)[i].is_binding) {
                 continue;
@@ -2245,7 +2345,10 @@ static int tc_expr_mcall(struct frontend_type_TypeCheck * self, int n, char * ou
             if ((self->arena->nodes[n].text3[0] && (strcmp((*self->maps)[i].trait, self->arena->nodes[n].text3) != 0))) {
                 continue;
             }
-            frontend_type_type_key((*self->maps)[i].host_type, tk, MAX_TEXT);
+            tk = frontend_type_type_key_text((*self->maps)[i].host_type);
+            if ((!tk)) {
+                return (-1);
+            }
             if (strcmp(tk, rk) != 0) {
                 continue;
             }
@@ -2296,12 +2399,12 @@ static int tc_expr_call(struct frontend_type_TypeCheck * self, int n, char * out
     return 0;
 }
 static int tc_expr_member_or_arrow(struct frontend_type_TypeCheck * self, int n, char * out, int cap) {
-    char rt[MAX_TEXT];
+    const char * rt = "";
     char sname[MAX_TEXT];
     int is_ptr;
     int si;
     int fi;
-    if (self->__frontend_type_typeops_vptr->expr_type(self, self->arena->nodes[n].a, rt, sizeof(rt)) != 0) {
+    if (self->__frontend_type_typeops_vptr->expr_type_text(self, self->arena->nodes[n].a, (&rt)) != 0) {
         return (-1);
     }
     is_ptr = (self->arena->nodes[n].kind == N_ARROW);
@@ -2434,12 +2537,12 @@ static int tc_expr_into(struct frontend_type_TypeCheck * self, int n, char * out
     return 0;
 }
 static int ctype_member(struct frontend_type_TypeCheck * self, int n, char * out, int cap, int is_ptr) {
-    char rt[MAX_TEXT];
+    const char * rt = "";
     char sname[MAX_TEXT];
     int si;
     int fi;
     int w;
-    if (self->__frontend_type_typeops_vptr->expr_type(self, self->arena->nodes[n].a, rt, sizeof(rt)) != 0) {
+    if (self->__frontend_type_typeops_vptr->expr_type_text(self, self->arena->nodes[n].a, (&rt)) != 0) {
         return (-1);
     }
     if ((!self->__frontend_type_typeops_vptr->concrete_struct(self, rt, sname, sizeof(sname), (&is_ptr)))) {

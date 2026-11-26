@@ -187,7 +187,7 @@ int frontend_parse_closure_walk(struct frontend_parse_Expr *, int, int, int);
 int frontend_parse_closure_walk_shadow(struct frontend_parse_Expr *, int, int);
 int frontend_parse_closure_walk_mutate(struct frontend_parse_Expr *, int, int);
 int frontend_parse_closure_capture_error(struct frontend_parse_Expr *, int, const char *);
-int frontend_parse_closure_copy(struct frontend_parse_Expr *, char *, const char *, const char *);
+int frontend_parse_closure_copy(struct frontend_parse_Expr *, const char * *, const char *, const char *);
 int frontend_parse_closure_capture_add(struct frontend_parse_Expr *, int, int, int);
 static int frontend_parse_Expr_frontend_parse_ExprClosure_type_is_fnptr(void *self, const char * t) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
@@ -429,7 +429,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_bind(void 
 static int frontend_parse_Expr_frontend_parse_ExprClosure_parse_closure(void *self) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     const char * typebuf;
-    char owner[MAX_TEXT];
+    const char * owner;
     int ci;
     int pstart;
     int body;
@@ -439,7 +439,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_parse_closure(void *se
     int save_assign;
     line = _self->lex->tokline;
     col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    snprintf(owner, sizeof(owner), "%s", ((_self->cur_func && (*_self->cur_func)) ? (*_self->cur_func) : ""));
+    owner = ((_self->cur_func && (*_self->cur_func)) ? (*_self->cur_func) : "");
     ci = _self->sym->__frontend_sym_symbolops_vptr->closure_new(_self->sym, owner);
     if (ci < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
@@ -564,13 +564,13 @@ int frontend_parse_closure_capture_error(struct frontend_parse_Expr * self, int 
     tool_diag_ct_sem_note(line, 1, CT_EXPR_CLOSURE_HINT, self->sup->mem->path);
     return (-1);
 }
-int frontend_parse_closure_copy(struct frontend_parse_Expr * self, char * dst, const char * src, const char * what) {
+int frontend_parse_closure_copy(struct frontend_parse_Expr * self, const char * * dst, const char * src, const char * what) {
     char msg[512];
-    if (strlen(src) >= MAX_TEXT) {
-        snprintf(msg, sizeof(msg), "%s is too long (limit %d)", what, (MAX_TEXT - 1));
+    (*dst) = runtime_text_ct_intern(src);
+    if ((!(*dst))) {
+        snprintf(msg, sizeof(msg), "out of memory while recording a %s", what);
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, msg);
     }
-    snprintf(dst, MAX_TEXT, "%s", src);
     return 0;
 }
 int frontend_parse_closure_capture_add(struct frontend_parse_Expr * self, int ci, int vi, int line) {
@@ -599,10 +599,10 @@ int frontend_parse_closure_capture_add(struct frontend_parse_Expr * self, int ci
     if (c->ncap >= 16) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a closure takes too many captures (limit 16)");
     }
-    if (frontend_parse_closure_copy(self, c->cap_name[c->ncap], name, "a captured name") != 0) {
+    if (frontend_parse_closure_copy(self, (&c->cap_name[c->ncap]), name, "a captured name") != 0) {
         return (-1);
     }
-    if (frontend_parse_closure_copy(self, c->cap_type[c->ncap], self->sym->vars[vi].type, "a captured type") != 0) {
+    if (frontend_parse_closure_copy(self, (&c->cap_type[c->ncap]), self->sym->vars[vi].type, "a captured type") != 0) {
         return (-1);
     }
     c->ncap++;
@@ -625,10 +625,10 @@ int frontend_parse_closure_capture_add(struct frontend_parse_Expr * self, int ci
         if (oc->ncap >= 16) {
             return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "a closure takes too many captures (limit 16)");
         }
-        if (frontend_parse_closure_copy(self, oc->cap_name[oc->ncap], name, "a captured name") != 0) {
+        if (frontend_parse_closure_copy(self, (&oc->cap_name[oc->ncap]), name, "a captured name") != 0) {
             return (-1);
         }
-        if (frontend_parse_closure_copy(self, oc->cap_type[oc->ncap], self->sym->vars[vi].type, "a captured type") != 0) {
+        if (frontend_parse_closure_copy(self, (&oc->cap_type[oc->ncap]), self->sym->vars[vi].type, "a captured type") != 0) {
             return (-1);
         }
         oc->ncap++;

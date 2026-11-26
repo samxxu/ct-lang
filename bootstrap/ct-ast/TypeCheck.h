@@ -10,6 +10,7 @@
 
 #include "SymbolsTypeText.h"
 #include "Intern.h"
+#include "Sh.h"
 #include "Lexer.h"
 #include "MapTable.h"
 #include "Symbols.h"
@@ -127,6 +128,7 @@ struct frontend_type_TypeCheck {
     const struct frontend_type_TypeOps_vtbl *__frontend_type_typeops_vptr;
 };
 void frontend_type_type_key(const char *, char *, int);
+const char * frontend_type_type_key_text(const char *);
 struct frontend_type_TypeCheck * frontend_type_type_get(void);
 
 #endif

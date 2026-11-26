@@ -272,10 +272,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     int a2;
     int aline;
     int acol;
-    char tybuf[MAX_TEXT];
-    char tname[MAX_TEXT];
-    char aname[MAX_TEXT];
-    char rn[MAX_TEXT];
+    const char * tybuf = "";
+    const char * tname = "";
+    const char * aname = "";
+    const char * rn = "";
     const char * vname;
     char msg[3 * MAX_TEXT];
     struct frontend_sym_Adt * adts;
@@ -297,33 +297,31 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
         return (-1);
     }
-    if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, e, tybuf, sizeof(tybuf)) != 0) {
+    if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&tybuf)) != 0) {
         return tool_diag_ct_sem_error(line, col, "cannot determine the type of the match subject", _self->mem->path);
     }
 {
         const char * b;
-        char * w;
         size_t n;
         b = tybuf;
         while ((((*b) == ' ') || ((*b) == '\t'))) {
             b++;
         }
-        snprintf(tname, sizeof(tname), "%s", b);
-        n = strlen(tname);
+        n = strlen(b);
         is_ptr = 0;
-        while (((n > 0) && ((tname[(n - 1)] == ' ') || (tname[(n - 1)] == '*')))) {
-            if (tname[(n - 1)] == '*') {
+        while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '*')))) {
+            if (b[(n - 1)] == '*') {
                 is_ptr = 1;
             }
             n--;
-            tname[n] = 0;
         }
-        w = tname;
-        if (strncmp(w, "struct ", 7) == 0) {
-            w += 7;
+        if (((n >= 7) && (strncmp(b, "struct ", 7) == 0))) {
+            b += 7;
+            n -= 7;
         }
-        if (w != tname) {
-            memmove(tname, w, (strlen(w) + 1));
+        tname = runtime_text_ct_intern_len(b, (int)(n));
+        if ((!tname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
     }
     adt = frontend_sym_ct_adt_from_type(tname);
@@ -403,10 +401,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a match arm");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, aname, sizeof(aname));
+            aname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!aname)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             aline = _self->lex->tokline;
             acol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-            if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, aname, rn, sizeof(rn)) != 0) {
+            rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, aname);
+            if ((!rn)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown ADT type in a match arm");
             }
             a2 = frontend_sym_ct_adt_from_type(rn);
@@ -717,15 +719,16 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     int block_form;
     int yline;
     int ycol;
-    char tybuf[MAX_TEXT];
-    char tname[MAX_TEXT];
-    char aname[MAX_TEXT];
-    char rn[MAX_TEXT];
+    const char * tybuf = "";
+    const char * tname = "";
+    const char * aname = "";
+    const char * rn = "";
     const char * vname;
     char msg[3 * MAX_TEXT];
     char rtype[MAX_TEXT];
     char rkey[MAX_TEXT];
-    char ytype[MAX_TEXT];
+    const char * ytype = "";
+    char ybuf[MAX_TEXT];
     char ykey[MAX_TEXT];
     struct frontend_sym_Adt * adts;
     int nadts;
@@ -746,33 +749,31 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
         return (-1);
     }
-    if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, e, tybuf, sizeof(tybuf)) != 0) {
+    if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&tybuf)) != 0) {
         return tool_diag_ct_sem_error(line, col, "cannot determine the type of the match subject", _self->mem->path);
     }
 {
         const char * b;
-        char * w;
         size_t n;
         b = tybuf;
         while ((((*b) == ' ') || ((*b) == '\t'))) {
             b++;
         }
-        snprintf(tname, sizeof(tname), "%s", b);
-        n = strlen(tname);
+        n = strlen(b);
         is_ptr = 0;
-        while (((n > 0) && ((tname[(n - 1)] == ' ') || (tname[(n - 1)] == '*')))) {
-            if (tname[(n - 1)] == '*') {
+        while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '*')))) {
+            if (b[(n - 1)] == '*') {
                 is_ptr = 1;
             }
             n--;
-            tname[n] = 0;
         }
-        w = tname;
-        if (strncmp(w, "struct ", 7) == 0) {
-            w += 7;
+        if (((n >= 7) && (strncmp(b, "struct ", 7) == 0))) {
+            b += 7;
+            n -= 7;
         }
-        if (w != tname) {
-            memmove(tname, w, (strlen(w) + 1));
+        tname = runtime_text_ct_intern_len(b, (int)(n));
+        if ((!tname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
     }
     adt = frontend_sym_ct_adt_from_type(tname);
@@ -841,8 +842,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a match arm");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, aname, sizeof(aname));
-            if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, aname, rn, sizeof(rn)) != 0) {
+            aname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!aname)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, aname);
+            if ((!rn)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown ADT type in a match arm");
             }
             a2 = frontend_sym_ct_adt_from_type(rn);
@@ -1032,7 +1037,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
                 yexpr = _self->last_yield_expr;
                 yline = _self->last_yield_line;
                 ycol = _self->last_yield_col;
-                snprintf(ytype, sizeof(ytype), "%s", _self->last_yield_type);
+                ytype = _self->last_yield_type;
                 ytyped = 1;
             }
             else {
@@ -1067,11 +1072,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
             }
 {
                 int yz = 0;
-                if (((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, yexpr, ytype, sizeof(ytype)) != 0) && (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, yexpr, ytype, sizeof(ytype), (&yz)) != 0))) {
-                    if (variant >= 0) {
-                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, yexpr, (&ytype)) != 0) {
+                    if (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, yexpr, ybuf, sizeof(ybuf), (&yz)) != 0) {
+                        if (variant >= 0) {
+                            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                        }
+                        return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
                     }
-                    return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
+                    ytype = ybuf;
                 }
                 ytyped = 1;
             }

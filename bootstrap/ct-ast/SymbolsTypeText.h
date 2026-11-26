@@ -93,6 +93,7 @@ struct frontend_sym_SymbolsTypeText {
     int unused;
 };
 void frontend_sym_adt_strip_type(const char *, char *, int);
+const char * frontend_sym_adt_strip_type_text(const char *);
 int frontend_sym_ct_generic_subst(const char *, const char *, const char *, char *, int);
 char * * frontend_sym_ct_rows_reserve(char * *, int, int, int *);
 int frontend_sym_ct_inst_arg_count(const char *);

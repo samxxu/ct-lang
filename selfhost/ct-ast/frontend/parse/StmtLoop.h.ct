@@ -246,8 +246,8 @@ impl StmtLoop for Stmt {
         int s, cnt, hi, body, line, col, cls, bi, nb, vi;
         int bounds[2];
         char msg[MAX_TEXT];
-        char t[MAX_TEXT];
-        char ct[MAX_TEXT];
+        const char *t = "";
+        const char *ct = "";
         const char *p;
         int bare;
 
@@ -329,12 +329,12 @@ impl StmtLoop for Stmt {
                pointer (`expr_type` answers), but a two-dimensional one has no
                single element type and `expr_type` gives up, which used to leave
                `loop(m.cells)` completely silent. */
-            if (self->sup->expr_ctype(e, ct, sizeof ct) == 0 && strchr(ct, '[')) {
+            if (self->sup->expr_ctype_text(e, &ct) == 0 && strchr(ct, '[')) {
                 snprintf(msg, sizeof msg,
                          "a loop bound must be an integer (got '%s')", ct);
                 return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
             }
-            if (self->sup->expr_type(e, t, sizeof t) != 0) continue;
+            if (self->sup->expr_type_text(e, &t) != 0) continue;
             bare = 1;
             for (p = t; *p; p++)
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
@@ -345,9 +345,8 @@ impl StmtLoop for Stmt {
                    only when it fits the diagnostic row, otherwise leave the
                    bare name for the checks below. */
                 const char *ex;
-                if (self->sym->expand_type_alias_text(t, &ex) == 0
-                    && strlen(ex) < sizeof t)
-                    snprintf(t, sizeof t, "%s", ex);
+                if (self->sym->expand_type_alias_text(t, &ex) == 0)
+                    t = ex;
             }
             /* `[` is a backstop here: the two checks above already reject
                arrays, but an alias could still expand to a dimensioned type. */

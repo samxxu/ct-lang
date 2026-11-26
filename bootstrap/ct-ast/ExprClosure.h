@@ -117,7 +117,7 @@ int frontend_parse_closure_walk(struct frontend_parse_Expr *, int, int, int);
 int frontend_parse_closure_walk_shadow(struct frontend_parse_Expr *, int, int);
 int frontend_parse_closure_walk_mutate(struct frontend_parse_Expr *, int, int);
 int frontend_parse_closure_capture_error(struct frontend_parse_Expr *, int, const char *);
-int frontend_parse_closure_copy(struct frontend_parse_Expr *, char *, const char *, const char *);
+int frontend_parse_closure_copy(struct frontend_parse_Expr *, const char * *, const char *, const char *);
 int frontend_parse_closure_capture_add(struct frontend_parse_Expr *, int, int, int);
 
 #endif

@@ -273,13 +273,15 @@ int frontend_parse_bind_conv_inherent(struct frontend_parse_Expr * self, const c
     return m;
 }
 int frontend_parse_bind_conv_maps(struct frontend_parse_Expr * self, const char * stype, const char * method, char * ret, int cap) {
-    char sk[MAX_TEXT];
-    char hk[MAX_TEXT];
-    char rk[MAX_TEXT];
+    const char * sk;
+    const char * hk;
     int i;
     int j;
     int seen = 0;
-    frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
+    sk = frontend_parse_bind_conv_key_text(stype);
+    if ((!sk)) {
+        return (-1);
+    }
     for (i = 0; i < (*self->nmaps); i++) {
         if ((*self->maps)[i].is_binding) {
             continue;
@@ -287,7 +289,10 @@ int frontend_parse_bind_conv_maps(struct frontend_parse_Expr * self, const char 
         if (((!(*self->maps)[i].is_static) || (!(*self->maps)[i].type_host))) {
             continue;
         }
-        frontend_parse_bind_conv_key((*self->maps)[i].host_type, hk, sizeof(hk));
+        hk = frontend_parse_bind_conv_key_text((*self->maps)[i].host_type);
+        if ((!hk)) {
+            return (-1);
+        }
         if (strcmp(hk, sk) != 0) {
             continue;
         }
@@ -303,34 +308,41 @@ int frontend_parse_bind_conv_maps(struct frontend_parse_Expr * self, const char 
             if ((((ti < 0) || (mi < 0)) || (mi >= self->sym->traits[ti].nm))) {
                 continue;
             }
-            frontend_parse_bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof(rk));
             if ((!ret[0])) {
                 snprintf(ret, (size_t)(cap), "%s", self->sym->traits[ti].m[mi].ret);
             }
             seen++;
         }
     }
-    (void)(rk);
     return seen;
 }
 int frontend_parse_bind_conv_binding(struct frontend_parse_Expr * self, const char * stype, const char * target) {
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
-    char hk[MAX_TEXT];
-    char dk[MAX_TEXT];
+    const char * sk;
+    const char * tk;
+    const char * hk;
+    const char * dk;
     int i;
     int seen = 0;
-    frontend_parse_bind_conv_key(stype, sk, sizeof(sk));
-    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
+    sk = frontend_parse_bind_conv_key_text(stype);
+    tk = frontend_parse_bind_conv_key_text(target);
+    if (((!sk) || (!tk))) {
+        return (-1);
+    }
     for (i = 0; i < (*self->nmaps); i++) {
         if ((!(*self->maps)[i].is_binding)) {
             continue;
         }
-        frontend_parse_bind_conv_key((*self->maps)[i].host_type, hk, sizeof(hk));
+        hk = frontend_parse_bind_conv_key_text((*self->maps)[i].host_type);
+        if ((!hk)) {
+            return (-1);
+        }
         if (strcmp(hk, sk) != 0) {
             continue;
         }
-        frontend_parse_bind_conv_key((*self->maps)[i].bind_dst, dk, sizeof(dk));
+        dk = frontend_parse_bind_conv_key_text((*self->maps)[i].bind_dst);
+        if ((!dk)) {
+            return (-1);
+        }
         if (strcmp(dk, tk) != 0) {
             continue;
         }
@@ -438,8 +450,8 @@ int frontend_parse_bind_conv_call(struct frontend_parse_Expr * self, int recv, c
 }
 int frontend_parse_bind_conv_site(struct frontend_parse_Expr * self, int expr, const char * target, int line, int col) {
     const char * st;
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
+    const char * sk;
+    const char * tk;
     char ret[MAX_TEXT];
     char tr[MAX_TEXT];
     char msg[MAX_TEXT * 2];
@@ -465,8 +477,11 @@ int frontend_parse_bind_conv_site(struct frontend_parse_Expr * self, int expr, c
     if (strchr(st, '*')) {
         return expr;
     }
-    frontend_parse_bind_conv_key(st, sk, sizeof(sk));
-    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
+    sk = frontend_parse_bind_conv_key_text(st);
+    tk = frontend_parse_bind_conv_key_text(target);
+    if (((!sk) || (!tk))) {
+        return expr;
+    }
     if (strcmp(sk, tk) == 0) {
         return expr;
     }
@@ -476,8 +491,10 @@ int frontend_parse_bind_conv_site(struct frontend_parse_Expr * self, int expr, c
     ret[0] = 0;
     mm = frontend_parse_bind_conv_inherent(self, st, "as", ret, sizeof(ret), (&ptr));
     if (mm >= 0) {
-        char rk[MAX_TEXT];
-        frontend_parse_bind_conv_key(ret, rk, sizeof(rk));
+        const char * rk = frontend_parse_bind_conv_key_text(ret);
+        if ((!rk)) {
+            return expr;
+        }
         if (strcmp(rk, tk) == 0) {
             return frontend_parse_bind_conv_call(self, expr, st, "as", target, line, col);
         }

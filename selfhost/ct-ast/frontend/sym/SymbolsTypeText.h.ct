@@ -27,6 +27,9 @@ pub struct SymbolsTypeText {
 }
 
 pub void adt_strip_type(const char *in, char *out, int cap);
+/* S1a-0 C2p-5: the pool-text form, so a 2000-byte ADT tag is not cut by a
+   caller row before `ct_adt_find` compares it. */
+pub const char *adt_strip_type_text(const char *in);
 pub int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap);
 /* S1a-0 C3: every cap is a starting capacity, not a language limit. A "row
    block" is an array of `char *`, one MAX_TEXT buffer per row; the block grows
@@ -91,6 +94,28 @@ void adt_strip_type(const char *in, char *out, int cap)
         while (*b == ' ' || *b == '\t') b++;
     }
     if (b != out) memmove(out, b, strlen(b) + 1);
+}
+
+const char *adt_strip_type_text(const char *in)
+{
+    const char *b;
+    size_t n;
+
+    b = in ? in : "";
+    while (*b == ' ' || *b == '\t' || *b == '\n' || *b == '\r') b++;
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t' || b[n - 1] == '\n'
+                     || b[n - 1] == '\r' || b[n - 1] == '*'))
+        n--;
+    for (;;) {
+        if (n > 6 && strncmp(b, "const ", 6) == 0) { b += 6; n -= 6; }
+        else if (n > 9 && strncmp(b, "volatile ", 9) == 0) { b += 9; n -= 9; }
+        else if (n > 7 && strncmp(b, "struct ", 7) == 0) { b += 7; n -= 7; }
+        else if (n > 6 && strncmp(b, "union ", 6) == 0) { b += 6; n -= 6; }
+        else break;
+        while (n > 0 && (*b == ' ' || *b == '\t')) { b++; n--; }
+    }
+    return runtime::text::ct_intern_len(b, (int)n);
 }
 
 int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap)

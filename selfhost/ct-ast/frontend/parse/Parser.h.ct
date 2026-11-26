@@ -324,7 +324,7 @@ static int check_borrow_param(struct Parser *self, int pnode, int line, int col)
 static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret)
 {
     int p, body, pi;
-    char save_trait[MAX_TEXT];
+    const char *save_trait;
     const char *save_ret;
     (void)self;
 
@@ -379,11 +379,10 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
         self->sup->pop_scope();
         return -1;
     }
-    snprintf(save_trait, sizeof save_trait, "%s", self->sym->trait_default);
+    save_trait = self->sym->trait_default;
     save_ret = self->sym->ret_type;
     self->sym->ret_type = ret;
-    snprintf(self->sym->trait_default, sizeof self->sym->trait_default, "%s",
-             self->sym->traits[ti].name);
+    self->sym->trait_default = self->sym->traits[ti].name;
     self->mem->leak_active = 1;
     self->mem->leak_frame = self->sym->nscope + 1;
     self->mem->leak_impl = 1;
@@ -393,7 +392,7 @@ static int parse_trait_body(struct Parser *self, int ti, int mi, const char *ret
     self->mem->leak_frame = -1;
     self->mem->leak_impl = 0;
     self->sym->ret_type = save_ret;
-    snprintf(self->sym->trait_default, sizeof self->sym->trait_default, "%s", save_trait);
+    self->sym->trait_default = save_trait;
     self->sup->pop_scope();
     if (body < 0) return -1;
     if (self->out_check_body(body, self->sym->traits[ti].m[mi].pnode,
@@ -595,7 +594,7 @@ impl ParseDeclOps for Parser {
     int parse_type_alias(int is_pub)
     {
         int line, col;
-        char name[MAX_TEXT];
+        const char *name;
         const char *target;
         (void)self;
 
@@ -609,7 +608,9 @@ impl ParseDeclOps for Parser {
                 "a type alias in a .m.ct unit must be 'pub'", self->mem->path);
         self->sup->lex_next();                       /* consume `type` */
         if (self->lex->tok != T_ID) return self->sup->fail("expected a name after 'type'");
-        self->lex->tok_copy(name, sizeof name);
+        name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                            self->lex->tokstr.len);
+        if (!name) return self->sup->fail("out of memory");
         self->sup->lex_next();
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("=")))
             return self->sup->fail("expected '=' in a type alias declaration");
@@ -924,12 +925,14 @@ impl ParseDeclOps for Parser {
         if (self->lex->tok == T_ID && self->lex->tok_is("_Alignas")) {
             int r, np, depth;
             char tbuf[MAX_TEXT];
+            char dpx[MAX_TEXT];
             if (self->ex->decl_prefix[0])
                 return self->sup->fail("duplicate _Alignas on one declaration");
             /* Capture only the specifier; the rest of the declaration (a
                storage class included) is read by the recursive call. */
+            dpx[0] = 0;
             np = 0;
-            if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, "_Alignas") != 0)
+            if (self->ex->type_append(dpx, sizeof dpx, &np, "_Alignas") != 0)
                 return -1;
             self->sup->lex_next();
             if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
@@ -941,7 +944,7 @@ impl ParseDeclOps for Parser {
                     snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                 else
                     self->lex->tok_copy(tbuf, sizeof tbuf);
-                if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, tbuf) != 0)
+                if (self->ex->type_append(dpx, sizeof dpx, &np, tbuf) != 0)
                     return -1;
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
@@ -953,13 +956,15 @@ impl ParseDeclOps for Parser {
                 }
                 self->sup->lex_next();
             }
+            self->ex->decl_prefix = runtime::text::ct_intern(dpx);
+            if (!self->ex->decl_prefix) return self->sup->fail("out of memory");
             r = self->top_decl(is_pub);
             if (r < 0) {
-                self->ex->decl_prefix[0] = 0;
+                self->ex->decl_prefix = "";
                 return r;
             }
             if (self->ex->decl_prefix[0]) {
-                self->ex->decl_prefix[0] = 0;
+                self->ex->decl_prefix = "";
                 return self->sup->fail("an _Alignas specifier must prefix a variable declaration");
             }
             return r;
@@ -1776,7 +1781,7 @@ impl ParseOps for Parser {
         const char *cname;
         const char *gns = "";
         char tparam[MAX_TEXT];
-        char bound[MAX_TEXT];
+        const char *bound;
         char *gparam[1];
         int is_generic, ret_slice;
         (void)self;
@@ -1828,7 +1833,7 @@ impl ParseOps for Parser {
            monomorphised at the call site (D26-1/D26-2). */
         is_generic = 0;
         tparam[0] = 0;
-        bound[0] = 0;
+        bound = "";
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
             /* Phase 34 (O1): L26-2 lifted — `pub T id<T>(T x)` is legal.
                Template body must live in a `.h.ct` header; the `.ct` import
@@ -1844,7 +1849,7 @@ impl ParseOps for Parser {
                The trait is resolved and validated here, so the template body
                and every instance work from one checked spelling. */
             if (self->lex->tok == T_PUNCT && self->lex->tok_is(":")) {
-                char raw[MAX_TEXT];
+                const char *raw;
                 char msg[MAX_TEXT];
                 int bline, bcol, bi;
                 self->sup->lex_next();
@@ -1852,9 +1857,12 @@ impl ParseOps for Parser {
                     return self->sup->fail("expected a trait name after ':'");
                 bline = self->lex->tokline;
                 bcol = self->lex->tokstart - self->lex->lstart + 1;
-                self->lex->tok_copy(raw, sizeof raw);
+                raw = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                   self->lex->tokstr.len);
+                if (!raw) return self->sup->fail("out of memory");
                 self->sup->lex_next();
-                if (self->sup->resolve_type(raw, bound, sizeof bound) != 0) return -1;
+                bound = self->sym->resolve_type_text(raw);
+                if (!bound) return self->sup->fail("out of memory");
                 bi = self->sym->find_trait(bound);
                 if (bi < 0 && strcmp(bound, "Drop") != 0 && strcmp(bound, "Handback") != 0) {
                     snprintf(msg, sizeof msg, "unknown trait '%s' in a generic bound", raw);
@@ -1876,9 +1884,13 @@ impl ParseOps for Parser {
                    bound is stored under its encoded name, so the dispatch in a
                    bounded body finds the very row the impl filled. */
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
+                    char bbuf[MAX_TEXT];
                     if (bi < 0)
                         return self->sup->fail("unknown trait in a generic bound");
-                    if (parse_trait_inst_args(self, bound, sizeof bound) < 0) return -1;
+                    snprintf(bbuf, sizeof bbuf, "%s", bound);
+                    if (parse_trait_inst_args(self, bbuf, sizeof bbuf) < 0) return -1;
+                    bound = runtime::text::ct_intern(bbuf);
+                    if (!bound) return self->sup->fail("out of memory");
                 }
             }
             if (self->lex->tok == T_PUNCT && self->lex->tok_is(","))
@@ -2120,15 +2132,17 @@ impl ParseOps for Parser {
             self->ex->in_generic_tparam = gparam;
             self->ex->in_generic_ntparam = 1;
         }
-        if (is_generic) snprintf(self->ex->in_generic_bound, sizeof self->ex->in_generic_bound,
-                                 "%s", bound);
+        if (is_generic) {
+            self->ex->in_generic_bound = runtime::text::ct_intern(bound);
+            if (!self->ex->in_generic_bound) return self->sup->fail("out of memory");
+        }
         b = self->st->parse_block();
         if (is_generic) self->ex->in_generic = 0;
         if (is_generic) {
             self->ex->in_generic_tparam = 0;
             self->ex->in_generic_ntparam = 0;
         }
-        if (is_generic) self->ex->in_generic_bound[0] = 0;
+        if (is_generic) self->ex->in_generic_bound = "";
         self->mem->leak_active = 0;
         self->mem->leak_frame = -1;
         self->cur_func = "";
@@ -2386,7 +2400,7 @@ impl ParseOps for Parser {
         const char *slice_elem = "";
         const char *typebuf;
         const char *parsed;
-        char name[MAX_TEXT];
+        const char *name;
         (void)self;
 
         self->nparams = 0;
@@ -2451,7 +2465,7 @@ impl ParseOps for Parser {
             }
             if (self->ex->fnptr_state) {
                 /* the declarator name came with the type (`int (*cb)(void *)`) */
-                snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+                name = self->ex->fnptr_name;
             } else {
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(")") &&
                     strcmp(typebuf, "void") == 0) {
@@ -2459,7 +2473,9 @@ impl ParseOps for Parser {
                     return 0;
                 }
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
-                self->lex->tok_copy(name, sizeof name);
+                name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                    self->lex->tokstr.len);
+                if (!name) return self->sup->fail("out of memory");
                 self->sup->lex_next();
             }
             /* C would adjust `int (*tbl[2])(int)` into a pointer to a pointer,
@@ -3163,16 +3179,16 @@ impl ParseOps for Parser {
         int mem_first, mem_last, has_payload, has_value, all_payload;
         int first_nopay_line, first_nopay_col, first_val_line, first_val_col;
         int adt, tn, tline, tcol, is_adt, pre_adt;
-        char name[MAX_TEXT];
-        char qname[MAX_TEXT];
+        const char *name;
+        const char *qname;
         char mname[MAX_TEXT];
         char cname[MAX_TEXT];
         char nsbuf[MAX_TEXT];
         size_t nl;
         (void)self;
 
-        name[0] = 0;
-        qname[0] = 0;
+        name = "";
+        qname = "";
         adt = -1;
         has_payload = 0;
         has_value = 0;
@@ -3187,8 +3203,11 @@ impl ParseOps for Parser {
         tcol = self->lex->tokstart - self->lex->lstart + 1;
         self->sup->lex_next();                       /* consume `enum` */
         if (self->lex->tok == T_ID) {
-            self->lex->tok_copy(name, sizeof name);
-            if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!name) return self->sup->fail("out of memory");
+            qname = self->sup->ns_decl_text(name);
+            if (!qname) return self->sup->fail("out of memory");
             ti = self->sym->find_type(qname);
             if (ti >= 0 && self->sym->type_kind[ti] == 5) {
                 char msg[MAX_TEXT];
@@ -3437,8 +3456,8 @@ impl ParseOps for Parser {
     {
         int t, td_line, ar, ao;
         const char *typebuf;
-        char name[MAX_TEXT];
-        char qname[MAX_TEXT];
+        const char *name;
+        const char *qname;
         (void)self;
 
         td_line = self->lex->tokline;
@@ -3449,7 +3468,9 @@ impl ParseOps for Parser {
             t = self->parse_enum_def(0, 0);
             if (t < 0) return -1;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
-            self->lex->tok_copy(name, sizeof name);
+            name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!name) return self->sup->fail("out of memory");
             self->sup->lex_next();
             ao = -1;
             ar = self->sup->attr_pool(&ao);
@@ -3460,7 +3481,8 @@ impl ParseOps for Parser {
                 self->arena->nodes[t].attr = ao;
             }
             if (self->sup->expect(";") != 0) return -1;
-            if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            qname = self->sup->ns_decl_text(name);
+            if (!qname) return self->sup->fail("out of memory");
             /* bit 1 marks the typedef half; bit 2 (an ADT) must survive it */
             self->arena->nodes[t].aux = self->arena->nodes[t].aux | 1;
             if ((self->arena->nodes[t].aux & 2) && self->arena->nodes[t].num > 0) {
@@ -3500,7 +3522,9 @@ impl ParseOps for Parser {
             t = self->parse_record_def(self->lex->tok_is("union"));
             if (t < 0) return -1;
             if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
-            self->lex->tok_copy(name, sizeof name);
+            name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!name) return self->sup->fail("out of memory");
             self->sup->lex_next();
             ao = -1;
             ar = self->sup->attr_pool(&ao);
@@ -3511,7 +3535,8 @@ impl ParseOps for Parser {
                 self->arena->nodes[t].attr = ao;
             }
             if (self->sup->expect(";") != 0) return -1;
-            if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+            qname = self->sup->ns_decl_text(name);
+            if (!qname) return self->sup->fail("out of memory");
             /* keep the tag in `text`: `typedef struct Tag {...} Alias;` must emit
                the tag, or a `struct Tag` reference elsewhere is incomplete */
             self->arena->nodes[t].text = runtime::text::ct_intern(self->arena->nodes[t].text2);
@@ -3588,17 +3613,20 @@ impl ParseOps for Parser {
                 "an atomic value cannot be a typedef target", self->mem->path);
         if (self->ex->fnptr_state) {
             /* `typedef int (*BinOp)(int, int);`: the alias came with the type */
-            snprintf(name, sizeof name, "%s", self->ex->fnptr_name);
+            name = self->ex->fnptr_name;
         } else {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a typedef name");
-            self->lex->tok_copy(name, sizeof name);
+            name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!name) return self->sup->fail("out of memory");
             self->sup->lex_next();
         }
         ao = -1;
         ar = self->sup->attr_pool(&ao);
         if (ar < 0) return -1;
         if (self->sup->expect(";") != 0) return -1;
-        if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+        qname = self->sup->ns_decl_text(name);
+        if (!qname) return self->sup->fail("out of memory");
         t = self->sup->new_node(N_TYPEDEF);
         if (t < 0) return -1;
         if (ao >= 0) self->arena->nodes[t].attr = ao;
@@ -3622,13 +3650,14 @@ impl ParseOps for Parser {
     /* `use A, B` after a struct body; the trailing `;` stays with the caller. */
     int parse_use_list(int sindex)
     {
-        char tname[MAX_TEXT];
+        const char *tname;
         int uti;
         (void)self;
         if (sindex < 0) return self->sup->fail("unknown struct in 'use'");
         for (;;) {
             if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
-            if (self->sup->resolve_type(self->lex->tok_cstr(), tname, sizeof tname) != 0) return -1;
+            tname = self->sym->resolve_type_text(runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len));
+            if (!tname) return self->sup->fail("out of memory");
             uti = self->sym->find_trait(tname);
             if (uti >= 0 && self->sym->traits[uti].is_static)
                 return tool::diag::ct_sem_error(self->lex->tokline,
@@ -3636,7 +3665,11 @@ impl ParseOps for Parser {
                     "a static trait cannot be adopted", self->mem->path);
             self->sup->lex_next();
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
-                if (parse_trait_inst_args(self, tname, sizeof tname) < 0) return -1;
+                char tnbuf[MAX_TEXT];
+                snprintf(tnbuf, sizeof tnbuf, "%s", tname);
+                if (parse_trait_inst_args(self, tnbuf, sizeof tnbuf) < 0) return -1;
+                tname = runtime::text::ct_intern(tnbuf);
+                if (!tname) return self->sup->fail("out of memory");
             }
             /* `Drop` is built in (Phase 5): it carries no vptr or vtable, so it
                never joins the `use` list -- only the flag matters */
@@ -3677,8 +3710,8 @@ impl ParseOps for Parser {
         char **tparam = 0;
         char **tbound = 0;
         int tcap = 0, bcap = 0;
-        char name[MAX_TEXT];
-        char qname[MAX_TEXT];
+        const char *name;
+        const char *qname;
         const char *ret;
         const char *ptype;
         const char *pname;
@@ -3691,7 +3724,9 @@ impl ParseOps for Parser {
                 "a trait in a .m.ct unit must be 'pub'", self->mem->path);
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
-        self->lex->tok_copy(name, sizeof name);
+        name = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                            self->lex->tokstr.len);
+        if (!name) return self->sup->fail("out of memory");
         /* LANG-23: `Drop` / `Handback` are reserved built-in traits. The
            built-in declaration unit may write them (the row is parsed for
            validation, then discarded: no MAX_TRAITS count, no vtable, and
@@ -3712,7 +3747,8 @@ impl ParseOps for Parser {
         save_ntraits = self->sym->ntraits;
         save_ntype = self->sym->ntype;
         save_nnode = self->arena->nnode;
-        if (self->sup->ns_decl_name(name, qname, sizeof qname) != 0) return -1;
+        qname = self->sup->ns_decl_text(name);
+        if (!qname) return self->sup->fail("out of memory");
         /* Phase 35: `trait Iter<T[, U]> { … }` declares a template. The row keeps
            the bare name and the parameters; `T` in a signature is substituted
            when an instance row is created (S2). A bound (`T: Show`) is parsed in
@@ -4856,7 +4892,7 @@ impl ParseOps for Parser {
            dispatches exactly like inside a bounded generic function. A bound
            that lands on the second parameter is not wired: the dispatch check
            reads one bound, the same limit a generic function has. */
-        self->ex->in_generic_bound[0] = 0;
+        self->ex->in_generic_bound = "";
         {
             int tbi = frontend::sym::ct_tmpl_find(tmpl);
             int tbn, kb;
@@ -4865,8 +4901,10 @@ impl ParseOps for Parser {
             if (tbi >= 0 && tps && tps[tbi].ntparams > 0 && tn[0][0]) {
                 for (kb = 0; kb < nargs; kb++)
                     if (strcmp(pat[kb], tn[0]) == 0) {
-                        snprintf(self->ex->in_generic_bound, MAX_TEXT, "%s",
-                                 tps[tbi].bound[kb]);
+                        self->ex->in_generic_bound =
+                            runtime::text::ct_intern(tps[tbi].bound[kb]);
+                        if (!self->ex->in_generic_bound)
+                            return self->sup->fail("out of memory");
                         /* A bounded body types `self` as the template's tag,
                            so `self->value` resolves to the parameter and the
                            dispatch above can see it; the emitter keeps its own
@@ -5005,7 +5043,7 @@ impl ParseOps for Parser {
         }
         self->ex->in_generic_tparam = 0;
         self->ex->in_generic_ntparam = 0;
-        self->ex->in_generic_bound[0] = 0;
+        self->ex->in_generic_bound = "";
         if (self->sup->expect("}") != 0) return -1;
         /* L36-1 (S1b): a `drop` body may not `release()` the same `self` field
            twice. Walk the `drop` method's body and report the first duplicate. */

@@ -47,6 +47,8 @@ import backend::emit::EmitInit;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
+/* S1a-0 C2p-5: the formal text bound (mirror of Symbols/Limits). */
+#define TEXT_LIMIT 65536
 #define MAX_HOISTS 4
 #define MAX_HOISTS_MAX 65536
 /* Phase 30: the receiver block and its `$` / `.name` reference. */
@@ -253,6 +255,8 @@ static int g_oc_bypass_node = -1;
 
 /* defined further down; `sb_norm` needs it to substitute a template spelling */
 static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int cap);
+/* S1a-0 C2p-5: the pool-text form. NULL means "no substitution applies". */
+static const char *emit_gsub_type_text(struct Emitter *self, const char *type);
 
 /* The innermost tracked binding named `name`, or -1. */
 static int sb_find(struct Emitter *self, const char *name)
@@ -316,6 +320,27 @@ static void sb_norm(struct Emitter *self, const char *in, char *out, int cap)
         if (frontend::sym::ct_inst_resolve(t, res, sizeof res) == 0) t = res;
     }
     snprintf(out, (size_t)cap, "%s", t);
+}
+
+/* S1a-0 C2p-5: the pool-text form of `sb_norm`, so a 2000-byte spelling is
+   not cut by the caller's row. Returns `in` itself when nothing changes. */
+static const char *sb_norm_text(struct Emitter *self, const char *in)
+{
+    const char *t = in;
+    const char *sub = emit_gsub_type_text(self, in);
+    if (sub) t = sub;
+    if (strchr(t, '<')) {
+        char *res = (char *)malloc(TEXT_LIMIT);
+        const char *pooled;
+        if (!res) return (const char *)0;
+        if (frontend::sym::ct_inst_resolve(t, res, TEXT_LIMIT) == 0) {
+            pooled = runtime::text::ct_intern(res);
+            free(res);
+            return pooled;
+        }
+        free(res);
+    }
+    return t;
 }
 
 /* LANG-29 S2 / B3 (D-021 §3): the ADT value protocol.
@@ -440,6 +465,20 @@ static void sb_norm_own_type(struct Emitter *self, char *t, int cap)
     snprintf(t, (size_t)cap, "struct %s", adts[ai].full);
 }
 
+/* S1a-0 C2p-5: the pool-text form of `sb_norm_own_type`. */
+static const char *sb_norm_own_type_text(struct Emitter *self, const char *t)
+{
+    int ai, n;
+    struct Adt *adts;
+    (void)self;
+    if (strncmp(t, "struct ", 7) == 0) return t;
+    ai = frontend::sym::ct_adt_from_type(t);
+    if (ai < 0) return t;
+    adts = frontend::sym::ct_adts(&n);
+    if (!adts || ai >= n) return t;
+    return runtime::text::ct_internf("struct %s", adts[ai].full);
+}
+
 /* 1 when a container / Box lvalue owns a heap handle its `release` must guard:
    the built-in `Vec` / `Map` abort on a zero handle (D29-12), unlike `String`
    and `Box`, whose release already tolerates it. */
@@ -465,41 +504,41 @@ static int sb_is_tparam(struct Emitter *self, const char *raw)
 /* The static C type of a place-shaped expression (a variable, a field, a
    deref or a subscript), or -1 when it cannot be resolved. Only the destination
    of a string assignment needs this; an rvalue is classified by its node kind. */
-static int sb_expr_type(struct Emitter *self, int n, char *out, int cap)
+static const char *sb_expr_type_text(struct Emitter *self, int n)
 {
-    char t[MAX_TEXT];
+    const char *t;
+    const char *out;
     int k, i;
     size_t ln;
 
-    if (n < 0) return -1;
+    if (n < 0) return (const char *)0;
     k = self->arena->nodes[n].kind;
     if (k == N_VAR) {
         i = sb_lfind(self, self->arena->nodes[n].text2);
         if (i >= 0) {
             if (sb_is_tparam(self, g_sb.ltype[i])) g_sb.hitparam = 1;
-            sb_norm(self, g_sb.ltype[i], out, cap);
-            return 0;
+            return sb_norm_text(self, g_sb.ltype[i]);
         }
         i = self->sym->find_var(self->arena->nodes[n].text2);
         if (i >= 0) {
             if (sb_is_tparam(self, self->sym->vars[i].type)) g_sb.hitparam = 1;
-            sb_norm(self, self->sym->vars[i].type, out, cap);
-            return 0;
+            return sb_norm_text(self, self->sym->vars[i].type);
         }
-        return -1;
+        return (const char *)0;
     }
     if (k == N_MEMBER || k == N_ARROW) {
         char sname[MAX_TEXT];
         int is_ptr, si, fi;
-        if (sb_expr_type(self, self->arena->nodes[n].a, t, sizeof t) != 0) return -1;
+        t = sb_expr_type_text(self, self->arena->nodes[n].a);
+        if (!t) return (const char *)0;
         is_ptr = (k == N_ARROW);
-        if (!self->ty->concrete_struct(t, sname, sizeof sname, &is_ptr)) return -1;
+        if (!self->ty->concrete_struct(t, sname, sizeof sname, &is_ptr)) return (const char *)0;
         si = self->sym->find_struct(sname);
-        if (si < 0) return -1;
+        if (si < 0) return (const char *)0;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
             if (strcmp(self->sym->structs[si].fields[fi].name,
                        self->arena->nodes[n].text2) == 0) {
-                if (self->sym->structs[si].fields[fi].dims[0]) return -1;
+                if (self->sym->structs[si].fields[fi].dims[0]) return (const char *)0;
                 /* an instance row carries substituted field types; the
                    template row keeps `T` / `V`, which is how a container
                    element assignment is recognised */
@@ -520,23 +559,23 @@ static int sb_expr_type(struct Emitter *self, int n, char *out, int cap)
                         (void)i2;
                     }
                 }
-                sb_norm(self, self->sym->structs[si].fields[fi].type, out, cap);
-                return 0;
+                return sb_norm_text(self, self->sym->structs[si].fields[fi].type);
             }
-        return -1;
+        return (const char *)0;
     }
     if (k == N_DEREF) {
-        if (sb_expr_type(self, self->arena->nodes[n].a, out, cap) != 0) return -1;
+        out = sb_expr_type_text(self, self->arena->nodes[n].a);
+        if (!out) return (const char *)0;
         ln = strlen(out);
         while (ln > 0 && out[ln - 1] == ' ') ln--;
-        if (ln == 0 || out[ln - 1] != '*') return -1;
+        if (ln == 0 || out[ln - 1] != '*') return (const char *)0;
         ln--;
         while (ln > 0 && out[ln - 1] == ' ') ln--;
-        out[ln] = 0;
-        return 0;
+        return runtime::text::ct_intern_len(out, (int)ln);
     }
     if (k == N_INDEX) {
-        if (sb_expr_type(self, self->arena->nodes[n].a, out, cap) != 0) return -1;
+        out = sb_expr_type_text(self, self->arena->nodes[n].a);
+        if (!out) return (const char *)0;
         /* an array declarator's type carries no star, so only a pointer base
            loses one; an array base already names the element */
         ln = strlen(out);
@@ -544,11 +583,11 @@ static int sb_expr_type(struct Emitter *self, int n, char *out, int cap)
         if (ln > 0 && out[ln - 1] == '*') {
             ln--;
             while (ln > 0 && out[ln - 1] == ' ') ln--;
-            out[ln] = 0;
+            return runtime::text::ct_intern_len(out, (int)ln);
         }
-        return 0;
+        return out;
     }
-    return -1;
+    return (const char *)0;
 }
 
 /* 1 when the expression hands over a fresh owning reference (a call result, a
@@ -975,12 +1014,13 @@ static void sb_mark_aggregate(struct Emitter *self, int decl)
    free a buffer the source still owns. Assign the field explicitly instead. */
 static int sb_struct_assign_check(struct Emitter *self, int n)
 {
-    char t[MAX_TEXT];
+    const char *t;
     int lhs, rhs, rk;
     if (self->arena->nodes[n].kind != N_ASSIGN || self->arena->nodes[n].aux != 0) return 0;
     lhs = self->arena->nodes[n].a;
     if (lhs < 0 || self->arena->nodes[lhs].kind != N_VAR) return 0;
-    if (sb_expr_type(self, lhs, t, sizeof t) != 0) return 0;
+    t = sb_expr_type_text(self, lhs);
+    if (!t) return 0;
     if (!sb_owning_struct_type(self, t)) return 0;
     /* a call result is a view / freshly handed-over aggregate (the documented
        `Map.entry` copy, a returned Result payload); only copying a stored
@@ -1077,7 +1117,7 @@ static int sb_decl(struct Emitter *self, int n, int ind)
    container. A local bound to a borrowed view stays a view. */
 static int sb_assign(struct Emitter *self, int n, int ind)
 {
-    char t[MAX_TEXT];
+    const char *t;
     char pbuf[MAX_TEXT];
     char fbase[MAX_TEXT], ffield[MAX_TEXT];
     int kind, lhs, rhs, idx, borrowed, wrap, release_old, needsrc, k, fowner, param_own, ai;
@@ -1092,12 +1132,13 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     if (k != N_VAR && k != N_MEMBER && k != N_ARROW && k != N_INDEX
         && k != N_DEREF && k != N_SLICE_INDEX) return 0;
     g_sb.hitparam = 0;
-    if (sb_expr_type(self, lhs, t, sizeof t) != 0) {
+    t = sb_expr_type_text(self, lhs);
+    if (!t) {
         /* LANG-29 S4 / B5: the expression-match result temporary is declared
            by the compiler's own statement expression, so it is not in the
            symbol table; the parser stamped its type on the assignment. */
         if (!(k == N_VAR && self->arena->nodes[n].text[0])) return 0;
-        snprintf(t, sizeof t, "%s", self->arena->nodes[n].text);
+        t = self->arena->nodes[n].text;
     }
     kind = frontend::sym::ct_is_string_value_type(t);
     /* LANG-29 S2 / B3: rebinding an owning ADT follows the same contract as a
@@ -1110,7 +1151,8 @@ static int sb_assign(struct Emitter *self, int n, int ind)
     if (g_sb.hitparam) return 0;
     pfx = sb_life_prefix(self, t, pbuf, sizeof pbuf);
     if (!pfx) return 0;
-    sb_norm_own_type(self, t, sizeof t);
+    t = sb_norm_own_type_text(self, t);
+    if (!t) return -1;
     if (self->hoist_rvalue(n) != 0) return -1;
     if (self->emit_hoists(ind) != 0) return -1;
     idx = (k == N_VAR) ? sb_find(self, self->arena->nodes[lhs].text2) : -1;
@@ -1306,6 +1348,41 @@ static int emit_gsub_type(struct Emitter *self, const char *type, char *buf, int
     }
     snprintf(buf, (size_t)cap, "%s", cur);
     return 0;
+}
+
+/* S1a-0 C2p-5: the pool-text form of `emit_gsub_type`, built with the growable
+   text builder so a 2000-byte type argument is not cut at 160. NULL means no
+   substitution applies (the caller keeps its own spelling). */
+static const char *emit_gsub_type_text(struct Emitter *self, const char *type)
+{
+    const char *cur;
+    int i;
+
+    if (self->gtntparam <= 0) return (const char *)0;
+    cur = type ? type : "";
+    for (i = 0; i < self->gtntparam; i++) {
+        if (!self->gtparam[i] || !self->gtparam[i][0]) continue;
+        if (!self->gtarg[i]) continue;
+        cur = frontend::sym::ct_generic_subst_text(cur, self->gtparam[i],
+                                                    self->gtarg[i]);
+        if (!cur) return (const char *)0;
+    }
+    /* A substituted spelling may still name an instance. The char* reader is
+       given a formal-limit block so an ordinary instance still resolves; a
+       spelling past it keeps the template-shaped answer, exactly as before. */
+    if (strchr(cur, '<')) {
+        char *res = (char *)malloc(TEXT_LIMIT);
+        const char *pooled;
+        if (!res) return (const char *)0;
+        if (frontend::sym::ct_inst_resolve(cur, res, TEXT_LIMIT) != 0) {
+            free(res);
+            return (const char *)0;
+        }
+        pooled = runtime::text::ct_intern(res);
+        free(res);
+        return pooled;
+    }
+    return cur;
 }
 
 /* A (struct, trait) pair that needs no `impl` at all: every method has a
@@ -2987,9 +3064,14 @@ static int inst_emit_one(struct Emitter *self, int ii)
         fputs("    ", self->out);
         {
             const char *ft = self->sym->structs[ti].fields[j].type;
-            char ibuf[160];
-            if (strchr(ft, '<') && frontend::sym::ct_inst_resolve(ft, ibuf, sizeof ibuf) == 0)
-                ft = ibuf;
+            if (strchr(ft, '<')) {
+                char *res = (char *)malloc(TEXT_LIMIT);
+                if (res && frontend::sym::ct_inst_resolve(ft, res, TEXT_LIMIT) == 0) {
+                    const char *pooled = runtime::text::ct_intern(res);
+                    if (pooled) ft = pooled;
+                }
+                free(res);
+            }
             fprintf(self->out, "%s %s%s;\n", ft,
                     self->sym->structs[ti].fields[j].name,
                     self->sym->structs[ti].fields[j].dims);
@@ -4564,10 +4646,11 @@ static int em_expr_cast(struct Emitter *self, int n, int nk)
     (void)nk;
 
 
-    char tbuf[160];
     const char *ct = self->arena->nodes[n].text;
+    const char *ctsub;
     int save_disc;
-    if (emit_gsub_type(self, ct, tbuf, sizeof tbuf) == 0) ct = tbuf;
+    ctsub = emit_gsub_type_text(self, ct);
+    if (ctsub) ct = ctsub;
     fprintf(self->out, "(%s)(", ct);
     /* Phase 44: `(void)f()?` discards the payload, so the `?` must
        release it. Only the direct operand qualifies: `(void)(f()? + 1)`
@@ -4603,11 +4686,12 @@ static int em_expr_vaarg(struct Emitter *self, int n, int nk)
     (void)nk;
 
 
-    char tbuf[160];
     const char *vt = self->arena->nodes[n].text;
+    const char *vtsub;
     /* Phase 26 fix (SH-62): `va_arg(ap, T)` is a fifth type position;
        it had the same silent `T` leak as `sizeof(T)`. */
-    if (emit_gsub_type(self, vt, tbuf, sizeof tbuf) == 0) vt = tbuf;
+    vtsub = emit_gsub_type_text(self, vt);
+    if (vtsub) vt = vtsub;
     fputs("va_arg(", self->out);
     if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
     fprintf(self->out, ", %s)", vt);
@@ -4626,10 +4710,11 @@ static int em_expr_sizeof(struct Emitter *self, int n, int nk)
     if (self->arena->nodes[n].aux && self->arena->nodes[n].a < 0) {
         static const char *const kw[5] = {"sizeof", "sizeof", "_Alignof",
                                           "alignof", "alignof"};
-        char tbuf[160];
         const char *st = self->arena->nodes[n].text;
+        const char *stsub;
         int a = self->arena->nodes[n].aux;
-        if (emit_gsub_type(self, st, tbuf, sizeof tbuf) == 0) st = tbuf;
+        stsub = emit_gsub_type_text(self, st);
+        if (stsub) st = stsub;
         fprintf(self->out, "%s(%s)", kw[a < 0 || a > 4 ? 1 : a], st);
         return 0;
     }
@@ -4647,9 +4732,10 @@ static int em_expr_offsetof(struct Emitter *self, int n, int nk)
 
     /* the source carried the call, so the generated `.c` keeps it; the
        source unit supplies `#include <stddef.h>` (D-8) */
-    char tbuf[160];
     const char *ot = self->arena->nodes[n].text;
-    if (emit_gsub_type(self, ot, tbuf, sizeof tbuf) == 0) ot = tbuf;
+    const char *otsub;
+    otsub = emit_gsub_type_text(self, ot);
+    if (otsub) ot = otsub;
     fprintf(self->out, "offsetof(%s, %s)", ot, self->arena->nodes[n].text2);
     return 0;
 }
@@ -5090,23 +5176,26 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
            key is computed (both sides then truncate identically). */
         const char *rt = self->arena->nodes[n].text;
         const char *tg = self->arena->nodes[n].text4;
-        char rk[MAX_TEXT];
-        char tk[MAX_TEXT];
-        char hk[MAX_TEXT];
-        char dk[MAX_TEXT];
+        const char *rk;
+        const char *tk;
+        const char *hk;
+        const char *dk;
         char msg[512];
         int mi, cand = -1, cand2 = -1;
 
         if (!rt || !rt[0] || !tg || !tg[0])
             return self->fail_from(n, "a map binding conversion lost its pair");
-        map_bind_key(rt, rk, MAX_TEXT);
-        map_bind_key(tg, tk, MAX_TEXT);
+        rk = map_bind_key_text(rt);
+        tk = map_bind_key_text(tg);
+        if (!rk || !tk) return self->fail_from(n, "out of memory");
         for (mi = 0; mi < (*self->nmaps); mi++) {
             if (!(*self->maps)[mi].is_binding) continue;
             if (!map_visible(self, mi)) continue;
-            map_bind_key((*self->maps)[mi].host_type, hk, MAX_TEXT);
+            hk = map_bind_key_text((*self->maps)[mi].host_type);
+            if (!hk) return self->fail_from(n, "out of memory");
             if (strcmp(hk, rk) != 0) continue;
-            map_bind_key((*self->maps)[mi].bind_dst, dk, MAX_TEXT);
+            dk = map_bind_key_text((*self->maps)[mi].bind_dst);
+            if (!dk) return self->fail_from(n, "out of memory");
             if (strcmp(dk, tk) != 0) continue;
             if (cand < 0) cand = mi;
             else if (cand2 < 0) cand2 = mi;
@@ -5133,19 +5222,20 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
                            self->arena->nodes[n].a, -1, n);
     }
     if (self->arena->nodes[n].aux == 6) {
-        char rt[MAX_TEXT];
-        char rk[MAX_TEXT];
-        char tk[MAX_TEXT];
+        const char *rt;
+        const char *rk;
+        const char *tk;
         char msg[512];
         int r, mi, bj, cand = -1, cand2 = -1, bind = -1, bind2 = -1;
         r = self->arena->nodes[n].a;
-        snprintf(rt, sizeof rt, "%s", self->arena->nodes[n].text);
-        if (r < 0 || !rt[0])
+        rt = self->arena->nodes[n].text;
+        if (r < 0 || !rt || !rt[0])
             return self->fail_from(n, "cannot infer the receiver type for a type-host map");
         /* the host key is the one the parser's arity pre-check and
            the type pass compare with, so a spelling cannot expand here
            and be missed there */
-        frontend::type::type_key(rt, rk, MAX_TEXT);
+        rk = frontend::type::type_key_text(rt);
+        if (!rk) return self->fail_from(n, "out of memory");
         for (mi = 0; mi < (*self->nmaps); mi++) {
             if ((*self->maps)[mi].is_binding) continue;
             if (!(*self->maps)[mi].is_static || !(*self->maps)[mi].type_host) continue;
@@ -5155,7 +5245,8 @@ static int em_expr_mcall(struct Emitter *self, int n, int nk)
             if (self->arena->nodes[n].text3[0]
                 && strcmp((*self->maps)[mi].trait, self->arena->nodes[n].text3) != 0)
                 continue;
-            frontend::type::type_key((*self->maps)[mi].host_type, tk, MAX_TEXT);
+            tk = frontend::type::type_key_text((*self->maps)[mi].host_type);
+            if (!tk) return self->fail_from(n, "out of memory");
             if (strcmp(tk, rk) != 0) continue;
             for (bj = 0; bj < (*self->maps)[mi].nb; bj++)
                 if (strcmp((*self->maps)[mi].b[bj].method, self->arena->nodes[n].text2) == 0) {
@@ -5661,8 +5752,8 @@ static int em_node_func(struct Emitter *self, int n, int ind, int nk)
     (void)c;
 
 
-    char rbuf[160];
     const char *rname;
+    const char *rnamesub;
     /* a new body starts with no closure variable bound (Phase 21 S3) */
     self->nclvar = 0;
     self->closure_ci = 0;
@@ -5689,7 +5780,8 @@ static int em_node_func(struct Emitter *self, int n, int ind, int nk)
     /* Phase 26: an active instance substitutes the return type and
        writes its own C name instead of the template's. */
     rname = self->arena->nodes[n].text;
-    if (emit_gsub_type(self, rname, rbuf, sizeof rbuf) == 0) rname = rbuf;
+    rnamesub = emit_gsub_type_text(self, rname);
+    if (rnamesub) rname = rnamesub;
     fprintf(self->out, "%s %s(", rname,
             self->gtname[0] ? self->gtname : self->arena->nodes[n].text2);
     c = self->arena->nodes[n].a;
@@ -5877,8 +5969,8 @@ static int em_node_ret(struct Emitter *self, int n, int ind, int nk)
        where the caller expects an owning `String` */
     if (srk && self->arena->nodes[n].a >= 0
         && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
-        char et[MAX_TEXT];
-        if (sb_expr_type(self, self->arena->nodes[n].a, et, sizeof et) == 0
+        const char *et = sb_expr_type_text(self, self->arena->nodes[n].a);
+        if (et
             && sb_view_ret(et) && !strchr(et, '*')
             && frontend::sym::ct_is_string_value_type(et) == 0)
             return self->fail_from(n,
@@ -8878,16 +8970,21 @@ impl EmitOps for Emitter {
     int emit_type_name_dims(const char *type, const char *name, const char *dims)
     {
         const char *star;
-        char tbuf[160];
+        const char *sub;
         (void)self;
 
-        if (emit_gsub_type(self, type, tbuf, sizeof tbuf) == 0) {
-            type = tbuf;
+        sub = emit_gsub_type_text(self, type);
+        if (sub) {
+            type = sub;
         } else if (strchr(type, '<')) {
             /* An instance spelling that reached the emitter without a template
                substitution (a field of a monomorphised struct, say). */
-            char ibuf[160];
-            if (frontend::sym::ct_inst_resolve(type, ibuf, sizeof ibuf) == 0) type = ibuf;
+            char *ibuf = (char *)malloc(TEXT_LIMIT);
+            if (ibuf && frontend::sym::ct_inst_resolve(type, ibuf, TEXT_LIMIT) == 0) {
+                const char *pooled = runtime::text::ct_intern(ibuf);
+                if (pooled) type = pooled;
+            }
+            free(ibuf);
         }
         star = strstr(type, "(*)");
         if (!star) {
@@ -9104,7 +9201,6 @@ impl EmitOps for Emitter {
     {
         int i, rid;
         char ret[MAX_TEXT];
-        char rbuf[MAX_TEXT];
         const char *rt;
 
         ret[0] = 0;
@@ -9124,7 +9220,10 @@ impl EmitOps for Emitter {
         /* a value the caller uses survives the write-back through a result
            temporary; a void call needs none */
         rt = ret;
-        if (emit_gsub_type(self, ret, rbuf, sizeof rbuf) == 0) rt = rbuf;
+        {
+            const char *retsub = emit_gsub_type_text(self, ret);
+            if (retsub) rt = retsub;
+        }
         rid = -1;
         if (ret[0] && strcmp(ret, "void") != 0) {
             rid = self->ntmp;
@@ -9804,7 +9903,7 @@ impl EmitOps for Emitter {
         int i, j, k, n, ns, root, fi;
         int order[256];
         char upper[MAX_TEXT];
-        char fwd[64][160];
+        const char *fwd[64];
         unsigned long h;
         FILE *f;
 
@@ -9854,35 +9953,36 @@ impl EmitOps for Emitter {
             for (p = -1; p < self->sym->funcs[order[i]].nparams; p++) {
                 const char *tp = p < 0 ? self->sym->funcs[order[i]].ret
                                        : self->sym->funcs[order[i]].ptype[p];
-                char nm[MAX_TEXT];
+                const char *nm;
                 int q = 0;
                 /* REQ-ABI-3/4: struct, union and enum parameters all need a
                    tag forward declaration in the exported header. */
                 if (strncmp(tp, "struct ", 7) == 0) {
-                    snprintf(nm, sizeof nm, "struct %s", tp + 7);
+                    nm = runtime::text::ct_internf("struct %s", tp + 7);
                 } else if (strncmp(tp, "union ", 6) == 0) {
-                    snprintf(nm, sizeof nm, "union %s", tp + 6);
+                    nm = runtime::text::ct_internf("union %s", tp + 6);
                 } else if (strncmp(tp, "enum ", 5) == 0) {
-                    snprintf(nm, sizeof nm, "enum %s", tp + 5);
+                    nm = runtime::text::ct_internf("enum %s", tp + 5);
                 } else {
                     continue;
                 }
+                if (!nm) return self->fail("out of memory");
                 /* keep only the tag spelling (drop trailing stars/space) */
                 q = (int)strlen(nm);
-                while (q > 0 && !(isalnum((unsigned char)nm[q - 1]) || nm[q - 1] == '_')) nm[--q] = 0;
+                while (q > 0 && !(isalnum((unsigned char)nm[q - 1]) || nm[q - 1] == '_')) q--;
                 if (!q) continue;
+                nm = runtime::text::ct_intern_len(nm, q);
+                if (!nm) return self->fail("out of memory");
                 for (j = 0; j < ns; j++) if (strcmp(fwd[j], nm) == 0) break;
-                if (j == ns && ns < 64) snprintf(fwd[ns++], MAX_TEXT, "%s", nm);
+                if (j == ns && ns < 64) fwd[ns++] = nm;
             }
         }
         for (i = 0; i < ns; i++)
             for (j = i + 1; j < ns; j++)
                 if (strcmp(fwd[i], fwd[j]) > 0) {
-                    char tmp[MAX_TEXT], tmp2[MAX_TEXT];
-                    snprintf(tmp, sizeof tmp, "%s", fwd[i]);
-                    snprintf(tmp2, sizeof tmp2, "%s", fwd[j]);
-                    snprintf(fwd[i], sizeof fwd[i], "%s", tmp2);
-                    snprintf(fwd[j], sizeof fwd[j], "%s", tmp);
+                    const char *tmp = fwd[i];
+                    fwd[i] = fwd[j];
+                    fwd[j] = tmp;
                 }
         for (i = 0; i < ns; i++) fprintf(f, "%s;\n", fwd[i]);
         if (ns > 0) fputs("\n", f);

@@ -706,9 +706,18 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     if (_self->lex->tok != T_ID) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a trait name");
     }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tname, sizeof(tname));
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, tname, rtrait, sizeof(rtrait)) != 0) {
-        return (-1);
+{
+        const char * tname_t = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        const char * rtrait_t;
+        if ((!tname_t)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        rtrait_t = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, tname_t);
+        if ((!rtrait_t)) {
+            return (-1);
+        }
+        snprintf(rtrait, sizeof(rtrait), "%s", rtrait_t);
+        snprintf(tname, sizeof(tname), "%s", tname_t);
     }
     ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rtrait);
     if (ti < 0) {

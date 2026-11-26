@@ -5,6 +5,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprPure.h.ct"
 #include <stdio.h>
@@ -95,6 +96,7 @@ int frontend_parse_slice_range_ahead(struct frontend_lex_Lexer *);
 int frontend_parse_is_range_index(struct runtime_arena_Arena *, int);
 int frontend_parse_closure_capture_index(struct frontend_sym_Closure *, const char *);
 void frontend_parse_bind_conv_key(const char *, char *, int);
+const char * frontend_parse_bind_conv_key_text(const char *);
 int frontend_parse_bind_conv_on(void);
 int frontend_parse_expr_is_builtin_Box_type(const char *);
 int frontend_parse_bplus_space(int);
@@ -207,6 +209,22 @@ void frontend_parse_bind_conv_key(const char * in, char * out, int cap) {
         }
     }
     snprintf(out, (size_t)(cap), "%s", k);
+}
+const char * frontend_parse_bind_conv_key_text(const char * in) {
+    const char * k = frontend_type_type_key_text(in);
+    if ((!k)) {
+        return (const char *)(0);
+    }
+    if (strncmp(k, "struct", 6) == 0) {
+        return runtime_text_ct_intern((k + 6));
+    }
+    if (strncmp(k, "union", 5) == 0) {
+        return runtime_text_ct_intern((k + 5));
+    }
+    if (strncmp(k, "enum", 4) == 0) {
+        return runtime_text_ct_intern((k + 4));
+    }
+    return k;
 }
 int frontend_parse_bind_conv_on(void) {
     const char * v = getenv("CT_BINDING_CONVERSION");

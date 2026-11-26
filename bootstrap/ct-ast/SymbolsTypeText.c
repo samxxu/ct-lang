@@ -91,6 +91,7 @@ extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
 void frontend_sym_adt_strip_type(const char *, char *, int);
+const char * frontend_sym_adt_strip_type_text(const char *);
 int frontend_sym_ct_generic_subst(const char *, const char *, const char *, char *, int);
 char * * frontend_sym_ct_rows_reserve(char * *, int, int, int *);
 int frontend_sym_ct_inst_arg_count(const char *);
@@ -156,6 +157,50 @@ void frontend_sym_adt_strip_type(const char * in, char * out, int cap) {
     if (b != out) {
         memmove(out, b, (strlen(b) + 1));
     }
+}
+const char * frontend_sym_adt_strip_type_text(const char * in) {
+    const char * b;
+    size_t n;
+    b = (in ? in : "");
+    while ((((((*b) == ' ') || ((*b) == '\t')) || ((*b) == '\n')) || ((*b) == '\r'))) {
+        b++;
+    }
+    n = strlen(b);
+    while (((n > 0) && (((((b[(n - 1)] == ' ') || (b[(n - 1)] == '\t')) || (b[(n - 1)] == '\n')) || (b[(n - 1)] == '\r')) || (b[(n - 1)] == '*')))) {
+        n--;
+    }
+    for (; ; ) {
+        if (((n > 6) && (strncmp(b, "const ", 6) == 0))) {
+            b += 6;
+            n -= 6;
+        }
+        else {
+            if (((n > 9) && (strncmp(b, "volatile ", 9) == 0))) {
+                b += 9;
+                n -= 9;
+            }
+            else {
+                if (((n > 7) && (strncmp(b, "struct ", 7) == 0))) {
+                    b += 7;
+                    n -= 7;
+                }
+                else {
+                    if (((n > 6) && (strncmp(b, "union ", 6) == 0))) {
+                        b += 6;
+                        n -= 6;
+                    }
+                    else {
+                        break;
+                    }
+                }
+            }
+        }
+        while (((n > 0) && (((*b) == ' ') || ((*b) == '\t')))) {
+            b++;
+            n--;
+        }
+    }
+    return runtime_text_ct_intern_len(b, (int)(n));
 }
 int frontend_sym_ct_generic_subst(const char * in, const char * word, const char * repl, char * out, int cap) {
     int n;

@@ -47,13 +47,14 @@ impl ExprAdt for Expr {
     int adt_ctor_ahead(void)
     {
         const char *p;
-        char rn[MAX_TEXT];
+        const char *rn;
         int i;
         (void)self;
 
         if (self->lex->tok != T_ID) return 0;
         if (self->sym->find_var(self->lex->tok_cstr()) >= 0) return 0;
-        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0) return 0;
+        rn = self->sym->resolve_type_text(runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len));
+        if (!rn) return 0;
         if (frontend::sym::ct_adt_from_type(rn) < 0) return 0;
         p = self->lex->src + self->lex->tokstart + self->lex->tokstr.len;
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
@@ -77,7 +78,7 @@ impl ExprAdt for Expr {
     int parse_adt_ctor(void)
     {
         int tline, tcol, vline, vcol, args, nargs, adt, v, nfields, n, k, a;
-        char rn[MAX_TEXT];
+        const char *rn;
         const char *vname;
         char msg[3 * MAX_TEXT];
         struct Adt *adts;
@@ -85,8 +86,8 @@ impl ExprAdt for Expr {
 
         tline = self->lex->tokline;
         tcol = self->lex->tokstart - self->lex->lstart + 1;
-        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0)
-            return -1;
+        rn = self->sym->resolve_type_text(runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len));
+        if (!rn) return self->sup->fail("out of memory");
         self->sup->lex_next();                     /* the type name */
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
             return self->sup->fail("expected '.' after an ADT type name");

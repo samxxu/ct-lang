@@ -1260,12 +1260,15 @@ int frontend_parse_closure_match(struct frontend_parse_Expr * self, int ci, cons
         i++;
     }
     if (set_ret) {
-        snprintf(c->ret, MAX_TEXT, "%s", ret);
+        c->ret = runtime_text_ct_intern(ret);
+        if ((!c->ret)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+        }
     }
     return 0;
 }
 int frontend_parse_str_handle_value(struct frontend_parse_Expr * self, int e, char * base, int cap) {
-    char ty[MAX_TEXT];
+    const char * ty = "";
     const char * p;
     size_t n;
     if (((base != 0) && (cap > 0))) {
@@ -1277,7 +1280,7 @@ int frontend_parse_str_handle_value(struct frontend_parse_Expr * self, int e, ch
     if (self->arena->nodes[e].kind == N_CAST) {
         return 0;
     }
-    if (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, e, ty, sizeof(ty)) != 0) {
+    if (self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, e, (&ty)) != 0) {
         return 0;
     }
     p = ty;

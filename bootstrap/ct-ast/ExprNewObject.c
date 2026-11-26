@@ -102,15 +102,16 @@ extern void U16String_Drop_drop(void *self);
 
 static int frontend_parse_Expr_frontend_parse_ExprNew_Box_member_deref(void *self, int recv, int arrow, const char * fname, int line, int col, int * out) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char ty[MAX_TEXT];
-    char * p;
+    const char * ty = "";
+    const char * p;
+    const char * trimmed;
     size_t bl;
     int stars;
     int pn;
     int mn;
     int in_layer;
     (void)(arrow);
-    if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, recv, ty, sizeof(ty)) != 0) {
+    if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, recv, (&ty)) != 0) {
         return 0;
     }
     p = ty;
@@ -121,7 +122,6 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_Box_member_deref(void *sel
     while (((bl > 0) && ((p[(bl - 1)] == ' ') || (p[(bl - 1)] == '\t')))) {
         bl--;
     }
-    p[bl] = 0;
     stars = 0;
     while (((bl > 0) && (p[(bl - 1)] == '*'))) {
         stars++;
@@ -129,8 +129,12 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_Box_member_deref(void *sel
         while (((bl > 0) && ((p[(bl - 1)] == ' ') || (p[(bl - 1)] == '\t')))) {
             bl--;
         }
-        p[bl] = 0;
     }
+    trimmed = runtime_text_ct_intern_len(p, (int)(bl));
+    if ((!trimmed)) {
+        return 0;
+    }
+    p = trimmed;
     if (((strncmp(p, "struct Box_", 11) != 0) || (strchr(p, '<') != 0))) {
         return 0;
     }
@@ -153,7 +157,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_Box_member_deref(void *sel
     if ((!_self->arena->nodes[pn].text2)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    _self->arena->nodes[pn].text = runtime_text_ct_intern(ty);
+    _self->arena->nodes[pn].text = trimmed;
     if ((!_self->arena->nodes[pn].text)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
@@ -229,8 +233,8 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_new_ahead(void *self) {
                                 res = 1;
                             }
                             else {
-                                char rn[MAX_TEXT];
-                                if (((_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) == 0) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
+                                const char * rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len));
+                                if ((rn && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
                                     res = 1;
                                 }
                             }

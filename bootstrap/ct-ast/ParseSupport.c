@@ -183,7 +183,7 @@ static void frontend_parse_ParseSupport_frontend_parse_SupportOps_note_slice(voi
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_is_slice(void *self, int n) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     int vi;
-    char rt[MAX_TEXT];
+    const char * rt;
     if (n < 0) {
         return 0;
     }
@@ -195,8 +195,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_is_slice(v
         return 1;
     }
     if (_self->arena->nodes[n].kind == N_CALL) {
-        rt[0] = 0;
-        if (((_self->ty->__frontend_type_typeops_vptr->expr_type(_self->ty, n, rt, (int)(sizeof(rt))) == 0) && (strcmp(rt, "struct __ct_slice") == 0))) {
+        if (((_self->ty->__frontend_type_typeops_vptr->expr_type_text(_self->ty, n, (&rt)) == 0) && (strcmp(rt, "struct __ct_slice") == 0))) {
             return 1;
         }
     }
@@ -250,7 +249,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_str_escape_clas
 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_str_escape_class_at(void *self, int e, int depth) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
-    char et[MAX_TEXT];
+    const char * et = "";
     int k;
     int vi;
     int rk;
@@ -258,7 +257,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_str_escape_clas
     if (((e < 0) || (depth > 8))) {
         return 0;
     }
-    if (_self->ty->__frontend_type_typeops_vptr->expr_type(_self->ty, e, et, (int)(sizeof(et))) != 0) {
+    if (_self->ty->__frontend_type_typeops_vptr->expr_type_text(_self->ty, e, (&et)) != 0) {
         return 0;
     }
     rk = _self->__frontend_parse_supportops_vptr->str_handle_kind(_self, et);
@@ -285,7 +284,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_str_escape_clas
         if (r < 0) {
             return 0;
         }
-        if (_self->ty->__frontend_type_typeops_vptr->expr_type(_self->ty, r, et, (int)(sizeof(et))) != 0) {
+        if (_self->ty->__frontend_type_typeops_vptr->expr_type_text(_self->ty, r, (&et)) != 0) {
             return 0;
         }
         rk = _self->__frontend_parse_supportops_vptr->str_handle_kind(_self, et);

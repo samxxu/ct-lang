@@ -340,20 +340,24 @@ static int container_sugar_kind(struct Expr *self, int n)
    has no address; a top-level `const` field is not writable. */
 static int ref_member_flags(struct Expr *self, int n, int *is_bit, int *is_const)
 {
-    char t[MAX_TEXT];
-    char base[MAX_TEXT];
+    const char *t;
+    const char *base;
     size_t bl;
     int si, fi;
 
     *is_bit = 0;
     *is_const = 0;
-    if (self->sup->expr_type(self->arena->nodes[n].a, t, sizeof t) != 0) return 0;
+    if (self->sup->expr_type_text(self->arena->nodes[n].a, &t) != 0) return 0;
     bl = strlen(t);
-    while (bl > 0 && (t[bl - 1] == ' ' || t[bl - 1] == '*')) t[--bl] = 0;
-    while (bl > 0 && (t[bl - 1] == ' ' || t[bl - 1] == '\t')) t[--bl] = 0;
-    if (strncmp(t, "struct ", 7) == 0) snprintf(base, sizeof base, "%s", t + 7);
-    else if (strncmp(t, "union ", 6) == 0) snprintf(base, sizeof base, "%s", t + 6);
-    else snprintf(base, sizeof base, "%s", t);
+    while (bl > 0 && (t[bl - 1] == ' ' || t[bl - 1] == '*')) bl--;
+    while (bl > 0 && (t[bl - 1] == ' ' || t[bl - 1] == '\t')) bl--;
+    if (bl >= 7 && strncmp(t, "struct ", 7) == 0)
+        base = runtime::text::ct_intern_len(t + 7, (int)(bl - 7));
+    else if (bl >= 6 && strncmp(t, "union ", 6) == 0)
+        base = runtime::text::ct_intern_len(t + 6, (int)(bl - 6));
+    else
+        base = runtime::text::ct_intern_len(t, (int)bl);
+    if (!base) return 0;
     si = self->sym->find_struct(base);
     if (si < 0) return 0;
     for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
@@ -542,7 +546,8 @@ void expr_view_bind(struct Expr *self, const char *name, int init)
 void expr_iter_push(struct Expr *self, const char *name)
 {
     if (self->niter >= 8) return;
-    snprintf(self->iter[self->niter], MAX_TEXT, "%s", name);
+    self->iter[self->niter] = runtime::text::ct_intern(name);
+    if (!self->iter[self->niter]) return;
     self->niter = self->niter + 1;
 }
 
@@ -663,18 +668,19 @@ static int record_io_call(struct Expr *e, const char *callee, int known, int lin
 /* `x.as<T>()`: the target is written, so a miss is always a diagnostic. */
 static int bind_conv_explicit(struct Expr *self, int recv, const char *target, int line, int col)
 {
-    char st[MAX_TEXT];
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
+    const char *st = "";
+    const char *sk;
+    const char *tk;
     char ret[MAX_TEXT];
     char msg[MAX_TEXT * 2];
     int ptr = 0, nm, mm;
 
-    if (self->sup->expr_type(recv, st, sizeof st) != 0 || !st[0])
+    if (self->sup->expr_type_text(recv, &st) != 0 || !st[0])
         return tool::diag::ct_sem_error(line, col,
             "cannot resolve the source type of this conversion", self->sup->mem->path);
-    bind_conv_key(st, sk, sizeof sk);
-    bind_conv_key(target, tk, sizeof tk);
+    sk = bind_conv_key_text(st);
+    tk = bind_conv_key_text(target);
+    if (!sk || !tk) return self->sup->fail("out of memory");
     if (strcmp(sk, tk) == 0) return recv;
     ret[0] = 0;
     mm = bind_conv_inherent(self, st, "as", ret, sizeof ret, &ptr);
@@ -685,8 +691,8 @@ static int bind_conv_explicit(struct Expr *self, int recv, const char *target, i
         return tool::diag::ct_sem_error(line, col,
             "an 'as' conversion takes no arguments", self->sup->mem->path);
     if (mm >= 0) {
-        char rk[MAX_TEXT];
-        bind_conv_key(ret, rk, sizeof rk);
+        const char *rk = bind_conv_key_text(ret);
+        if (!rk) return self->sup->fail("out of memory");
         if (strcmp(rk, tk) != 0) {
             snprintf(msg, sizeof msg,
                      "no conversion from '%s' to '%s': inherent 'as' answers '%s'",
@@ -714,29 +720,32 @@ static int bind_conv_explicit(struct Expr *self, int recv, const char *target, i
    is named rather than silently accepted. */
 static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target, int line, int col)
 {
-    char st[MAX_TEXT];
+    const char *st = "";
     char ret[MAX_TEXT];
-    char enc[MAX_TEXT];
-    char expect[MAX_TEXT];
-    char ek[MAX_TEXT];
-    char rk[MAX_TEXT];
+    const char *enc;
+    const char *expect;
+    const char *ek;
+    const char *rk;
     char msg[MAX_TEXT * 2];
     int ptr = 0, nm, mm;
 
-    if (self->sup->expr_type(recv, st, sizeof st) != 0 || !st[0])
+    if (self->sup->expr_type_text(recv, &st) != 0 || !st[0])
         return tool::diag::ct_sem_error(line, col,
             "cannot resolve the source type of this conversion", self->sup->mem->path);
     {
         char *aa[1];
         aa[0] = (char *)target;
-        if (frontend::sym::ct_inst_encode("Option", 1, aa, enc, sizeof enc) != 0)
+        enc = frontend::sym::ct_inst_encode_text("Option", 1, aa);
+        if (!enc)
             return tool::diag::ct_sem_error(line, col,
                 "the strict conversion target is too long", self->sup->mem->path);
     }
-    if (snprintf(expect, sizeof expect, "struct %s", enc) >= (int)sizeof expect)
+    expect = runtime::text::ct_internf("struct %s", enc);
+    if (!expect)
         return tool::diag::ct_sem_error(line, col,
             "the strict conversion target is too long", self->sup->mem->path);
-    bind_conv_key(expect, ek, sizeof ek);
+    ek = bind_conv_key_text(expect);
+    if (!ek) return self->sup->fail("out of memory");
     ret[0] = 0;
     mm = bind_conv_inherent(self, st, "to", ret, sizeof ret, &ptr);
     if (mm == -2)
@@ -746,7 +755,8 @@ static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target
         return tool::diag::ct_sem_error(line, col,
             "a 'to' conversion takes no arguments", self->sup->mem->path);
     if (mm >= 0) {
-        bind_conv_key(ret, rk, sizeof rk);
+        rk = bind_conv_key_text(ret);
+        if (!rk) return self->sup->fail("out of memory");
         if (strcmp(rk, ek) != 0) {
             snprintf(msg, sizeof msg,
                      "no strict conversion from '%s' to '%s': 'to' answers '%s', expected '%s'",
@@ -777,9 +787,9 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
 {
     const char *fts[16];
     int anns[16];
-    char at[MAX_TEXT];
-    char ak[MAX_TEXT];
-    char fk[MAX_TEXT];
+    const char *at = "";
+    const char *ak;
+    const char *fk;
     char ret[MAX_TEXT];
     char name[MAX_TEXT];
     int cur, prev, k, np, pi;
@@ -825,12 +835,13 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
         /* only `out`; a pointer spelling, an interface target and the owning
            string / container / Box families keep their existing diagnostics */
         if (ann == 3 && ft && ft[0] && strcmp(ft, "void") != 0 && !strchr(ft, '*')
-            && self->sup->expr_type(cur, at, sizeof at) == 0 && at[0]
+            && self->sup->expr_type_text(cur, &at) == 0 && at[0]
             && !strchr(at, '*')) {
             int ip = 0;
             char itr[MAX_TEXT];
-            bind_conv_key(at, ak, sizeof ak);
-            bind_conv_key(ft, fk, sizeof fk);
+            ak = bind_conv_key_text(at);
+            fk = bind_conv_key_text(ft);
+            if (!ak || !fk) return self->sup->fail("out of memory");
             if (strcmp(ak, fk) != 0
                 && !(self->sup->iface_ref_type(ft, itr, sizeof itr, &ip)
                      && self->sym->find_trait(itr) >= 0)
@@ -913,16 +924,16 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
    every other struct operand keeps whatever C has always said. */
 static int bind_conv_arith(struct Expr *self, int left, int right, int line, int col)
 {
-    char lt[MAX_TEXT];
-    char rt[MAX_TEXT];
+    const char *lt = "";
+    const char *rt = "";
     char msg[MAX_TEXT];
     int lc = 0, rc = 0;
 
     if (!bind_conv_on()) return 0;
-    if (left >= 0 && self->sup->expr_type(left, lt, sizeof lt) == 0 && lt[0]
+    if (left >= 0 && self->sup->expr_type_text(left, &lt) == 0 && lt[0]
         && bind_conv_struct_like(self, lt))
         lc = bind_conv_any(self, lt, "as");
-    if (right >= 0 && self->sup->expr_type(right, rt, sizeof rt) == 0 && rt[0]
+    if (right >= 0 && self->sup->expr_type_text(right, &rt) == 0 && rt[0]
         && bind_conv_struct_like(self, rt))
         rc = bind_conv_any(self, rt, "as");
     if (!lc && !rc) return 0;
@@ -1267,7 +1278,7 @@ impl ExprOps for Expr {
     int into_tail(int left, int allow)
     {
         int n, recv, line, col, kind;
-        char type[MAX_TEXT];
+        const char *type;
 
         n = left;
         for (;;) {
@@ -1295,16 +1306,16 @@ impl ExprOps for Expr {
                     self->sup->mem->path);
                 return -1;
             }
-            type[0] = 0;
+            type = "";
             /* An indexed receiver's element type is `expr_type`'s answer: for
                an array variable `expr_ctype` keeps the `[]` decay marker,
                which is not a declarable type. Every other form needs the
                addressable spelling `expr_ctype` produces. */
             if (kind == N_INDEX) {
-                if (self->sup->expr_type(recv, type, sizeof type) != 0)
-                    type[0] = 0;
-            } else if (self->sup->expr_ctype(recv, type, sizeof type) != 0) {
-                type[0] = 0;
+                if (self->sup->expr_type_text(recv, &type) != 0)
+                    type = "";
+            } else if (self->sup->expr_ctype_text(recv, &type) != 0) {
+                type = "";
             }
             if (type[0] == 0) {
                 tool::diag::ct_sem_error(line, col,
@@ -1353,7 +1364,7 @@ impl ExprOps for Expr {
 
     /* Build one `into` node and parse its block with `$` / `.name` bound to
        it. The receiver has already been type-checked as `type`. */
-    int into_block(int recv, char *type, int line, int col)
+    int into_block(int recv, const char *type, int line, int col)
     {
         int n, blk, save, selfn, kind, cat, len;
 
@@ -1858,6 +1869,7 @@ impl ExprOps for Expr {
         const char *rtype;
         const char *ibase;
         char trname[MAX_TEXT];
+        const char *trtext;
         (void)self;
 
         n = self->postfix_seed;
@@ -2626,7 +2638,7 @@ impl ExprOps for Expr {
                                 self->arena->nodes[m].text = runtime::text::ct_intern(trname);
                                 if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                             }
-                        } else if (self->sup->method_trait(rtype, fname, trname, sizeof trname) == 0) {
+                        } else if ((trtext = self->sym->method_trait_text(rtype, fname)) != 0) {
                             char tr2[MAX_TEXT];
                             /* PH-51 D51-1: the same pointer-receiver defect on
                                the trait dispatch path; an interface pointer
@@ -2640,8 +2652,7 @@ impl ExprOps for Expr {
                                 return tool::diag::ct_sem_error(mline, mcol, pmsg,
                                                                 self->sup->mem->path);
                             }
-                            self->arena->nodes[m].text = runtime::text::ct_intern(trname);
-                            if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                            self->arena->nodes[m].text = trtext;
                             /* 19.3 (SH-46): a second trait of the same struct
                                declaring the method means the bare call keeps
                                the first match in `use` order silently (the spec
@@ -2649,12 +2660,12 @@ impl ExprOps for Expr {
                                A static type host and a `map` binding resolve
                                below, outside `method_trait`, so they never
                                reach this check. */
-                            if (self->sup->method_trait_amb(rtype, fname, trname,
+                            if (self->sup->method_trait_amb(rtype, fname, trtext,
                                                             tr2, sizeof tr2) == 0) {
                                 char amsg[MAX_TEXT];
                                 snprintf(amsg, sizeof amsg,
                                          "declared by '%s' and '%s'; '%s' is used",
-                                         trname, tr2, trname);
+                                         trtext, tr2, trtext);
                                 if (self->sup->amb_warn(mline, mcol, fname, amsg) != 0)
                                     return self->sup->fail("too many warnings");
                             }
@@ -2694,16 +2705,16 @@ impl ExprOps for Expr {
                             && self->arena->nodes[m].kind == N_MCALL) {
                             char it[MAX_TEXT];
                             if (!self->sup->is_iface_type(rtype, it, sizeof it)) {
-                                char rt2[MAX_TEXT];
-                                snprintf(rt2, sizeof rt2, "%s", rtype);
+                                const char *rt2 = rtype;
                                 if (self->arena->nodes[n].kind == N_VAR) {
                                     int vi = self->sym->find_var(self->arena->nodes[n].text2);
-                                    if (vi >= 0 && self->sym->vars[vi].is_array
-                                        && strlen(rt2) + 2 < sizeof rt2)
-                                        strcat(rt2, " *");
+                                    if (vi >= 0 && self->sym->vars[vi].is_array) {
+                                        rt2 = runtime::text::ct_internf("%s *", rt2);
+                                        if (!rt2) return self->sup->fail("out of memory");
+                                    }
                                 }
                                 self->arena->nodes[m].aux = 6;
-                                self->arena->nodes[m].text = runtime::text::ct_intern(rt2);
+                                self->arena->nodes[m].text = rt2;
                                 if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                                 /* P20-03: the emitter picks the map, so the
                                    arity check beside the resolved-method path
@@ -2728,8 +2739,8 @@ impl ExprOps for Expr {
                                     int mut_any = 0, mut_plain = 0;
                                     int got2 = arg_count(self->arena, args)
                                                + self->closure_arg_count(args);
-                                    char rk[MAX_TEXT];
-                                    char tk[MAX_TEXT];
+                                    const char *rk;
+                                    const char *tk;
                                     char msg[MAX_TEXT];
                                     char tmsg[MAX_TEXT];
                                     tmsg[0] = 0;
@@ -2741,12 +2752,14 @@ impl ExprOps for Expr {
                                        `unsigned int` would miss each other
                                        here while the recipe still expands,
                                        dropping a surplus actual in silence */
-                                    frontend::type::type_key(rt2, rk, sizeof rk);
+                                    rk = frontend::type::type_key_text(rt2);
+                                    if (!rk) return self->sup->fail("out of memory");
                                     for (mi2 = 0; mi2 < hn; mi2++) {
                                         if (hm[mi2].is_binding) continue;
                                         if (!hm[mi2].is_static
                                             || !hm[mi2].type_host) continue;
-                                        frontend::type::type_key(hm[mi2].host_type, tk, sizeof tk);
+                                        tk = frontend::type::type_key_text(hm[mi2].host_type);
+                                        if (!tk) return self->sup->fail("out of memory");
                                         if (strcmp(tk, rk) != 0) continue;
                                         for (bi2 = 0; bi2 < hm[mi2].nb; bi2++) {
                                             int want2, tail2, tt, tm, arity_ok;
@@ -2856,14 +2869,14 @@ impl ExprOps for Expr {
                        emitter already spells it `_self->n` (P34 S5a). A value
                        answer needs no temporary: `f().v` is valid C. */
                     if (!arrow) {
-                        char frty[MAX_TEXT];
+                        const char *frty = "";
                         char ifn[MAX_TEXT];
                         int ifp = 0;
                         int self_recv = n >= 0
                                         && self->arena->nodes[n].kind == N_VAR
                                         && strcmp(self->arena->nodes[n].text2, "self") == 0;
                         if (!self_recv
-                            && self->sup->expr_type(n, frty, sizeof frty) == 0) {
+                            && self->sup->expr_type_text(n, &frty) == 0) {
                             /* `struct Vec_Show__iface` also ends in `_iface`
                                (a container of an interface element), so the
                                suffix alone is not an interface value; and an
@@ -2906,8 +2919,8 @@ impl ExprOps for Expr {
                                  || strstr(self->sup->mem->path, "lib/core/utf16/U16Str.h.ct") != 0
                                  || strstr(self->sup->mem->path, "lib/core/utf16/U16String.h.ct") != 0
                                  || strstr(self->sup->mem->path, "lib/std/Str.h.ct") != 0))) { /* DOC-87 迁移回退 */
-                        char rty[MAX_TEXT];
-                        if (self->sup->expr_type(n, rty, sizeof rty) == 0) {
+                        const char *rty = "";
+                        if (self->sup->expr_type_text(n, &rty) == 0) {
                             const char *rp = rty;
                             size_t rn;
                             char rb[64];
@@ -2939,12 +2952,12 @@ impl ExprOps for Expr {
                        handed to a callee (`printf("%s", s.data)` is a hard
                        error). */
                     {
-                        char dty[MAX_TEXT];
+                        const char *dty = "";
                         char dbase[MAX_TEXT];
                         const char *dp;
                         size_t dn;
                         if (strcmp(fname, "data") == 0
-                            && self->sup->expr_type(n, dty, sizeof dty) == 0) {
+                            && self->sup->expr_type_text(n, &dty) == 0) {
                             dp = dty;
                             while (*dp == ' ' || *dp == '\t') dp++;
                             if (strncmp(dp, "struct ", 7) == 0) dp += 7;
@@ -3569,14 +3582,17 @@ impl ExprOps for Expr {
                instead of comparing the bare token against the struct table.
                `stext2` keeps the source spelling for diagnostics and rewind. */
             {
-                char sres2[MAX_TEXT];
-                char sqn2[MAX_TEXT];
+                const char *sres2;
+                const char *sqn2;
                 int sres2_is_type = 0;
-                self->lex->tok_copy(sres2, sizeof sres2);
-                if (self->sym->find_struct(sres2) < 0
-                    && self->sym->resolve_type(sres2, sqn2, (int)sizeof sqn2) == 0) {
+                sres2 = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!sres2) return self->sup->fail("out of memory");
+                if (self->sym->find_struct(sres2) < 0) {
+                    sqn2 = self->sym->resolve_type_text(sres2);
+                    if (!sqn2) return self->sup->fail("out of memory");
                     if (self->sym->find_struct(sqn2) >= 0)
-                        snprintf(sres2, sizeof sres2, "%s", sqn2);
+                        sres2 = sqn2;
                     else if (self->sym->find_type(sqn2) >= 0
                              || self->sym->find_type_alias(sqn2) >= 0
                              || self->sym->find_trait(sqn2) >= 0)
@@ -3875,7 +3891,7 @@ impl ExprOps for Expr {
                    run, or an extra actual is dropped by the recipe with no
                    diagnostic. */
                 if (qf == 5) {
-                    char rtype[MAX_TEXT];
+                    const char *rtype;
                     int mn, rest, got;
                     args = self->parse_args();
                     if (args < 0) return -1;
@@ -3884,13 +3900,14 @@ impl ExprOps for Expr {
                     /* the receiver stands apart from the trait method's own
                        parameters, exactly as in `Trait::ns.method(...)` */
                     got = arg_count(self->arena, args) - 1;
-                    if (self->sup->expr_type(args, rtype, sizeof rtype) != 0)
+                    if (self->sup->expr_type_text(args, &rtype) != 0)
                         return self->sup->fail("cannot infer the receiver type of a qualified method call");
                     if (self->arena->nodes[args].kind == N_VAR) {
                         int vi = self->sym->find_var(self->arena->nodes[args].text2);
-                        if (vi >= 0 && self->sym->vars[vi].is_array
-                            && strlen(rtype) + 2 < sizeof rtype)
-                            strcat(rtype, " *");
+                        if (vi >= 0 && self->sym->vars[vi].is_array) {
+                            rtype = runtime::text::ct_internf("%s *", rtype);
+                            if (!rtype) return self->sup->fail("out of memory");
+                        }
                     }
                     rest = self->arena->nodes[args].next;
                     self->arena->nodes[args].next = -1;
@@ -4027,8 +4044,10 @@ impl ExprOps for Expr {
                         || strcmp(an, "ct_atomic_cas") == 0) {
                         const char *aop;
                         const char *asuf;
-                        char t[MAX_TEXT], base[MAX_TEXT], helper[MAX_TEXT];
-                        char *ap, *aq;
+                        const char *t = "";
+                        const char *base;
+                        char helper[MAX_TEXT];
+                        const char *ap, *aq;
                         size_t alen;
                         int a1, a2, a3, got;
                         static const char *at_ints[] = {
@@ -4057,21 +4076,27 @@ impl ExprOps for Expr {
                                     "ct_atomic_cas takes three arguments", self->sup->mem->path);
                             aop = "cas";
                         }
-                        t[0] = 0;
-                        if (!self->sup->expr_type(a1, t, sizeof t)) {
+                        t = "";
+                        if (self->sup->expr_type_text(a1, &t) == 0) {
                             if (self->arena->nodes[a1].kind == N_ADDR) {
                                 int ain = self->arena->nodes[a1].a;
-                                char vt[MAX_TEXT];
-                                if (!self->sup->expr_type(ain, vt, sizeof vt)
+                                const char *vt = "";
+                                char vbuf[MAX_TEXT];
+                                if (self->sup->expr_type_text(ain, &vt) == 0
                                     && self->arena->nodes[ain].kind == N_VAR
                                     && self->sym->var_type(self->arena->nodes[ain].text2,
-                                                           vt, sizeof vt) == 0)
-                                    snprintf(t, sizeof t, "%s *", vt);
+                                                           vbuf, sizeof vbuf) == 0)
+                                    t = runtime::text::ct_internf("%s *", vbuf);
                                 else if (vt[0])
-                                    snprintf(t, sizeof t, "%s *", vt);
+                                    t = runtime::text::ct_internf("%s *", vt);
+                                if (!t) return self->sup->fail("out of memory");
                             } else if (self->arena->nodes[a1].kind == N_VAR) {
-                                self->sym->var_type(self->arena->nodes[a1].text2,
-                                                    t, sizeof t);
+                                char vbuf[MAX_TEXT];
+                                if (self->sym->var_type(self->arena->nodes[a1].text2,
+                                                        vbuf, sizeof vbuf) == 0) {
+                                    t = runtime::text::ct_intern(vbuf);
+                                    if (!t) return self->sup->fail("out of memory");
+                                }
                             }
                         }
                         ap = strstr(t, "_Atomic(");
@@ -4081,13 +4106,12 @@ impl ExprOps for Expr {
                                 self->sup->mem->path);
                         ap += 8;
                         aq = strchr(ap, ')');
-                        if (!aq || (alen = (size_t)(aq - ap)) == 0
-                            || alen >= sizeof base)
+                        if (!aq || (alen = (size_t)(aq - ap)) == 0)
                             return tool::diag::ct_sem_error(id_line, id_col,
                                 "the first argument of 'ct_atomic_load' must be the address of an atomic variable",
                                 self->sup->mem->path);
-                        memcpy(base, ap, alen);
-                        base[alen] = 0;
+                        base = runtime::text::ct_intern_len(ap, (int)alen);
+                        if (!base) return self->sup->fail("out of memory");
                         for (aq++; *aq == ' '; aq++)
                             ;
                         if (*aq != '*')
@@ -4104,25 +4128,25 @@ impl ExprOps for Expr {
                                 self->sup->mem->path);
                         if (strcmp(aop, "store") == 0 || strcmp(aop, "cas") == 0) {
                             int valarg = (strcmp(aop, "store") == 0) ? a2 : a3;
-                            char vt[MAX_TEXT];
+                            const char *vt = "";
                             int ok = 0, vi;
-                            vt[0] = 0;
-                            if (!self->sup->expr_type(valarg, vt, sizeof vt)) {
+                            vt = "";
+                            if (self->sup->expr_type_text(valarg, &vt) == 0) {
                                 int vk = self->arena->nodes[valarg].kind;
                                 if (vk == N_NUM) {
                                     const char *s = self->arena->nodes[valarg].text;
-                                    snprintf(vt, sizeof vt, "%s",
-                                             strcmp(s, "L") == 0 ? "long"
+                                    vt = runtime::text::ct_intern(strcmp(s, "L") == 0 ? "long"
                                              : strcmp(s, "U") == 0 ? "unsigned" : "int");
                                 } else if (vk == N_FNUM) {
-                                    snprintf(vt, sizeof vt, "double");
+                                    vt = runtime::text::ct_intern("double");
                                 } else if (vk == N_ADDR
                                            && self->arena->nodes[self->arena->nodes[valarg].a].kind == N_VAR) {
                                     char it[MAX_TEXT];
                                     if (self->sym->var_type(self->arena->nodes[self->arena->nodes[valarg].a].text2,
                                                             it, sizeof it) == 0)
-                                        snprintf(vt, sizeof vt, "%s *", it);
+                                        vt = runtime::text::ct_internf("%s *", it);
                                 }
+                                if (!vt) return self->sup->fail("out of memory");
                             }
                             if (vt[0]) {
                                 ok = strcmp(vt, base) == 0;
@@ -4138,17 +4162,19 @@ impl ExprOps for Expr {
                                     "atomic value type mismatch", self->sup->mem->path);
                         }
                         if (strcmp(aop, "cas") == 0) {
-                            char et[MAX_TEXT];
+                            const char *et = "";
                             int has_ptr = 0;
                             size_t bl;
-                            et[0] = 0;
-                            if (!self->sup->expr_type(a2, et, sizeof et)
+                            et = "";
+                            if (self->sup->expr_type_text(a2, &et) == 0
                                 && self->arena->nodes[a2].kind == N_ADDR
                                 && self->arena->nodes[self->arena->nodes[a2].a].kind == N_VAR) {
                                 char it[MAX_TEXT];
                                 if (self->sym->var_type(self->arena->nodes[self->arena->nodes[a2].a].text2,
-                                                        it, sizeof it) == 0)
-                                    snprintf(et, sizeof et, "%s *", it);
+                                                        it, sizeof it) == 0) {
+                                    et = runtime::text::ct_internf("%s *", it);
+                                    if (!et) return self->sup->fail("out of memory");
+                                }
                             }
                             if (et[0]) {
                                 bl = strlen(base);
@@ -4263,14 +4289,15 @@ impl ExprOps for Expr {
                         int aline2 = apos < self->argcap ? self->arg_line[apos] : id_line;
                         int acol2 = apos < self->argcap ? self->arg_col[apos] : id_col;
                         if (self->sym->funcs[fi].pann[pk3] != 3) {
-                            char at[MAX_TEXT];
-                            char fk[MAX_TEXT];
-                            char ak[MAX_TEXT];
-                            if (self->sup->expr_type(pc2, at, sizeof at) == 0 && at[0]
+                            const char *at = "";
+                            const char *fk;
+                            const char *ak;
+                            if (self->sup->expr_type_text(pc2, &at) == 0 && at[0]
                                 && bind_conv_struct_like(self, at)
                                 && bind_conv_any(self, at, "as")) {
-                                bind_conv_key(at, ak, sizeof ak);
-                                bind_conv_key(self->sym->funcs[fi].ptype[pk3], fk, sizeof fk);
+                                ak = bind_conv_key_text(at);
+                                fk = bind_conv_key_text(self->sym->funcs[fi].ptype[pk3]);
+                                if (!ak || !fk) return self->sup->fail("out of memory");
                                 if (strcmp(ak, fk) != 0) {
                                     char pmsg[MAX_TEXT * 2];
                                     snprintf(pmsg, sizeof pmsg,
@@ -5080,6 +5107,11 @@ void ct_expr_bind(void *arena, void *lex, void *sym, void *sup, void *cur_func, 
     g_expr.nmaps = (int *)nmaps;
     g_expr.postfix_seed = -1;
     g_expr.into_node = -1;
+    /* S1a-0 C2p-5: the pool-text slots are non-NULL before the first use. */
+    g_expr.fnptr_name = "";
+    g_expr.fnptr_dims = "";
+    g_expr.decl_prefix = "";
+    g_expr.in_generic_bound = "";
 }
 
 pub struct Expr *expr_get(void);

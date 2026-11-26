@@ -34,7 +34,7 @@ pub trait ExprOps {
        block here is L30-1. */
     int  into_tail(int left, int allow);
 
-    int  into_block(int recv, char *type, int line, int col);
+    int  into_block(int recv, const char *type, int line, int col);
 
     int  into_member_check(int base, char *fname, int line, int col);
 
@@ -388,15 +388,15 @@ pub struct Expr {
     int  nio;
     /* A function-pointer declarator carries its name inside the type
        (`int (*cb)(void *)`), so `parse_type` reads it and the caller takes it
-       from here instead of expecting an identifier of its own. 160 is MAX_TEXT
-       here: the generated header carries no macros. (D-7) */
-    char fnptr_name[160];
+       from here instead of expecting an identifier of its own. S1a-0 C2p-5:
+       a pool text, so a 2000-byte name is not cut here. (D-7) */
+    const char *fnptr_name;
     int  call_line;
     int  call_col;
     /* The array dimensions of a function pointer live inside its declarator
        (`int (*tbl[2])(int)`), so `parse_type` collects them here and the four
        declaration entries copy them into the node's `text3` (D-5). */
-    char fnptr_dims[160];
+    const char *fnptr_dims;   /* S1a-0 C2p-5: pool text */
     int  fnptr_state;
     /* Phase 41: the type just read used the contextual `atomic` modifier.
        Contexts that cannot hold an atomic value (return type, typedef) reset
@@ -410,7 +410,7 @@ pub struct Expr {
     /* A specifier captured before the storage class (`_Alignas(16) static int
        g;`) arrives here; `parse_type` prepends it and clears the slot, so the
        declaration keeps its canonical spelling (`static _Alignas(16) int g`). */
-    char decl_prefix[160];
+    const char *decl_prefix;  /* S1a-0 C2p-5: pool text */
     /* Set while the expression being parsed may name a C library function
        (`p = strcmp;`, `p = &strcmp;`): an unknown bare identifier is then
        emitted verbatim instead of being rejected. */
@@ -477,7 +477,7 @@ pub struct Expr {
     /* Phase 28: the trait bound of the template whose body is being parsed.
        A method call on the type parameter resolves against this trait instead
        of failing to find a struct; empty for a plain template and outside one. */
-    char in_generic_bound[160];
+    const char *in_generic_bound;  /* S1a-0 C2p-5: pool text */
     /* Phase 26 fix (SH-63): the last bare struct/union/enum tag `parse_type`
        expanded into `struct <tag>`. A template whose return type was written
        bare `T` must become the type parameter, not the same-named tag. */
@@ -549,7 +549,7 @@ pub struct Expr {
     /* Phase 31 S23b (L31-22): the iterated variable of each enclosing
        `foreach`, so a mutation call on it inside the body is refused. */
     int  niter;
-    char iter[8][160];
+    const char *iter[8];   /* S1a-0 C2p-5: pool texts */
     /* Phase 44: inside a condition, a short-circuit right operand, a ternary
        arm, a closure body or a defer body a postfix `?` is refused (L44-4). */
     int  try_ban;

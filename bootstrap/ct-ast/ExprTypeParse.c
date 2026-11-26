@@ -230,12 +230,12 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "type is too long");
         }
         n = pn;
-        _self->decl_prefix[0] = 0;
+        _self->decl_prefix = "";
     }
     _self->fnptr_state = 0;
     _self->saw_trait = 0;
-    _self->fnptr_name[0] = 0;
-    _self->fnptr_dims[0] = 0;
+    _self->fnptr_name = "";
+    _self->fnptr_dims = "";
     _self->last_bare_tag = "";
     for (; ; ) {
         if ((((n == 0) && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "atomic"))) {
@@ -732,7 +732,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*"))) {
             const char * plist = "";
-            char dname[MAX_TEXT];
+            const char * dname;
             const char * fdims = "";
             int pn;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -742,7 +742,10 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a name in the function-pointer declarator");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, dname, sizeof(dname));
+            dname = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!dname)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             while (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "["))) {
                 const char * dim;
@@ -842,8 +845,8 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     return (-1);
                 }
             }
-            snprintf(_self->fnptr_name, MAX_TEXT, "%s", dname);
-            snprintf(_self->fnptr_dims, MAX_TEXT, "%s", fdims);
+            _self->fnptr_name = dname;
+            _self->fnptr_dims = fdims;
             _self->fnptr_state = 1;
         }
         else {

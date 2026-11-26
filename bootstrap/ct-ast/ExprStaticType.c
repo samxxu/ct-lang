@@ -404,7 +404,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_tok_is_type_name(vo
     save_text_len = _self->lex->tokstr.len;
     res = 0;
     if (_self->lex->tok == T_ID) {
-        char rn[MAX_TEXT];
+        const char * rtn;
 {
             const char * qp = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
             while ((((*qp) == ' ') || ((*qp) == '\t'))) {
@@ -497,7 +497,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_tok_is_type_name(vo
                         res = 1;
                     }
                     else {
-                        if (((_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) == 0) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
+                        if ((((rtn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len))) != 0) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rtn) >= 0))) {
                             res = 1;
                         }
                         else {

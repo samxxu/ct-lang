@@ -251,7 +251,7 @@ impl SupportOps for ParseSupport {
     int expr_is_slice(int n)
     {
         int vi;
-        char rt[MAX_TEXT];
+        const char *rt;
         if (n < 0) return 0;
         if (self->arena->nodes[n].kind == N_VAR) {
             vi = self->sym->find_var(self->arena->nodes[n].text2);
@@ -259,8 +259,7 @@ impl SupportOps for ParseSupport {
         }
         if (self->arena->nodes[n].kind == N_SLICE_RANGE) return 1;
         if (self->arena->nodes[n].kind == N_CALL) {
-            rt[0] = 0;
-            if (self->ty->expr_type(n, rt, (int)sizeof rt) == 0
+            if (self->ty->expr_type_text(n, &rt) == 0
                 && strcmp(rt, "struct __ct_slice") == 0)
                 return 1;
         }
@@ -301,11 +300,11 @@ impl SupportOps for ParseSupport {
        1 local owner, 2 temporary owner. LANG-22 reuses it unchanged. */
     int str_escape_class_at(int e, int depth)
     {
-        char et[MAX_TEXT];
+        const char *et = "";
         int k, vi, rk, r;
 
         if (e < 0 || depth > 8) return 0;
-        if (self->ty->expr_type(e, et, (int)sizeof et) != 0) return 0;
+        if (self->ty->expr_type_text(e, &et) != 0) return 0;
         rk = self->str_handle_kind(et);
         if (rk != 3 && rk != 4) return 0;
         k = self->arena->nodes[e].kind;
@@ -323,7 +322,7 @@ impl SupportOps for ParseSupport {
                 return 0;
             r = self->arena->nodes[e].a;
             if (r < 0) return 0;
-            if (self->ty->expr_type(r, et, (int)sizeof et) != 0) return 0;
+            if (self->ty->expr_type_text(r, &et) != 0) return 0;
             rk = self->str_handle_kind(et);
             if (rk == 3 || rk == 4)
                 return self->str_escape_class_at(r, depth + 1);

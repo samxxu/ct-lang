@@ -203,8 +203,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
     int vi;
     int bounds[2];
     char msg[MAX_TEXT];
-    char t[MAX_TEXT];
-    char ct[MAX_TEXT];
+    const char * t = "";
+    const char * ct = "";
     const char * p;
     int bare;
     line = _self->lex->tokline;
@@ -268,11 +268,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
             snprintf(msg, sizeof(msg), "a loop bound must be an integer (got the array '%s')", _self->sym->vars[vi].name);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
-        if (((_self->sup->__frontend_parse_supportops_vptr->expr_ctype(_self->sup, e, ct, sizeof(ct)) == 0) && strchr(ct, '['))) {
+        if (((_self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(_self->sup, e, (&ct)) == 0) && strchr(ct, '['))) {
             snprintf(msg, sizeof(msg), "a loop bound must be an integer (got '%s')", ct);
             return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
         }
-        if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, e, t, sizeof(t)) != 0) {
+        if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&t)) != 0) {
             continue;
         }
         bare = 1;
@@ -283,8 +283,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
         }
         if (bare) {
             const char * ex;
-            if (((_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias_text(_self->sym, t, (&ex)) == 0) && (strlen(ex) < sizeof(t)))) {
-                snprintf(t, sizeof(t), "%s", ex);
+            if (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias_text(_self->sym, t, (&ex)) == 0) {
+                t = ex;
             }
         }
         if (((((strchr(t, '*') || strchr(t, '[')) || strchr(t, '(')) || (strncmp(t, "struct ", 7) == 0)) || (strncmp(t, "union ", 6) == 0))) {

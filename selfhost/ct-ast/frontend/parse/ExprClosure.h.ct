@@ -140,15 +140,15 @@ pub int closure_capture_error(struct Expr *self, int line, const char *msg)
     return -1;
 }
 
-pub int closure_copy(struct Expr *self, char *dst, const char *src, const char *what)
+pub int closure_copy(struct Expr *self, const char **dst, const char *src, const char *what)
 {
     char msg[512];
 
-    if (strlen(src) >= MAX_TEXT) {
-        snprintf(msg, sizeof msg, "%s is too long (limit %d)", what, MAX_TEXT - 1);
+    *dst = runtime::text::ct_intern(src);
+    if (!*dst) {
+        snprintf(msg, sizeof msg, "out of memory while recording a %s", what);
         return self->sup->fail(msg);
     }
-    snprintf(dst, MAX_TEXT, "%s", src);
     return 0;
 }
 
@@ -190,8 +190,8 @@ pub int closure_capture_add(struct Expr *self, int ci, int vi, int line)
     if (closure_capture_index(c, name) >= 0) return 0;
     if (c->ncap >= 16)
         return self->sup->fail("a closure takes too many captures (limit 16)");
-    if (closure_copy(self, c->cap_name[c->ncap], name, "a captured name") != 0) return -1;
-    if (closure_copy(self, c->cap_type[c->ncap], self->sym->vars[vi].type,
+    if (closure_copy(self, &c->cap_name[c->ncap], name, "a captured name") != 0) return -1;
+    if (closure_copy(self, &c->cap_type[c->ncap], self->sym->vars[vi].type,
                      "a captured type") != 0) return -1;
     c->ncap++;
     /* An inner literal is built inside the enclosing trampoline, so a name that
@@ -210,8 +210,8 @@ pub int closure_capture_add(struct Expr *self, int ci, int vi, int line)
         if (dup) continue;
         if (oc->ncap >= 16)
             return self->sup->fail("a closure takes too many captures (limit 16)");
-        if (closure_copy(self, oc->cap_name[oc->ncap], name, "a captured name") != 0) return -1;
-        if (closure_copy(self, oc->cap_type[oc->ncap], self->sym->vars[vi].type,
+        if (closure_copy(self, &oc->cap_name[oc->ncap], name, "a captured name") != 0) return -1;
+        if (closure_copy(self, &oc->cap_type[oc->ncap], self->sym->vars[vi].type,
                          "a captured type") != 0) return -1;
         oc->ncap++;
     }
@@ -523,13 +523,12 @@ impl ExprClosure for Expr {
     int parse_closure(void)
     {
         const char *typebuf;
-        char owner[MAX_TEXT];
+        const char *owner;
         int ci, pstart, body, n, line, col, save_assign;
 
         line = self->lex->tokline;
         col = self->lex->tokstart - self->lex->lstart + 1;
-        snprintf(owner, sizeof owner, "%s",
-                 (self->cur_func && *self->cur_func) ? *self->cur_func : "");
+        owner = (self->cur_func && *self->cur_func) ? *self->cur_func : "";
         ci = self->sym->closure_new(owner);
         if (ci < 0) return self->sup->fail(self->sym->last_error());
         self->sym->closures[ci].line = line;

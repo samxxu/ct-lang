@@ -423,7 +423,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_into_tail(void *self, int 
     int line;
     int col;
     int kind;
-    char type[MAX_TEXT];
+    const char * type;
     n = left;
     for (; ; ) {
         if ((!((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "into")))) {
@@ -445,15 +445,15 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_into_tail(void *self, int 
             tool_diag_ct_sem_error(line, col, "'into' needs a variable, field or call on its left", _self->sup->mem->path);
             return (-1);
         }
-        type[0] = 0;
+        type = "";
         if (kind == N_INDEX) {
-            if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, recv, type, sizeof(type)) != 0) {
-                type[0] = 0;
+            if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, recv, (&type)) != 0) {
+                type = "";
             }
         }
         else {
-            if (_self->sup->__frontend_parse_supportops_vptr->expr_ctype(_self->sup, recv, type, sizeof(type)) != 0) {
-                type[0] = 0;
+            if (_self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(_self->sup, recv, (&type)) != 0) {
+                type = "";
             }
         }
         if (type[0] == 0) {
@@ -488,7 +488,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_into_tail(void *self, int 
     }
 }
 
-static int frontend_parse_Expr_frontend_parse_ExprOps_into_block(void *self, int recv, char * type, int line, int col) {
+static int frontend_parse_Expr_frontend_parse_ExprOps_into_block(void *self, int recv, const char * type, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     int n;
     int blk;
@@ -1100,6 +1100,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
     const char * rtype;
     const char * ibase;
     char trname[MAX_TEXT];
+    const char * trtext;
     (void)(_self);
     n = _self->postfix_seed;
     _self->postfix_seed = (-1);
@@ -1818,20 +1819,17 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                         }
                                     }
                                     else {
-                                        if (_self->sup->__frontend_parse_supportops_vptr->method_trait(_self->sup, rtype, fname, trname, sizeof(trname)) == 0) {
+                                        if ((trtext = _self->sym->__frontend_sym_symbolops_vptr->method_trait_text(_self->sym, rtype, fname)) != 0) {
                                             char tr2[MAX_TEXT];
                                             if (((!arrow) && piface)) {
                                                 char pmsg[MAX_TEXT];
                                                 snprintf(pmsg, sizeof(pmsg), "'.' cannot call method '%s' through a pointer receiver; use '->%s()'", fname, fname);
                                                 return tool_diag_ct_sem_error(mline, mcol, pmsg, _self->sup->mem->path);
                                             }
-                                            _self->arena->nodes[m].text = runtime_text_ct_intern(trname);
-                                            if ((!_self->arena->nodes[m].text)) {
-                                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                                            }
-                                            if (_self->sup->__frontend_parse_supportops_vptr->method_trait_amb(_self->sup, rtype, fname, trname, tr2, sizeof(tr2)) == 0) {
+                                            _self->arena->nodes[m].text = trtext;
+                                            if (_self->sup->__frontend_parse_supportops_vptr->method_trait_amb(_self->sup, rtype, fname, trtext, tr2, sizeof(tr2)) == 0) {
                                                 char amsg[MAX_TEXT];
-                                                snprintf(amsg, sizeof(amsg), "declared by '%s' and '%s'; '%s' is used", trname, tr2, trname);
+                                                snprintf(amsg, sizeof(amsg), "declared by '%s' and '%s'; '%s' is used", trtext, tr2, trtext);
                                                 if (_self->sup->__frontend_parse_supportops_vptr->amb_warn(_self->sup, mline, mcol, fname, amsg) != 0) {
                                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
                                                 }
@@ -1865,16 +1863,18 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         if (((!_self->arena->nodes[m].text[0]) && (_self->arena->nodes[m].kind == N_MCALL))) {
                             char it[MAX_TEXT];
                             if ((!_self->sup->__frontend_parse_supportops_vptr->is_iface_type(_self->sup, rtype, it, sizeof(it)))) {
-                                char rt2[MAX_TEXT];
-                                snprintf(rt2, sizeof(rt2), "%s", rtype);
+                                const char * rt2 = rtype;
                                 if (_self->arena->nodes[n].kind == N_VAR) {
                                     int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-                                    if ((((vi >= 0) && _self->sym->vars[vi].is_array) && ((strlen(rt2) + 2) < sizeof(rt2)))) {
-                                        strcat(rt2, " *");
+                                    if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
+                                        rt2 = runtime_text_ct_internf("%s *", rt2);
+                                        if ((!rt2)) {
+                                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                                        }
                                     }
                                 }
                                 _self->arena->nodes[m].aux = 6;
-                                _self->arena->nodes[m].text = runtime_text_ct_intern(rt2);
+                                _self->arena->nodes[m].text = rt2;
                                 if ((!_self->arena->nodes[m].text)) {
                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                                 }
@@ -1892,14 +1892,17 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                     int mut_any = 0;
                                     int mut_plain = 0;
                                     int got2 = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args));
-                                    char rk[MAX_TEXT];
-                                    char tk[MAX_TEXT];
+                                    const char * rk;
+                                    const char * tk;
                                     char msg[MAX_TEXT];
                                     char tmsg[MAX_TEXT];
                                     tmsg[0] = 0;
                                     hm = (*_self->sup->ty->maps);
                                     hn = (*_self->sup->ty->nmaps);
-                                    frontend_type_type_key(rt2, rk, sizeof(rk));
+                                    rk = frontend_type_type_key_text(rt2);
+                                    if ((!rk)) {
+                                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                                    }
                                     for (mi2 = 0; mi2 < hn; mi2++) {
                                         if (hm[mi2].is_binding) {
                                             continue;
@@ -1907,7 +1910,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                         if (((!hm[mi2].is_static) || (!hm[mi2].type_host))) {
                                             continue;
                                         }
-                                        frontend_type_type_key(hm[mi2].host_type, tk, sizeof(tk));
+                                        tk = frontend_type_type_key_text(hm[mi2].host_type);
+                                        if ((!tk)) {
+                                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                                        }
                                         if (strcmp(tk, rk) != 0) {
                                             continue;
                                         }
@@ -1994,11 +2000,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     return (-1);
                 }
                 if ((!arrow)) {
-                    char frty[MAX_TEXT];
+                    const char * frty = "";
                     char ifn[MAX_TEXT];
                     int ifp = 0;
                     int self_recv = (((n >= 0) && (_self->arena->nodes[n].kind == N_VAR)) && (strcmp(_self->arena->nodes[n].text2, "self") == 0));
-                    if (((!self_recv) && (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, n, frty, sizeof(frty)) == 0))) {
+                    if (((!self_recv) && (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, n, (&frty)) == 0))) {
                         if (((((!frontend_sym_ct_is_container_type(frty)) && (strcmp(fname, "self") != 0)) && _self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, frty, ifn, sizeof(ifn), (&ifp))) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, ifn) >= 0))) {
                             char imsg[MAX_TEXT];
                             snprintf(imsg, sizeof(imsg), "'.' cannot access field '%s': '%s' is an interface value; ""it has methods, not fields", fname, ifn);
@@ -2018,8 +2024,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     }
                 }
                 if (((strcmp(fname, "ptr") == 0) && (!(_self->sup->mem->path && (((((strstr(_self->sup->mem->path, "lib/core/Str.h.ct") != 0) || (strstr(_self->sup->mem->path, "lib/core/String.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/core/utf16/U16Str.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/core/utf16/U16String.h.ct") != 0)) || (strstr(_self->sup->mem->path, "lib/std/Str.h.ct") != 0)))))) {
-                    char rty[MAX_TEXT];
-                    if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, n, rty, sizeof(rty)) == 0) {
+                    const char * rty = "";
+                    if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, n, (&rty)) == 0) {
                         const char * rp = rty;
                         size_t rn;
                         char rb[64];
@@ -2043,11 +2049,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     }
                 }
 {
-                    char dty[MAX_TEXT];
+                    const char * dty = "";
                     char dbase[MAX_TEXT];
                     const char * dp;
                     size_t dn;
-                    if (((strcmp(fname, "data") == 0) && (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, n, dty, sizeof(dty)) == 0))) {
+                    if (((strcmp(fname, "data") == 0) && (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, n, (&dty)) == 0))) {
                         dp = dty;
                         while ((((*dp) == ' ') || ((*dp) == '\t'))) {
                             dp++;
@@ -2729,13 +2735,20 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             return mn;
         }
 {
-            char sres2[MAX_TEXT];
-            char sqn2[MAX_TEXT];
+            const char * sres2;
+            const char * sqn2;
             int sres2_is_type = 0;
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, sres2, sizeof(sres2));
-            if (((_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sres2) < 0) && (_self->sym->__frontend_sym_symbolops_vptr->resolve_type(_self->sym, sres2, sqn2, (int)(sizeof(sqn2))) == 0))) {
+            sres2 = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!sres2)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            if (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sres2) < 0) {
+                sqn2 = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, sres2);
+                if ((!sqn2)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 if (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sqn2) >= 0) {
-                    snprintf(sres2, sizeof(sres2), "%s", sqn2);
+                    sres2 = sqn2;
                 }
                 else {
                     if ((((_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, sqn2) >= 0) || (_self->sym->__frontend_sym_typealiasops_vptr->find_type_alias(_self->sym, sqn2) >= 0)) || (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, sqn2) >= 0))) {
@@ -3074,7 +3087,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 return mn;
             }
             if (qf == 5) {
-                char rtype[MAX_TEXT];
+                const char * rtype;
                 int mn;
                 int rest;
                 int got;
@@ -3086,13 +3099,16 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a qualified method call needs a receiver argument");
                 }
                 got = (frontend_parse_arg_count(_self->arena, args) - 1);
-                if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, args, rtype, sizeof(rtype)) != 0) {
+                if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, args, (&rtype)) != 0) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot infer the receiver type of a qualified method call");
                 }
                 if (_self->arena->nodes[args].kind == N_VAR) {
                     int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[args].text2);
-                    if ((((vi >= 0) && _self->sym->vars[vi].is_array) && ((strlen(rtype) + 2) < sizeof(rtype)))) {
-                        strcat(rtype, " *");
+                    if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
+                        rtype = runtime_text_ct_internf("%s *", rtype);
+                        if ((!rtype)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
                     }
                 }
                 rest = _self->arena->nodes[args].next;
@@ -3218,11 +3234,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 if ((((strcmp(an, "ct_atomic_load") == 0) || (strcmp(an, "ct_atomic_store") == 0)) || (strcmp(an, "ct_atomic_cas") == 0))) {
                     const char * aop;
                     const char * asuf;
-                    char t[MAX_TEXT];
-                    char base[MAX_TEXT];
+                    const char * t = "";
+                    const char * base;
                     char helper[MAX_TEXT];
-                    char * ap;
-                    char * aq;
+                    const char * ap;
+                    const char * aq;
                     size_t alen;
                     int a1;
                     int a2;
@@ -3258,23 +3274,33 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                             aop = "cas";
                         }
                     }
-                    t[0] = 0;
-                    if ((!_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, a1, t, sizeof(t)))) {
+                    t = "";
+                    if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, a1, (&t)) == 0) {
                         if (_self->arena->nodes[a1].kind == N_ADDR) {
                             int ain = _self->arena->nodes[a1].a;
-                            char vt[MAX_TEXT];
-                            if ((((!_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, ain, vt, sizeof(vt))) && (_self->arena->nodes[ain].kind == N_VAR)) && (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, _self->arena->nodes[ain].text2, vt, sizeof(vt)) == 0))) {
-                                snprintf(t, sizeof(t), "%s *", vt);
+                            const char * vt = "";
+                            char vbuf[MAX_TEXT];
+                            if ((((_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, ain, (&vt)) == 0) && (_self->arena->nodes[ain].kind == N_VAR)) && (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, _self->arena->nodes[ain].text2, vbuf, sizeof(vbuf)) == 0))) {
+                                t = runtime_text_ct_internf("%s *", vbuf);
                             }
                             else {
                                 if (vt[0]) {
-                                    snprintf(t, sizeof(t), "%s *", vt);
+                                    t = runtime_text_ct_internf("%s *", vt);
                                 }
+                            }
+                            if ((!t)) {
+                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                             }
                         }
                         else {
                             if (_self->arena->nodes[a1].kind == N_VAR) {
-                                _self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, _self->arena->nodes[a1].text2, t, sizeof(t));
+                                char vbuf[MAX_TEXT];
+                                if (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, _self->arena->nodes[a1].text2, vbuf, sizeof(vbuf)) == 0) {
+                                    t = runtime_text_ct_intern(vbuf);
+                                    if ((!t)) {
+                                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                                    }
+                                }
                             }
                         }
                     }
@@ -3284,11 +3310,13 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     }
                     ap += 8;
                     aq = strchr(ap, ')');
-                    if ((((!aq) || ((alen = (size_t)((aq - ap))) == 0)) || (alen >= sizeof(base)))) {
+                    if (((!aq) || ((alen = (size_t)((aq - ap))) == 0))) {
                         return tool_diag_ct_sem_error(id_line, id_col, "the first argument of 'ct_atomic_load' must be the address of an atomic variable", _self->sup->mem->path);
                     }
-                    memcpy(base, ap, alen);
-                    base[alen] = 0;
+                    base = runtime_text_ct_intern_len(ap, (int)(alen));
+                    if ((!base)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                     for (aq++; (*aq) == ' '; aq++) {
                     }
                     if ((*aq) != '*') {
@@ -3317,28 +3345,31 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     }
                     if (((strcmp(aop, "store") == 0) || (strcmp(aop, "cas") == 0))) {
                         int valarg = ((strcmp(aop, "store") == 0) ? a2 : a3);
-                        char vt[MAX_TEXT];
+                        const char * vt = "";
                         int ok = 0;
                         int vi;
-                        vt[0] = 0;
-                        if ((!_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, valarg, vt, sizeof(vt)))) {
+                        vt = "";
+                        if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, valarg, (&vt)) == 0) {
                             int vk = _self->arena->nodes[valarg].kind;
                             if (vk == N_NUM) {
                                 const char * s = _self->arena->nodes[valarg].text;
-                                snprintf(vt, sizeof(vt), "%s", ((strcmp(s, "L") == 0) ? "long" : ((strcmp(s, "U") == 0) ? "unsigned" : "int")));
+                                vt = runtime_text_ct_intern(((strcmp(s, "L") == 0) ? "long" : ((strcmp(s, "U") == 0) ? "unsigned" : "int")));
                             }
                             else {
                                 if (vk == N_FNUM) {
-                                    snprintf(vt, sizeof(vt), "double");
+                                    vt = runtime_text_ct_intern("double");
                                 }
                                 else {
                                     if (((vk == N_ADDR) && (_self->arena->nodes[_self->arena->nodes[valarg].a].kind == N_VAR))) {
                                         char it[MAX_TEXT];
                                         if (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, _self->arena->nodes[_self->arena->nodes[valarg].a].text2, it, sizeof(it)) == 0) {
-                                            snprintf(vt, sizeof(vt), "%s *", it);
+                                            vt = runtime_text_ct_internf("%s *", it);
                                         }
                                     }
                                 }
+                            }
+                            if ((!vt)) {
+                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                             }
                         }
                         if (vt[0]) {
@@ -3363,14 +3394,17 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                         }
                     }
                     if (strcmp(aop, "cas") == 0) {
-                        char et[MAX_TEXT];
+                        const char * et = "";
                         int has_ptr = 0;
                         size_t bl;
-                        et[0] = 0;
-                        if ((((!_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, a2, et, sizeof(et))) && (_self->arena->nodes[a2].kind == N_ADDR)) && (_self->arena->nodes[_self->arena->nodes[a2].a].kind == N_VAR))) {
+                        et = "";
+                        if ((((_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, a2, (&et)) == 0) && (_self->arena->nodes[a2].kind == N_ADDR)) && (_self->arena->nodes[_self->arena->nodes[a2].a].kind == N_VAR))) {
                             char it[MAX_TEXT];
                             if (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, _self->arena->nodes[_self->arena->nodes[a2].a].text2, it, sizeof(it)) == 0) {
-                                snprintf(et, sizeof(et), "%s *", it);
+                                et = runtime_text_ct_internf("%s *", it);
+                                if ((!et)) {
+                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                                }
                             }
                         }
                         if (et[0]) {
@@ -3469,12 +3503,15 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     int aline2 = ((apos < _self->argcap) ? _self->arg_line[apos] : id_line);
                     int acol2 = ((apos < _self->argcap) ? _self->arg_col[apos] : id_col);
                     if (_self->sym->funcs[fi].pann[pk3] != 3) {
-                        char at[MAX_TEXT];
-                        char fk[MAX_TEXT];
-                        char ak[MAX_TEXT];
-                        if (((((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, pc2, at, sizeof(at)) == 0) && at[0]) && frontend_parse_bind_conv_struct_like(_self, at)) && frontend_parse_bind_conv_any(_self, at, "as"))) {
-                            frontend_parse_bind_conv_key(at, ak, sizeof(ak));
-                            frontend_parse_bind_conv_key(_self->sym->funcs[fi].ptype[pk3], fk, sizeof(fk));
+                        const char * at = "";
+                        const char * fk;
+                        const char * ak;
+                        if (((((_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, pc2, (&at)) == 0) && at[0]) && frontend_parse_bind_conv_struct_like(_self, at)) && frontend_parse_bind_conv_any(_self, at, "as"))) {
+                            ak = frontend_parse_bind_conv_key_text(at);
+                            fk = frontend_parse_bind_conv_key_text(_self->sym->funcs[fi].ptype[pk3]);
+                            if (((!ak) || (!fk))) {
+                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                            }
                             if (strcmp(ak, fk) != 0) {
                                 char pmsg[MAX_TEXT * 2];
                                 snprintf(pmsg, sizeof(pmsg), "conversion is only allowed at a binding site (declaration/assignment/out/return); argument %d of '%s' is not one", (pk3 + 1), _self->arena->nodes[n].text2);
@@ -4320,33 +4357,36 @@ static int container_sugar_kind(struct frontend_parse_Expr * self, int n) {
     return 0;
 }
 static int ref_member_flags(struct frontend_parse_Expr * self, int n, int * is_bit, int * is_const) {
-    char t[MAX_TEXT];
-    char base[MAX_TEXT];
+    const char * t;
+    const char * base;
     size_t bl;
     int si;
     int fi;
     (*is_bit) = 0;
     (*is_const) = 0;
-    if (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, self->arena->nodes[n].a, t, sizeof(t)) != 0) {
+    if (self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, self->arena->nodes[n].a, (&t)) != 0) {
         return 0;
     }
     bl = strlen(t);
     while (((bl > 0) && ((t[(bl - 1)] == ' ') || (t[(bl - 1)] == '*')))) {
-        t[--bl] = 0;
+        bl--;
     }
     while (((bl > 0) && ((t[(bl - 1)] == ' ') || (t[(bl - 1)] == '\t')))) {
-        t[--bl] = 0;
+        bl--;
     }
-    if (strncmp(t, "struct ", 7) == 0) {
-        snprintf(base, sizeof(base), "%s", (t + 7));
+    if (((bl >= 7) && (strncmp(t, "struct ", 7) == 0))) {
+        base = runtime_text_ct_intern_len((t + 7), (int)((bl - 7)));
     }
     else {
-        if (strncmp(t, "union ", 6) == 0) {
-            snprintf(base, sizeof(base), "%s", (t + 6));
+        if (((bl >= 6) && (strncmp(t, "union ", 6) == 0))) {
+            base = runtime_text_ct_intern_len((t + 6), (int)((bl - 6)));
         }
         else {
-            snprintf(base, sizeof(base), "%s", t);
+            base = runtime_text_ct_intern_len(t, (int)(bl));
         }
+    }
+    if ((!base)) {
+        return 0;
     }
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
     if (si < 0) {
@@ -4561,7 +4601,10 @@ void frontend_parse_expr_iter_push(struct frontend_parse_Expr * self, const char
     if (self->niter >= 8) {
         return;
     }
-    snprintf(self->iter[self->niter], MAX_TEXT, "%s", name);
+    self->iter[self->niter] = runtime_text_ct_intern(name);
+    if ((!self->iter[self->niter])) {
+        return;
+    }
     self->niter = (self->niter + 1);
 }
 void frontend_parse_expr_iter_pop(struct frontend_parse_Expr * self) {
@@ -4626,19 +4669,22 @@ static int record_io_call(struct frontend_parse_Expr * e, const char * callee, i
     return 0;
 }
 static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const char * target, int line, int col) {
-    char st[MAX_TEXT];
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
+    const char * st = "";
+    const char * sk;
+    const char * tk;
     char ret[MAX_TEXT];
     char msg[MAX_TEXT * 2];
     int ptr = 0;
     int nm;
     int mm;
-    if (((self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, recv, st, sizeof(st)) != 0) || (!st[0]))) {
+    if (((self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, recv, (&st)) != 0) || (!st[0]))) {
         return tool_diag_ct_sem_error(line, col, "cannot resolve the source type of this conversion", self->sup->mem->path);
     }
-    frontend_parse_bind_conv_key(st, sk, sizeof(sk));
-    frontend_parse_bind_conv_key(target, tk, sizeof(tk));
+    sk = frontend_parse_bind_conv_key_text(st);
+    tk = frontend_parse_bind_conv_key_text(target);
+    if (((!sk) || (!tk))) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
     if (strcmp(sk, tk) == 0) {
         return recv;
     }
@@ -4651,8 +4697,10 @@ static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const
         return tool_diag_ct_sem_error(line, col, "an 'as' conversion takes no arguments", self->sup->mem->path);
     }
     if (mm >= 0) {
-        char rk[MAX_TEXT];
-        frontend_parse_bind_conv_key(ret, rk, sizeof(rk));
+        const char * rk = frontend_parse_bind_conv_key_text(ret);
+        if ((!rk)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+        }
         if (strcmp(rk, tk) != 0) {
             snprintf(msg, sizeof(msg), "no conversion from '%s' to '%s': inherent 'as' answers '%s'", st, target, ret);
             return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
@@ -4671,30 +4719,35 @@ static int bind_conv_explicit(struct frontend_parse_Expr * self, int recv, const
     return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
 }
 static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, const char * target, int line, int col) {
-    char st[MAX_TEXT];
+    const char * st = "";
     char ret[MAX_TEXT];
-    char enc[MAX_TEXT];
-    char expect[MAX_TEXT];
-    char ek[MAX_TEXT];
-    char rk[MAX_TEXT];
+    const char * enc;
+    const char * expect;
+    const char * ek;
+    const char * rk;
     char msg[MAX_TEXT * 2];
     int ptr = 0;
     int nm;
     int mm;
-    if (((self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, recv, st, sizeof(st)) != 0) || (!st[0]))) {
+    if (((self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, recv, (&st)) != 0) || (!st[0]))) {
         return tool_diag_ct_sem_error(line, col, "cannot resolve the source type of this conversion", self->sup->mem->path);
     }
 {
         char * aa[1];
         aa[0] = (char *)(target);
-        if (frontend_sym_ct_inst_encode("Option", 1, aa, enc, sizeof(enc)) != 0) {
+        enc = frontend_sym_ct_inst_encode_text("Option", 1, aa);
+        if ((!enc)) {
             return tool_diag_ct_sem_error(line, col, "the strict conversion target is too long", self->sup->mem->path);
         }
     }
-    if (snprintf(expect, sizeof(expect), "struct %s", enc) >= (int)(sizeof(expect))) {
+    expect = runtime_text_ct_internf("struct %s", enc);
+    if ((!expect)) {
         return tool_diag_ct_sem_error(line, col, "the strict conversion target is too long", self->sup->mem->path);
     }
-    frontend_parse_bind_conv_key(expect, ek, sizeof(ek));
+    ek = frontend_parse_bind_conv_key_text(expect);
+    if ((!ek)) {
+        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+    }
     ret[0] = 0;
     mm = frontend_parse_bind_conv_inherent(self, st, "to", ret, sizeof(ret), (&ptr));
     if (mm == (-2)) {
@@ -4704,7 +4757,10 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
         return tool_diag_ct_sem_error(line, col, "a 'to' conversion takes no arguments", self->sup->mem->path);
     }
     if (mm >= 0) {
-        frontend_parse_bind_conv_key(ret, rk, sizeof(rk));
+        rk = frontend_parse_bind_conv_key_text(ret);
+        if ((!rk)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+        }
         if (strcmp(rk, ek) != 0) {
             snprintf(msg, sizeof(msg), "no strict conversion from '%s' to '%s': 'to' answers '%s', expected '%s'", st, target, ret, expect);
             return tool_diag_ct_sem_error(line, col, msg, self->sup->mem->path);
@@ -4722,9 +4778,9 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
 static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int args, int kind, int a, int b, const char * retin, int line, int col) {
     const char * fts[16];
     int anns[16];
-    char at[MAX_TEXT];
-    char ak[MAX_TEXT];
-    char fk[MAX_TEXT];
+    const char * at = "";
+    const char * ak;
+    const char * fk;
     char ret[MAX_TEXT];
     char name[MAX_TEXT];
     int cur;
@@ -4786,11 +4842,14 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
         const char * ft = fts[k];
         int ann = anns[k];
         int do_conv = 0;
-        if (((((((((ann == 3) && ft) && ft[0]) && (strcmp(ft, "void") != 0)) && (!strchr(ft, '*'))) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, cur, at, sizeof(at)) == 0)) && at[0]) && (!strchr(at, '*')))) {
+        if (((((((((ann == 3) && ft) && ft[0]) && (strcmp(ft, "void") != 0)) && (!strchr(ft, '*'))) && (self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, cur, (&at)) == 0)) && at[0]) && (!strchr(at, '*')))) {
             int ip = 0;
             char itr[MAX_TEXT];
-            frontend_parse_bind_conv_key(at, ak, sizeof(ak));
-            frontend_parse_bind_conv_key(ft, fk, sizeof(fk));
+            ak = frontend_parse_bind_conv_key_text(at);
+            fk = frontend_parse_bind_conv_key_text(ft);
+            if (((!ak) || (!fk))) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
             if ((((((((((strcmp(ak, fk) != 0) && (!(self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, ft, itr, sizeof(itr), (&ip)) && (self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, itr) >= 0)))) && (!frontend_sym_ct_is_string_value_type(at))) && (!frontend_sym_ct_is_string_value_type(ft))) && (!frontend_sym_ct_is_container_type(at))) && (!frontend_sym_ct_is_container_type(ft))) && (strstr(at, "Box_") == 0)) && (strstr(ft, "Box_") == 0)) && (frontend_parse_bind_conv_any(self, at, "as") || (frontend_parse_bind_conv_struct_like(self, at) && frontend_parse_bind_conv_struct_like(self, ft))))) {
                 do_conv = 1;
             }
@@ -4883,18 +4942,18 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
     return args;
 }
 static int bind_conv_arith(struct frontend_parse_Expr * self, int left, int right, int line, int col) {
-    char lt[MAX_TEXT];
-    char rt[MAX_TEXT];
+    const char * lt = "";
+    const char * rt = "";
     char msg[MAX_TEXT];
     int lc = 0;
     int rc = 0;
     if ((!frontend_parse_bind_conv_on())) {
         return 0;
     }
-    if (((((left >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, left, lt, sizeof(lt)) == 0)) && lt[0]) && frontend_parse_bind_conv_struct_like(self, lt))) {
+    if (((((left >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, left, (&lt)) == 0)) && lt[0]) && frontend_parse_bind_conv_struct_like(self, lt))) {
         lc = frontend_parse_bind_conv_any(self, lt, "as");
     }
-    if (((((right >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, right, rt, sizeof(rt)) == 0)) && rt[0]) && frontend_parse_bind_conv_struct_like(self, rt))) {
+    if (((((right >= 0) && (self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, right, (&rt)) == 0)) && rt[0]) && frontend_parse_bind_conv_struct_like(self, rt))) {
         rc = frontend_parse_bind_conv_any(self, rt, "as");
     }
     if (((!lc) && (!rc))) {
@@ -4948,6 +5007,10 @@ void frontend_parse_ct_expr_bind(void * arena, void * lex, void * sym, void * su
     frontend_parse_g_expr.nmaps = (int *)(nmaps);
     frontend_parse_g_expr.postfix_seed = (-1);
     frontend_parse_g_expr.into_node = (-1);
+    frontend_parse_g_expr.fnptr_name = "";
+    frontend_parse_g_expr.fnptr_dims = "";
+    frontend_parse_g_expr.decl_prefix = "";
+    frontend_parse_g_expr.in_generic_bound = "";
 }
 struct frontend_parse_Expr * frontend_parse_expr_get(void) {
     return (&frontend_parse_g_expr);

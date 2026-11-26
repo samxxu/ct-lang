@@ -194,20 +194,23 @@ pub int closure_match(struct Expr *self, int ci, const char *host, int skip_env,
         }
         i++;
     }
-    if (set_ret) snprintf(c->ret, MAX_TEXT, "%s", ret);
+    if (set_ret) {
+        c->ret = runtime::text::ct_intern(ret);
+        if (!c->ret) return self->sup->fail("out of memory");
+    }
     return 0;
 }
 
 pub int str_handle_value(struct Expr *self, int e, char *base, int cap)
 {
-    char ty[MAX_TEXT];
+    const char *ty = "";
     const char *p;
     size_t n;
 
     if (base != 0 && cap > 0) base[0] = 0;
     if (e < 0 || base == 0 || cap < 2) return 0;
     if (self->arena->nodes[e].kind == N_CAST) return 0;
-    if (self->sup->expr_type(e, ty, sizeof ty) != 0) return 0;
+    if (self->sup->expr_type_text(e, &ty) != 0) return 0;
     p = ty;
     while (*p == ' ' || *p == '\t') p++;
     if (strncmp(p, "struct ", 7) == 0) p += 7;

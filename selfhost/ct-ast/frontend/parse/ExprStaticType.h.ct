@@ -607,7 +607,7 @@ impl ExprStaticType for Expr {
         save_text_ptr = self->lex->tokstr.ptr; save_text_len = self->lex->tokstr.len;
         res = 0;
         if (self->lex->tok == T_ID) {
-            char rn[MAX_TEXT];
+            const char *rtn;
             /* DOC-87 Stage 2: `core::Vec v;` in a statement position. The
                declaration lookahead reads one name, so walk an `ns::` prefix to
                the final segment; the lexer state is restored below. */
@@ -684,8 +684,8 @@ impl ExprStaticType for Expr {
                only holds its mangled spelling */
             if (self->is_type_word(self->lex->tok_cstr())) {
                 res = 1;
-            } else if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) == 0
-                       && self->sym->find_type(rn) >= 0) {
+            } else if ((rtn = self->sym->resolve_type_text(runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len))) != 0
+                       && self->sym->find_type(rtn) >= 0) {
                 res = 1;
             } else {
                 /* A type name only a header declares (`time_t`), used in a cast

@@ -186,16 +186,17 @@ pub int bind_conv_inherent(struct Expr *self, const char *stype, const char *met
 
 pub int bind_conv_maps(struct Expr *self, const char *stype, const char *method, char *ret, int cap)
 {
-    char sk[MAX_TEXT];
-    char hk[MAX_TEXT];
-    char rk[MAX_TEXT];
+    const char *sk;
+    const char *hk;
     int i, j, seen = 0;
 
-    bind_conv_key(stype, sk, sizeof sk);
+    sk = bind_conv_key_text(stype);
+    if (!sk) return -1;
     for (i = 0; i < *self->nmaps; i++) {
         if ((*self->maps)[i].is_binding) continue;
         if (!(*self->maps)[i].is_static || !(*self->maps)[i].type_host) continue;
-        bind_conv_key((*self->maps)[i].host_type, hk, sizeof hk);
+        hk = bind_conv_key_text((*self->maps)[i].host_type);
+        if (!hk) return -1;
         if (strcmp(hk, sk) != 0) continue;
         for (j = 0; j < (*self->maps)[i].nb; j++) {
             int ti = (*self->maps)[i].b[j].ti;
@@ -203,31 +204,32 @@ pub int bind_conv_maps(struct Expr *self, const char *stype, const char *method,
             if (strcmp((*self->maps)[i].b[j].method, method) != 0) continue;
             if ((*self->maps)[i].b[j].nparams - (*self->maps)[i].b[j].recv != 0) continue;
             if (ti < 0 || mi < 0 || mi >= self->sym->traits[ti].nm) continue;
-            bind_conv_key(self->sym->traits[ti].m[mi].ret, rk, sizeof rk);
             if (!ret[0]) snprintf(ret, (size_t)cap, "%s",
                                   self->sym->traits[ti].m[mi].ret);
             seen++;
         }
     }
-    (void)rk;
     return seen;
 }
 
 pub int bind_conv_binding(struct Expr *self, const char *stype, const char *target)
 {
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
-    char hk[MAX_TEXT];
-    char dk[MAX_TEXT];
+    const char *sk;
+    const char *tk;
+    const char *hk;
+    const char *dk;
     int i, seen = 0;
 
-    bind_conv_key(stype, sk, sizeof sk);
-    bind_conv_key(target, tk, sizeof tk);
+    sk = bind_conv_key_text(stype);
+    tk = bind_conv_key_text(target);
+    if (!sk || !tk) return -1;
     for (i = 0; i < *self->nmaps; i++) {
         if (!(*self->maps)[i].is_binding) continue;
-        bind_conv_key((*self->maps)[i].host_type, hk, sizeof hk);
+        hk = bind_conv_key_text((*self->maps)[i].host_type);
+        if (!hk) return -1;
         if (strcmp(hk, sk) != 0) continue;
-        bind_conv_key((*self->maps)[i].bind_dst, dk, sizeof dk);
+        dk = bind_conv_key_text((*self->maps)[i].bind_dst);
+        if (!dk) return -1;
         if (strcmp(dk, tk) != 0) continue;
         seen++;
     }
@@ -318,8 +320,8 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
     /* S1a-0 C2p-4: the source type is a pool text, so a 2000-byte host type
        reaches the binding registry instead of failing the 160-byte row. */
     const char *st;
-    char sk[MAX_TEXT];
-    char tk[MAX_TEXT];
+    const char *sk;
+    const char *tk;
     char ret[MAX_TEXT];
     char tr[MAX_TEXT];
     char msg[MAX_TEXT * 2];
@@ -332,8 +334,9 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
     if (strchr(target, '*')) return expr;
     if (self->sup->expr_type_text(expr, &st) != 0 || !st[0]) return expr;
     if (strchr(st, '*')) return expr;
-    bind_conv_key(st, sk, sizeof sk);
-    bind_conv_key(target, tk, sizeof tk);
+    sk = bind_conv_key_text(st);
+    tk = bind_conv_key_text(target);
+    if (!sk || !tk) return expr;
     if (strcmp(sk, tk) == 0) return expr;
     /* an interface target is filled by the boxing pass, not by a conversion */
     if (self->sup->iface_ref_type(target, tr, sizeof tr, &ip)
@@ -342,8 +345,8 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
     ret[0] = 0;
     mm = bind_conv_inherent(self, st, "as", ret, sizeof ret, &ptr);
     if (mm >= 0) {
-        char rk[MAX_TEXT];
-        bind_conv_key(ret, rk, sizeof rk);
+        const char *rk = bind_conv_key_text(ret);
+        if (!rk) return expr;
         if (strcmp(rk, tk) == 0)
             return bind_conv_call(self, expr, st, "as", target, line, col);
         snprintf(msg, sizeof msg,

@@ -91,7 +91,7 @@ struct frontend_parse_ExprOps_vtbl {
     int (*container_index_check)(void *, int);
     int (*parse_expr)(void *);
     int (*into_tail)(void *, int, int);
-    int (*into_block)(void *, int, char *, int, int);
+    int (*into_block)(void *, int, const char *, int, int);
     int (*into_member_check)(void *, int, char *, int, int);
     int (*parse_bitor)(void *);
     int (*parse_bxor)(void *);
@@ -297,14 +297,14 @@ struct frontend_parse_Expr {
     int io_known[1024];
     int io_line[1024];
     int nio;
-    char fnptr_name[160];
+    const char * fnptr_name;
     int call_line;
     int call_col;
-    char fnptr_dims[160];
+    const char * fnptr_dims;
     int fnptr_state;
     int saw_atomic;
     int saw_trait;
-    char decl_prefix[160];
+    const char * decl_prefix;
     int fnval_ok;
     int in_generic;
     char * * in_generic_tparam;
@@ -326,7 +326,7 @@ struct frontend_parse_Expr {
     int argcap;
     int narg_pos;
     int arg_base;
-    char in_generic_bound[160];
+    const char * in_generic_bound;
     const char * last_bare_tag;
     int type_no_ptr;
     int assign_ok;
@@ -347,7 +347,7 @@ struct frontend_parse_Expr {
     int view_cvi[64];
     int view_bad[64];
     int niter;
-    char iter[8][160];
+    const char * iter[8];
     int try_ban;
     int ntry_cleanup;
     int try_cleanup_node[512];

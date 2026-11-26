@@ -222,7 +222,7 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_map_arity(void *self
 
 static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_mismatch(void *self, int args, int fi, int ti, int mi, char * msg, int cap) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char at[MAX_TEXT];
+    const char * at = "";
     char fb[MAX_TEXT];
     char ab[MAX_TEXT];
     const char * ft;
@@ -269,7 +269,7 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_mismatch(voi
         if (((((!skip) && (_self->arena->nodes[cur].kind == N_NUM)) && (_self->arena->nodes[cur].num == 0)) && strchr(ft, '*'))) {
             skip = 1;
         }
-        if (((!skip) && (_self->sup->__frontend_parse_supportops_vptr->expr_ctype(_self->sup, cur, at, sizeof(at)) != 0))) {
+        if (((!skip) && (_self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(_self->sup, cur, (&at)) != 0))) {
             skip = 1;
         }
         if (((!skip) && strchr(at, '['))) {

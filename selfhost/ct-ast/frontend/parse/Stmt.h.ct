@@ -426,10 +426,10 @@ static int borrow_decl_ahead(struct Stmt *self)
    call of an undefined symbol. */
 static int mark_borrow(struct Stmt *self, int n, int line, int col)
 {
-    char base[MAX_TEXT];
-    char et[MAX_TEXT];
+    const char *base;
+    const char *et = "";
     char msg[MAX_TEXT];
-    char eb[MAX_TEXT];
+    const char *eb;
     int d, si, vi;
     size_t bl, el;
 
@@ -445,13 +445,14 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
             return tool::diag::ct_sem_error(line, col,
                                    "'borrow' requires an initialiser of struct pointer type",
                                    self->mem->path);
-        snprintf(base, sizeof base, "%s", tp);
-        bl = strlen(base);
-        while (bl > 0 && (base[bl - 1] == '*' || base[bl - 1] == ' ')) {
-            bl = bl - 1;
-            base[bl] = 0;
+        bl = strlen(tp);
+        while (bl > 0 && (tp[bl - 1] == '*' || tp[bl - 1] == ' ')) bl--;
+        if (bl >= 7 && strncmp(tp, "struct ", 7) == 0) {
+            base = runtime::text::ct_intern_len(tp + 7, (int)(bl - 7));
+        } else {
+            base = runtime::text::ct_intern_len(tp, (int)bl);
         }
-        if (strncmp(base, "struct ", 7) == 0) memmove(base, base + 7, strlen(base + 7) + 1);
+        if (!base) return self->sup->fail("out of memory");
         si = self->sym->find_struct(base);
         if (si < 0 || self->arena->nodes[d].a < 0)
             return tool::diag::ct_sem_error(line, col,
@@ -460,16 +461,15 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
         /* the initialiser must name a pointer to the same struct whenever its
            type is resolvable here; an untyped expression is left to the C
            compiler, as the rest of the compiler does */
-        if (self->sup->expr_type(self->arena->nodes[d].a, et, sizeof et) == 0) {
+        if (self->sup->expr_type_text(self->arena->nodes[d].a, &et) == 0) {
             el = strlen(et);
             if (el > 0 && et[el - 1] == '*') {
-                snprintf(eb, sizeof eb, "%s", et);
-                el = strlen(eb);
-                while (el > 0 && (eb[el - 1] == '*' || eb[el - 1] == ' ')) {
-                    el = el - 1;
-                    eb[el] = 0;
-                }
-                if (strncmp(eb, "struct ", 7) == 0) memmove(eb, eb + 7, strlen(eb + 7) + 1);
+                while (el > 0 && (et[el - 1] == '*' || et[el - 1] == ' ')) el--;
+                if (el >= 7 && strncmp(et, "struct ", 7) == 0)
+                    eb = runtime::text::ct_intern_len(et + 7, (int)(el - 7));
+                else
+                    eb = runtime::text::ct_intern_len(et, (int)el);
+                if (!eb) return self->sup->fail("out of memory");
                 if (strcmp(eb, base) != 0)
                     return tool::diag::ct_sem_error(line, col,
                                            "'borrow' requires an initialiser of struct pointer type",
@@ -683,7 +683,7 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
     self->sup->lex_next();              /* `{` */
     while (!(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
         int el, eline, ecol;
-        char ety[MAX_TEXT];
+        const char *ety = "";
         char tr[MAX_TEXT];
         int ip = 0;
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
@@ -702,7 +702,7 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
             el = self->sup->maybe_box(el, tr, ip);
             if (el < 0) return -1;
         }
-        if (self->sup->expr_ctype(el, ety, sizeof ety) != 0) {
+        if (self->sup->expr_ctype_text(el, &ety) != 0) {
             char msg[256];
             snprintf(msg, sizeof msg,
                      "cannot determine the type of initializer element %d", count + 1);
@@ -898,8 +898,8 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
         k = self->ex->parse_expr();
         if (k < 0) return -1;
         {
-            char kty[MAX_TEXT];
-            if (self->sup->expr_ctype(k, kty, sizeof kty) == 0
+            const char *kty = "";
+            if (self->sup->expr_ctype_text(k, &kty) == 0
                 && self->ex->brace_arg_ok(ktype, kty) == 1) {
                 char msg[512];
                 snprintf(msg, sizeof msg,
@@ -934,13 +934,13 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
         if (v < 0) return -1;
         {
             char tr[MAX_TEXT];
-            char vty[MAX_TEXT];
+            const char *vty = "";
             int ip = 0;
             if (self->sup->iface_ref_type(vtype, tr, sizeof tr, &ip)) {
                 v = self->sup->maybe_box(v, tr, ip);
                 if (v < 0) return -1;
             }
-            if (self->sup->expr_ctype(v, vty, sizeof vty) == 0
+            if (self->sup->expr_ctype_text(v, &vty) == 0
                 && self->ex->brace_arg_ok(vtype, vty) == 1) {
                 char msg[512];
                 snprintf(msg, sizeof msg,
@@ -1014,7 +1014,7 @@ impl StmtOps for Stmt {
        `Arena *p` would otherwise look like an expression statement. */
     int is_decl_start(void)
     {
-        char rn[MAX_TEXT];
+        const char *rn;
         const char *save_text_ptr; int save_text_len;
         int save_tok, save_float, save_line, save_tokline, save_start;
         int save_lstart, save_bol, save_pos, look, i;
@@ -1110,24 +1110,25 @@ impl StmtOps for Stmt {
                     return 1;
                 if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
                       || *p == '_' || *p == '*')) return 0;
-                if (self->sup->resolve_type(qn, rn, sizeof rn) == 0
+                if ((rn = self->sym->resolve_type_text(qn)) != 0
                     && self->sym->find_type(rn) >= 0) return 1;
                 /* DOC-87 Stage 2: `core::String` / `core::Vec` — the built-in
                    layer's source namespace maps to the root spelling during the
                    compatibility window (no C/ABI churn). */
                 if (strncmp(qn, "core_", 5) == 0
-                    && self->sup->resolve_type(qn + 5, rn, sizeof rn) == 0
+                    && (rn = self->sym->resolve_type_text(qn + 5)) != 0
                     && (self->sym->find_type(rn) >= 0
                         || frontend::sym::ct_tmpl_find(qn + 5) >= 0)) return 1;
                 /* SH-120: `core::utf16::U16String` / `U16Str` in a statement
                    position maps to the bare built-in spelling. */
                 if (strncmp(qn, "core_utf16_", 11) == 0
-                    && self->sup->resolve_type(qn + 11, rn, sizeof rn) == 0
+                    && (rn = self->sym->resolve_type_text(qn + 11)) != 0
                     && self->sym->find_type(rn) >= 0) return 1;
             }
         }
         if (self->ex->is_type_word(self->lex->tok_cstr())) return 1;
-        if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) != 0) return 0;
+        rn = self->sym->resolve_type_text(runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len));
+        if (!rn) return 0;
         if (self->sym->find_type(rn) >= 0) return 1;
         for (i = 0; kw[i]; i++)
             if (self->lex->tok_is(kw[i])) return 0;
@@ -1267,17 +1268,20 @@ impl StmtOps for Stmt {
                    cannot see them after the block closes */
                 {
                     int yz = 0;
+                    const char *ytp = "";
                     char ybuf[MAX_TEXT];
-                    if (self->sup->expr_type(ye, ybuf, sizeof ybuf) != 0
-                        && self->ex->chk_type(ye, ybuf, sizeof ybuf, &yz) != 0) {
-                        self->sup->pop_scope();
-                        self->in_match_arm = save_in_match_arm;
-                        self->yield_depth = save_yield_depth;
-                        return tool::diag::ct_sem_error(yl, yc,
-                            "cannot determine the type yielded by this match arm",
-                            self->mem->path);
+                    if (self->sup->expr_type_text(ye, &ytp) != 0) {
+                        if (self->ex->chk_type(ye, ybuf, sizeof ybuf, &yz) != 0) {
+                            self->sup->pop_scope();
+                            self->in_match_arm = save_in_match_arm;
+                            self->yield_depth = save_yield_depth;
+                            return tool::diag::ct_sem_error(yl, yc,
+                                "cannot determine the type yielded by this match arm",
+                                self->mem->path);
+                        }
+                        ytp = ybuf;
                     }
-                    self->yield_type[dep] = runtime::text::ct_intern(ybuf);
+                    self->yield_type[dep] = runtime::text::ct_intern(ytp);
                     if (!self->yield_type[dep]) {
                         self->sup->pop_scope();
                         self->in_match_arm = save_in_match_arm;
@@ -1772,8 +1776,8 @@ impl StmtOps for Stmt {
                before the delete is emitted) and remember it only when it uses
                Drop; otherwise the emitter stays on the plain `free` path */
             {
-                char dt[MAX_TEXT];
-                if (self->sup->expr_type(e, dt, sizeof dt) == 0) {
+                const char *dt = "";
+                if (self->sup->expr_type_text(e, &dt) == 0) {
                     const char *dp = dt;
                     size_t dl;
                     int si;
@@ -2114,10 +2118,12 @@ impl StmtOps for Stmt {
         if (self->lex->tok == T_ID && self->lex->tok_is("_Alignas")) {
             int r, np, depth;
             char tbuf[MAX_TEXT];
+            char dpx[MAX_TEXT];
             if (self->ex->decl_prefix[0])
                 return self->sup->fail("duplicate _Alignas on one declaration");
+            dpx[0] = 0;
             np = 0;
-            if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, "_Alignas") != 0)
+            if (self->ex->type_append(dpx, sizeof dpx, &np, "_Alignas") != 0)
                 return -1;
             self->sup->lex_next();
             if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
@@ -2129,7 +2135,7 @@ impl StmtOps for Stmt {
                     snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
                 else
                     self->lex->tok_copy(tbuf, sizeof tbuf);
-                if (self->ex->type_append(self->ex->decl_prefix, MAX_TEXT, &np, tbuf) != 0)
+                if (self->ex->type_append(dpx, sizeof dpx, &np, tbuf) != 0)
                     return -1;
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) depth++;
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(")")) {
@@ -2141,13 +2147,15 @@ impl StmtOps for Stmt {
                 }
                 self->sup->lex_next();
             }
+            self->ex->decl_prefix = runtime::text::ct_intern(dpx);
+            if (!self->ex->decl_prefix) return self->sup->fail("out of memory");
             r = self->parse_stmt();
             if (r < 0) {
-                self->ex->decl_prefix[0] = 0;
+                self->ex->decl_prefix = "";
                 return r;
             }
             if (self->ex->decl_prefix[0]) {
-                self->ex->decl_prefix[0] = 0;
+                self->ex->decl_prefix = "";
                 return self->sup->fail("an _Alignas specifier must prefix a variable declaration");
             }
             return r;
@@ -2582,9 +2590,8 @@ impl StmtOps for Stmt {
                         /* A callee that returns a slice is a view it owns the
                            contract for; the direct local-array lint does not
                            follow through a call (P-4.5 pass-through). */
-                        char rt[MAX_TEXT];
-                        rt[0] = 0;
-                        if (self->sup->expr_type(e, rt, sizeof rt) != 0
+                        const char *rt = "";
+                        if (self->sup->expr_type_text(e, &rt) != 0
                             || strcmp(rt, "struct __ct_slice") != 0)
                             return tool::diag::ct_sem_error(dline, dcol,
                                 "a slice can only be initialized from an array, a slice or a slice-returning call",

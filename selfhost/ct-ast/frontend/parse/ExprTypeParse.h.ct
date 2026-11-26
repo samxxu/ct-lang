@@ -263,12 +263,12 @@ impl ExprTypeParse for Expr {
             int pn = snprintf(out, (size_t)cap, "%s", self->decl_prefix);
             if (pn < 0 || pn >= cap) return self->sup->fail("type is too long");
             n = pn;
-            self->decl_prefix[0] = 0;
+            self->decl_prefix = "";
         }
         self->fnptr_state = 0;
         self->saw_trait = 0;
-        self->fnptr_name[0] = 0;
-        self->fnptr_dims[0] = 0;
+        self->fnptr_name = "";
+        self->fnptr_dims = "";
         self->last_bare_tag = "";
         for (;;) {
             /* Phase 41 B′: `atomic` is a contextual modifier, not a reserved
@@ -708,7 +708,7 @@ impl ExprTypeParse for Expr {
                    texts, so a 2000-byte parameter type inside `(*)(...)` is not
                    cut at a 160-byte local. */
                 const char *plist = "";
-                char dname[MAX_TEXT];
+                const char *dname;
                 const char *fdims = "";
                 int pn;
                 self->sup->lex_next();
@@ -723,7 +723,9 @@ impl ExprTypeParse for Expr {
                     return self->sup->fail("expected a name in the function-pointer declarator");
                 /* keep the name here: parsing the parameter list below calls
                    `parse_type` again, which clears `fnptr_name` */
-                self->lex->tok_copy(dname, sizeof dname);
+                dname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!dname) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 /* dimensions sit inside the declarator, before the `)`: a
                    function-pointer array (`int (*tbl[2])(int)`) (D-5) */
@@ -791,8 +793,8 @@ impl ExprTypeParse for Expr {
                     if (!sig) return self->sup->fail("out of memory");
                     if (self->type_append(out, cap, &n, sig) != 0) return -1;
                 }
-                snprintf(self->fnptr_name, MAX_TEXT, "%s", dname);
-                snprintf(self->fnptr_dims, MAX_TEXT, "%s", fdims);
+                self->fnptr_name = dname;
+                self->fnptr_dims = fdims;
                 self->fnptr_state = 1;
             } else {
                 self->lex->tok = save_tok;

@@ -370,6 +370,38 @@ scratch 与输出上限一并删除；`parse_type` 的 `(*)(...)` 声明符 scra
 证据：`c2p_limits.sh` 16/16，baseline `af193df6` 为 9/16；发射 C 67577 ->
 67620 行（仅 .c），切片清单仍为 76。
 
+**C2p-5 调用方缓冲 / 持久名字 / 比较键（已落）**：`expr_type`/`expr_ctype`
+的 38 处调用点（`Expr` 17、`Stmt` 7、`Emitter` 4、`StmtMatch` 3、`TypeCheck`
+2、`StmtLoop` 2、`ExprTypes`/`ExprNewObject`/`ExprCallCheck` 各 1）全部改
+pool 文本入口（`expr_type_text`/`expr_ctype_text`），`ParseSupport` 内部的
+3 处 `self->ty->expr_type` 同批收掉；`Emitter.sb_expr_type` 改为返回 pool
+文本，`emit_gsub_type` 新增 pool 形式，`write_abi_header` 的 `fwd[64][160]`
+改指针行。持久行迁池：`Closure.owner/ret/cap_name/cap_type`、
+`Symbols.trait_default/tachain`（`tachain` 改指针行）、`ExprCore` 的
+`fnptr_name`/`fnptr_dims`/`decl_prefix`/`in_generic_bound`/`iter`、ADT 标签
+（`parse_enum_def.name` 与构造器/match 的 `rn`）；`CT_ADT` 的 `ct_adt_from_type`
+也改 pool 解析。比较键 `type_key`/`bind_conv_key`/`map_bind_key` 新增 pool
+形式并迁移全部调用点，`method_trait` 新增 pool 形式：两个只在前 159 字节
+相同的长类型不再同键（旧行为报 "ambiguous map binding"）。
+证据：`c2p_limits.sh` 22/22，baseline `86ae58db` 为 16/22；发射 C 67620 ->
+68180 行（仅 .c），`Emitter.h.ct` 10215 -> 10315 行，切片清单仍为 76。
+
+**剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 390 处
+（`Expr.h.ct` 94、`Parser.h.ct` 53、`Stmt.h.ct` 42、`ExprTypes.h.ct` 33、
+`MapBuild.h.ct` 24、`ExprStaticType.h.ct` 23、`ExprBinding.h.ct` 16、
+`ExprInstantiate.h.ct` 14 …）、`backend/emit` 114 处（`Emitter.h.ct` 101、
+`EmitterText.h.ct` 3、`Init.h.ct` 2、`EmitInit.h.ct` 2、`EmitHoist.h.ct` 2、
+`EmitterMapText.h.ct` 1）、`tool/pkg` 55 处、`frontend/type` 29 处、
+`frontend/sym` 16 处、`frontend/module` 20 处、`backend/mem` 7 处。另有
+8 处 `[128]` 计数行（`Emitter` 的路径/字段数组等），它们是行数容量而非文本
+scratch。下一批优先级：`Emitter.gtarg`（仍是 `ct_rows_reserve` 的
+`MAX_TEXT` 行，泛型实例的 2000 字节类型实参在发射端仍会被截；`Emitter`
+`tbuf/rbuf/ibuf` 已改 pool，但 `gen` 的 2000 字节泛型函数实参仍红）、
+`Closure` 之外的 `MapBuild.parse` 局部（`inst/icn/prefix/vt/host_type`
+仍 160）、`ExprInstantiate` 的实例行与 `ExprStaticType`/`Stmt` 中剩余的
+一次性 `char[MAX_TEXT]` scratch，以及 `foreach` 迭代变量的 2000 字节声明
+路径（`iter` 已迁池，但 `declare_var` 前仍有一处 160 行截断）。
+
 **剩余（按文件，`grep -c '\[MAX_TEXT\]'`）**：`frontend/parse` 390 处
 （`Expr.h.ct` 94、`Parser.h.ct` 53、`Stmt.h.ct` 42、`ExprTypes.h.ct` 33、
 `MapBuild.h.ct` 24、`ExprStaticType.h.ct` 23、`ExprBinding.h.ct` 16、

@@ -203,7 +203,7 @@ struct frontend_parse_Stmt * frontend_parse_stmt_get(void);
 static struct frontend_parse_Stmt frontend_parse_g_stmt = { .__frontend_parse_stmtops_vptr = &frontend_parse_Stmt_frontend_parse_StmtOps_vtable, .__frontend_parse_stmtdeferops_vptr = &frontend_parse_Stmt_frontend_parse_StmtDeferOps_vtable, .__frontend_parse_stmtmatch_vptr = &frontend_parse_Stmt_frontend_parse_StmtMatch_vtable, .__frontend_parse_stmtloop_vptr = &frontend_parse_Stmt_frontend_parse_StmtLoop_vtable, .__frontend_parse_stmtswitch_vptr = &frontend_parse_Stmt_frontend_parse_StmtSwitch_vtable, .__frontend_parse_stmtcontrol_vptr = &frontend_parse_Stmt_frontend_parse_StmtControl_vtable, .__frontend_parse_stmtuninit_vptr = &frontend_parse_Stmt_frontend_parse_StmtUninit_vtable };
 static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    char rn[MAX_TEXT];
+    const char * rn;
     const char * save_text_ptr;
     int save_text_len;
     int save_tok;
@@ -302,13 +302,13 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
             if ((!((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || ((*p) == '_')) || ((*p) == '*')))) {
                 return 0;
             }
-            if (((_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, qn, rn, sizeof(rn)) == 0) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
+            if ((((rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, qn)) != 0) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
                 return 1;
             }
-            if ((((strncmp(qn, "core_", 5) == 0) && (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, (qn + 5), rn, sizeof(rn)) == 0)) && ((_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0) || (frontend_sym_ct_tmpl_find((qn + 5)) >= 0)))) {
+            if ((((strncmp(qn, "core_", 5) == 0) && ((rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, (qn + 5))) != 0)) && ((_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0) || (frontend_sym_ct_tmpl_find((qn + 5)) >= 0)))) {
                 return 1;
             }
-            if ((((strncmp(qn, "core_utf16_", 11) == 0) && (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, (qn + 11), rn, sizeof(rn)) == 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
+            if ((((strncmp(qn, "core_utf16_", 11) == 0) && ((rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, (qn + 11))) != 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
                 return 1;
             }
         }
@@ -316,7 +316,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
     if (_self->ex->__frontend_parse_exprtypeparse_vptr->is_type_word(_self->ex, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex))) {
         return 1;
     }
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) != 0) {
+    rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len));
+    if ((!rn)) {
         return 0;
     }
     if (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0) {
@@ -453,14 +454,18 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
                 _self->yield_col[dep] = yc;
 {
                     int yz = 0;
+                    const char * ytp = "";
                     char ybuf[MAX_TEXT];
-                    if (((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, ye, ybuf, sizeof(ybuf)) != 0) && (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, ye, ybuf, sizeof(ybuf), (&yz)) != 0))) {
-                        _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
-                        _self->in_match_arm = save_in_match_arm;
-                        _self->yield_depth = save_yield_depth;
-                        return tool_diag_ct_sem_error(yl, yc, "cannot determine the type yielded by this match arm", _self->mem->path);
+                    if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, ye, (&ytp)) != 0) {
+                        if (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, ye, ybuf, sizeof(ybuf), (&yz)) != 0) {
+                            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+                            _self->in_match_arm = save_in_match_arm;
+                            _self->yield_depth = save_yield_depth;
+                            return tool_diag_ct_sem_error(yl, yc, "cannot determine the type yielded by this match arm", _self->mem->path);
+                        }
+                        ytp = ybuf;
                     }
-                    _self->yield_type[dep] = runtime_text_ct_intern(ybuf);
+                    _self->yield_type[dep] = runtime_text_ct_intern(ytp);
                     if ((!_self->yield_type[dep])) {
                         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                         _self->in_match_arm = save_in_match_arm;
@@ -947,8 +952,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             return (-1);
         }
 {
-            char dt[MAX_TEXT];
-            if (_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, e, dt, sizeof(dt)) == 0) {
+            const char * dt = "";
+            if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&dt)) == 0) {
                 const char * dp = dt;
                 size_t dl;
                 int si;
@@ -1384,11 +1389,13 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         int np;
         int depth;
         char tbuf[MAX_TEXT];
+        char dpx[MAX_TEXT];
         if (_self->ex->decl_prefix[0]) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate _Alignas on one declaration");
         }
+        dpx[0] = 0;
         np = 0;
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), "_Alignas") != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), "_Alignas") != 0) {
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -1406,7 +1413,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             else {
                 _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
             }
-            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), tbuf) != 0) {
+            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), tbuf) != 0) {
                 return (-1);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
@@ -1421,13 +1428,17 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
+        _self->ex->decl_prefix = runtime_text_ct_intern(dpx);
+        if ((!_self->ex->decl_prefix)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         r = _self->__frontend_parse_stmtops_vptr->parse_stmt(_self);
         if (r < 0) {
-            _self->ex->decl_prefix[0] = 0;
+            _self->ex->decl_prefix = "";
             return r;
         }
         if (_self->ex->decl_prefix[0]) {
-            _self->ex->decl_prefix[0] = 0;
+            _self->ex->decl_prefix = "";
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "an _Alignas specifier must prefix a variable declaration");
         }
         return r;
@@ -1797,9 +1808,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                 }
                 else {
                     if (_self->arena->nodes[e].kind == N_CALL) {
-                        char rt[MAX_TEXT];
-                        rt[0] = 0;
-                        if (((_self->sup->__frontend_parse_supportops_vptr->expr_type(_self->sup, e, rt, sizeof(rt)) != 0) || (strcmp(rt, "struct __ct_slice") != 0))) {
+                        const char * rt = "";
+                        if (((_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&rt)) != 0) || (strcmp(rt, "struct __ct_slice") != 0))) {
                             return tool_diag_ct_sem_error(dline, dcol, "a slice can only be initialized from an array, a slice or a slice-returning call", _self->mem->path);
                         }
                         sroot = 0;
@@ -2752,10 +2762,10 @@ static int borrow_decl_ahead(struct frontend_parse_Stmt * self) {
     return look;
 }
 static int mark_borrow(struct frontend_parse_Stmt * self, int n, int line, int col) {
-    char base[MAX_TEXT];
-    char et[MAX_TEXT];
+    const char * base;
+    const char * et = "";
     char msg[MAX_TEXT];
-    char eb[MAX_TEXT];
+    const char * eb;
     int d;
     int si;
     int vi;
@@ -2774,30 +2784,37 @@ static int mark_borrow(struct frontend_parse_Stmt * self, int n, int line, int c
         if (((bl == 0) || (tp[(bl - 1)] != '*'))) {
             return tool_diag_ct_sem_error(line, col, "'borrow' requires an initialiser of struct pointer type", self->mem->path);
         }
-        snprintf(base, sizeof(base), "%s", tp);
-        bl = strlen(base);
-        while (((bl > 0) && ((base[(bl - 1)] == '*') || (base[(bl - 1)] == ' ')))) {
-            bl = (bl - 1);
-            base[bl] = 0;
+        bl = strlen(tp);
+        while (((bl > 0) && ((tp[(bl - 1)] == '*') || (tp[(bl - 1)] == ' ')))) {
+            bl--;
         }
-        if (strncmp(base, "struct ", 7) == 0) {
-            memmove(base, (base + 7), (strlen((base + 7)) + 1));
+        if (((bl >= 7) && (strncmp(tp, "struct ", 7) == 0))) {
+            base = runtime_text_ct_intern_len((tp + 7), (int)((bl - 7)));
+        }
+        else {
+            base = runtime_text_ct_intern_len(tp, (int)(bl));
+        }
+        if ((!base)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
         if (((si < 0) || (self->arena->nodes[d].a < 0))) {
             return tool_diag_ct_sem_error(line, col, "'borrow' requires an initialiser of struct pointer type", self->mem->path);
         }
-        if (self->sup->__frontend_parse_supportops_vptr->expr_type(self->sup, self->arena->nodes[d].a, et, sizeof(et)) == 0) {
+        if (self->sup->__frontend_parse_supportops_vptr->expr_type_text(self->sup, self->arena->nodes[d].a, (&et)) == 0) {
             el = strlen(et);
             if (((el > 0) && (et[(el - 1)] == '*'))) {
-                snprintf(eb, sizeof(eb), "%s", et);
-                el = strlen(eb);
-                while (((el > 0) && ((eb[(el - 1)] == '*') || (eb[(el - 1)] == ' ')))) {
-                    el = (el - 1);
-                    eb[el] = 0;
+                while (((el > 0) && ((et[(el - 1)] == '*') || (et[(el - 1)] == ' ')))) {
+                    el--;
                 }
-                if (strncmp(eb, "struct ", 7) == 0) {
-                    memmove(eb, (eb + 7), (strlen((eb + 7)) + 1));
+                if (((el >= 7) && (strncmp(et, "struct ", 7) == 0))) {
+                    eb = runtime_text_ct_intern_len((et + 7), (int)((el - 7)));
+                }
+                else {
+                    eb = runtime_text_ct_intern_len(et, (int)(el));
+                }
+                if ((!eb)) {
+                    return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
                 }
                 if (strcmp(eb, base) != 0) {
                     return tool_diag_ct_sem_error(line, col, "'borrow' requires an initialiser of struct pointer type", self->mem->path);
@@ -2964,7 +2981,7 @@ static int parse_vec_brace_init(struct frontend_parse_Stmt * self, const char * 
         int el;
         int eline;
         int ecol;
-        char ety[MAX_TEXT];
+        const char * ety = "";
         char tr[MAX_TEXT];
         int ip = 0;
         if (((self->lex->tok == T_PUNCT) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, "{"))) {
@@ -2985,7 +3002,7 @@ static int parse_vec_brace_init(struct frontend_parse_Stmt * self, const char * 
                 return (-1);
             }
         }
-        if (self->sup->__frontend_parse_supportops_vptr->expr_ctype(self->sup, el, ety, sizeof(ety)) != 0) {
+        if (self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(self->sup, el, (&ety)) != 0) {
             char msg[256];
             snprintf(msg, sizeof(msg), "cannot determine the type of initializer element %d", (count + 1));
             return tool_diag_ct_sem_error(eline, ecol, msg, self->mem->path);
@@ -3251,8 +3268,8 @@ static int parse_map_brace_init(struct frontend_parse_Stmt * self, const char * 
             return (-1);
         }
 {
-            char kty[MAX_TEXT];
-            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype(self->sup, k, kty, sizeof(kty)) == 0) && (self->ex->__frontend_parse_exprstatictype_vptr->brace_arg_ok(self->ex, ktype, kty) == 1))) {
+            const char * kty = "";
+            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(self->sup, k, (&kty)) == 0) && (self->ex->__frontend_parse_exprstatictype_vptr->brace_arg_ok(self->ex, ktype, kty) == 1))) {
                 char msg[512];
                 snprintf(msg, sizeof(msg), "initializer item %d has key type '%s', expected '%s'", (count + 1), kty, ktype);
                 return tool_diag_ct_sem_error(kline, kcol, msg, self->mem->path);
@@ -3284,7 +3301,7 @@ static int parse_map_brace_init(struct frontend_parse_Stmt * self, const char * 
         }
 {
             char tr[MAX_TEXT];
-            char vty[MAX_TEXT];
+            const char * vty = "";
             int ip = 0;
             if (self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, vtype, tr, sizeof(tr), (&ip))) {
                 v = self->sup->__frontend_parse_supportops_vptr->maybe_box(self->sup, v, tr, ip);
@@ -3292,7 +3309,7 @@ static int parse_map_brace_init(struct frontend_parse_Stmt * self, const char * 
                     return (-1);
                 }
             }
-            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype(self->sup, v, vty, sizeof(vty)) == 0) && (self->ex->__frontend_parse_exprstatictype_vptr->brace_arg_ok(self->ex, vtype, vty) == 1))) {
+            if (((self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(self->sup, v, (&vty)) == 0) && (self->ex->__frontend_parse_exprstatictype_vptr->brace_arg_ok(self->ex, vtype, vty) == 1))) {
                 char msg[512];
                 snprintf(msg, sizeof(msg), "initializer item %d has value type '%s', expected '%s'", (count + 1), vty, vtype);
                 return tool_diag_ct_sem_error(vline, vcol, msg, self->mem->path);

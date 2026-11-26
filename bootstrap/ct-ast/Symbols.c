@@ -523,11 +523,16 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_closure_new(void *self, c
         return (-1);
     }
     c = (&_self->closures[_self->nclosure]);
-    snprintf(c->owner, MAX_TEXT, "%s", (owner ? owner : ""));
-    c->ret[0] = 0;
+    c->owner = runtime_text_ct_intern((owner ? owner : ""));
+    if ((!c->owner)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    c->ret = "";
     for (i = 0; i < 16; i++) {
         c->ptype[i] = "";
         c->pname[i] = "";
+        c->cap_name[i] = "";
+        c->cap_type[i] = "";
     }
     c->nparams = 0;
     c->body = (-1);
@@ -938,6 +943,16 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of(void *self
     }
     snprintf(out, (size_t)(cap), "%s", _self->type_target[i]);
     return 1;
+}
+
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_text(void *self, const char * name) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    int i;
+    i = _self->__frontend_sym_symbolops_vptr->find_type(_self, name);
+    if ((((i < 0) || (!_self->type_target[i])) || (!_self->type_target[i][0]))) {
+        return (const char *)(0);
+    }
+    return _self->type_target[i];
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity(void *self, int need) {
@@ -1501,6 +1516,48 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait(void *self, 
     return (-1);
 }
 
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_text(void *self, const char * stype, const char * method) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    const char * base;
+    const char * key;
+    size_t n;
+    int s;
+    int ti;
+    int mi;
+    (void)(_self);
+    base = stype;
+    if (strncmp(base, "struct ", 7) == 0) {
+        base += 7;
+    }
+    while ((*base) == ' ') {
+        base++;
+    }
+    n = strlen(base);
+    while (((n > 0) && ((base[(n - 1)] == ' ') || (base[(n - 1)] == '*')))) {
+        n--;
+    }
+    key = runtime_text_ct_intern_len(base, (int)(n));
+    if ((!key)) {
+        return (const char *)(0);
+    }
+    s = _self->__frontend_sym_symbolops_vptr->find_struct(_self, key);
+    if (s < 0) {
+        return (const char *)(0);
+    }
+    for (ti = 0; ti < _self->structs[s].nuse; ti++) {
+        int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->structs[s].use[ti]);
+        if (t < 0) {
+            continue;
+        }
+        for (mi = 0; mi < _self->traits[t].nm; mi++) {
+            if (strcmp(_self->traits[t].m[mi].name, method) == 0) {
+                return _self->traits[t].name;
+            }
+        }
+    }
+    return (const char *)(0);
+}
+
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb(void *self, const char * stype, const char * method, const char * first, char * other, int ocap) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     const char * base;
@@ -1823,6 +1880,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .add_type = frontend_sym_Symbols_frontend_sym_SymbolOps_add_type,
     .set_type_target = frontend_sym_Symbols_frontend_sym_SymbolOps_set_type_target,
     .type_target_of = frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of,
+    .type_target_text = frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_text,
     .ensure_struct_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity,
     .ensure_struct_field_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_field_capacity,
     .ensure_tmpl_field_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_tmpl_field_capacity,
@@ -1839,6 +1897,7 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .trait_inst = frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst,
     .impl_use_concrete = frontend_sym_Symbols_frontend_sym_SymbolOps_impl_use_concrete,
     .method_trait = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait,
+    .method_trait_text = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_text,
     .method_trait_amb = frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb,
     .ns_decl_name = frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_name,
     .ns_decl_text = frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_text,
@@ -1895,7 +1954,10 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
             if (_self->ntachain >= MAX_ALIAS_CHAIN) {
                 return _self->__frontend_sym_symbolops_vptr->fail(_self, "type alias expansion is too deep");
             }
-            snprintf(_self->tachain[_self->ntachain], 160, "%s", name);
+            _self->tachain[_self->ntachain] = runtime_text_ct_intern(name);
+            if ((!_self->tachain[_self->ntachain])) {
+                return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+            }
             _self->ntachain++;
             return 0;
         }
@@ -1915,7 +1977,10 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
         if (_self->ntachain >= MAX_ALIAS_CHAIN) {
             return _self->__frontend_sym_symbolops_vptr->fail(_self, "type alias expansion is too deep");
         }
-        snprintf(_self->tachain[_self->ntachain], 160, "%s", name);
+        _self->tachain[_self->ntachain] = runtime_text_ct_intern(name);
+        if ((!_self->tachain[_self->ntachain])) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
         _self->ntachain++;
         return 0;
     }
@@ -1950,7 +2015,10 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
     if (_self->ntachain >= MAX_ALIAS_CHAIN) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "type alias expansion is too deep");
     }
-    snprintf(_self->tachain[_self->ntachain], 160, "%s", name);
+    _self->tachain[_self->ntachain] = runtime_text_ct_intern(name);
+    if ((!_self->tachain[_self->ntachain])) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
     _self->ntachain++;
     return 0;
 }
@@ -2128,7 +2196,10 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_expand_type_alias_text
     if (_self->ntachain >= MAX_ALIAS_CHAIN) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "type alias expansion is too deep");
     }
-    snprintf(_self->tachain[_self->ntachain], 160, "%s", name);
+    _self->tachain[_self->ntachain] = runtime_text_ct_intern(name);
+    if ((!_self->tachain[_self->ntachain])) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
     _self->ntachain++;
     if (((!_self->taliases[i].target) || (!_self->taliases[i].target[0]))) {
         _self->ntachain--;
@@ -2345,6 +2416,9 @@ static int symbols_grow(struct frontend_sym_Symbols * self) {
 struct frontend_sym_Symbols * frontend_sym_symbols_get(void) {
     if ((!frontend_sym_g_symbols.ret_type)) {
         frontend_sym_g_symbols.ret_type = "";
+    }
+    if ((!frontend_sym_g_symbols.trait_default)) {
+        frontend_sym_g_symbols.trait_default = "";
     }
     if (symbols_grow((&frontend_sym_g_symbols)) != 0) {
         fprintf(stderr, "ctc: out of memory\n");
@@ -3141,17 +3215,17 @@ int frontend_sym_ct_adt_add_field(int adt, int v, const char * name, const char 
     return f;
 }
 int frontend_sym_ct_adt_from_type(const char * spelling) {
-    char raw[MAX_TEXT];
-    char base[MAX_TEXT];
-    char rn[MAX_TEXT];
-    char tgt[MAX_TEXT];
+    const char * raw;
+    const char * base;
+    const char * tgt;
+    const char * rn;
     struct frontend_sym_Symbols * sym;
     int a;
     if (((!spelling) || (!spelling[0]))) {
         return (-1);
     }
-    frontend_sym_adt_strip_type(spelling, raw, sizeof(raw));
-    if ((!raw[0])) {
+    raw = frontend_sym_adt_strip_type_text(spelling);
+    if (((!raw) || (!raw[0]))) {
         return (-1);
     }
     a = frontend_sym_ct_adt_find(raw);
@@ -3159,26 +3233,36 @@ int frontend_sym_ct_adt_from_type(const char * spelling) {
         return a;
     }
     sym = frontend_sym_symbols_get();
-    rn[0] = 0;
-    if ((((sym->__frontend_sym_symbolops_vptr->resolve_type(sym, raw, rn, sizeof(rn)) == 0) && rn[0]) && (strcmp(rn, raw) != 0))) {
-        frontend_sym_adt_strip_type(rn, base, sizeof(base));
-        a = frontend_sym_ct_adt_find(base);
-        if (a >= 0) {
-            return a;
+    rn = sym->__frontend_sym_symbolops_vptr->resolve_type_text(sym, raw);
+    if (((rn && rn[0]) && (strcmp(rn, raw) != 0))) {
+        base = frontend_sym_adt_strip_type_text(rn);
+        if (base) {
+            a = frontend_sym_ct_adt_find(base);
+            if (a >= 0) {
+                return a;
+            }
         }
     }
-    if (sym->__frontend_sym_symbolops_vptr->type_target_of(sym, raw, tgt, sizeof(tgt))) {
-        frontend_sym_adt_strip_type(tgt, base, sizeof(base));
-        a = frontend_sym_ct_adt_find(base);
-        if (a >= 0) {
-            return a;
+    tgt = sym->__frontend_sym_symbolops_vptr->type_target_text(sym, raw);
+    if (tgt) {
+        base = frontend_sym_adt_strip_type_text(tgt);
+        if (base) {
+            a = frontend_sym_ct_adt_find(base);
+            if (a >= 0) {
+                return a;
+            }
         }
     }
-    if (((rn[0] && (strcmp(rn, raw) != 0)) && sym->__frontend_sym_symbolops_vptr->type_target_of(sym, rn, tgt, sizeof(tgt)))) {
-        frontend_sym_adt_strip_type(tgt, base, sizeof(base));
-        a = frontend_sym_ct_adt_find(base);
-        if (a >= 0) {
-            return a;
+    if (((rn && rn[0]) && (strcmp(rn, raw) != 0))) {
+        tgt = sym->__frontend_sym_symbolops_vptr->type_target_text(sym, rn);
+        if (tgt) {
+            base = frontend_sym_adt_strip_type_text(tgt);
+            if (base) {
+                a = frontend_sym_ct_adt_find(base);
+                if (a >= 0) {
+                    return a;
+                }
+            }
         }
     }
     return (-1);

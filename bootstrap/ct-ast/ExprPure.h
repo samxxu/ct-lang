@@ -13,6 +13,7 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 
 
 struct ct_buf;
@@ -98,6 +99,7 @@ int frontend_parse_slice_range_ahead(struct frontend_lex_Lexer *);
 int frontend_parse_is_range_index(struct runtime_arena_Arena *, int);
 int frontend_parse_closure_capture_index(struct frontend_sym_Closure *, const char *);
 void frontend_parse_bind_conv_key(const char *, char *, int);
+const char * frontend_parse_bind_conv_key_text(const char *);
 int frontend_parse_bind_conv_on(void);
 int frontend_parse_expr_is_builtin_Box_type(const char *);
 int frontend_parse_bplus_space(int);

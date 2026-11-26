@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10215 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10315 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=67620 io_cap=1024
+     emitted_before=48223 emitted_after=68188 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -30,6 +30,10 @@
       `Symbols.ret_type` / 类型别名展开），发射器 `map binding` 的 pair 直接读
       pool 文本；Emitter.h.ct 10214 -> 10215，发射 C 67577 -> 67620 行
       （仅 .c），切片清单仍为 76)
+     (S1a-0 C2p-5 后复测：`expr_type`/`expr_ctype` 的 38 处调用改 pool 文本入口、
+      `sb_expr_type`/`emit_gsub_type` 新增 pool 形式、`write_abi_header` 的 fwd
+      改指针行；`Emitter.h.ct` 10215 -> 10315，发射 C 67620 -> 68188 行
+      （仅 .c），切片清单仍为 76，判别式仍各读 1 次)
      (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
       Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，
       发射 C 54413 -> 54712，切片清单不变)

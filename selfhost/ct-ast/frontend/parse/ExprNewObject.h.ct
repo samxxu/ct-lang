@@ -49,25 +49,27 @@ impl ExprNew for Expr {
        was built, 0 when the receiver is not a Box, -1 on a diagnostic. */
     int Box_member_deref(int recv, int arrow, const char *fname, int line, int col, int *out)
     {
-        char ty[MAX_TEXT];
-        char *p;
+        const char *ty = "";
+        const char *p;
+        const char *trimmed;
         size_t bl;
         int stars, pn, mn, in_layer;
         (void)arrow;
 
-        if (self->sup->expr_type(recv, ty, sizeof ty) != 0) return 0;
+        if (self->sup->expr_type_text(recv, &ty) != 0) return 0;
         p = ty;
         while (*p == ' ' || *p == '\t') p++;
         bl = strlen(p);
         while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
-        p[bl] = 0;
         stars = 0;
         while (bl > 0 && p[bl - 1] == '*') {
             stars++;
             bl--;
             while (bl > 0 && (p[bl - 1] == ' ' || p[bl - 1] == '\t')) bl--;
-            p[bl] = 0;
         }
+        trimmed = runtime::text::ct_intern_len(p, (int)bl);
+        if (!trimmed) return 0;
+        p = trimmed;
         if (strncmp(p, "struct Box_", 11) != 0 || strchr(p, '<') != 0) return 0;
         if (!expr_is_builtin_Box_type(p)) return 0;
         in_layer = self->sup->mem->path != 0
@@ -84,7 +86,7 @@ impl ExprNew for Expr {
         self->arena->nodes[pn].a = recv;
         self->arena->nodes[pn].text2 = runtime::text::ct_internf("ptr");
         if (!self->arena->nodes[pn].text2) return self->sup->fail("out of memory");
-        self->arena->nodes[pn].text = runtime::text::ct_intern(ty);
+        self->arena->nodes[pn].text = trimmed;
         if (!self->arena->nodes[pn].text) return self->sup->fail("out of memory");
         mn = self->sup->new_node(N_ARROW);
         if (mn < 0) return -1;
@@ -140,9 +142,8 @@ impl ExprNew for Expr {
         } else if (self->sym->find_type_alias(self->lex->tok_cstr()) >= 0) {
             res = 1;
         } else {
-            char rn[MAX_TEXT];
-            if (self->sup->resolve_type(self->lex->tok_cstr(), rn, sizeof rn) == 0
-                && self->sym->find_type(rn) >= 0)
+            const char *rn = self->sym->resolve_type_text(runtime::text::ct_intern_len(self->lex->tokstr.ptr, self->lex->tokstr.len));
+            if (rn && self->sym->find_type(rn) >= 0)
                 res = 1;
         }
         self->lex->tok = save_tok;

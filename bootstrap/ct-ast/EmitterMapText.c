@@ -3,6 +3,7 @@
 #include "EmitterMapText.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterMapText.h.ct"
 #include <stdio.h>
@@ -97,6 +98,7 @@ extern void U16String_Drop_drop(void *self);
 
 void backend_emit_map_path_base(const char *, char *, int);
 void backend_emit_map_bind_key(const char *, char *, int);
+const char * backend_emit_map_bind_key_text(const char *);
 void backend_emit_map_clean_type(const char *, char *);
 void backend_emit_map_recipe_callee(const char *, char *);
 int backend_emit_map_is_ident(int);
@@ -128,6 +130,22 @@ void backend_emit_map_bind_key(const char * in, char * out, int cap) {
         }
     }
     snprintf(out, (size_t)(cap), "%s", k);
+}
+const char * backend_emit_map_bind_key_text(const char * in) {
+    const char * k = frontend_type_type_key_text(in);
+    if ((!k)) {
+        return (const char *)(0);
+    }
+    if (strncmp(k, "struct", 6) == 0) {
+        return runtime_text_ct_intern((k + 6));
+    }
+    if (strncmp(k, "union", 5) == 0) {
+        return runtime_text_ct_intern((k + 5));
+    }
+    if (strncmp(k, "enum", 4) == 0) {
+        return runtime_text_ct_intern((k + 4));
+    }
+    return k;
 }
 void backend_emit_map_clean_type(const char * in, char * out) {
     int n = 0;

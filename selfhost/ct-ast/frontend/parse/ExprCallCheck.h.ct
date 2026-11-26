@@ -156,7 +156,7 @@ impl ExprCallCheck for Expr {
 
     int argtype_mismatch(int args, int fi, int ti, int mi, char *msg, int cap)
     {
-        char at[MAX_TEXT];
+        const char *at = "";
         char fb[MAX_TEXT], ab[MAX_TEXT];
         const char *ft;
         int cur, k, np, skip, r;
@@ -187,7 +187,7 @@ impl ExprCallCheck for Expr {
             if (!skip && self->arena->nodes[cur].kind == N_NUM
                 && self->arena->nodes[cur].num == 0
                 && strchr(ft, '*')) skip = 1;
-            if (!skip && self->sup->expr_ctype(cur, at, sizeof at) != 0) skip = 1;
+            if (!skip && self->sup->expr_ctype_text(cur, &at) != 0) skip = 1;
             if (!skip && strchr(at, '[')) skip = 1;   /* a decayed array */
             if (!skip) {
                 int fdp = 0, adp = 0;

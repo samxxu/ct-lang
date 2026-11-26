@@ -101,7 +101,7 @@ extern void U16String_Drop_drop(void *self);
 static int frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead(void *self) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     const char * p;
-    char rn[MAX_TEXT];
+    const char * rn;
     int i;
     (void)(_self);
     if (_self->lex->tok != T_ID) {
@@ -110,7 +110,8 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead(void *self)
     if (_self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
         return 0;
     }
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) != 0) {
+    rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len));
+    if ((!rn)) {
         return 0;
     }
     if (frontend_sym_ct_adt_from_type(rn) < 0) {
@@ -155,15 +156,16 @@ static int frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor(void *self)
     int n;
     int k;
     int a;
-    char rn[MAX_TEXT];
+    const char * rn;
     const char * vname;
     char msg[3 * MAX_TEXT];
     struct frontend_sym_Adt * adts;
     int nadts;
     tline = _self->lex->tokline;
     tcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), rn, sizeof(rn)) != 0) {
-        return (-1);
+    rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len));
+    if ((!rn)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ".")))) {

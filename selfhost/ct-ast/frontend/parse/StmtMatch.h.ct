@@ -182,10 +182,10 @@ impl StmtMatch for Stmt {
         int *covered;
         int ncov, wild, seen_wild, is_ptr, a2;
         int aline, acol;
-        char tybuf[MAX_TEXT];
-        char tname[MAX_TEXT];
-        char aname[MAX_TEXT];
-        char rn[MAX_TEXT];
+        const char *tybuf = "";
+        const char *tname = "";
+        const char *aname = "";
+        const char *rn = "";
         const char *vname;
         char msg[3 * MAX_TEXT];
         struct Adt *adts;
@@ -203,26 +203,26 @@ impl StmtMatch for Stmt {
         if (e < 0) return -1;
         if (self->sup->expect(")") != 0) return -1;
         /* the subject type is read now, while its local is still in scope */
-        if (self->sup->expr_type(e, tybuf, sizeof tybuf) != 0)
+        if (self->sup->expr_type_text(e, &tybuf) != 0)
             return tool::diag::ct_sem_error(line, col,
                 "cannot determine the type of the match subject", self->mem->path);
         {
             const char *b;
-            char *w;
             size_t n;
             b = tybuf;
             while (*b == ' ' || *b == '\t') b++;
-            snprintf(tname, sizeof tname, "%s", b);
-            n = strlen(tname);
+            n = strlen(b);
             is_ptr = 0;
-            while (n > 0 && (tname[n - 1] == ' ' || tname[n - 1] == '*')) {
-                if (tname[n - 1] == '*') is_ptr = 1;
+            while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '*')) {
+                if (b[n - 1] == '*') is_ptr = 1;
                 n--;
-                tname[n] = 0;
             }
-            w = tname;
-            if (strncmp(w, "struct ", 7) == 0) w += 7;
-            if (w != tname) memmove(tname, w, strlen(w) + 1);
+            if (n >= 7 && strncmp(b, "struct ", 7) == 0) {
+                b += 7;
+                n -= 7;
+            }
+            tname = runtime::text::ct_intern_len(b, (int)n);
+            if (!tname) return self->sup->fail("out of memory");
         }
         adt = frontend::sym::ct_adt_from_type(tname);
         if (adt < 0) {
@@ -283,10 +283,13 @@ impl StmtMatch for Stmt {
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a match arm");
-                self->lex->tok_copy(aname, sizeof aname);
+                aname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!aname) return self->sup->fail("out of memory");
                 aline = self->lex->tokline;
                 acol = self->lex->tokstart - self->lex->lstart + 1;
-                if (self->sup->resolve_type(aname, rn, sizeof rn) != 0)
+                rn = self->sym->resolve_type_text(aname);
+                if (!rn)
                     return self->sup->fail("unknown ADT type in a match arm");
                 a2 = frontend::sym::ct_adt_from_type(rn);
                 if (a2 < 0) {
@@ -515,15 +518,16 @@ impl StmtMatch for Stmt {
         int ncov, wild, seen_wild, is_ptr, a2;
         int body, asg, yexpr, have_type, ytyped, block_form;
         int yline, ycol;
-        char tybuf[MAX_TEXT];
-        char tname[MAX_TEXT];
-        char aname[MAX_TEXT];
-        char rn[MAX_TEXT];
+        const char *tybuf = "";
+        const char *tname = "";
+        const char *aname = "";
+        const char *rn = "";
         const char *vname;
         char msg[3 * MAX_TEXT];
         char rtype[MAX_TEXT];
         char rkey[MAX_TEXT];
-        char ytype[MAX_TEXT];
+        const char *ytype = "";
+        char ybuf[MAX_TEXT];
         char ykey[MAX_TEXT];
         struct Adt *adts;
         int nadts;
@@ -539,26 +543,26 @@ impl StmtMatch for Stmt {
         self->ex->assign_ok = 0;
         if (e < 0) return -1;
         if (self->sup->expect(")") != 0) return -1;
-        if (self->sup->expr_type(e, tybuf, sizeof tybuf) != 0)
+        if (self->sup->expr_type_text(e, &tybuf) != 0)
             return tool::diag::ct_sem_error(line, col,
                 "cannot determine the type of the match subject", self->mem->path);
         {
             const char *b;
-            char *w;
             size_t n;
             b = tybuf;
             while (*b == ' ' || *b == '\t') b++;
-            snprintf(tname, sizeof tname, "%s", b);
-            n = strlen(tname);
+            n = strlen(b);
             is_ptr = 0;
-            while (n > 0 && (tname[n - 1] == ' ' || tname[n - 1] == '*')) {
-                if (tname[n - 1] == '*') is_ptr = 1;
+            while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '*')) {
+                if (b[n - 1] == '*') is_ptr = 1;
                 n--;
-                tname[n] = 0;
             }
-            w = tname;
-            if (strncmp(w, "struct ", 7) == 0) w += 7;
-            if (w != tname) memmove(tname, w, strlen(w) + 1);
+            if (n >= 7 && strncmp(b, "struct ", 7) == 0) {
+                b += 7;
+                n -= 7;
+            }
+            tname = runtime::text::ct_intern_len(b, (int)n);
+            if (!tname) return self->sup->fail("out of memory");
         }
         adt = frontend::sym::ct_adt_from_type(tname);
         if (adt < 0) {
@@ -614,8 +618,11 @@ impl StmtMatch for Stmt {
                     return tool::diag::ct_sem_error(arm_line, arm_col,
                         "a wildcard match arm must be the last arm", self->mem->path);
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a match arm");
-                self->lex->tok_copy(aname, sizeof aname);
-                if (self->sup->resolve_type(aname, rn, sizeof rn) != 0)
+                aname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!aname) return self->sup->fail("out of memory");
+                rn = self->sym->resolve_type_text(aname);
+                if (!rn)
                     return self->sup->fail("unknown ADT type in a match arm");
                 a2 = frontend::sym::ct_adt_from_type(rn);
                 if (a2 < 0) {
@@ -784,7 +791,7 @@ impl StmtMatch for Stmt {
                     yexpr = self->last_yield_expr;
                     yline = self->last_yield_line;
                     ycol = self->last_yield_col;
-                    snprintf(ytype, sizeof ytype, "%s", self->last_yield_type);
+                    ytype = self->last_yield_type;
                     ytyped = 1;
                 } else {
                     last = -1;
@@ -815,12 +822,14 @@ impl StmtMatch for Stmt {
                 }
                 {
                     int yz = 0;
-                    if (self->sup->expr_type(yexpr, ytype, sizeof ytype) != 0
-                        && self->ex->chk_type(yexpr, ytype, sizeof ytype, &yz) != 0) {
-                        if (variant >= 0) self->sup->pop_scope();
-                        return tool::diag::ct_sem_error(yline, ycol,
-                            "cannot determine the type yielded by this match arm",
-                            self->mem->path);
+                    if (self->sup->expr_type_text(yexpr, &ytype) != 0) {
+                        if (self->ex->chk_type(yexpr, ybuf, sizeof ybuf, &yz) != 0) {
+                            if (variant >= 0) self->sup->pop_scope();
+                            return tool::diag::ct_sem_error(yline, ycol,
+                                "cannot determine the type yielded by this match arm",
+                                self->mem->path);
+                        }
+                        ytype = ybuf;
                     }
                     ytyped = 1;
                 }

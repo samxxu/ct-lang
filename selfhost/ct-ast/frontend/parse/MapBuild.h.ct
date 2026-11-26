@@ -772,8 +772,16 @@ impl MapBuildOps for MapBuild {
             return self->sup->fail("expected 'trait' or 'binding'");
         self->sup->lex_next();
         if (self->lex->tok != T_ID) return self->sup->fail("expected a trait name");
-        self->lex->tok_copy(tname, sizeof tname);
-        if (self->sup->resolve_type(tname, rtrait, sizeof rtrait) != 0) return -1;
+        {
+            const char *tname_t = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                              self->lex->tokstr.len);
+            const char *rtrait_t;
+            if (!tname_t) return self->sup->fail("out of memory");
+            rtrait_t = self->sym->resolve_type_text(tname_t);
+            if (!rtrait_t) return -1;
+            snprintf(rtrait, sizeof rtrait, "%s", rtrait_t);
+            snprintf(tname, sizeof tname, "%s", tname_t);
+        }
         ti = self->sym->find_trait(rtrait);
         if (ti < 0) return self->sup->fail("map of an unknown trait");
         is_static = *self->unit_is_map;

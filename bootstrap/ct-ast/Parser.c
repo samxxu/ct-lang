@@ -309,7 +309,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_parse_type_alias(vo
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
     int line;
     int col;
-    char name[MAX_TEXT];
+    const char * name;
     const char * target;
     (void)(_self);
     line = _self->lex->tokline;
@@ -324,7 +324,10 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_parse_type_alias(vo
     if (_self->lex->tok != T_ID) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a name after 'type'");
     }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+    name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!name)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=")))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '=' in a type alias declaration");
@@ -680,11 +683,13 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
         int np;
         int depth;
         char tbuf[MAX_TEXT];
+        char dpx[MAX_TEXT];
         if (_self->ex->decl_prefix[0]) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate _Alignas on one declaration");
         }
+        dpx[0] = 0;
         np = 0;
-        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), "_Alignas") != 0) {
+        if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), "_Alignas") != 0) {
             return (-1);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -702,7 +707,7 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
             else {
                 _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
             }
-            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, _self->ex->decl_prefix, MAX_TEXT, (&np), tbuf) != 0) {
+            if (_self->ex->__frontend_parse_exprtypeparse_vptr->type_append(_self->ex, dpx, sizeof(dpx), (&np), tbuf) != 0) {
                 return (-1);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
@@ -717,13 +722,17 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
             }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
+        _self->ex->decl_prefix = runtime_text_ct_intern(dpx);
+        if ((!_self->ex->decl_prefix)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         r = _self->__frontend_parse_parsedeclops_vptr->top_decl(_self, is_pub);
         if (r < 0) {
-            _self->ex->decl_prefix[0] = 0;
+            _self->ex->decl_prefix = "";
             return r;
         }
         if (_self->ex->decl_prefix[0]) {
-            _self->ex->decl_prefix[0] = 0;
+            _self->ex->decl_prefix = "";
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "an _Alignas specifier must prefix a variable declaration");
         }
         return r;
@@ -1304,7 +1313,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     const char * cname;
     const char * gns = "";
     char tparam[MAX_TEXT];
-    char bound[MAX_TEXT];
+    const char * bound;
     char * gparam[1];
     int is_generic;
     int ret_slice;
@@ -1355,7 +1364,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
     }
     is_generic = 0;
     tparam[0] = 0;
-    bound[0] = 0;
+    bound = "";
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->lex->tok != T_ID) {
@@ -1364,7 +1373,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tparam, sizeof(tparam));
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
-            char raw[MAX_TEXT];
+            const char * raw;
             char msg[MAX_TEXT];
             int bline;
             int bcol;
@@ -1375,10 +1384,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             }
             bline = _self->lex->tokline;
             bcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, raw, sizeof(raw));
+            raw = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!raw)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-            if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, raw, bound, sizeof(bound)) != 0) {
-                return (-1);
+            bound = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, raw);
+            if ((!bound)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
             bi = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, bound);
             if ((((bi < 0) && (strcmp(bound, "Drop") != 0)) && (strcmp(bound, "Handback") != 0))) {
@@ -1393,11 +1406,17 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
                 return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "only one trait bound is supported", _self->mem->path);
             }
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
+                char bbuf[MAX_TEXT];
                 if (bi < 0) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown trait in a generic bound");
                 }
-                if (parse_trait_inst_args(_self, bound, sizeof(bound)) < 0) {
+                snprintf(bbuf, sizeof(bbuf), "%s", bound);
+                if (parse_trait_inst_args(_self, bbuf, sizeof(bbuf)) < 0) {
                     return (-1);
+                }
+                bound = runtime_text_ct_intern(bbuf);
+                if ((!bound)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
             }
         }
@@ -1643,7 +1662,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->ex->in_generic_ntparam = 1;
     }
     if (is_generic) {
-        snprintf(_self->ex->in_generic_bound, sizeof(_self->ex->in_generic_bound), "%s", bound);
+        _self->ex->in_generic_bound = runtime_text_ct_intern(bound);
+        if ((!_self->ex->in_generic_bound)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
     }
     b = _self->st->__frontend_parse_stmtops_vptr->parse_block(_self->st);
     if (is_generic) {
@@ -1654,7 +1676,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->ex->in_generic_ntparam = 0;
     }
     if (is_generic) {
-        _self->ex->in_generic_bound[0] = 0;
+        _self->ex->in_generic_bound = "";
     }
     _self->mem->leak_active = 0;
     _self->mem->leak_frame = (-1);
@@ -1970,7 +1992,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
     const char * slice_elem = "";
     const char * typebuf;
     const char * parsed;
-    char name[MAX_TEXT];
+    const char * name;
     (void)(_self);
     _self->nparams = 0;
     _self->variadic = 0;
@@ -2036,7 +2058,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
             typebuf = "struct __ct_slice";
         }
         if (_self->ex->fnptr_state) {
-            snprintf(name, sizeof(name), "%s", _self->ex->fnptr_name);
+            name = _self->ex->fnptr_name;
         }
         else {
             if ((((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ")")) && (strcmp(typebuf, "void") == 0))) {
@@ -2046,7 +2068,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
             if (_self->lex->tok != T_ID) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a parameter name");
             }
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+            name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!name)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         }
         if ((_self->ex->fnptr_state && _self->ex->fnptr_dims[0])) {
@@ -2833,15 +2858,15 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     int tcol;
     int is_adt;
     int pre_adt;
-    char name[MAX_TEXT];
-    char qname[MAX_TEXT];
+    const char * name;
+    const char * qname;
     char mname[MAX_TEXT];
     char cname[MAX_TEXT];
     char nsbuf[MAX_TEXT];
     size_t nl;
     (void)(_self);
-    name[0] = 0;
-    qname[0] = 0;
+    name = "";
+    qname = "";
     adt = (-1);
     has_payload = 0;
     has_value = 0;
@@ -2856,9 +2881,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     tcol = ((_self->lex->tokstart - _self->lex->lstart) + 1);
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (_self->lex->tok == T_ID) {
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
-        if (_self->sup->__frontend_parse_supportops_vptr->ns_decl_name(_self->sup, name, qname, sizeof(qname)) != 0) {
-            return (-1);
+        name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!name)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        qname = _self->sup->__frontend_parse_supportops_vptr->ns_decl_text(_self->sup, name);
+        if ((!qname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, qname);
         if (((ti >= 0) && (_self->sym->type_kind[ti] == 5))) {
@@ -3154,8 +3183,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
     int ar;
     int ao;
     const char * typebuf;
-    char name[MAX_TEXT];
-    char qname[MAX_TEXT];
+    const char * name;
+    const char * qname;
     (void)(_self);
     td_line = _self->lex->tokline;
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -3167,7 +3196,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a typedef name");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+        name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!name)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         ao = (-1);
         ar = _self->sup->__frontend_parse_supportops_vptr->attr_pool(_self->sup, (&ao));
@@ -3183,8 +3215,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
             return (-1);
         }
-        if (_self->sup->__frontend_parse_supportops_vptr->ns_decl_name(_self->sup, name, qname, sizeof(qname)) != 0) {
-            return (-1);
+        qname = _self->sup->__frontend_parse_supportops_vptr->ns_decl_text(_self->sup, name);
+        if ((!qname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         _self->arena->nodes[t].aux = (_self->arena->nodes[t].aux | 1);
         if (((_self->arena->nodes[t].aux & 2) && (_self->arena->nodes[t].num > 0))) {
@@ -3236,7 +3269,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a typedef name");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+        name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!name)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         ao = (-1);
         ar = _self->sup->__frontend_parse_supportops_vptr->attr_pool(_self->sup, (&ao));
@@ -3252,8 +3288,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
             return (-1);
         }
-        if (_self->sup->__frontend_parse_supportops_vptr->ns_decl_name(_self->sup, name, qname, sizeof(qname)) != 0) {
-            return (-1);
+        qname = _self->sup->__frontend_parse_supportops_vptr->ns_decl_text(_self->sup, name);
+        if ((!qname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         _self->arena->nodes[t].text = runtime_text_ct_intern(_self->arena->nodes[t].text2);
         if ((!_self->arena->nodes[t].text)) {
@@ -3330,13 +3367,16 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
         return tool_diag_ct_sem_error(td_line, 1, "an atomic value cannot be a typedef target", _self->mem->path);
     }
     if (_self->ex->fnptr_state) {
-        snprintf(name, sizeof(name), "%s", _self->ex->fnptr_name);
+        name = _self->ex->fnptr_name;
     }
     else {
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a typedef name");
         }
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+        name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!name)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     }
     ao = (-1);
@@ -3347,8 +3387,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
         return (-1);
     }
-    if (_self->sup->__frontend_parse_supportops_vptr->ns_decl_name(_self->sup, name, qname, sizeof(qname)) != 0) {
-        return (-1);
+    qname = _self->sup->__frontend_parse_supportops_vptr->ns_decl_text(_self->sup, name);
+    if ((!qname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     t = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_TYPEDEF);
     if (t < 0) {
@@ -3377,7 +3418,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
 
 static int frontend_parse_Parser_frontend_parse_ParseOps_parse_use_list(void *self, int sindex) {
     struct frontend_parse_Parser *_self = (struct frontend_parse_Parser *)self;
-    char tname[MAX_TEXT];
+    const char * tname;
     int uti;
     (void)(_self);
     if (sindex < 0) {
@@ -3387,8 +3428,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_use_list(void *se
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a trait name");
         }
-        if (_self->sup->__frontend_parse_supportops_vptr->resolve_type(_self->sup, _self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), tname, sizeof(tname)) != 0) {
-            return (-1);
+        tname = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len));
+        if ((!tname)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         uti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tname);
         if (((uti >= 0) && _self->sym->traits[uti].is_static)) {
@@ -3396,8 +3438,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_use_list(void *se
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
-            if (parse_trait_inst_args(_self, tname, sizeof(tname)) < 0) {
+            char tnbuf[MAX_TEXT];
+            snprintf(tnbuf, sizeof(tnbuf), "%s", tname);
+            if (parse_trait_inst_args(_self, tnbuf, sizeof(tnbuf)) < 0) {
                 return (-1);
+            }
+            tname = runtime_text_ct_intern(tnbuf);
+            if ((!tname)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
         }
         if (strcmp(tname, "Drop") == 0) {
@@ -3457,8 +3505,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     char * * tbound = 0;
     int tcap = 0;
     int bcap = 0;
-    char name[MAX_TEXT];
-    char qname[MAX_TEXT];
+    const char * name;
+    const char * qname;
     const char * ret;
     const char * ptype;
     const char * pname;
@@ -3472,7 +3520,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     if (_self->lex->tok != T_ID) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a trait name");
     }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+    name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!name)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     discard = 0;
     if (((strcmp(name, "Drop") == 0) || (strcmp(name, "Handback") == 0))) {
         if (((strstr(_self->mem->path, "lib/core/Vec.h.ct") != 0) || (strstr(_self->mem->path, "lib/std/Vec.h.ct") != 0))) {
@@ -3487,8 +3538,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     save_ntraits = _self->sym->ntraits;
     save_ntype = _self->sym->ntype;
     save_nnode = _self->arena->nnode;
-    if (_self->sup->__frontend_parse_supportops_vptr->ns_decl_name(_self->sup, name, qname, sizeof(qname)) != 0) {
-        return (-1);
+    qname = _self->sup->__frontend_parse_supportops_vptr->ns_decl_text(_self->sup, name);
+    if ((!qname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     ntp = 0;
@@ -4701,7 +4753,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     tail = (-1);
     _self->ex->in_generic_tparam = tn;
     _self->ex->in_generic_ntparam = nt;
-    _self->ex->in_generic_bound[0] = 0;
+    _self->ex->in_generic_bound = "";
 {
         int tbi = frontend_sym_ct_tmpl_find(tmpl);
         int tbn;
@@ -4711,7 +4763,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         if (((((tbi >= 0) && tps) && (tps[tbi].ntparams > 0)) && tn[0][0])) {
             for (kb = 0; kb < nargs; kb++) {
                 if (strcmp(pat[kb], tn[0]) == 0) {
-                    snprintf(_self->ex->in_generic_bound, MAX_TEXT, "%s", tps[tbi].bound[kb]);
+                    _self->ex->in_generic_bound = runtime_text_ct_intern(tps[tbi].bound[kb]);
+                    if ((!_self->ex->in_generic_bound)) {
+                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                    }
                     if (_self->ex->in_generic_bound[0]) {
                         snprintf(htype, sizeof(htype), "struct %s", tmpl);
                     }
@@ -4864,7 +4919,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     }
     _self->ex->in_generic_tparam = 0;
     _self->ex->in_generic_ntparam = 0;
-    _self->ex->in_generic_bound[0] = 0;
+    _self->ex->in_generic_bound = "";
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "}") != 0) {
         return (-1);
     }
@@ -5012,7 +5067,7 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
     int p;
     int body;
     int pi;
-    char save_trait[MAX_TEXT];
+    const char * save_trait;
     const char * save_ret;
     (void)(self);
     if (self->sup->__frontend_parse_supportops_vptr->push_scope(self->sup) != 0) {
@@ -5058,10 +5113,10 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
         self->sup->__frontend_parse_supportops_vptr->pop_scope(self->sup);
         return (-1);
     }
-    snprintf(save_trait, sizeof(save_trait), "%s", self->sym->trait_default);
+    save_trait = self->sym->trait_default;
     save_ret = self->sym->ret_type;
     self->sym->ret_type = ret;
-    snprintf(self->sym->trait_default, sizeof(self->sym->trait_default), "%s", self->sym->traits[ti].name);
+    self->sym->trait_default = self->sym->traits[ti].name;
     self->mem->leak_active = 1;
     self->mem->leak_frame = (self->sym->nscope + 1);
     self->mem->leak_impl = 1;
@@ -5071,7 +5126,7 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
     self->mem->leak_frame = (-1);
     self->mem->leak_impl = 0;
     self->sym->ret_type = save_ret;
-    snprintf(self->sym->trait_default, sizeof(self->sym->trait_default), "%s", save_trait);
+    self->sym->trait_default = save_trait;
     self->sup->__frontend_parse_supportops_vptr->pop_scope(self->sup);
     if (body < 0) {
         return (-1);

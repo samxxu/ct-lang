@@ -136,6 +136,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*add_type)(void *, const char *, int);
     int (*set_type_target)(void *, const char *, const char *);
     int (*type_target_of)(void *, const char *, char *, int);
+    const char * (*type_target_text)(void *, const char *);
     int (*add_bare_type)(void *, const char *, const char *);
     int (*find_struct)(void *, const char *);
     int (*add_struct)(void *, const char *);
@@ -153,6 +154,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*trait_inst)(void *, const char *, int, char * *, char * *, int);
     int (*impl_use_concrete)(void *, const char *, int, char * *, char * *, int, char *, int);
     int (*method_trait)(void *, const char *, const char *, char *, int);
+    const char * (*method_trait_text)(void *, const char *, const char *);
     int (*method_trait_amb)(void *, const char *, const char *, const char *, char *, int);
     int (*ns_decl_name)(void *, const char *, char *, int);
     const char * (*ns_decl_text)(void *, const char *);
@@ -239,16 +241,16 @@ struct frontend_sym_Var {
     int str_immortal;
 };
 struct frontend_sym_Closure {
-    char owner[160];
-    char ret[160];
+    const char * owner;
+    const char * ret;
     const char * ptype[16];
     const char * pname[16];
     int nparams;
     int body;
     int is_block;
     int ncap;
-    char cap_name[16][160];
-    char cap_type[16][160];
+    const char * cap_name[16];
+    const char * cap_type[16];
     int line;
     int col;
 };
@@ -454,7 +456,7 @@ struct frontend_sym_Symbols {
     struct frontend_sym_TypeAlias * taliases;
     int ntalias;
     int taliascap;
-    char tachain[32][160];
+    const char * tachain[32];
     int ntachain;
     struct frontend_sym_TypeAlias * gtaliases;
     int ngtalias;
@@ -462,7 +464,7 @@ struct frontend_sym_Symbols {
     int alias_decl;
     int self_mode;
     const char * ret_type;
-    char trait_default[160];
+    const char * trait_default;
     const char * errmsg;
     const struct frontend_sym_SymbolOps_vtbl *__frontend_sym_symbolops_vptr;
     const struct frontend_sym_TypeAliasOps_vtbl *__frontend_sym_typealiasops_vptr;

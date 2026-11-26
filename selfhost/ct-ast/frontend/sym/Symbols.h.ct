@@ -252,8 +252,10 @@ pub struct Var {
    reads it in S3. Parameter and capture lists are copied by value because the
    `Var` rows they came from die when the enclosing scope is popped. */
 pub struct Closure {
-    char owner[160];            /* enclosing function's C name, empty at file scope */
-    char ret[160];              /* return type from the host function pointer */
+    /* S1a-0 C2p-5: pool texts, so a 2000-byte enclosing name / return type /
+       capture spelling is not cut by a 160-byte row. */
+    const char *owner;          /* enclosing function's C name, empty at file scope */
+    const char *ret;            /* return type from the host function pointer */
     /* S1a-0 C2p-4: the parameter rows are pointer arrays of interned texts, so
        a 2000-byte parameter type/name is not cut at the old 160-byte row. The
        16-slot count is still the closure's own limit (a hard error). */
@@ -263,8 +265,8 @@ pub struct Closure {
     int  body;                  /* expression node index, or an N_BLOCK */
     int  is_block;              /* 1 when the body is `=> { … }` (S5) */
     int  ncap;
-    char cap_name[16][160];
-    char cap_type[16][160];
+    const char *cap_name[16];
+    const char *cap_type[16];
     int  line;
     int  col;
 }
@@ -448,6 +450,8 @@ pub trait SymbolOps {
     /* V29-4: the spelling behind a C typedef name (empty for an opaque one). */
     int  set_type_target(const char *name, const char *target);
     int  type_target_of(const char *name, char *out, int cap);
+    /* S1a-0 C2p-5: the pool-text form of `type_target_of`. */
+    const char *type_target_text(const char *name);
     int  add_bare_type(const char *name, const char *full);
     int  find_struct(const char *name);
     int  add_struct(const char *name);
@@ -487,6 +491,9 @@ pub trait SymbolOps {
     int  impl_use_concrete(const char *use, int nargs, char **args, char **cargs,
                            int owner, char *out, int cap);
     int  method_trait(const char *stype, const char *method, char *tout, int tcap);
+    /* S1a-0 C2p-5: the pool-text form, so a 2000-byte trait name is not cut
+       by the caller's row and the dispatch does not fall through to a map. */
+    const char *method_trait_text(const char *stype, const char *method);
     int  method_trait_amb(const char *stype, const char *method, const char *first,
                           char *other, int ocap);
     int  ns_decl_name(const char *name, char *out, int cap);
@@ -802,7 +809,8 @@ pub struct Symbols {
     struct TypeAlias *taliases;
     int  ntalias;
     int  taliascap;
-    char tachain[32][160];      /* MAX_ALIAS_CHAIN, spelled out for the header */
+    /* S1a-0 C2p-5: pool texts; a 2000-byte alias name is not cut by a row. */
+    const char *tachain[32];    /* MAX_ALIAS_CHAIN, spelled out for the header */
     int  ntachain;
     struct TypeAlias *gtaliases;
     int  ngtalias;
@@ -819,7 +827,7 @@ pub struct Symbols {
     /* Inside a trait method's default body: the trait `self->m(...)` dispatches
        through. Empty everywhere else. The adopting struct is unknown at parse
        time, so the receiver resolves to the enclosing trait by construction. */
-    char trait_default[160];
+    const char *trait_default;  /* S1a-0 C2p-5: pool text */
     /* S1a-0 C2p: a pool text, not a 160-byte row. */
     const char *errmsg;         /* the bare message `fail` recorded; Ast adds the position */
 } use SymbolOps, TypeAliasOps;
@@ -1104,14 +1112,18 @@ impl SymbolOps for Symbols {
         (void)self;
         if (self->ensure_closure_capacity(self->nclosure + 1) != 0) return -1;
         c = &self->closures[self->nclosure];
-        snprintf(c->owner, MAX_TEXT, "%s", owner ? owner : "");
-        c->ret[0] = 0;
+        c->owner = runtime::text::ct_intern(owner ? owner : "");
+        if (!c->owner) return self->fail("out of memory");
+        c->ret = "";
         /* S1a-0 C2p-4: the parameter rows are pointer rows now; a row the
            literal never fills is the empty spelling, not NULL (`closure_match`
-           reads past `nparams` while walking the host prototype). */
+           reads past `nparams` while walking the host prototype).
+           C2p-5: the capture rows are pointer rows too. */
         for (i = 0; i < 16; i++) {
             c->ptype[i] = "";
             c->pname[i] = "";
+            c->cap_name[i] = "";
+            c->cap_type[i] = "";
         }
         c->nparams = 0;
         c->body = -1;
@@ -1471,6 +1483,15 @@ impl SymbolOps for Symbols {
         if (i < 0 || !self->type_target[i] || !self->type_target[i][0]) return 0;
         snprintf(out, (size_t)cap, "%s", self->type_target[i]);
         return 1;
+    }
+
+    const char *type_target_text(const char *name)
+    {
+        int i;
+        i = self->find_type(name);
+        if (i < 0 || !self->type_target[i] || !self->type_target[i][0])
+            return (const char *)0;
+        return self->type_target[i];
     }
 
     /* S1a-0 C1: the per-unit struct block is one array for plain rows and
@@ -1935,6 +1956,33 @@ impl SymbolOps for Symbols {
         return -1;
     }
 
+    const char *method_trait_text(const char *stype, const char *method)
+    {
+        const char *base;
+        const char *key;
+        size_t n;
+        int s, ti, mi;
+        (void)self;
+
+        base = stype;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        while (*base == ' ') base++;
+        n = strlen(base);
+        while (n > 0 && (base[n - 1] == ' ' || base[n - 1] == '*')) n--;
+        key = runtime::text::ct_intern_len(base, (int)n);
+        if (!key) return (const char *)0;
+        s = self->find_struct(key);
+        if (s < 0) return (const char *)0;
+        for (ti = 0; ti < self->structs[s].nuse; ti++) {
+            int t = self->find_trait(self->structs[s].use[ti]);
+            if (t < 0) continue;
+            for (mi = 0; mi < self->traits[t].nm; mi++)
+                if (strcmp(self->traits[t].m[mi].name, method) == 0)
+                    return self->traits[t].name;
+        }
+        return (const char *)0;
+    }
+
     /* SH-46 (19.3): `method_trait` answers with the first match in `use`
        order, and a bare call keeps that resolution (the spec pins it). This
        companion answers whether a *different* trait of the same struct also
@@ -2217,7 +2265,8 @@ impl TypeAliasOps for Symbols {
                 self->taliases[i].resolving = 1;
                 if (self->ntachain >= MAX_ALIAS_CHAIN)
                     return self->fail("type alias expansion is too deep");
-                snprintf(self->tachain[self->ntachain], 160, "%s", name);
+                self->tachain[self->ntachain] = runtime::text::ct_intern(name);
+                if (!self->tachain[self->ntachain]) return self->fail("out of memory");
                 self->ntachain++;
                 return 0;
             }
@@ -2235,7 +2284,8 @@ impl TypeAliasOps for Symbols {
             self->taliases[i].resolving = 1;
             if (self->ntachain >= MAX_ALIAS_CHAIN)
                 return self->fail("type alias expansion is too deep");
-            snprintf(self->tachain[self->ntachain], 160, "%s", name);
+            self->tachain[self->ntachain] = runtime::text::ct_intern(name);
+            if (!self->tachain[self->ntachain]) return self->fail("out of memory");
             self->ntachain++;
             return 0;
         }
@@ -2262,7 +2312,8 @@ impl TypeAliasOps for Symbols {
         self->taliases[i].resolving = 1;
         if (self->ntachain >= MAX_ALIAS_CHAIN)
             return self->fail("type alias expansion is too deep");
-        snprintf(self->tachain[self->ntachain], 160, "%s", name);
+        self->tachain[self->ntachain] = runtime::text::ct_intern(name);
+        if (!self->tachain[self->ntachain]) return self->fail("out of memory");
         self->ntachain++;
         return 0;
     }
@@ -2412,7 +2463,8 @@ impl TypeAliasOps for Symbols {
         }
         if (self->ntachain >= MAX_ALIAS_CHAIN)
             return self->fail("type alias expansion is too deep");
-        snprintf(self->tachain[self->ntachain], 160, "%s", name);
+        self->tachain[self->ntachain] = runtime::text::ct_intern(name);
+        if (!self->tachain[self->ntachain]) return self->fail("out of memory");
         self->ntachain++;
         if (!self->taliases[i].target || !self->taliases[i].target[0]) {
             self->ntachain--;
@@ -2577,6 +2629,7 @@ static int symbols_grow(struct Symbols *self)
 struct Symbols *symbols_get(void)
 {
     if (!g_symbols.ret_type) g_symbols.ret_type = "";   /* non-NULL before the first body */
+    if (!g_symbols.trait_default) g_symbols.trait_default = "";   /* C2p-5: non-NULL outside a default body */
     if (symbols_grow(&g_symbols) != 0) {
         fprintf(stderr, "ctc: out of memory\n");
         exit(1);
@@ -3241,35 +3294,45 @@ int ct_adt_add_field(int adt, int v, const char *name, const char *type)
 
 int ct_adt_from_type(const char *spelling)
 {
-    char raw[MAX_TEXT];
-    char base[MAX_TEXT];
-    char rn[MAX_TEXT];
-    char tgt[MAX_TEXT];
+    const char *raw;
+    const char *base;
+    const char *tgt;
+    const char *rn;
     struct Symbols *sym;
     int a;
 
     if (!spelling || !spelling[0]) return -1;
-    adt_strip_type(spelling, raw, sizeof raw);
-    if (!raw[0]) return -1;
+    raw = adt_strip_type_text(spelling);
+    if (!raw || !raw[0]) return -1;
     a = ct_adt_find(raw);
     if (a >= 0) return a;
     sym = symbols_get();
-    rn[0] = 0;
-    if (sym->resolve_type(raw, rn, sizeof rn) == 0 && rn[0] && strcmp(rn, raw) != 0) {
-        adt_strip_type(rn, base, sizeof base);
-        a = ct_adt_find(base);
-        if (a >= 0) return a;
+    rn = sym->resolve_type_text(raw);
+    if (rn && rn[0] && strcmp(rn, raw) != 0) {
+        base = adt_strip_type_text(rn);
+        if (base) {
+            a = ct_adt_find(base);
+            if (a >= 0) return a;
+        }
     }
     /* a typedef alias records `struct <tag>` as its target (F1) */
-    if (sym->type_target_of(raw, tgt, sizeof tgt)) {
-        adt_strip_type(tgt, base, sizeof base);
-        a = ct_adt_find(base);
-        if (a >= 0) return a;
+    tgt = sym->type_target_text(raw);
+    if (tgt) {
+        base = adt_strip_type_text(tgt);
+        if (base) {
+            a = ct_adt_find(base);
+            if (a >= 0) return a;
+        }
     }
-    if (rn[0] && strcmp(rn, raw) != 0 && sym->type_target_of(rn, tgt, sizeof tgt)) {
-        adt_strip_type(tgt, base, sizeof base);
-        a = ct_adt_find(base);
-        if (a >= 0) return a;
+    if (rn && rn[0] && strcmp(rn, raw) != 0) {
+        tgt = sym->type_target_text(rn);
+        if (tgt) {
+            base = adt_strip_type_text(tgt);
+            if (base) {
+                a = ct_adt_find(base);
+                if (a >= 0) return a;
+            }
+        }
     }
     return -1;
 }
