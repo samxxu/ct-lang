@@ -1,7 +1,7 @@
-# ADT 模式 A：字面量 / 嵌套 / 结构体（v1-PH-2 S4）
+# ADT 模式 A/B：字面量 / 嵌套 / 结构体 / or / 守卫（v1-PH-2 S4–S5）
 
-> 状态：**实现设计（2026-11-27）**。对应 [REQ-ADT-PATTERN-1](../planning/requirements-pool.md#req-adt-pattern-1--adt-模式扩展字面量--嵌套--结构体--or--守卫--泛型-adt) 的第一段、
-> [v1-PH-2](../phases/v1-PH-2/card.md) 的 S4。S5（or / 守卫）与 S6（泛型 ADT）不在本设计内。
+> 状态：**实现设计（2026-11-27）**。对应 [REQ-ADT-PATTERN-1](../planning/requirements-pool.md#req-adt-pattern-1--adt-模式扩展字面量--嵌套--结构体--or--守卫--泛型-adt) 的前两段、
+> [v1-PH-2](../phases/v1-PH-2/card.md) 的 S4–S5。S6（泛型 ADT）不在本设计内。
 > 语言口径落在 [spec §4.73](../language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast)。
 
 ## 1 范围
@@ -17,8 +17,9 @@
 | 结构体模式 `T { f: p, g, .. }` | 新增 | 字段可显式给模式，也可简写为同名字段绑定；`..` 表示余下字段 |
 | 顶层标量/结构体主语 | 新增（仅语句 `match`） | `match (n) { 0 => …  _ => … }`、`match (p) { Point { x: 0, .. } => … }` |
 | 表达式 `match` | 仍限 ADT 主语 | 嵌套/字面量/结构体子模式在 ADT 负载里可用；表达式形式本身不扩主语 |
-| or 模式、守卫 | S5 | 本轮不解析 |
+| or 模式 `A | B` | S5 | 任何模式位置；DNF 条件组，见 §9 |
 | 指针负载上的模式 | 不做 | 负载字段类型为指针时，只能 `_` 或绑定整个值 |
+| 守卫 `pattern if expr` | S5 | 见 §9；守卫可读模式绑定 |
 
 ## 2 文法
 
@@ -142,10 +143,120 @@ else { … }
 
 ## 8 边界与诚实登记
 
-- S4 只扩展模式文法与穷尽框架，不引入 or / 守卫；`A | B` 与 `if` 守卫留给 S5。
+- S4 只扩展模式文法与穷尽框架，不引入 or / 守卫；`A | B` 与 `if` 守卫在 S5 补齐（§9）。
 - 字符串字面量模式不在本轮：现有 `Str` / `String` 没有 `==`，需要运行期比较入口，属
   REQ-ADT-PATTERN-1 的后续切面。
 - 嵌套模式的穷尽是**保守**判定：可反驳的嵌套 arm 不计入覆盖；写 `_` 永远安全。
 - 非 ADT 主语只在语句 `match` 开放；表达式 `match` 仍要求 ADT 主语，避免把 `match` 变成
   通用 `switch` 表达式（S5 再评估）。
 - 模式不穿透指针负载；`T { p: T2 { … } }` 里的 `T2` 必须是值字段。
+
+## 9 S5：or 模式与守卫（`v1-PH-2` S5）
+
+### 9.1 文法
+
+```
+pattern      := or-pattern
+or-pattern   := pattern-atom ('|' pattern-atom)*
+pattern-atom := '_' | binder | literal | variant-pattern | struct-pattern
+arm          := pattern ('if' expr)? '=>' block        // statement match
+              | pattern ('if' expr)? '=>' expr         // expression match
+```
+
+- `|` 可以出现在任何模式位置，包括变体负载与结构体字段里
+  （`Some(A.X(n) | A.Y(n))`、`Point { x: 0 | 1, .. }`）。
+- 守卫是 arm 级的：`pattern if guard => …`。守卫表达式与 `if` 语句的条件同语法，
+  在模式匹配成功后才求值（C 的 `&&` 短路保证）。
+
+### 9.2 条件与绑定
+
+- 解析期把整个 arm 的模式展开成 **DNF 条件组**：每个 `|` 复制当前组集合，
+  组内测试按 AND 累加。运行期条件是各组的 OR。
+- **绑定一致性**：同一 arm 的所有 DNF 组必须绑定**同名集合**且每个名字的**类型相同**；
+  否则是硬错。`A(r) | B(w, h)` 因此不合法（`r` 在另一组里缺失）。
+- 同名绑定在不同组里可以走不同的访问路径（`Circle(r) | Square(r)`）：只要类型是
+  整数族，发射器按组条件选择访问器（`(tag==0) ? ….Circle.r : (tag==1) ? ….Square.s : …`）。
+  非整数族（owning / 结构体 / 指针）在路径不同时是硬错，避免浅拷贝。
+- 绑定是 arm 块内的普通局部量；守卫与 arm 体都能读它。
+
+### 9.3 穷尽算法（S5 扩展）
+
+在 S4 的“不可反驳根模式才计数”之上：
+
+1. **or 分支逐支计数**：一个 `A | B` arm 对每个“不可反驳的变体根”分支分别标记
+   `covered[v]`；两支同名变体是 `duplicate match arm for variant`。
+2. **守卫 arm 不计入穷尽**：带守卫的 arm 不标记 `covered`，也不构成 catch-all；
+   `_ if cond` 不是兜底。缺分支时若只有守卫 arm 提过该变体，诊断改为
+   `match does not cover variant '…' (a guarded arm does not count as coverage; …)`。
+3. **非 ADT 主语**：仍需一个**无守卫**的 `_` / 根绑定兜底；只有守卫 catch-all 时报
+   `match on '…' needs a final unguarded '_ => { … }' arm (a guarded arm does not count as coverage)`。
+4. **嵌套仍是保守判定**：嵌套的变体/结构体/字面量子模式（含 `Some(X(n) | Y(n))`）
+   即使覆盖了内部全部变体，也不使根变成不可反驳；仍要 `_` 或根兜底。这是 S4 口径
+   的延续，S6 的泛型 ADT 也不改它。
+5. **重复模式**：带守卫的 arm 之间允许逐字相同的模式（不同守卫）；`_` 末位规则与
+   `_` 唯一规则不变。守卫 arm 不参与“完整模式重复”的比较。
+
+### 9.4 诊断（S5 新增）
+
+| 场景 | 文本 |
+| --- | --- |
+| or 两组名字集合不同 | `or-pattern alternatives bind different names ('<n>' is missing)` |
+| 同名不同类型 | `or-pattern alternatives bind '<n>' as different types ('<T1>' and '<T2>')` |
+| 非整数族跨路径绑定 | `an or-pattern cannot bind '<n>' of type '<T>' at different offsets (S5: integer payloads only)` |
+| 守卫 arm 的变体缺口 | `match does not cover variant '<A>.<V>' (a guarded arm does not count as coverage; add an unguarded arm or write '_ => { … }')` |
+| 非 ADT 守卫兜底 | `match on '<T>' needs a final unguarded '_ => { … }' arm (a guarded arm does not count as coverage)` |
+
+位置都在 arm 的模式起始 token；漏分支在 `match` 关键字处（沿用 §4.73）。
+
+### 9.5 发射形态
+
+**无守卫**（含纯 or-pattern）沿用 if/else 链，最后一支仍是 `else`：
+
+```
+if (__ct_match0.tag == 0 && ((__ct_match0.u.Circle.r == 0) || (__ct_match0.u.Square.s == 0))) { … }
+else if (__ct_match0.tag == 1) { … }
+else { … }
+```
+
+or-pattern 的组条件是 `(组0) || (组1)`；跨变体时每组自带 `.tag=<v>` 行，
+`arm.num = -1`。同名整数绑定的访问器是条件表达式（见 §9.2）。
+
+**有守卫**时整个 match 换成 flag 形状，因为守卫失败要落到下一支：
+
+```
+int __ct_matched0 = 0;
+if (!__ct_matched0 && (__ct_match0.tag == 0)) {
+    int r = __ct_match0.u.Circle.r;        // 绑定先于守卫
+    if (r > limit) { __ct_matched0 = 1; { … } }
+}
+if (!__ct_matched0 && (__ct_match0.tag == 1)) { … }
+…
+```
+
+- `__ct_matchedN` 保证只执行一支；守卫在绑定声明之后求值。
+- 绑定在 arm 的包裹块结束时释放（守卫为假也释放），与普通局部量一致。
+- 已知 C 形态边界：语句 `match` 的**最后一支**不能写 `else`（守卫失败要能落到
+  下一支），因此穷尽但所有 arm 都 `return` 的函数若 match 是函数最后一条语句，
+  C 编译器会报 `-Wreturn-type`；在 match 之后补一条 `return` 即可。表达式
+  `match` 不受影响（`return match (…)` 本身无条件返回）。
+
+### 9.6 AST / TIR / LIR 映射
+
+- **AST**：`N_ARM.text4` 是 `|` 分组的条件串（单组时与 S4 逐字节相同）；
+  `N_ARM.d` 改为守卫表达式 id（-1 = 无守卫，模式描述树仍是解析期临时物）；
+  绑定行的 `text4` 为 `?g:path,g:path,…` 时表示按组选择访问器。
+- **TIR**：`TS_ARM.text2` 继续携带条件串；新增 `TS_ARM.guard`（守卫表达式 id，
+  0 = 无）。`TS_ARM.text` 的绑定路径可以带 `?g:path,…`（`;` 仍是绑定分隔符）。
+- **LIR**：or-pattern 的条件组与“按组选访问器”需要 flag 形状/条件访问器，
+  S5 的 LIR 切片不复制这两者：lowering 见到 `arm->guard >= 0` 或条件串含 `|`
+  即把该函数标为未覆盖（`L7822` / `L7832`），整函数回退到 AST body seam。
+  `--ir=on` 因此仍与 AST 路径逐字节一致；这是 S5 的诚实边界，S8 的 emitter
+  契约再决定是否把该形状下沉到 LIR。
+
+### 9.7 S5 边界（诚实登记）
+
+- 守卫可读绑定；但守卫里**不能**用 `?`（在条件里提前返回）——与 `if` 条件同规则。
+- 嵌套 or/变体的穷尽仍是保守判定（§9.3 第 4 条）。
+- 字符串字面量模式、指针负载模式仍不做（同 S4）。
+- 跨变体的非整数绑定（owning / 结构体）不做（§9.2）。
+- LIR 的 or/守卫打印回退到 AST body seam（§9.6）。

@@ -3249,8 +3249,8 @@ weak / 跨过程分析（D-012）。
 ### 4.73 最小 ADT 与 `match`（Phase 84，仅 ct-ast）
 
 最小名义和类型，为 ct-ast 重写提供穷尽判别（D3 / LANG-21）。本轮只做名义和类型、
-构造器负载、穷尽 `match` 与变量绑定；泛型 ADT、or / 守卫仍是**非目标**（v1.1+ 增量
-提案，R84-5）。表达式形式的 `match` 由 LANG-29 S4 / B5 补齐（见下），语句形式与其拼写
+构造器负载、穷尽 `match` 与变量绑定；泛型 ADT 仍是**非目标**（S6）；or / 守卫自
+`v1-PH-2` S5 起补齐（见「S5 模式扩展」）。表达式形式的 `match` 由 LANG-29 S4 / B5 补齐（见下），语句形式与其拼写
 不变。字面量、嵌套与结构体模式自 `v1-PH-2` S4 起补齐，口径见「S4 模式扩展」小节与
 [adt-patterns](design/adt-patterns.md)。
 
@@ -3310,7 +3310,7 @@ int area(Shape s)
 
 #### S4 模式扩展（`v1-PH-2` S4，仅语句 `match` 扩主语）
 
-在既有变体模式之上增加三种模式；S5 的 or / 守卫不在此列。完整设计见
+在既有变体模式之上增加三种模式；or / 守卫见下一小节「S5 模式扩展」。完整设计见
 [adt-patterns](design/adt-patterns.md)。
 
 ```
@@ -3353,6 +3353,47 @@ field-pattern := IDENT ':' pattern | IDENT | '..'
   结构体字段追加 `<path> == value`。非 ADT 主语的语句 `match` 声明
   `%s __ct_matchN`（主语 C 类型，指针加 `*`），条件来自模式；最后一个 arm 是 `else`。
   绑定初始化仍是 `__ct_matchN` + 访问路径；表达式 `match` 的 `__ct_mresN` 形态不变。
+
+#### S5 模式扩展（or 与守卫）
+
+在 S4 三种模式之上增加 **or 模式** `A | B` 与 **守卫** `pattern if expr`；口径见
+[adt-patterns §9](design/adt-patterns.md)。
+
+```
+pattern      := pattern-atom ('|' pattern-atom)*
+pattern-atom := '_' | binder | INT | CHAR
+              | type '.' variant '(' pattern (',' pattern)* ')'
+              | type '{' field-pattern (',' field-pattern)* ','? '}'
+              | type '{' '..' '}'
+arm          := pattern ('if' expr)? '=>' block | pattern ('if' expr)? '=>' expr
+```
+
+- **or 模式**：`|` 可出现在任何模式位置（含变体负载与结构体字段，
+  `Some(A.X(n) | A.Y(n))`）。运行期条件是各分支的 OR；一个分支的测试按 AND。
+- **or 的绑定一致性**：同一 arm 的所有分支必须绑定**同名集合**，且每个名字的类型相同；
+  否则硬错：`or-pattern alternatives bind different names ('<n>' is missing)` /
+  `or-pattern alternatives bind '<n>' as different types ('<T1>' and '<T2>')`。
+  同名绑定可以来自不同负载（`Circle(r) | Square(r)`）：整数族按分支条件选择访问器；
+  owning / 结构体 / 指针类型在不同路径时硬错
+  `an or-pattern cannot bind '<n>' of type '<T>' at different offsets (S5: integer payloads only)`。
+- **守卫**：`pattern if guard => …`。守卫在模式测试成功之后、arm 体之前求值；
+  模式绑定在守卫里可见。守卫为假时**落到下一支**，不是整个 `if/else` 的 else。
+  守卫是普通表达式（与 `if` 条件同语法），不引入 `true`/`false` 关键字。
+- **穷尽（S5 扩展）**：or 模式按**分支**计数——每个分支的不可反驳变体根分别覆盖
+  对应变体。**带守卫的 arm 不计入穷尽**：它不覆盖变体、也不构成 catch-all，因此
+  每个仍缺的变体必须有**无守卫** arm 覆盖，非 ADT 主语仍必须有**无守卫**的
+  `_` / 根绑定兜底。缺分支时若只有守卫 arm 提过该变体，诊断带
+  `a guarded arm does not count as coverage`。`_` 末位与 `_` 唯一规则不变；
+  带守卫的 arm 之间允许逐字相同的模式，也不参与完整模式重复比较。
+- **嵌套仍保守**：嵌套变体/结构体/字面量子模式（含 `Some(X(n) | Y(n))`）即使覆盖内部
+  全部变体，也不把根变成不可反驳；仍要 `_` 或根兜底（S4 口径的延续）。
+- **诊断位置**：模式错误在 arm 的模式起始 token；漏分支在 `match` 关键字。
+- **S5 边界（诚实登记）**：守卫里不能用 `?`；嵌套穷尽保守；跨变体非整数绑定不做；
+  字符串字面量 / 指针负载模式仍不做；or / 守卫的 LIR 打印回退到 AST body seam
+  （整函数回退，`--ir=on` 与 AST 路径逐字节一致）。语句 `match` 的守卫形状用
+  `__ct_matchedN` 标志而不是 `else`，因此若穷尽 match 是函数最后一条语句且所有
+  arm 都 `return`，需在 match 之后补一条 `return` 来满足 C 的 `-Wreturn-type`
+  （表达式 `match` 不受影响）。
 
 #### 布局与 ABI（冻结）
 
@@ -3403,8 +3444,9 @@ struct Shape {
 - **payload 生命周期（LANG-29 S2 / B3 起）**：ADT 的 owning payload 由编译器生成的
   `<T>_retain` / `<T>_release` 持有与释放；裸 `Str` 不能作 payload（存 `String`，取视图用
   `as_str()`），声明处即硬错。
-- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；没有 or / 守卫；字符串字面量
-  模式不支持；模式不穿透指针负载；非 ADT 主语只在语句 `match` 开放。
+- **简化（诚实登记）**：ADT 不能带显式枚举值；无泛型 ADT；字符串字面量模式不支持；
+  模式不穿透指针负载；非 ADT 主语只在语句 `match` 开放。or / 守卫自 S5 起支持，
+  S5 自身的三条边界见「S5 模式扩展」末尾。
   `offsetof(<ADT>, tag)` 在源码层不接受（布局断言由编译器产物负责）。
   表达式 `match` 的当前切面另有三条边界（LANG-29 S4 / B5）：臂块内不允许 `defer` /
   `own`（`yield` 必须在清理之前求值），`yield` 不能出现在臂块里嵌套的内部块中，
