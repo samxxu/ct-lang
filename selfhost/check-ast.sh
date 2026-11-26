@@ -207,6 +207,11 @@
 # are pinned negatives. A call with more actuals than a fixed recipe names is
 # now an arity diagnostic instead of a silent drop.
 #
+# v1-PH-2 S3 adds the functor signature sugar `(A, B) => R` (D-029): the forms
+# fixtures (`p3_functor_forms`, `p3_functor_header`) run in the ordinary loops,
+# and `p3_functor.sh` pins the malformed shapes, the arity / return diagnostics,
+# the sugar-vs-pointer byte identity and the LIR path.
+#
 # The unit-name lint keeps `selfhost/ct-ast/**` on the layout rule: a unit file
 # is named after its main type, so every `.h.ct` declares a type or trait whose
 # name matches its own basename (`main.ct` is the entry, not a unit).
@@ -5309,6 +5314,16 @@ if bash test/ast/p52_index.sh "$work/ct-ast" "$CC"; then
     ok "p52/index (D-028 key-type dispatch + borrow write + INDEX_L)"
 else
     bad "p52/index" "index protocol (D-028) failed"
+fi
+# v1-PH-2 S3 / D-029: `(A, B) => R` is the function-pointer type in another
+# spelling. The forms fixture (`test/ast/p3_functor_forms`) and the pub-header
+# fixture (`test/ast/p3_functor_header`) run in the generic loops above; this
+# probe pins the malformed shapes, the arity / return diagnostics, the
+# sugar-vs-pointer byte identity and the LIR path.
+if bash test/ast/p3_functor.sh "$work/ct-ast"; then
+    ok "p3/functor (D-029 sugar: diagnostics, zero cost, LIR)"
+else
+    bad "p3/functor" "functor signature sugar (D-029) failed"
 fi
 # Phase 53: parser-level `?.` / `?[` on pointer receivers (optional chain).
 if bash test/ast/p53_optional.sh "$work/ct-ast" "$CC"; then

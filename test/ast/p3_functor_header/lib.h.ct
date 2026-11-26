@@ -1,0 +1,7 @@
+/* D-029: a `pub` header carries the functor spelling unchanged. The `.h`
+   product must expose the same abstract function-pointer type a hand-written
+   `int (*)(int, int)` would; the C ABI is identical. */
+pub int pick((int, int) => int f, (int, int) => int g, int which)
+{
+    return which > 0 ? f(which, which) : g(which, which);
+}

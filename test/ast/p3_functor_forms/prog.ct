@@ -1,0 +1,35 @@
+#include <stdio.h>
+
+static int add(int a, int b) { return a + b; }
+static int sub(int a, int b) { return a - b; }
+static int one(void) { return 1; }
+
+struct Ops {
+    (int, int) => int bin;
+};
+
+typedef (int, int) => int Bin;
+
+static (int, int) => int g_ops[2] = { add, sub };
+static (int, int) => int g_scalar = add;
+
+static int apply((int, int) => int f, int a, int b) { return f(a, b); }
+static int apply_named((int x, int y) => int f, int a, int b) { return f(a, b); }
+
+int main(void)
+{
+    (int, int) => int f = add;
+    (int, int) => int tbl[2] = { add, sub };
+    struct Ops ops = { sub };
+    int (*plain)(int, int) = f;
+    (int, int) => int back = plain;
+    (int, int) => int cl = (int a, int b) => a * b;
+    Bin alias = add;
+    (void) => int tick = one;
+    () => int tick2 = one;
+    printf("%d %d %d %d %d %d %d %d %d %d\n",
+           apply(f, 1, 2), apply_named(sub, 5, 3), tbl[1](7, 2),
+           ops.bin(9, 4), back(10, 1), cl(3, 4), g_ops[1](8, 3),
+           g_scalar(4, 6), alias(2, 8), tick() + tick2());
+    return 0;
+}
