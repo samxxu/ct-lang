@@ -1,0 +1,44 @@
+/* REQ-INDEX-1 A1 / D-028: `int get(int)` and `char *get(char *)` coexist, and
+   the same two key types select the two `set` versions on the write side. */
+#include <stdio.h>
+#include <string.h>
+
+struct Vault {
+    int n;
+    char tag[8];
+}
+
+impl Vault {
+    int get(int i)
+    {
+        return self->n + i;
+    }
+    char *get(char *k)
+    {
+        (void)k;
+        return self->tag;
+    }
+    void set(int i, int v)
+    {
+        self->n = i + v;
+    }
+    void set(char *k, int v)
+    {
+        strcpy(self->tag, k);
+        self->n = v;
+    }
+}
+
+int main(void)
+{
+    Vault b;
+    b.n = 1;
+    strcpy(b.tag, "old");
+    printf("i=%d\n", b[2]);
+    printf("s=%s\n", b["new"]);
+    b[0] = 5;
+    printf("w=%d\n", b.n);
+    b["x"] = 9;
+    printf("k=%s %d\n", b.tag, b.n);
+    return 0;
+}

@@ -1,0 +1,26 @@
+/* REQ-JSACCESS-1 A4: the v0-PH-52 single-layer string key keeps working
+   (`x["k"]` -> `get(k)`); this is the pre-existing behaviour under a name the
+   requirement's acceptance command greps for. */
+#include <stdio.h>
+#include <string.h>
+
+struct X {
+    int n;
+    int seen;
+}
+
+impl X {
+    int get(char *k)
+    {
+        if (strcmp(k, "a") == 0) return self->n;
+        return -1;
+    }
+}
+
+int main(void)
+{
+    X x;
+    x.n = 7;
+    printf("a=%d z=%d\n", x["a"], x["z"]);
+    return 0;
+}

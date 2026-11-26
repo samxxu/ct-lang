@@ -5301,6 +5301,15 @@ if bash test/ast/p52_subscript.sh "$work/ct-ast" "$CC"; then
 else
     bad "p52/subscript" "custom subscript protocol failed"
 fi
+# v1-PH-2 S2 / D-028: key-type dispatch, the borrow write and the frozen
+# `+=` / `++` / `&x[k]` rejections. The positives are also ordinary fixtures
+# (`test/ast/index_*`), so the generic loop has already compiled and run them;
+# this probe pins the shapes, the new diagnostics and the negative labels.
+if bash test/ast/p52_index.sh "$work/ct-ast" "$CC"; then
+    ok "p52/index (D-028 key-type dispatch + borrow write + INDEX_L)"
+else
+    bad "p52/index" "index protocol (D-028) failed"
+fi
 # Phase 53: parser-level `?.` / `?[` on pointer receivers (optional chain).
 if bash test/ast/p53_optional.sh "$work/ct-ast" "$CC"; then
     ok "p53/optional"

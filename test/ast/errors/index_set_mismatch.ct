@@ -1,0 +1,27 @@
+/* D-028 §1.4: `set` exists but its key type does not match the actual, and no
+   pointer `get` can serve a borrow write, so the write is a hard error that
+   lists the set candidate. */
+struct W {
+    int n;
+}
+
+impl W {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+    void set(char *k, int v)
+    {
+        (void)k;
+        self->n = v;
+    }
+}
+
+int main(void)
+{
+    W w;
+    w.n = 1;
+    w[0] = 2;
+    return 0;
+}

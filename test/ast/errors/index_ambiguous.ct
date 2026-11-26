@@ -1,0 +1,23 @@
+/* D-028 §1.6: two candidates carry the same key, so the subscript is
+   ambiguous and names both signatures; no priority rule is invented. */
+struct A {
+    int n;
+}
+
+impl A {
+    int get(int i)
+    {
+        return self->n + i;
+    }
+    int get(int i)
+    {
+        return self->n - i;
+    }
+}
+
+int main(void)
+{
+    A a;
+    a.n = 1;
+    return a[0];
+}

@@ -1,0 +1,21 @@
+/* REQ-JSACCESS-1 A2 / REQ-INDEX-1 A2 / D-028: only a string key is declared;
+   `j[0]` is a compile-time error that lists the candidate signature, not a
+   silent `get(0)` that answers an empty value (D52-6). */
+struct J {
+    int n;
+}
+
+impl J {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    J j;
+    j.n = 7;
+    return j[0];
+}

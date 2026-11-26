@@ -1,0 +1,19 @@
+/* REQ-JSACCESS-1 A3 / D-028: no candidate matches the key's static type, so
+   the error lists the whole signature and the attempted key type. */
+struct K {
+    int n;
+}
+
+impl K {
+    long get(long k)
+    {
+        return (long)self->n + k;
+    }
+}
+
+int main(void)
+{
+    K k;
+    k.n = 1;
+    return k[0];
+}

@@ -1,0 +1,29 @@
+/* REQ-JSACCESS-1 A1 / D-028: one type declares `get(char *)` and `get(int)`.
+   `j["a"]` and `j[0]` must each select their own version by the key's static
+   type, not by declaration order. */
+#include <stdio.h>
+#include <string.h>
+
+struct J {
+    int n;
+}
+
+impl J {
+    int get(char *k)
+    {
+        if (strcmp(k, "a") == 0) return self->n + 100;
+        return -1;
+    }
+    int get(int i)
+    {
+        return self->n + i;
+    }
+}
+
+int main(void)
+{
+    J j;
+    j.n = 7;
+    printf("s=%d i=%d\n", j["a"], j[0]);
+    return 0;
+}
