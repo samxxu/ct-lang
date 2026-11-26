@@ -145,3 +145,4 @@ REQ 已把样例与文档面的剩余工作交给 **TEST/REVIEW**。以下是可
 | 片 | 提交 | 文件数 | 前后 `char *` / `->` / `malloc` | 门禁结果 |
 | --- | --- | --- | --- | --- |
 | H2（部分） | `4ac331bd` | 1（guide） | `char *` 12→16，`->` 1→4（新增均为 C 互操作对照）；Ct 段 0 | `check-docs` 仅剩 `docs/decisions/D-013.md` 既有死链（他人改动，未触碰）；H2 的“只出现在 C 互操作表”未收口 |
+| H4（部分） | `cd798dd7` | 3（README + snippet + expected） | 新增 `match`/ADT 片段；README 0.5.1；其余矩阵行未补 | `check-docs` 仅剩 D-013 既有死链；H4 未收口 |
