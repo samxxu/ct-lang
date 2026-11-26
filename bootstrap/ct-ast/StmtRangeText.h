@@ -99,6 +99,7 @@ struct frontend_parse_StmtRangeText {
 };
 int frontend_parse_loop_count_class(const char *);
 int frontend_parse_map_brace_target(const char *, char *, int, char *, int, char *, int, char *, int);
+int frontend_parse_map_brace_target_text(const char *, const char * *, const char * *, const char * *, const char * *);
 int frontend_parse_range_digit(int, int);
 int frontend_parse_range_dim_value(const char *, long *);
 void frontend_parse_range_element_spelling(const char *, char *, int);

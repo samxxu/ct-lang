@@ -95,6 +95,7 @@ extern void U16String_Drop_drop(void *self);
 
 int frontend_parse_loop_count_class(const char *);
 int frontend_parse_map_brace_target(const char *, char *, int, char *, int, char *, int, char *, int);
+int frontend_parse_map_brace_target_text(const char *, const char * *, const char * *, const char * *, const char * *);
 int frontend_parse_range_digit(int, int);
 int frontend_parse_range_dim_value(const char *, long *);
 void frontend_parse_range_element_spelling(const char *, char *, int);
@@ -152,6 +153,54 @@ int frontend_parse_loop_count_class(const char * t) {
         return (-1);
     }
     return (words ? 1 : (-1));
+}
+int frontend_parse_map_brace_target_text(const char * type, const char * * entry, const char * * iname, const char * * ktype, const char * * vtype) {
+    const char * base;
+    int ii;
+    struct frontend_sym_StructInst * ins;
+    if (entry) {
+        (*entry) = "";
+    }
+    if (iname) {
+        (*iname) = "";
+    }
+    if (ktype) {
+        (*ktype) = "";
+    }
+    if (vtype) {
+        (*vtype) = "";
+    }
+    if (strncmp(type, "struct ", 7) != 0) {
+        return 0;
+    }
+    base = (type + 7);
+    if (strpbrk(base, " *[(")) {
+        return 0;
+    }
+    ins = frontend_sym_ct_insts(0);
+    ii = frontend_sym_ct_inst_find(base);
+    if (((!ins) || (ii < 0))) {
+        return 0;
+    }
+    if (((strcmp(ins[ii].tmpl, "Map") != 0) || (ins[ii].nargs != 2))) {
+        return 0;
+    }
+    if (strncmp(ins[ii].name, "Map_", 4) != 0) {
+        return 0;
+    }
+    if (entry) {
+        (*entry) = runtime_text_ct_internf("struct MapEntry_%s", (ins[ii].name + 4));
+    }
+    if (iname) {
+        (*iname) = ins[ii].name;
+    }
+    if (ktype) {
+        (*ktype) = ins[ii].ctype[0];
+    }
+    if (vtype) {
+        (*vtype) = ins[ii].ctype[1];
+    }
+    return 1;
 }
 int frontend_parse_map_brace_target(const char * type, char * entry, int ecap, char * iname, int icap, char * ktype, int kcap, char * vtype, int vcap) {
     const char * base;

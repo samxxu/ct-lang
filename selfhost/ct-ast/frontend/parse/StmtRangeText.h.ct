@@ -34,6 +34,11 @@ pub struct StmtRangeText {
 
 pub int loop_count_class(const char *t);
 pub int map_brace_target(const char *type, char *entry, int ecap, char *iname, int icap, char *ktype, int kcap, char *vtype, int vcap);
+/* S1a-0 C2p-10: the same target rows as pool texts; the entry name is
+   `struct MapEntry_<enc>`, which a 2000-byte instance name pushes past the
+   old 160-byte row. */
+pub int map_brace_target_text(const char *type, const char **entry, const char **iname,
+                              const char **ktype, const char **vtype);
 pub int range_digit(int c, int base);
 pub int range_dim_value(const char *dims, long *out);
 pub void range_element_spelling(const char *type, char *out, int cap);
@@ -91,6 +96,33 @@ int loop_count_class(const char *t)
 
 /* Phase 31 S14a: the row lookup for a by-value `Map`. Its constructor takes the
    nested `MapEntry` instance: `MapEntry_` plus the `Map_` suffix (P14). */
+int map_brace_target_text(const char *type, const char **entry, const char **iname,
+                          const char **ktype, const char **vtype)
+{
+    const char *base;
+    int ii;
+    struct StructInst *ins;
+
+    if (entry) *entry = "";
+    if (iname) *iname = "";
+    if (ktype) *ktype = "";
+    if (vtype) *vtype = "";
+    if (strncmp(type, "struct ", 7) != 0) return 0;
+    base = type + 7;
+    if (strpbrk(base, " *[(")) return 0;
+    ins = frontend::sym::ct_insts(0);
+    ii = frontend::sym::ct_inst_find(base);
+    if (!ins || ii < 0) return 0;
+    if (strcmp(ins[ii].tmpl, "Map") != 0 || ins[ii].nargs != 2) return 0;
+    if (strncmp(ins[ii].name, "Map_", 4) != 0) return 0;
+    if (entry) *entry = runtime::text::ct_internf("struct MapEntry_%s",
+                                                  ins[ii].name + 4);
+    if (iname) *iname = ins[ii].name;
+    if (ktype) *ktype = ins[ii].ctype[0];
+    if (vtype) *vtype = ins[ii].ctype[1];
+    return 1;
+}
+
 int map_brace_target(const char *type, char *entry, int ecap, char *iname, int icap, char *ktype, int kcap, char *vtype, int vcap)
 {
     const char *base;

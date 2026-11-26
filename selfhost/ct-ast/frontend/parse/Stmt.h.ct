@@ -30,6 +30,7 @@ import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::StmtRangeText;
 import frontend::parse::StmtRangeScan;
 import frontend::parse::StmtScope;
@@ -272,7 +273,6 @@ static int closure_is_returned(struct Stmt *self, int e)
 static int check_closure_assign(struct Stmt *self, int n, int col)
 {
     int lhs, rhs, bv, lv, kind;
-    char msg[MAX_TEXT];
 
     if (n < 0) return 0;
     lhs = self->arena->nodes[n].a;
@@ -297,12 +297,11 @@ static int check_closure_assign(struct Stmt *self, int n, int col)
                              "a closure cannot be stored in a field, an element or a container");
     if (kind == N_VAR) {
         lv = self->sym->find_var(self->arena->nodes[lhs].text2);
-        if (lv >= 0 && outlives(self->sym, lv, bv)) {
-            snprintf(msg, sizeof msg,
-                     "a closure cannot be stored in '%s' (its scope outlives the closure)",
-                     self->sym->vars[lv].name);
-            return closure_error(self, self->arena->nodes[n].line, col, msg);
-        }
+        if (lv >= 0 && outlives(self->sym, lv, bv))
+            return closure_error(self, self->arena->nodes[n].line, col,
+                tool::sh::ct_scratch_fmt(
+                    "a closure cannot be stored in '%s' (its scope outlives the closure)",
+                    self->sym->vars[lv].name));
     }
     return closure_error(self, self->arena->nodes[n].line, col,
                          "this closure is a binding, not a value (inline it or use a struct + trait)");
@@ -313,18 +312,16 @@ static int check_closure_assign(struct Stmt *self, int n, int col)
 static int check_closure_decl_init(struct Stmt *self, int n, const char *name, int col)
 {
     int rhs, bv, dv;
-    char msg[MAX_TEXT];
 
     if (n < 0 || self->arena->nodes[n].a < 0) return 0;
     rhs = self->arena->nodes[n].a;
     bv = closure_var_index(self, rhs);
     if (bv < 0) return 0;
     dv = self->sym->find_var(name);
-    if (dv >= 0 && outlives(self->sym, dv, bv)) {
-        snprintf(msg, sizeof msg,
-                 "a closure cannot be stored in '%s' (its scope outlives the closure)", name);
-        return closure_error(self, self->arena->nodes[n].line, col, msg);
-    }
+    if (dv >= 0 && outlives(self->sym, dv, bv))
+        return closure_error(self, self->arena->nodes[n].line, col,
+            tool::sh::ct_scratch_fmt(
+                "a closure cannot be stored in '%s' (its scope outlives the closure)", name));
     return closure_error(self, self->arena->nodes[n].line, col,
                          "this closure is a binding, not a value (inline it or use a struct + trait)");
 }
@@ -352,7 +349,6 @@ static int check_borrow_delete(struct Stmt *self, int e)
 static int check_borrow_store(struct Stmt *self, int n)
 {
     int lhs, rhs, bv, lv;
-    char msg[MAX_TEXT];
 
     if (n < 0) return 0;
     lhs = self->arena->nodes[n].a;
@@ -380,10 +376,10 @@ static int check_borrow_store(struct Stmt *self, int n)
     if (lv < 0) return 0;
     /* a static local outlives the borrow just like a global (SH-37) */
     if (!outlives(self->sym, lv, bv)) return 0;
-    snprintf(msg, sizeof msg,
-             "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)",
-             self->sym->vars[lv].name);
-    return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1, msg, self->mem->path);
+    return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1,
+        tool::sh::ct_scratch_fmt(
+            "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)",
+            self->sym->vars[lv].name), self->mem->path);
 }
 
 /* The token after a leading `borrow` decides what the statement is: a type
@@ -431,7 +427,6 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
 {
     const char *base;
     const char *et = "";
-    char msg[MAX_TEXT];
     const char *eb;
     int d, si, vi;
     size_t bl, el;
@@ -483,16 +478,16 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
                                        self->mem->path);
             }
         }
-        if (!self->sym->structs[si].uses_handback) {
-            snprintf(msg, sizeof msg, "struct '%s' does not use trait 'Handback'", base);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
-        }
+        if (!self->sym->structs[si].uses_handback)
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                "struct '%s' does not use trait 'Handback'", base), self->mem->path);
         if (!self->sym->structs[si].has_handback_impl) {
             /* the impl table is per unit (design E-B), so a cross-unit impl is
                not visible here; the message says "in this unit" rather than
                claiming the impl does not exist (SH-38 / SH-39) */
-            snprintf(msg, sizeof msg, "struct '%s' uses trait 'Handback' but this unit has no impl", base);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                "struct '%s' uses trait 'Handback' but this unit has no impl", base),
+                self->mem->path);
         }
         vi = self->sym->find_var(self->arena->nodes[d].text2);
         if (vi >= 0) {
@@ -549,7 +544,6 @@ static int borrow_escape(struct Stmt *self, int ret, int line)
 static int str_escape_op(struct Stmt *self, int op, int e, const char *name, int vk, int line, int col, int stmt_line, int depth)
 {
     struct Arena *ar = self->arena;
-    char msg[MAX_TEXT];
     int k, vi;
 
     if (op == 4) {
@@ -603,11 +597,10 @@ static int str_escape_op(struct Stmt *self, int op, int e, const char *name, int
         if (str_escape_op(self, 4, -1, 0, 0, stmt_line, 0, 0, 0)
             || str_escape_op(self, 4, -1, 0, 0, line, 0, 0, 0))
             return 0;
-        snprintf(msg, sizeof msg,
-                 "borrowed '%s' view escapes this statement: the temporary '%s' owner's lifetime ends at the end of the expression; bind the owner to a local first",
-                 vk == 4 ? "U16Str" : "Str",
-                 vk == 4 ? "U16String" : "String");
-        return tool::diag::ct_str_warn(line, col, msg, self->mem->path);
+        return tool::diag::ct_str_warn(line, col, tool::sh::ct_scratch_fmt(
+            "borrowed '%s' view escapes this statement: the temporary '%s' owner's lifetime ends at the end of the expression; bind the owner to a local first",
+            vk == 4 ? "U16Str" : "Str",
+            vk == 4 ? "U16String" : "String"), self->sup->mem->path);
     }
     if (op == 1) {
         k = str_escape_op(self, 0, e, name, vk, line, col, stmt_line, 0);
@@ -615,19 +608,17 @@ static int str_escape_op(struct Stmt *self, int op, int e, const char *name, int
         if (str_escape_op(self, 4, -1, 0, 0, line, 0, 0, 0)
             || str_escape_op(self, 4, -1, 0, 0, stmt_line, 0, 0, 0))
             return 0;
-        if (k == 2) {
-            snprintf(msg, sizeof msg,
-                     "borrowed '%s' view escapes 'return': the temporary '%s' owner's lifetime ends at the end of this expression; bind the owner to a local first",
-                     vk == 4 ? "U16Str" : "Str",
-                     vk == 4 ? "U16String" : "String");
-        } else {
-            snprintf(msg, sizeof msg,
-                     "borrowed '%s' view escapes 'return': the local '%s' owner's lifetime ends with this frame; return an owning '%s' or a caller-owned view",
-                     vk == 4 ? "U16Str" : "Str",
-                     vk == 4 ? "U16String" : "String",
-                     vk == 4 ? "U16String" : "String");
-        }
-        return tool::diag::ct_str_warn(line, col, msg, self->mem->path);
+        if (k == 2)
+            return tool::diag::ct_str_warn(line, col, tool::sh::ct_scratch_fmt(
+                "borrowed '%s' view escapes 'return': the temporary '%s' owner's lifetime ends at the end of this expression; bind the owner to a local first",
+                vk == 4 ? "U16Str" : "Str",
+                vk == 4 ? "U16String" : "String"), self->sup->mem->path);
+        return tool::diag::ct_str_warn(line, col, tool::sh::ct_scratch_fmt(
+            "borrowed '%s' view escapes 'return': the local '%s' owner's lifetime ends with this frame; return an owning '%s' or a caller-owned view",
+            vk == 4 ? "U16Str" : "Str",
+            vk == 4 ? "U16String" : "String",
+            vk == 4 ? "U16String" : "String"), self->sup->mem->path);
+
     }
     /* op 0: the escape class of a borrowed view expression. The classifier is
        shared with LANG-22's store lint; see `ParseSupport::str_escape_class_at`
@@ -687,7 +678,7 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
     while (!(self->lex->tok == T_PUNCT && self->lex->tok_is("}"))) {
         int el, eline, ecol;
         const char *ety = "";
-        char tr[MAX_TEXT];
+        const char *tr;
         int ip = 0;
         if (self->lex->tok == T_PUNCT && self->lex->tok_is("{"))
             return tool::diag::ct_sem_error(self->lex->tokline,
@@ -701,7 +692,7 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
         ecol = self->lex->tokstart - self->lex->lstart + 1;
         el = self->ex->parse_expr();
         if (el < 0) return -1;
-        if (self->sup->iface_ref_type(elem, tr, sizeof tr, &ip)) {
+        if (self->sup->iface_ref_type_text(elem, &tr, &ip)) {
             el = self->sup->maybe_box(el, tr, ip);
             if (el < 0) return -1;
         }
@@ -751,15 +742,23 @@ static int parse_vec_brace_init(struct Stmt *self, const char *elem, const char 
    literals are already joined in the row and each keeps its quotes, so the
    scan walks every quoted segment and normalises escapes. The result stops at
    the first NUL, matching the runtime `strcmp` the constructor uses. */
-static int map_decode_str(struct Stmt *self, int n, char *out, int cap)
+/* Phase 31 S16a/S16b: 1 when key `n` repeats one of the first `count` keys by a
+   statically determinable value. `disp` receives the key's spelling (decimal
+   for an integer, decoded bytes for a string, the cname for an enum member) and
+   `*first` the line of the first occurrence. A key that cannot be folded is not
+   judged here; the constructor's inline insert overwrites it at runtime. */
+static int map_decode_str_text(struct Stmt *self, int n, const char **out)
 {
     const char *s;
-    int i = 0, o = 0;
+    char *buf = 0;
+    int cap = 0, i = 0;
+    char one[2];
 
-    if (n < 0 || cap < 1) return 0;
+    *out = "";
+    if (n < 0) return 0;
     if (self->arena->nodes[n].kind != N_STR) return 0;
+    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return 0;
     s = self->arena->str_at(self->arena->nodes[n].num);
-    out[0] = 0;
     while (s[i]) {
         int c;
         if (s[i] != '"') { i++; continue; }
@@ -768,7 +767,7 @@ static int map_decode_str(struct Stmt *self, int n, char *out, int cap)
             c = (unsigned char)s[i];
             if (c == '\\') {
                 i++;
-                if (!s[i]) return 0;
+                if (!s[i]) goto fail;
                 c = (unsigned char)s[i];
                 if (c == 'n') c = '\n';
                 else if (c == 't') c = '\t';
@@ -790,7 +789,7 @@ static int map_decode_str(struct Stmt *self, int n, char *out, int cap)
                         nd++;
                         i++;
                     }
-                    if (!nd) return 0;
+                    if (!nd) goto fail;
                     c = hv;
                     i--;
                 } else if (c >= '0' && c <= '7') {
@@ -807,41 +806,48 @@ static int map_decode_str(struct Stmt *self, int n, char *out, int cap)
             } else {
                 i++;
             }
-            if (c == 0) return 1;          /* strcmp stops at the first NUL */
-            if (o < cap - 1) out[o++] = (char)c;
+            if (c == 0) {
+                *out = runtime::text::ct_intern(buf);
+                tool::sh::ct_text_free(&buf, &cap);
+                return 1;           /* strcmp stops at the first NUL */
+            }
+            one[0] = (char)c;
+            one[1] = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto fail;
         }
     }
-    out[o] = 0;
+    *out = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
     return 1;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return 0;
 }
 
-/* Phase 31 S16a/S16b: 1 when key `n` repeats one of the first `count` keys by a
-   statically determinable value. `disp` receives the key's spelling (decimal
-   for an integer, decoded bytes for a string, the cname for an enum member) and
-   `*first` the line of the first occurrence. A key that cannot be folded is not
-   judged here; the constructor's inline insert overwrites it at runtime. */
-static int map_dup_key(struct Stmt *self, int *keys, int count, int n, char *disp, int *first)
+static int map_dup_key(struct Stmt *self, int *keys, int count, int n, const char **disp, int *first)
 {
     long nv = 0, pv;
-    char sbuf[MAX_TEXT];
+    const char *sbuf = "";
     int j, kind = 0;
 
     if (self->arena->nodes[n].kind == N_STR) {
-        if (!map_decode_str(self, n, sbuf, (int)sizeof sbuf)) return 0;
+        if (!map_decode_str_text(self, n, &sbuf)) return 0;
         kind = 2;
     } else if (self->arena->nodes[n].kind == N_VAR
                && self->sym->is_const_name(self->arena->nodes[n].text2)) {
-        char cn[MAX_TEXT];
-        if (self->sym->var_cname(self->arena->nodes[n].text2, cn, sizeof cn) != 0)
-            return 0;
-        snprintf(sbuf, (size_t)MAX_TEXT, "%s", cn);
+        sbuf = self->sym->var_cname_text(self->arena->nodes[n].text2);
+        if (!sbuf) return 0;
         kind = 3;
     } else if (map_fold_num(self, n, &nv)) {
         kind = 1;
     }
     if (kind == 0) return 0;
-    if (kind == 1) snprintf(disp, (size_t)MAX_TEXT, "%ld", nv);
-    else snprintf(disp, (size_t)MAX_TEXT, "%s", sbuf);
+    if (kind == 1) {
+        *disp = runtime::text::ct_internf("%ld", nv);
+        if (!*disp) return 0;
+    } else {
+        *disp = sbuf;
+    }
     for (j = 0; j < count; j++) {
         if (kind == 1) {
             if (map_fold_num(self, keys[j], &pv) && pv == nv) {
@@ -849,16 +855,16 @@ static int map_dup_key(struct Stmt *self, int *keys, int count, int n, char *dis
                 return 1;
             }
         } else if (kind == 2) {
-            char pb[MAX_TEXT];
-            if (map_decode_str(self, keys[j], pb, (int)sizeof pb)
+            const char *pb;
+            if (map_decode_str_text(self, keys[j], &pb)
                 && strcmp(pb, sbuf) == 0) {
                 *first = self->arena->nodes[keys[j]].line;
                 return 1;
             }
         } else {
-            char pb[MAX_TEXT];
+            const char *pb;
             if (self->arena->nodes[keys[j]].kind == N_VAR
-                && self->sym->var_cname(self->arena->nodes[keys[j]].text2, pb, sizeof pb) == 0
+                && (pb = self->sym->var_cname_text(self->arena->nodes[keys[j]].text2)) != 0
                 && strcmp(pb, sbuf) == 0) {
                 *first = self->arena->nodes[keys[j]].line;
                 return 1;
@@ -914,15 +920,13 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
         /* S16a: a repeat the compiler can prove is a hard error at the second
            key; a key it cannot fold is left to the runtime insert (D31-14). */
         {
-            char dupdisp[MAX_TEXT];
+            const char *dupdisp;
             int firstline = 0;
-            if (map_dup_key(self, keys, count, k, dupdisp, &firstline)) {
-                char msg[256];
-                snprintf(msg, sizeof msg,
-                         "duplicate key '%s' in a Map initializer (first at line %d)",
-                         dupdisp, firstline);
-                return tool::diag::ct_sem_error(kline, kcol, msg, self->mem->path);
-            }
+            if (map_dup_key(self, keys, count, k, &dupdisp, &firstline))
+                return tool::diag::ct_sem_error(kline, kcol,
+                    tool::sh::ct_scratch_fmt(
+                        "duplicate key '%s' in a Map initializer (first at line %d)",
+                        dupdisp, firstline), self->mem->path);
         }
         if (count < 1024) keys[count] = k;
         if (self->sup->expect(":") != 0) return -1;
@@ -936,10 +940,10 @@ static int parse_map_brace_init(struct Stmt *self, const char *entry, const char
         v = self->ex->parse_expr();
         if (v < 0) return -1;
         {
-            char tr[MAX_TEXT];
+            const char *tr;
             const char *vty = "";
             int ip = 0;
-            if (self->sup->iface_ref_type(vtype, tr, sizeof tr, &ip)) {
+            if (self->sup->iface_ref_type_text(vtype, &tr, &ip)) {
                 v = self->sup->maybe_box(v, tr, ip);
                 if (v < 0) return -1;
             }
@@ -1080,26 +1084,24 @@ impl StmtOps for Stmt {
         {
             const char *p = self->lex->src + self->lex->tokstart
                             + self->lex->tokstr.len;
-            char qn[MAX_TEXT];
-            int qw;
+            const char *qn;
             while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
             if (p[0] == ':' && p[1] == ':') {
-                self->lex->tok_copy(qn, sizeof qn);
+                qn = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                  self->lex->tokstr.len);
+                if (!qn) return 0;
                 while (p[0] == ':' && p[1] == ':') {
+                    int qs;
                     p += 2;
                     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-                    qw = (int)strlen(qn);
-                    if (qw + 1 >= (int)sizeof qn) return 0;
-                    qn[qw] = '_';
-                    qw++;
-                    while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
-                           || (*p >= '0' && *p <= '9') || *p == '_') {
-                        if (qw + 1 >= (int)sizeof qn) return 0;
-                        qn[qw] = *p;
-                        qw++;
-                        p++;
-                    }
-                    qn[qw] = 0;
+                    qs = 0;
+                    while ((p[qs] >= 'a' && p[qs] <= 'z') || (p[qs] >= 'A' && p[qs] <= 'Z')
+                           || (p[qs] >= '0' && p[qs] <= '9') || p[qs] == '_') qs++;
+                    qn = runtime::text::ct_intern_join(qn, "_");
+                    if (qn) qn = runtime::text::ct_intern_join(qn,
+                                          runtime::text::ct_intern_len(p, qs));
+                    if (!qn) return 0;
+                    p += qs;
                     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
                 }
                 /* A type is followed by `*` or the declarator's name; `.` /
@@ -1271,10 +1273,10 @@ impl StmtOps for Stmt {
                    cannot see them after the block closes */
                 {
                     int yz = 0;
-                    const char *ytp = "";
-                    char ybuf[MAX_TEXT];
+                    const char *ytp;
                     if (self->sup->expr_type_text(ye, &ytp) != 0) {
-                        if (self->ex->chk_type(ye, ybuf, sizeof ybuf, &yz) != 0) {
+                        ytp = self->ex->chk_type_text(ye, &yz);
+                        if (!ytp) {
                             self->sup->pop_scope();
                             self->in_match_arm = save_in_match_arm;
                             self->yield_depth = save_yield_depth;
@@ -1282,7 +1284,6 @@ impl StmtOps for Stmt {
                                 "cannot determine the type yielded by this match arm",
                                 self->mem->path);
                         }
-                        ytp = ybuf;
                     }
                     self->yield_type[dep] = runtime::text::ct_intern(ytp);
                     if (!self->yield_type[dep]) {
@@ -1547,12 +1548,11 @@ impl StmtOps for Stmt {
                     && self->ex->ncl_stack == 0
                     && self->sym->ret_type[0]
                     && strcmp(self->sym->ret_type, "void") != 0) {
-                    char msg[MAX_TEXT];
-                    snprintf(msg, sizeof msg,
-                             "return: missing a value (function returns '%s')",
-                             self->sym->ret_type);
-                    if (tool::diag::ct_type_warn(rline, rcol, "", msg,
-                                                 self->sup->mem->path) != 0)
+                    if (tool::diag::ct_type_warn(rline, rcol, "",
+                            tool::sh::ct_scratch_fmt(
+                                "return: missing a value (function returns '%s')",
+                                self->sym->ret_type),
+                            self->sup->mem->path) != 0)
                         return -1;
                 }
                 /* a bare `return;` leaves every owned object behind */
@@ -1661,16 +1661,14 @@ impl StmtOps for Stmt {
             if (self->ex->ncl_stack == 0 && self->sym->ret_type[0]
                 && (is_err || (self->ex->types_mode && *self->ex->types_mode))) {
                 if (strcmp(self->sym->ret_type, "void") == 0) {
-                    char msg[MAX_TEXT];
-                    snprintf(msg, sizeof msg,
-                             "return: a value is not allowed in a void function");
-                    if (tool::diag::ct_type_warn(eline, ecol, "", msg,
-                                                 self->sup->mem->path) != 0)
+                    if (tool::diag::ct_type_warn(eline, ecol, "",
+                            "return: a value is not allowed in a void function",
+                            self->sup->mem->path) != 0)
                         return -1;
                 } else {
-                    char out[MAX_TEXT];
                     int is_zero = 0;
-                    if (self->ex->chk_type(e, out, sizeof out, &is_zero) == 0) {
+                    const char *out = self->ex->chk_type_text(e, &is_zero);
+                    if (out) {
                         self->ex->chk_line = eline;
                         self->ex->chk_col = ecol;
                         self->ex->chk_arg = 0;
@@ -1691,9 +1689,9 @@ impl StmtOps for Stmt {
                 return closure_error(self, self->arena->nodes[e].line, rcol,
                                      "a closure cannot escape through 'return'");
             {
-                char tr[MAX_TEXT];
+                const char *tr;
                 int ip = 0;
-                if (self->sup->iface_ref_type(self->sym->ret_type, tr, sizeof tr, &ip)) {
+                if (self->sup->iface_ref_type_text(self->sym->ret_type, &tr, &ip)) {
                     int src = e;
                     e = self->sup->maybe_box(e, tr, ip);
                     if (e < 0) return -1;
@@ -2557,8 +2555,8 @@ impl StmtOps for Stmt {
                        becomes a `{ptr,len}` compound literal; `sizeof` answers
                        the inferred length for `T a[] = {…}` too. */
                     int svi, off2, k2, sroot;
-                    char raw2[MAX_TEXT * 4];
-                    char cname2[MAX_TEXT];
+                    const char *raw2;
+                    const char *cname2;
                     if (self->lex->tok == T_PUNCT
                         && self->lex->tok_is("{"))
                         return tool::diag::ct_sem_error(self->lex->tokline,
@@ -2588,11 +2586,11 @@ impl StmtOps for Stmt {
                                 return tool::diag::ct_sem_error(dline, dcol,
                                     "slice element type does not match the array declarator",
                                     self->mem->path);
-                            snprintf(cname2, sizeof cname2, "%s",
-                                     self->sym->vars[svi].cname);
-                            snprintf(raw2, sizeof raw2,
+                            cname2 = self->sym->vars[svi].cname;
+                            raw2 = runtime::text::ct_internf(
                                      "(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }",
                                      cname2, cname2, cname2);
+                            if (!raw2) return self->sup->fail("out of memory");
                             e = self->sup->new_node(N_RAW);
                             if (e < 0) return -1;
                             off2 = self->arena->str_begin();
@@ -2646,17 +2644,16 @@ impl StmtOps for Stmt {
                 } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                     /* local `static` tables can be long, so the text goes to the
                        arena string pool (`aux = 1`, `num` = offset) */
-                    char elemtype[MAX_TEXT];
-                    char iname[MAX_TEXT];
-                    char entrytype[MAX_TEXT];
-                    char mapname[MAX_TEXT];
-                    char ktype[MAX_TEXT];
-                    char vtype[MAX_TEXT];
+                    const char *elemtype;
+                    const char *iname;
+                    const char *entrytype;
+                    const char *mapname;
+                    const char *ktype;
+                    const char *vtype;
                     char *raw;
                     char *fixed;
                     int off, k, fixedcap;
-                    if (range_vec_target(typebuf, elemtype, (int)sizeof elemtype,
-                                         iname, (int)sizeof iname)) {
+                    if (range_vec_target_text(typebuf, &elemtype, &iname)) {
                         /* Phase 31 S11a: `Vec<T> v = {…}` lowers to `from(…, n)`.
                            Handled before the raw capture so the element list
                            stays a structured expression chain. A `static`
@@ -2670,11 +2667,8 @@ impl StmtOps for Stmt {
                                 self->mem->path);
                         e = parse_vec_brace_init(self, elemtype, iname);
                         if (e < 0) return -1;
-                    } else if (map_brace_target(typebuf, entrytype,
-                                               (int)sizeof entrytype, mapname,
-                                               (int)sizeof mapname, ktype,
-                                               (int)sizeof ktype, vtype,
-                                               (int)sizeof vtype)) {
+                    } else if (map_brace_target_text(typebuf, &entrytype, &mapname,
+                                                     &ktype, &vtype)) {
                         /* Phase 31 S14a: `Map<K, V> m = {k: v, …}` lowers to
                            `Map_<enc>_from((MapEntry_<enc>[]){ … }, n)`. A
                            `static` local cannot call the constructor during C
@@ -2756,9 +2750,9 @@ impl StmtOps for Stmt {
                        initialiser. The position is the initialiser's own
                        start, and the whole check stays behind `--types`. */
                     if (self->ex->types_mode && *self->ex->types_mode) {
-                        char out[MAX_TEXT];
                         int is_zero = 0;
-                        if (self->ex->chk_type(e, out, sizeof out, &is_zero) == 0) {
+                        const char *out = self->ex->chk_type_text(e, &is_zero);
+                        if (out) {
                             int array_lit_ok;
                             self->ex->chk_line = eline;
                             self->ex->chk_col = ecol;
@@ -2861,22 +2855,19 @@ impl StmtOps for Stmt {
                 && check_closure_decl_init(self, n, name, dcol) != 0)
                 return -1;
             if (self->arena->nodes[n].a >= 0) {
-                char tr[MAX_TEXT];
+                const char *tr;
                 int ip = 0;
                 /* A container instance whose type argument is an interface
                    value is spelled `struct Vec_Show__iface`: the `_iface` tail
                    alone must not turn the declaration into an interface slot,
                    so the name has to be a declared trait. */
-                if (self->sup->iface_ref_type(typebuf, tr, sizeof tr, &ip)
+                if (self->sup->iface_ref_type_text(typebuf, &tr, &ip)
                     && self->sym->find_trait(tr) >= 0) {
-                    char imsg[MAX_TEXT * 2];
-                    if (self->sup->expr_is_slice(self->arena->nodes[n].a)) {
-                        snprintf(imsg, sizeof imsg,
-                                 "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
-                                 tr);
-                        return tool::diag::ct_sem_error(iline, icol, imsg,
-                                                        self->mem->path);
-                    }
+                    if (self->sup->expr_is_slice(self->arena->nodes[n].a))
+                        return tool::diag::ct_sem_error(iline, icol,
+                            tool::sh::ct_scratch_fmt(
+                                "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
+                                tr), self->mem->path);
                     e = self->sup->maybe_box(self->arena->nodes[n].a, tr, ip);
                     if (e < 0) return -1;
                     self->arena->nodes[n].a = e;
@@ -2906,8 +2897,9 @@ impl StmtOps for Stmt {
     int string_raw_write_check(int e)
     {
         int b, k;
-        char ty[MAX_TEXT];
+        const char *ty;
         const char *p;
+        const char *base;
         size_t n;
 
         if (e < 0) return 0;
@@ -2934,25 +2926,23 @@ impl StmtOps for Stmt {
         }
         {
             int z = 0;
-            if (b < 0 || self->ex->chk_type(b, ty, sizeof ty, &z) != 0) return 0;
+            if (b < 0) return 0;
+            ty = self->ex->chk_type_text(b, &z);
+            if (!ty) return 0;
         }
         p = ty;
         while (*p == ' ' || *p == '\t') p++;
         if (strncmp(p, "struct ", 7) == 0) p += 7;
         n = strlen(p);
         while (n > 0 && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
-        if (n >= (size_t)MAX_TEXT) return 0;
-        {
-            char base[MAX_TEXT];
-            memcpy(base, p, n);
-            base[n] = 0;
-            if (strchr(base, '*') == 0
-                && (strcmp(base, "String") == 0 || strcmp(base, "Str") == 0))
-                return tool::diag::ct_sem_error(self->arena->nodes[e].line,
-                    self->arena->nodes[e].num,
-                    "String/Str is immutable: '.ptr' is a raw implementation field; use s[i] (read-only Str) or cstr()",
-                    self->sup->mem->path);
-        }
+        base = runtime::text::ct_intern_len(p, (int)n);
+        if (!base) return 0;
+        if (strchr(base, '*') == 0
+            && (strcmp(base, "String") == 0 || strcmp(base, "Str") == 0))
+            return tool::diag::ct_sem_error(self->arena->nodes[e].line,
+                self->arena->nodes[e].num,
+                "String/Str is immutable: '.ptr' is a raw implementation field; use s[i] (read-only Str) or cstr()",
+                self->sup->mem->path);
         return 0;
     }
 
@@ -3058,7 +3048,7 @@ impl StmtOps for Stmt {
             /* S1a-0 C2p-4: the assignment target's type is a pool text, so a
                2000-byte target reaches the binding site whole. */
             const char *tt = "";
-            char tr[MAX_TEXT];
+            const char *tr;
             ip = 0;
             /* `N_DEREF` never fills `tt` below, and `iface_ref_type` reads it:
                an empty string is the "no type derived" case */
@@ -3198,25 +3188,22 @@ impl StmtOps for Stmt {
                branch carries an `into` block's `.field = expr`, whose type
                `expr_type` derives from the receiver record. */
             if (self->ex->types_mode && *self->ex->types_mode && tt[0]) {
-                char out[MAX_TEXT];
                 int is_zero = 0;
-                if (self->ex->chk_type(rhs, out, sizeof out, &is_zero) == 0) {
+                const char *out = self->ex->chk_type_text(rhs, &is_zero);
+                if (out) {
                     self->ex->chk_line = rline;
                     self->ex->chk_col = rcol;
                     self->ex->chk_arg = 0;
                     if (self->ex->chk_assignable(tt, out, is_zero, 2) != 0) return -1;
                 }
             }
-            if (self->sup->iface_ref_type(tt, tr, sizeof tr, &ip)
+            if (self->sup->iface_ref_type_text(tt, &tr, &ip)
                 && self->sym->find_trait(tr) >= 0) {
-                char imsg[MAX_TEXT * 2];
-                if (self->sup->expr_is_slice(rhs)) {
-                    snprintf(imsg, sizeof imsg,
-                             "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
-                             tr);
-                    return tool::diag::ct_sem_error(rline, rcol, imsg,
-                                                    self->mem->path);
-                }
+                if (self->sup->expr_is_slice(rhs))
+                    return tool::diag::ct_sem_error(rline, rcol,
+                        tool::sh::ct_scratch_fmt(
+                            "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view",
+                            tr), self->mem->path);
                 rhs = self->sup->maybe_box(rhs, tr, ip);
                 if (rhs < 0) return -1;
             }
@@ -3302,12 +3289,9 @@ impl StmtOps for Stmt {
        build an environment in and used to fall back to `unknown expression node`. */
     int closure_global_init(int e, const char *name, int line, int col)
     {
-        char msg[MAX_TEXT];
-
         if (e < 0 || self->arena->nodes[e].kind != N_CLOSURE) return 0;
-        snprintf(msg, sizeof msg,
-                 "a closure cannot be stored in '%s' (its scope outlives the closure)", name);
-        return closure_error(self, line, col, msg);
+        return closure_error(self, line, col, tool::sh::ct_scratch_fmt(
+            "a closure cannot be stored in '%s' (its scope outlives the closure)", name));
     }
 }
 

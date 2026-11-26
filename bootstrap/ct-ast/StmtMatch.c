@@ -727,7 +727,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
     const char * rtype = "";
     const char * rkey = "";
     const char * ytype = "";
-    char ybuf[MAX_TEXT];
     const char * ykey = "";
     struct frontend_sym_Adt * adts;
     int nadts;
@@ -1071,13 +1070,13 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
 {
                 int yz = 0;
                 if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, yexpr, (&ytype)) != 0) {
-                    if (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, yexpr, ybuf, sizeof(ybuf), (&yz)) != 0) {
+                    ytype = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, yexpr, (&yz));
+                    if ((!ytype)) {
                         if (variant >= 0) {
                             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                         }
                         return tool_diag_ct_sem_error(yline, ycol, "cannot determine the type yielded by this match arm", _self->mem->path);
                     }
-                    ytype = ybuf;
                 }
                 ytyped = 1;
             }

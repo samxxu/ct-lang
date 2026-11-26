@@ -8,6 +8,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct"
 #include <stdio.h>
@@ -586,7 +587,6 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_var_type(void *
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *self, const char * name, const char * ret, int is_static, int is_pub, int first_param) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * cname;
-    char msg[MAX_TEXT];
     int i;
     int k;
     int p;
@@ -615,8 +615,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
     fresh = 0;
     if (i < 0) {
         if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self->sym, (_self->sym->nfunc + 1)) != 0) {
-            snprintf(msg, sizeof(msg), "too many functions (limit %d, whole program)", MAX_FUNCS_MAX);
-            return _self->__frontend_parse_supportops_vptr->fail(_self, msg);
+            return _self->__frontend_parse_supportops_vptr->fail(_self, tool_sh_ct_scratch_fmt("too many functions (limit %d, whole program)", MAX_FUNCS_MAX));
         }
         i = _self->sym->nfunc;
         _self->sym->nfunc++;
@@ -672,8 +671,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
             return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
         }
         if ((((!fresh) && (k < prev_nparams)) && (_self->sym->funcs[i].pann[k] != (char)(_self->arena->nodes[p].aux)))) {
-            snprintf(msg, sizeof(msg), "redeclaration of '%s' changes the ref/out annotation of parameter %d", name, (k + 1));
-            return _self->__frontend_parse_supportops_vptr->fail(_self, msg);
+            return _self->__frontend_parse_supportops_vptr->fail(_self, tool_sh_ct_scratch_fmt("redeclaration of '%s' changes the ref/out annotation of parameter %d", name, (k + 1)));
         }
         _self->sym->funcs[i].pann[k] = (char)(_self->arena->nodes[p].aux);
         if (_self->arena->nodes[p].attr >= 0) {
@@ -692,7 +690,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
 
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_attr_pool(void *self, int * out) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
-    char tbuf[MAX_TEXT];
+    const char * tbuf;
     int depth;
     int got;
     int k;
@@ -712,10 +710,13 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_attr_pool(void 
                 return _self->__frontend_parse_supportops_vptr->fail(_self, "unterminated __attribute__");
             }
             if (((_self->lex->tok == T_NUM) && (!_self->lex->tokfloat))) {
-                snprintf(tbuf, sizeof(tbuf), "%ld", _self->lex->toknum);
+                tbuf = runtime_text_ct_internf("%ld", _self->lex->toknum);
             }
             else {
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, tbuf, sizeof(tbuf));
+                tbuf = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            }
+            if ((!tbuf)) {
+                return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
             }
             if (((!first) && (_self->arena->__runtime_arena_arenaops_vptr->str_put(_self->arena, ' ') != 0))) {
                 return _self->__frontend_parse_supportops_vptr->fail(_self, "__attribute__ is too long");

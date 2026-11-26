@@ -10,6 +10,7 @@
 #include "ParseSupport.h"
 #include "Expr.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "StmtRangeText.h"
 #include "StmtRangeScan.h"
 #include "StmtScope.h"
@@ -195,8 +196,8 @@ static int mark_borrow(struct frontend_parse_Stmt *, int, int, int);
 static int borrow_escape(struct frontend_parse_Stmt *, int, int);
 static int str_escape_op(struct frontend_parse_Stmt *, int, int, const char *, int, int, int, int, int);
 static int parse_vec_brace_init(struct frontend_parse_Stmt *, const char *, const char *);
-static int map_decode_str(struct frontend_parse_Stmt *, int, char *, int);
-static int map_dup_key(struct frontend_parse_Stmt *, int *, int, int, char *, int *);
+static int map_decode_str_text(struct frontend_parse_Stmt *, int, const char * *);
+static int map_dup_key(struct frontend_parse_Stmt *, int *, int, int, const char * *, int *);
 static int parse_map_brace_init(struct frontend_parse_Stmt *, const char *, const char *, const char *, const char *);
 static int stmt_owning_struct(struct frontend_parse_Stmt *, const char *);
 void frontend_parse_ct_stmt_bind(void *, void *, void *, void *, void *, void *);
@@ -266,33 +267,33 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
     }
 {
         const char * p = ((_self->lex->src + _self->lex->tokstart) + _self->lex->tokstr.len);
-        char qn[MAX_TEXT];
-        int qw;
+        const char * qn;
         while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
             p++;
         }
         if (((p[0] == ':') && (p[1] == ':'))) {
-            _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, qn, sizeof(qn));
+            qn = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+            if ((!qn)) {
+                return 0;
+            }
             while (((p[0] == ':') && (p[1] == ':'))) {
+                int qs;
                 p += 2;
                 while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
                     p++;
                 }
-                qw = (int)(strlen(qn));
-                if ((qw + 1) >= (int)(sizeof(qn))) {
+                qs = 0;
+                while ((((((p[qs] >= 'a') && (p[qs] <= 'z')) || ((p[qs] >= 'A') && (p[qs] <= 'Z'))) || ((p[qs] >= '0') && (p[qs] <= '9'))) || (p[qs] == '_'))) {
+                    qs++;
+                }
+                qn = runtime_text_ct_intern_join(qn, "_");
+                if (qn) {
+                    qn = runtime_text_ct_intern_join(qn, runtime_text_ct_intern_len(p, qs));
+                }
+                if ((!qn)) {
                     return 0;
                 }
-                qn[qw] = '_';
-                qw++;
-                while (((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_'))) {
-                    if ((qw + 1) >= (int)(sizeof(qn))) {
-                        return 0;
-                    }
-                    qn[qw] = (*p);
-                    qw++;
-                    p++;
-                }
-                qn[qw] = 0;
+                p += qs;
                 while ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
                     p++;
                 }
@@ -455,16 +456,15 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
                 _self->yield_col[dep] = yc;
 {
                     int yz = 0;
-                    const char * ytp = "";
-                    char ybuf[MAX_TEXT];
+                    const char * ytp;
                     if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, ye, (&ytp)) != 0) {
-                        if (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, ye, ybuf, sizeof(ybuf), (&yz)) != 0) {
+                        ytp = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, ye, (&yz));
+                        if ((!ytp)) {
                             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
                             _self->in_match_arm = save_in_match_arm;
                             _self->yield_depth = save_yield_depth;
                             return tool_diag_ct_sem_error(yl, yc, "cannot determine the type yielded by this match arm", _self->mem->path);
                         }
-                        ytp = ybuf;
                     }
                     _self->yield_type[dep] = runtime_text_ct_intern(ytp);
                     if ((!_self->yield_type[dep])) {
@@ -738,9 +738,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                 return tool_diag_ct_sem_error(rline, rcol, "an error return needs a value", _self->mem->path);
             }
             if (((((_self->ex->types_mode && (*_self->ex->types_mode)) && (_self->ex->ncl_stack == 0)) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "void") != 0))) {
-                char msg[MAX_TEXT];
-                snprintf(msg, sizeof(msg), "return: missing a value (function returns '%s')", _self->sym->ret_type);
-                if (tool_diag_ct_type_warn(rline, rcol, "", msg, _self->sup->mem->path) != 0) {
+                if (tool_diag_ct_type_warn(rline, rcol, "", tool_sh_ct_scratch_fmt("return: missing a value (function returns '%s')", _self->sym->ret_type), _self->sup->mem->path) != 0) {
                     return (-1);
                 }
             }
@@ -831,16 +829,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         }
         if ((((_self->ex->ncl_stack == 0) && _self->sym->ret_type[0]) && (is_err || (_self->ex->types_mode && (*_self->ex->types_mode))))) {
             if (strcmp(_self->sym->ret_type, "void") == 0) {
-                char msg[MAX_TEXT];
-                snprintf(msg, sizeof(msg), "return: a value is not allowed in a void function");
-                if (tool_diag_ct_type_warn(eline, ecol, "", msg, _self->sup->mem->path) != 0) {
+                if (tool_diag_ct_type_warn(eline, ecol, "", "return: a value is not allowed in a void function", _self->sup->mem->path) != 0) {
                     return (-1);
                 }
             }
             else {
-                char out[MAX_TEXT];
                 int is_zero = 0;
-                if (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, e, out, sizeof(out), (&is_zero)) == 0) {
+                const char * out = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, e, (&is_zero));
+                if (out) {
                     _self->ex->chk_line = eline;
                     _self->ex->chk_col = ecol;
                     _self->ex->chk_arg = 0;
@@ -861,9 +857,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             return closure_error(_self, _self->arena->nodes[e].line, rcol, "a closure cannot escape through 'return'");
         }
 {
-            char tr[MAX_TEXT];
+            const char * tr;
             int ip = 0;
-            if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, _self->sym->ret_type, tr, sizeof(tr), (&ip))) {
+            if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, _self->sym->ret_type, (&tr), (&ip))) {
                 int src = e;
                 e = _self->sup->__frontend_parse_supportops_vptr->maybe_box(_self->sup, e, tr, ip);
                 if (e < 0) {
@@ -1768,8 +1764,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                 int off2;
                 int k2;
                 int sroot;
-                char raw2[MAX_TEXT * 4];
-                char cname2[MAX_TEXT];
+                const char * raw2;
+                const char * cname2;
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
                     return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a slice 'T[]' has no initializer list; initialize it from an array or another slice", _self->mem->path);
                 }
@@ -1797,8 +1793,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                             if (strchr(_self->sym->vars[svi].dims, '(')) {
                                 return tool_diag_ct_sem_error(dline, dcol, "slice element type does not match the array declarator", _self->mem->path);
                             }
-                            snprintf(cname2, sizeof(cname2), "%s", _self->sym->vars[svi].cname);
-                            snprintf(raw2, sizeof(raw2), "(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }", cname2, cname2, cname2);
+                            cname2 = _self->sym->vars[svi].cname;
+                            raw2 = runtime_text_ct_internf("(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }", cname2, cname2, cname2);
+                            if ((!raw2)) {
+                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                            }
                             e = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_RAW);
                             if (e < 0) {
                                 return (-1);
@@ -1859,18 +1858,18 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
             }
             else {
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
-                    char elemtype[MAX_TEXT];
-                    char iname[MAX_TEXT];
-                    char entrytype[MAX_TEXT];
-                    char mapname[MAX_TEXT];
-                    char ktype[MAX_TEXT];
-                    char vtype[MAX_TEXT];
+                    const char * elemtype;
+                    const char * iname;
+                    const char * entrytype;
+                    const char * mapname;
+                    const char * ktype;
+                    const char * vtype;
                     char * raw;
                     char * fixed;
                     int off;
                     int k;
                     int fixedcap;
-                    if (frontend_parse_range_vec_target(typebuf, elemtype, (int)(sizeof(elemtype)), iname, (int)(sizeof(iname)))) {
+                    if (frontend_parse_range_vec_target_text(typebuf, (&elemtype), (&iname))) {
                         if (_self->static_decl) {
                             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a Vec brace initializer is only supported in a local declaration", _self->mem->path);
                         }
@@ -1880,7 +1879,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                         }
                     }
                     else {
-                        if (frontend_parse_map_brace_target(typebuf, entrytype, (int)(sizeof(entrytype)), mapname, (int)(sizeof(mapname)), ktype, (int)(sizeof(ktype)), vtype, (int)(sizeof(vtype)))) {
+                        if (frontend_parse_map_brace_target_text(typebuf, (&entrytype), (&mapname), (&ktype), (&vtype))) {
                             if (_self->static_decl) {
                                 return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a Map brace initializer is only supported in a local declaration", _self->mem->path);
                             }
@@ -1966,9 +1965,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                             }
                         }
                         if ((_self->ex->types_mode && (*_self->ex->types_mode))) {
-                            char out[MAX_TEXT];
                             int is_zero = 0;
-                            if (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, e, out, sizeof(out), (&is_zero)) == 0) {
+                            const char * out = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, e, (&is_zero));
+                            if (out) {
                                 int array_lit_ok;
                                 _self->ex->chk_line = eline;
                                 _self->ex->chk_col = ecol;
@@ -2023,13 +2022,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
             return (-1);
         }
         if (_self->arena->nodes[n].a >= 0) {
-            char tr[MAX_TEXT];
+            const char * tr;
             int ip = 0;
-            if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, typebuf, tr, sizeof(tr), (&ip)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr) >= 0))) {
-                char imsg[MAX_TEXT * 2];
+            if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, typebuf, (&tr), (&ip)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr) >= 0))) {
                 if (_self->sup->__frontend_parse_supportops_vptr->expr_is_slice(_self->sup, _self->arena->nodes[n].a)) {
-                    snprintf(imsg, sizeof(imsg), "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view", tr);
-                    return tool_diag_ct_sem_error(iline, icol, imsg, _self->mem->path);
+                    return tool_diag_ct_sem_error(iline, icol, tool_sh_ct_scratch_fmt("a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view", tr), _self->mem->path);
                 }
                 e = _self->sup->__frontend_parse_supportops_vptr->maybe_box(_self->sup, _self->arena->nodes[n].a, tr, ip);
                 if (e < 0) {
@@ -2067,8 +2064,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_string_raw_write_check(voi
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     int b;
     int k;
-    char ty[MAX_TEXT];
+    const char * ty;
     const char * p;
+    const char * base;
     size_t n;
     if (e < 0) {
         return 0;
@@ -2100,7 +2098,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_string_raw_write_check(voi
     }
 {
         int z = 0;
-        if (((b < 0) || (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, b, ty, sizeof(ty), (&z)) != 0))) {
+        if (b < 0) {
+            return 0;
+        }
+        ty = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, b, (&z));
+        if ((!ty)) {
             return 0;
         }
     }
@@ -2115,16 +2117,12 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_string_raw_write_check(voi
     while (((n > 0) && ((p[(n - 1)] == ' ') || (p[(n - 1)] == '\t')))) {
         n--;
     }
-    if (n >= (size_t)(MAX_TEXT)) {
+    base = runtime_text_ct_intern_len(p, (int)(n));
+    if ((!base)) {
         return 0;
     }
-{
-        char base[MAX_TEXT];
-        memcpy(base, p, n);
-        base[n] = 0;
-        if (((strchr(base, '*') == 0) && ((strcmp(base, "String") == 0) || (strcmp(base, "Str") == 0)))) {
-            return tool_diag_ct_sem_error(_self->arena->nodes[e].line, _self->arena->nodes[e].num, "String/Str is immutable: '.ptr' is a raw implementation field; use s[i] (read-only Str) or cstr()", _self->sup->mem->path);
-        }
+    if (((strchr(base, '*') == 0) && ((strcmp(base, "String") == 0) || (strcmp(base, "Str") == 0)))) {
+        return tool_diag_ct_sem_error(_self->arena->nodes[e].line, _self->arena->nodes[e].num, "String/Str is immutable: '.ptr' is a raw implementation field; use s[i] (read-only Str) or cstr()", _self->sup->mem->path);
     }
     return 0;
 }
@@ -2270,7 +2268,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
             int rline;
             int rcol;
             const char * tt = "";
-            char tr[MAX_TEXT];
+            const char * tr;
             ip = 0;
             if (_self->ex->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self->ex, e, _self->arena->nodes[e].line, _self->arena->nodes[e].num) != 0) {
                 return (-1);
@@ -2408,9 +2406,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         }
                     }
                     if (((_self->ex->types_mode && (*_self->ex->types_mode)) && tt[0])) {
-                        char out[MAX_TEXT];
                         int is_zero = 0;
-                        if (_self->ex->__frontend_parse_exprtypes_vptr->chk_type(_self->ex, rhs, out, sizeof(out), (&is_zero)) == 0) {
+                        const char * out = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, rhs, (&is_zero));
+                        if (out) {
                             _self->ex->chk_line = rline;
                             _self->ex->chk_col = rcol;
                             _self->ex->chk_arg = 0;
@@ -2419,11 +2417,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                             }
                         }
                     }
-                    if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, tt, tr, sizeof(tr), (&ip)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr) >= 0))) {
-                        char imsg[MAX_TEXT * 2];
+                    if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, tt, (&tr), (&ip)) && (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tr) >= 0))) {
                         if (_self->sup->__frontend_parse_supportops_vptr->expr_is_slice(_self->sup, rhs)) {
-                            snprintf(imsg, sizeof(imsg), "a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view", tr);
-                            return tool_diag_ct_sem_error(rline, rcol, imsg, _self->mem->path);
+                            return tool_diag_ct_sem_error(rline, rcol, tool_sh_ct_scratch_fmt("a slice 'T[]' cannot be stored in interface '%s'; it is a non-owning view", tr), _self->mem->path);
                         }
                         rhs = _self->sup->__frontend_parse_supportops_vptr->maybe_box(_self->sup, rhs, tr, ip);
                         if (rhs < 0) {
@@ -2507,12 +2503,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
 
 static int frontend_parse_Stmt_frontend_parse_StmtOps_closure_global_init(void *self, int e, const char * name, int line, int col) {
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
-    char msg[MAX_TEXT];
     if (((e < 0) || (_self->arena->nodes[e].kind != N_CLOSURE))) {
         return 0;
     }
-    snprintf(msg, sizeof(msg), "a closure cannot be stored in '%s' (its scope outlives the closure)", name);
-    return closure_error(_self, line, col, msg);
+    return closure_error(_self, line, col, tool_sh_ct_scratch_fmt("a closure cannot be stored in '%s' (its scope outlives the closure)", name));
 }
 
 const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_StmtOps_vtable = {
@@ -2623,7 +2617,6 @@ static int check_closure_assign(struct frontend_parse_Stmt * self, int n, int co
     int bv;
     int lv;
     int kind;
-    char msg[MAX_TEXT];
     if (n < 0) {
         return 0;
     }
@@ -2654,8 +2647,7 @@ static int check_closure_assign(struct frontend_parse_Stmt * self, int n, int co
     if (kind == N_VAR) {
         lv = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[lhs].text2);
         if (((lv >= 0) && frontend_parse_outlives(self->sym, lv, bv))) {
-            snprintf(msg, sizeof(msg), "a closure cannot be stored in '%s' (its scope outlives the closure)", self->sym->vars[lv].name);
-            return closure_error(self, self->arena->nodes[n].line, col, msg);
+            return closure_error(self, self->arena->nodes[n].line, col, tool_sh_ct_scratch_fmt("a closure cannot be stored in '%s' (its scope outlives the closure)", self->sym->vars[lv].name));
         }
     }
     return closure_error(self, self->arena->nodes[n].line, col, "this closure is a binding, not a value (inline it or use a struct + trait)");
@@ -2664,7 +2656,6 @@ static int check_closure_decl_init(struct frontend_parse_Stmt * self, int n, con
     int rhs;
     int bv;
     int dv;
-    char msg[MAX_TEXT];
     if (((n < 0) || (self->arena->nodes[n].a < 0))) {
         return 0;
     }
@@ -2675,8 +2666,7 @@ static int check_closure_decl_init(struct frontend_parse_Stmt * self, int n, con
     }
     dv = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name);
     if (((dv >= 0) && frontend_parse_outlives(self->sym, dv, bv))) {
-        snprintf(msg, sizeof(msg), "a closure cannot be stored in '%s' (its scope outlives the closure)", name);
-        return closure_error(self, self->arena->nodes[n].line, col, msg);
+        return closure_error(self, self->arena->nodes[n].line, col, tool_sh_ct_scratch_fmt("a closure cannot be stored in '%s' (its scope outlives the closure)", name));
     }
     return closure_error(self, self->arena->nodes[n].line, col, "this closure is a binding, not a value (inline it or use a struct + trait)");
 }
@@ -2696,7 +2686,6 @@ static int check_borrow_store(struct frontend_parse_Stmt * self, int n) {
     int rhs;
     int bv;
     int lv;
-    char msg[MAX_TEXT];
     if (n < 0) {
         return 0;
     }
@@ -2732,8 +2721,7 @@ static int check_borrow_store(struct frontend_parse_Stmt * self, int n) {
     if ((!frontend_parse_outlives(self->sym, lv, bv))) {
         return 0;
     }
-    snprintf(msg, sizeof(msg), "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)", self->sym->vars[lv].name);
-    return tool_diag_ct_sem_error(self->arena->nodes[n].line, 1, msg, self->mem->path);
+    return tool_diag_ct_sem_error(self->arena->nodes[n].line, 1, tool_sh_ct_scratch_fmt("a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)", self->sym->vars[lv].name), self->mem->path);
 }
 static int borrow_decl_ahead(struct frontend_parse_Stmt * self) {
     const char * save_text_ptr;
@@ -2777,7 +2765,6 @@ static int borrow_decl_ahead(struct frontend_parse_Stmt * self) {
 static int mark_borrow(struct frontend_parse_Stmt * self, int n, int line, int col) {
     const char * base;
     const char * et = "";
-    char msg[MAX_TEXT];
     const char * eb;
     int d;
     int si;
@@ -2838,12 +2825,10 @@ static int mark_borrow(struct frontend_parse_Stmt * self, int n, int line, int c
             }
         }
         if ((!self->sym->structs[si].uses_handback)) {
-            snprintf(msg, sizeof(msg), "struct '%s' does not use trait 'Handback'", base);
-            return tool_diag_ct_sem_error(line, col, msg, self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("struct '%s' does not use trait 'Handback'", base), self->mem->path);
         }
         if ((!self->sym->structs[si].has_handback_impl)) {
-            snprintf(msg, sizeof(msg), "struct '%s' uses trait 'Handback' but this unit has no impl", base);
-            return tool_diag_ct_sem_error(line, col, msg, self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("struct '%s' uses trait 'Handback' but this unit has no impl", base), self->mem->path);
         }
         vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[d].text2);
         if (vi >= 0) {
@@ -2886,7 +2871,6 @@ static int borrow_escape(struct frontend_parse_Stmt * self, int ret, int line) {
 }
 static int str_escape_op(struct frontend_parse_Stmt * self, int op, int e, const char * name, int vk, int line, int col, int stmt_line, int depth) {
     struct runtime_arena_Arena * ar = self->arena;
-    char msg[MAX_TEXT];
     int k;
     int vi;
     if (op == 4) {
@@ -2956,8 +2940,7 @@ static int str_escape_op(struct frontend_parse_Stmt * self, int op, int e, const
         if ((str_escape_op(self, 4, (-1), 0, 0, stmt_line, 0, 0, 0) || str_escape_op(self, 4, (-1), 0, 0, line, 0, 0, 0))) {
             return 0;
         }
-        snprintf(msg, sizeof(msg), "borrowed '%s' view escapes this statement: the temporary '%s' owner's lifetime ends at the end of the expression; bind the owner to a local first", ((vk == 4) ? "U16Str" : "Str"), ((vk == 4) ? "U16String" : "String"));
-        return tool_diag_ct_str_warn(line, col, msg, self->mem->path);
+        return tool_diag_ct_str_warn(line, col, tool_sh_ct_scratch_fmt("borrowed '%s' view escapes this statement: the temporary '%s' owner's lifetime ends at the end of the expression; bind the owner to a local first", ((vk == 4) ? "U16Str" : "Str"), ((vk == 4) ? "U16String" : "String")), self->sup->mem->path);
     }
     if (op == 1) {
         k = str_escape_op(self, 0, e, name, vk, line, col, stmt_line, 0);
@@ -2968,12 +2951,9 @@ static int str_escape_op(struct frontend_parse_Stmt * self, int op, int e, const
             return 0;
         }
         if (k == 2) {
-            snprintf(msg, sizeof(msg), "borrowed '%s' view escapes 'return': the temporary '%s' owner's lifetime ends at the end of this expression; bind the owner to a local first", ((vk == 4) ? "U16Str" : "Str"), ((vk == 4) ? "U16String" : "String"));
+            return tool_diag_ct_str_warn(line, col, tool_sh_ct_scratch_fmt("borrowed '%s' view escapes 'return': the temporary '%s' owner's lifetime ends at the end of this expression; bind the owner to a local first", ((vk == 4) ? "U16Str" : "Str"), ((vk == 4) ? "U16String" : "String")), self->sup->mem->path);
         }
-        else {
-            snprintf(msg, sizeof(msg), "borrowed '%s' view escapes 'return': the local '%s' owner's lifetime ends with this frame; return an owning '%s' or a caller-owned view", ((vk == 4) ? "U16Str" : "Str"), ((vk == 4) ? "U16String" : "String"), ((vk == 4) ? "U16String" : "String"));
-        }
-        return tool_diag_ct_str_warn(line, col, msg, self->mem->path);
+        return tool_diag_ct_str_warn(line, col, tool_sh_ct_scratch_fmt("borrowed '%s' view escapes 'return': the local '%s' owner's lifetime ends with this frame; return an owning '%s' or a caller-owned view", ((vk == 4) ? "U16Str" : "Str"), ((vk == 4) ? "U16String" : "String"), ((vk == 4) ? "U16String" : "String")), self->sup->mem->path);
     }
     return self->sup->__frontend_parse_supportops_vptr->str_escape_class_at(self->sup, e, depth);
 }
@@ -2995,7 +2975,7 @@ static int parse_vec_brace_init(struct frontend_parse_Stmt * self, const char * 
         int eline;
         int ecol;
         const char * ety = "";
-        char tr[MAX_TEXT];
+        const char * tr;
         int ip = 0;
         if (((self->lex->tok == T_PUNCT) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, "{"))) {
             return tool_diag_ct_sem_error(self->lex->tokline, ((self->lex->tokstart - self->lex->lstart) + 1), "a brace list cannot appear inside another brace initializer; build the inner container first", self->mem->path);
@@ -3009,7 +2989,7 @@ static int parse_vec_brace_init(struct frontend_parse_Stmt * self, const char * 
         if (el < 0) {
             return (-1);
         }
-        if (self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, elem, tr, sizeof(tr), (&ip))) {
+        if (self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(self->sup, elem, (&tr), (&ip))) {
             el = self->sup->__frontend_parse_supportops_vptr->maybe_box(self->sup, el, tr, ip);
             if (el < 0) {
                 return (-1);
@@ -3061,18 +3041,23 @@ static int parse_vec_brace_init(struct frontend_parse_Stmt * self, const char * 
     }
     return e;
 }
-static int map_decode_str(struct frontend_parse_Stmt * self, int n, char * out, int cap) {
+static int map_decode_str_text(struct frontend_parse_Stmt * self, int n, const char * * out) {
     const char * s;
+    char * buf = 0;
+    int cap = 0;
     int i = 0;
-    int o = 0;
-    if (((n < 0) || (cap < 1))) {
+    char one[2];
+    (*out) = "";
+    if (n < 0) {
         return 0;
     }
     if (self->arena->nodes[n].kind != N_STR) {
         return 0;
     }
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return 0;
+    }
     s = self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].num);
-    out[0] = 0;
     while (s[i]) {
         int c;
         if (s[i] != '"') {
@@ -3085,7 +3070,7 @@ static int map_decode_str(struct frontend_parse_Stmt * self, int n, char * out, 
             if (c == '\\') {
                 i++;
                 if ((!s[i])) {
-                    return 0;
+                    goto fail;
                 }
                 c = (unsigned char)(s[i]);
                 if (c == 'n') {
@@ -3143,7 +3128,7 @@ static int map_decode_str(struct frontend_parse_Stmt * self, int n, char * out, 
                                                     i++;
                                                 }
                                                 if ((!nd)) {
-                                                    return 0;
+                                                    goto fail;
                                                 }
                                                 c = hv;
                                                 i--;
@@ -3174,35 +3159,43 @@ static int map_decode_str(struct frontend_parse_Stmt * self, int n, char * out, 
                 i++;
             }
             if (c == 0) {
+                (*out) = runtime_text_ct_intern(buf);
+                tool_sh_ct_text_free((&buf), (&cap));
                 return 1;
             }
-            if (o < (cap - 1)) {
-                out[o++] = (char)(c);
+            one[0] = (char)(c);
+            one[1] = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), one) != 0) {
+                goto fail;
             }
         }
     }
-    out[o] = 0;
+    (*out) = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
     return 1;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return 0;
 }
-static int map_dup_key(struct frontend_parse_Stmt * self, int * keys, int count, int n, char * disp, int * first) {
+static int map_dup_key(struct frontend_parse_Stmt * self, int * keys, int count, int n, const char * * disp, int * first) {
     long nv = 0;
     long pv;
-    char sbuf[MAX_TEXT];
+    const char * sbuf = "";
     int j;
     int kind = 0;
     if (self->arena->nodes[n].kind == N_STR) {
-        if ((!map_decode_str(self, n, sbuf, (int)(sizeof(sbuf))))) {
+        if ((!map_decode_str_text(self, n, (&sbuf)))) {
             return 0;
         }
         kind = 2;
     }
     else {
         if (((self->arena->nodes[n].kind == N_VAR) && self->sym->__frontend_sym_symbolops_vptr->is_const_name(self->sym, self->arena->nodes[n].text2))) {
-            char cn[MAX_TEXT];
-            if (self->sym->__frontend_sym_symbolops_vptr->var_cname(self->sym, self->arena->nodes[n].text2, cn, sizeof(cn)) != 0) {
+            sbuf = self->sym->__frontend_sym_symbolops_vptr->var_cname_text(self->sym, self->arena->nodes[n].text2);
+            if ((!sbuf)) {
                 return 0;
             }
-            snprintf(sbuf, (size_t)(MAX_TEXT), "%s", cn);
             kind = 3;
         }
         else {
@@ -3215,10 +3208,13 @@ static int map_dup_key(struct frontend_parse_Stmt * self, int * keys, int count,
         return 0;
     }
     if (kind == 1) {
-        snprintf(disp, (size_t)(MAX_TEXT), "%ld", nv);
+        (*disp) = runtime_text_ct_internf("%ld", nv);
+        if ((!(*disp))) {
+            return 0;
+        }
     }
     else {
-        snprintf(disp, (size_t)(MAX_TEXT), "%s", sbuf);
+        (*disp) = sbuf;
     }
     for (j = 0; j < count; j++) {
         if (kind == 1) {
@@ -3229,15 +3225,15 @@ static int map_dup_key(struct frontend_parse_Stmt * self, int * keys, int count,
         }
         else {
             if (kind == 2) {
-                char pb[MAX_TEXT];
-                if ((map_decode_str(self, keys[j], pb, (int)(sizeof(pb))) && (strcmp(pb, sbuf) == 0))) {
+                const char * pb;
+                if ((map_decode_str_text(self, keys[j], (&pb)) && (strcmp(pb, sbuf) == 0))) {
                     (*first) = self->arena->nodes[keys[j]].line;
                     return 1;
                 }
             }
             else {
-                char pb[MAX_TEXT];
-                if ((((self->arena->nodes[keys[j]].kind == N_VAR) && (self->sym->__frontend_sym_symbolops_vptr->var_cname(self->sym, self->arena->nodes[keys[j]].text2, pb, sizeof(pb)) == 0)) && (strcmp(pb, sbuf) == 0))) {
+                const char * pb;
+                if ((((self->arena->nodes[keys[j]].kind == N_VAR) && ((pb = self->sym->__frontend_sym_symbolops_vptr->var_cname_text(self->sym, self->arena->nodes[keys[j]].text2)) != 0)) && (strcmp(pb, sbuf) == 0))) {
                     (*first) = self->arena->nodes[keys[j]].line;
                     return 1;
                 }
@@ -3289,12 +3285,10 @@ static int parse_map_brace_init(struct frontend_parse_Stmt * self, const char * 
             }
         }
 {
-            char dupdisp[MAX_TEXT];
+            const char * dupdisp;
             int firstline = 0;
-            if (map_dup_key(self, keys, count, k, dupdisp, (&firstline))) {
-                char msg[256];
-                snprintf(msg, sizeof(msg), "duplicate key '%s' in a Map initializer (first at line %d)", dupdisp, firstline);
-                return tool_diag_ct_sem_error(kline, kcol, msg, self->mem->path);
+            if (map_dup_key(self, keys, count, k, (&dupdisp), (&firstline))) {
+                return tool_diag_ct_sem_error(kline, kcol, tool_sh_ct_scratch_fmt("duplicate key '%s' in a Map initializer (first at line %d)", dupdisp, firstline), self->mem->path);
             }
         }
         if (count < 1024) {
@@ -3313,10 +3307,10 @@ static int parse_map_brace_init(struct frontend_parse_Stmt * self, const char * 
             return (-1);
         }
 {
-            char tr[MAX_TEXT];
+            const char * tr;
             const char * vty = "";
             int ip = 0;
-            if (self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, vtype, tr, sizeof(tr), (&ip))) {
+            if (self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(self->sup, vtype, (&tr), (&ip))) {
                 v = self->sup->__frontend_parse_supportops_vptr->maybe_box(self->sup, v, tr, ip);
                 if (v < 0) {
                     return (-1);

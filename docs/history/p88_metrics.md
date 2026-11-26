@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10321 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=68726 io_cap=1024
+     emitted_before=48223 emitted_after=68768 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -63,8 +63,13 @@
       `chk_assignable` / `chk_brace_init` / `chk_callptr_args` / `chk_mcall_args` /
       `closure_match` / `lit_coerce`）与 ExprClosure / ExprAdtCtor /
       ExprInstantiate / ExprTraitInst / ExprSubscript 改 pool 文本；
-      `Emitter.h.ct` 不变（10321），发射 C 68633 -> 68723 行（仅 .c），
+      `Emitter.h.ct` 不变（10321），发射 C 68633 -> 68726 行（仅 .c），
       切片清单仍为 76，判别式仍各读 1 次)
+     (S1a-0 C2p-10 第三批复测：Stmt 的语句层文本（切片视图的 `{ptr,len}`
+      复合字面量、Map 重复键解码与诊断、`_Alignas` 捕获、限定类型前瞻、
+      yield/return/赋值/初始化器的类型行）与 StmtMatch / ParseSupport /
+      StmtControl 改 pool 文本或 run-scoped 块；`Emitter.h.ct` 不变（10321），
+      发射 C 68726 -> 68768 行（仅 .c），切片清单仍为 76，判别式仍各读 1 次)
      (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
       Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，
       发射 C 54413 -> 54712，切片清单不变)

@@ -15,6 +15,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 
 
 struct ct_buf;

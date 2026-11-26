@@ -18,6 +18,7 @@
 #include "ParseSupport.h"
 #include "Expr.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "StmtRangeText.h"
 #include "StmtRangeScan.h"
 #include "StmtScope.h"

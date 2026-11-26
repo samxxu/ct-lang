@@ -114,9 +114,9 @@ pub struct StmtMatch {
     int unused;
 }
 
-/* S1a-0 C2p-6: the comparison key as a pool text. The old `char k[MAX_TEXT]`
-   cut two arm types that differ after byte 159 down to one key; the growable
-   `type_key_text` keeps them apart. */
+/* S1a-0 C2p-6: the comparison key as a pool text. The old fixed 160-byte key
+   row cut two arm types that differ after byte 159 down to one key; the
+   growable `type_key_text` keeps them apart. */
 pub const char *match_expr_type_key_text(const char *in)
 {
     const char *k;
@@ -536,7 +536,6 @@ impl StmtMatch for Stmt {
         const char *rtype = "";
         const char *rkey = "";
         const char *ytype = "";
-        char ybuf[MAX_TEXT];
         const char *ykey = "";
         struct Adt *adts;
         int nadts;
@@ -837,13 +836,13 @@ impl StmtMatch for Stmt {
                 {
                     int yz = 0;
                     if (self->sup->expr_type_text(yexpr, &ytype) != 0) {
-                        if (self->ex->chk_type(yexpr, ybuf, sizeof ybuf, &yz) != 0) {
+                        ytype = self->ex->chk_type_text(yexpr, &yz);
+                        if (!ytype) {
                             if (variant >= 0) self->sup->pop_scope();
                             return tool::diag::ct_sem_error(yline, ycol,
                                 "cannot determine the type yielded by this match arm",
                                 self->mem->path);
                         }
-                        ytype = ybuf;
                     }
                     ytyped = 1;
                 }

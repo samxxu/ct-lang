@@ -25,6 +25,7 @@ import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::StmtRangeText;
 import frontend::parse::StmtRangeScan;
 import frontend::parse::StmtScope;
@@ -185,7 +186,6 @@ impl StmtControl for Stmt {
     int func_end(void)
     {
         int i, j, k, gd, ld;
-        char msg[MAX_TEXT];
         (void)self;
 
         /* SH-102: a `goto` cannot be released correctly across a scope that
@@ -196,10 +196,10 @@ impl StmtControl for Stmt {
                 "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
         for (i = 0; i < self->ngotos; i++) {
             int li = self->label_find(self->gotos[i].name);
-            if (li < 0) {
-                snprintf(msg, sizeof msg, "label '%s' is not defined", self->gotos[i].name);
-                return self->sup->fail_at(self->gotos[i].line, msg);
-            }
+            if (li < 0)
+                return self->sup->fail_at(self->gotos[i].line,
+                    tool::sh::ct_scratch_fmt("label '%s' is not defined",
+                                             self->gotos[i].name));
             /* Only a path element below the label/goto LCA is a block boundary
                the jump actually crosses. A defer on an ancestor common to both
                sides is not crossed. */

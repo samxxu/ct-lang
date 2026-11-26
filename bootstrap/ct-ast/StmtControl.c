@@ -9,6 +9,7 @@
 #include "ParseSupport.h"
 #include "Expr.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "StmtRangeText.h"
 #include "StmtRangeScan.h"
 #include "StmtScope.h"
@@ -271,7 +272,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtControl_func_end(void *self) {
     int k;
     int gd;
     int ld;
-    char msg[MAX_TEXT];
     (void)(_self);
     if ((_self->f_string_local && (_self->ngotos > 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[0].line, "a goto cannot cross an owning String scope; restructure the code or release() explicitly");
@@ -279,8 +279,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtControl_func_end(void *self) {
     for (i = 0; i < _self->ngotos; i++) {
         int li = _self->__frontend_parse_stmtswitch_vptr->label_find(_self, _self->gotos[i].name);
         if (li < 0) {
-            snprintf(msg, sizeof(msg), "label '%s' is not defined", _self->gotos[i].name);
-            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->gotos[i].line, tool_sh_ct_scratch_fmt("label '%s' is not defined", _self->gotos[i].name));
         }
         gd = _self->gotos[i].depth;
         ld = _self->labels[li].depth;
