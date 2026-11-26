@@ -44,6 +44,7 @@
 #include <string.h>
 
 import runtime::text::Intern;
+import frontend::module::Unit;
 import backend::tir::TModule;
 import backend::tir::TModule::ct_tmark as ct_tmark;
 import backend::tir::TModule::ct_tdecl as ct_tdecl;
@@ -87,7 +88,16 @@ import backend::verify::Verifier;
 #define TK_BOX              21
 #define TK_NEWOBJ           22
 #define TK_SIZEOF           24
+#define TK_COMPOUND         23
+#define TK_SLICE            30
 #define TK_OTHER            33
+#define TK_CLOSURE          14
+#define TK_OPTIONAL_CHAIN   15
+#define TK_INTO_TARGET      16
+#define TK_TRY_EXPR         17
+#define TK_MATCH_ARM        18
+#define TK_ADT_CTOR         19
+#define TK_INTO_SELF        32
 #define TK_INIT_RANGE       34
 #define TK_INIT_BRACE       35
 #define TK_INIT_MBRACE      36
@@ -117,6 +127,7 @@ import backend::verify::Verifier;
 #define RT_INDIRECT          2
 #define RT_VIRTUAL           3
 #define RT_INTRINSIC         4
+#define RT_RECIPE            5
 #define RT_BUILTIN           7
 #define RT_VAR               8
 
@@ -174,6 +185,9 @@ import backend::verify::Verifier;
 #define LE_RANGEK          32
 #define LE_MCALL           33
 #define LE_STRLIT          34
+#define LE_COMPOUND        35
+#define LE_SLICE           36
+#define LE_OPT             37
 #define LB_SUB              2
 #define LB_MUL              3
 #define LB_DIV              4
@@ -214,6 +228,7 @@ import backend::verify::Verifier;
 #define LS_DECLS           18
 #define LS_LOOP            19
 #define LS_FOREACH         20
+#define LS_TEMPDECL        21
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -263,6 +278,22 @@ pub struct Lower {
     int func_scope;     /* TScope id of the function being lowered */
     int func_has_self;  /* an impl method: the C spelling of `self` is `_self` */
     int tmp_start_temps; /* LTemp count at function entry (rollback on abort) */
+    int bypass_te;      /* the hoisted root whose own initialiser is lowering */
+    int hoist_block;    /* the block the current statement-head hoists live in */
+    int h_map_te[256];  /* TExpr id that a hoist names -> its temp */
+    int h_map_tmp[256];
+    int h_nmap;
+    int h_into_ast[64]; /* AST `into` node index -> its promoted temp */
+    int h_into_tmp[64];
+    int h_into_cat[64]; /* the receiver category (2 = addressed in place) */
+    int h_into_n;
+    int h_temp[64];     /* statement-head hoists, in emission order */
+    int h_init[64];
+    int h_kind[64];     /* 1 optional temp, 2 receiver temp, 3 into */
+    int h_type[64];
+    int h_cat[64];
+    int h_blk[64];
+    int h_n;
 }
 
 static struct Lower g_lower;
@@ -662,6 +693,203 @@ static int lw_name_is_ref(struct Lower *w, const char *name)
     return 0;
 }
 
+/* --- statement-head hoists (the emitter's hoist_scan/emit_hoists) --------
+   Three shapes need a name before the statement that uses it:
+   - a `?.` whose receiver is not a variable: `__ct_optN` is declared at the
+     statement head, the conditional still assigns it;
+   - a method call whose receiver chain is rooted at a call: each level gets
+     `__ct_tmpN`, innermost first, with the call as its initialiser;
+   - an `into` receiver: `__ct_recvN` plus its spliced block. */
+/* The expression map lives for the whole function: a TExpr id names one AST
+   node, so a stale row can never be reached by another statement. The
+   statement's own entry list (`h_n`) is what resets per statement. */
+static int lw_hoist_clear(struct Lower *w)
+{
+    w->h_n = 0;
+    w->bypass_te = 0;
+    return 0;
+}
+
+static int lw_hoist_into_lookup(struct Lower *w, int ast)
+{
+    int i;
+
+    for (i = 0; i < w->h_into_n; i++)
+        if (w->h_into_ast[i] == ast) return w->h_into_tmp[i];
+    return 0;
+}
+
+static int lw_hoist_into_add(struct Lower *w, int ast, int temp, int cat)
+{
+    if (w->h_into_n >= 64) return -1;
+    w->h_into_ast[w->h_into_n] = ast;
+    w->h_into_tmp[w->h_into_n] = temp;
+    w->h_into_cat[w->h_into_n] = cat;
+    w->h_into_n++;
+    return 0;
+}
+
+static int lw_hoist_into_cat(struct Lower *w, int ast)
+{
+    int i;
+
+    for (i = 0; i < w->h_into_n; i++)
+        if (w->h_into_ast[i] == ast) return w->h_into_cat[i];
+    return 0;
+}
+
+static int lw_hoist_lookup(struct Lower *w, int teid)
+{
+    int i;
+
+    for (i = 0; i < w->h_nmap; i++)
+        if (w->h_map_te[i] == teid) return w->h_map_tmp[i];
+    return 0;
+}
+
+static int lw_hoist_add(struct Lower *w, int teid, int temp)
+{
+    if (w->h_nmap >= 256) return -1;
+    w->h_map_te[w->h_nmap] = teid;
+    w->h_map_tmp[w->h_nmap] = temp;
+    w->h_nmap++;
+    return 0;
+}
+
+static int lw_hoist_entry(struct Lower *w, int kind, int temp, int init,
+                          int type, int cat, int blk)
+{
+    if (w->h_n >= 64) return -1;
+    w->h_temp[w->h_n] = temp;
+    w->h_init[w->h_n] = init;
+    w->h_kind[w->h_n] = kind;
+    w->h_type[w->h_n] = type;
+    w->h_cat[w->h_n] = cat;
+    w->h_blk[w->h_n] = blk;
+    w->h_n++;
+    return 0;
+}
+
+static int lw_is_name_kind(int k)
+{
+    return k == TK_NAME_LOCAL || k == TK_NAME_GLOBAL;
+}
+
+/* The C type a hoisted receiver is declared with: the expression's own type,
+   which the TIR builder resolved. */
+static int lw_hoist_type(struct Lower *w, int teid)
+{
+    if (teid <= 0 || teid > w->m->nexprs) return 0;
+    return lw_type(w, w->m->exprs[teid - 1].type);
+}
+
+static int lw_hoist_scan(struct Lower *w, int teid, int top)
+{
+    struct ct_texpr *t;
+    int i;
+
+    if (teid <= 0 || teid > w->m->nexprs) return 0;
+    t = &w->m->exprs[teid - 1];
+    if (t->kind == TK_OPTIONAL_CHAIN) {
+        if (t->nkids >= 1 && !lw_is_name_kind(w->m->exprs[t->kids[0] - 1].kind)) {
+            int temp = lmod_new_temp(w->l, LTK_OPT,
+                                     lw_hoist_type(w, t->kids[0]),
+                                     w->hoist_block);
+            if (temp <= 0) { w->hard = 1; return -1; }
+            if (lw_hoist_add(w, t->kids[0], temp) != 0
+                || lw_hoist_entry(w, 1, temp, 0,
+                                  lw_hoist_type(w, t->kids[0]), 0, 0) != 0) {
+                w->hard = 1;
+                return -1;
+            }
+        }
+    }
+    if (t->kind == TK_INTO_TARGET) {
+        int temp, ty;
+        if (t->nkids >= 1 && lw_hoist_scan(w, t->kids[0], 0) != 0) return -1;
+        ty = lw_type(w, t->text && t->text[0]
+                        ? backend::tir::tmod_type(w->m, t->text, 0)
+                        : t->type);
+        temp = lmod_new_temp(w->l, LTK_RECV, ty, w->hoist_block);
+        if (temp <= 0) { w->hard = 1; return -1; }
+        if (lw_hoist_into_add(w, (int)t->num, temp, t->aux == 2 ? 2 : 0) != 0
+            || lw_hoist_entry(w, 3, temp, t->nkids >= 1 ? t->kids[0] : 0,
+                              ty, t->aux == 2 ? 2 : 0, teid) != 0) {
+            w->hard = 1;
+            return -1;
+        }
+        /* the block is spliced by the statement, not scanned here */
+        return 0;
+    }
+    if (t->kind == TK_CLOSURE || t->kind == TK_MATCH_ARM) {
+        /* the trailing kids are statement ids, not expressions: only a match
+           subject is an expression. */
+        if (t->kind == TK_MATCH_ARM && t->nkids >= 1)
+            if (lw_hoist_scan(w, t->kids[0], 0) != 0) return -1;
+        return 0;
+    }
+    if (t->op == 2 && (t->kind == TK_CALL || t->kind == TK_INTRINSIC)
+        && t->target_kind != RT_RECIPE && t->aux != 6 && t->nkids >= 1) {
+        int chain[8];
+        int nc = 0, lvl = teid;
+        for (;;) {
+            int root;
+            int ok = 0;
+            if (lvl <= 0 || lvl > w->m->nexprs) break;
+            root = w->m->exprs[lvl - 1].kids[0];
+            while (root > 0 && root <= w->m->nexprs
+                   && w->m->exprs[root - 1].kind == TK_FIELD)
+                root = w->m->exprs[root - 1].kids[0];
+            if (root <= 0 || root > w->m->nexprs) break;
+            if (lw_hoist_lookup(w, root) > 0) break;
+            if (w->m->exprs[root - 1].kind == TK_CALL
+                || w->m->exprs[root - 1].kind == TK_INTRINSIC) {
+                ok = w->m->exprs[root - 1].target_kind == RT_DIRECT;
+                if (!ok && w->m->exprs[root - 1].text
+                    && (w->m->exprs[lvl - 1].aux == 9
+                        || w->m->exprs[lvl - 1].aux == 10))
+                    ok = 1;
+            }
+            if (!ok && w->m->exprs[root - 1].kind == TK_CALL
+                && w->m->exprs[root - 1].op == 2
+                && w->m->exprs[root - 1].aux != 5
+                && w->m->exprs[root - 1].aux != 6) {
+                if (lw_hoist_type(w, root) > 0) ok = 1;
+            }
+            if (!ok) break;
+            if (nc >= 8) { w->aborted = 1; return -1; }
+            chain[nc] = root;
+            nc++;
+            if (w->m->exprs[root - 1].kind != TK_CALL
+                || w->m->exprs[root - 1].op != 2)
+                break;
+            lvl = root;
+        }
+        if (nc > 0) {
+            if (!top) {
+                /* the emitter rejects a nested receiver that needs a temp */
+                w->aborted = 1;
+                return -1;
+            }
+            for (i = nc - 1; i >= 0; i--) {
+                int temp = lmod_new_temp(w->l, LTK_TMP,
+                                         lw_hoist_type(w, chain[i]),
+                                         w->hoist_block);
+                if (temp <= 0) { w->hard = 1; return -1; }
+                if (lw_hoist_add(w, chain[i], temp) != 0
+                    || lw_hoist_entry(w, 2, temp, chain[i],
+                                      lw_hoist_type(w, chain[i]), 0, 0) != 0) {
+                    w->hard = 1;
+                    return -1;
+                }
+            }
+        }
+    }
+    for (i = 0; i < t->nkids; i++)
+        if (lw_hoist_scan(w, t->kids[i], 0) != 0) return -1;
+    return 0;
+}
+
 static int lw_expr(struct Lower *w, int teid);
 
 static int lw_expr_kid(struct Lower *w, int parent, int kid)
@@ -689,6 +917,21 @@ static int lw_expr(struct Lower *w, int teid)
 
     if (teid <= 0 || teid > w->m->nexprs) { lw_abort(w, "L366"); return 0; }
     t = &w->m->exprs[teid - 1];
+    if (teid != w->bypass_te && t->kind != TK_INTO_TARGET) {
+        int ht = lw_hoist_lookup(w, teid);
+        if (ht > 0) {
+            e = lmod_new_expr(w->l, LE_TEMP, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            /* an `into` that addressed its receiver in place is read as the
+               value: `(*__ct_recvN)`; every other temp prints as itself. */
+            w->l->exprs[e - 1].num = ht;
+            w->l->exprs[e - 1].op = (t->kind == TK_INTO_TARGET && t->aux == 2)
+                                    ? 1 : 0;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            return e;
+        }
+    }
     switch (t->kind) {
         case TK_LITERAL:
             if (t->op == 1) e = lmod_new_expr(w->l, LE_NUM, t->span.file,
@@ -806,7 +1049,8 @@ static int lw_expr(struct Lower *w, int teid)
                    this stage does not model. */
                 int rk = w->m->exprs[t->kids[0] - 1].kind;
                 int trait_len = 0;
-                if (rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
+                if (lw_hoist_lookup(w, t->kids[0]) <= 0
+                    && rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
                     && rk != TK_FIELD && rk != TK_INDEX) {
                     lw_abort(w, "L4530");
                     return 0;
@@ -851,7 +1095,8 @@ static int lw_expr(struct Lower *w, int teid)
                 if (!k || !k[0]) { lw_abort(w, "L4533"); return 0; }
                 if (t->aux != 11 && t->nkids > 0) {
                     int rk = w->m->exprs[t->kids[0] - 1].kind;
-                    if (rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
+                    if (lw_hoist_lookup(w, t->kids[0]) <= 0
+                        && rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
                         && rk != TK_FIELD && rk != TK_INDEX) {
                         /* an rvalue receiver would need a hoisted temp */
                         lw_abort(w, "L4534");
@@ -885,7 +1130,8 @@ static int lw_expr(struct Lower *w, int teid)
                 if (!k || !k[0]) { lw_abort(w, "L4533"); return 0; }
                 if (t->aux != 11 && t->nkids > 0) {
                     int rk = w->m->exprs[t->kids[0] - 1].kind;
-                    if (rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
+                    if (lw_hoist_lookup(w, t->kids[0]) <= 0
+                        && rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
                         && rk != TK_FIELD && rk != TK_INDEX)
                         stable = 0;
                 }
@@ -1032,6 +1278,83 @@ static int lw_expr(struct Lower *w, int teid)
             w->l->exprs[e - 1].text = t->text;
             w->l->exprs[e - 1].type = lw_type(w, t->type);
             return e;
+        case TK_OPTIONAL_CHAIN: {
+            /* `?.`: `(<recv> ? <recv>->f : 0)`, with the hoisted temp where
+               the receiver is not a stable place. The receiver prints its
+               real expression inside the conditional's assignment, so the
+               hoist map must not replace it here. */
+            int temp = t->nkids >= 1 ? lw_hoist_lookup(w, t->kids[0]) : 0;
+            int saved = w->bypass_te;
+            e = lmod_new_expr(w->l, LE_OPT, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            if (temp > 0) w->bypass_te = t->kids[0];
+            w->l->exprs[e - 1].text = t->text;
+            w->l->exprs[e - 1].op = t->aux;
+            w->l->exprs[e - 1].num = (long)temp;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            for (i = 0; i < t->nkids; i++)
+                if (lw_expr_kid(w, e, t->kids[i]) != 0) { w->bypass_te = saved; return 0; }
+            w->bypass_te = saved;
+            return e;
+        }
+        case TK_INTO_TARGET: {
+            /* the promoted receiver; the declaration and the spliced block
+               were emitted at the statement head. */
+            int temp = lw_hoist_into_lookup(w, (int)t->num);
+            if (temp <= 0) { lw_abort(w, "L7630"); return 0; }
+            e = lmod_new_expr(w->l, LE_TEMP, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            w->l->exprs[e - 1].num = temp;
+            w->l->exprs[e - 1].op = t->aux == 2 ? 1 : 0;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            return e;
+        }
+        case TK_INTO_SELF: {
+            int owner = (int)t->num;
+            int temp = lw_hoist_into_lookup(w, owner);
+            if (temp <= 0) { lw_abort(w, "L7640"); return 0; }
+            e = lmod_new_expr(w->l, LE_TEMP, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            w->l->exprs[e - 1].num = temp;
+            if (t->aux == 1) w->l->exprs[e - 1].op = 0;
+            else if (lw_hoist_into_cat(w, owner) == 2)
+                w->l->exprs[e - 1].op = 1;
+            else w->l->exprs[e - 1].op = 0;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            return e;
+        }
+        case TK_SLICE: {
+            /* P-7.2 slice forms: index (`__ct_slice_at`), get (`__ct_slice_get`)
+               and range (`__ct_slice_range`, or the plain `{ptr,len}` pair for
+               a whole-array view). `op` is the form, `num` the range's view. */
+            e = lmod_new_expr(w->l, LE_SLICE, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            w->l->exprs[e - 1].text = t->text;
+            w->l->exprs[e - 1].op = t->op;
+            w->l->exprs[e - 1].num = (long)t->aux;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            for (i = 0; i < t->nkids; i++)
+                if (lw_expr_kid(w, e, t->kids[i]) != 0) return 0;
+            return e;
+        }
+        case TK_COMPOUND: {
+            /* `(type){ … }`: the braces are the captured initialiser the same
+               writer a declaration uses would print, so a trait-carrying
+               struct gets its vptr items before the closing brace. */
+            e = lmod_new_expr(w->l, LE_COMPOUND, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            w->l->exprs[e - 1].text = t->text;
+            w->l->exprs[e - 1].op = t->op;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            for (i = 0; i < t->nkids; i++)
+                if (lw_expr_kid(w, e, t->kids[i]) != 0) return 0;
+            return e;
+        }
         case TK_SIZEOF:
             if (t->target_key && t->target_key[0]) {
                 e = lmod_new_expr(w->l, LE_OFFSETOF, t->span.file, t->span.line,
@@ -1107,23 +1430,6 @@ static int lw_chain(struct Lower *w, int scope, int stop_scope, int stop_kind,
         scope = lw_scope_parent(w, scope);
     }
     *nout = n;
-    return 0;
-}
-
-/* Is there any active cleanup entry in the chain? The return materialisation
-   rule (SH-45) is "any active defer block", including an errdefer that the
-   normal edge will not run. */
-static int lw_has_active(struct Lower *w, int *chain, int nchain, int line, int col)
-{
-    int ci, k;
-
-    for (ci = 0; ci < nchain; ci++) {
-        struct ct_lscope *s = &w->l->scopes[chain[ci] - 1];
-        for (k = 0; k < s->ncleanups; k++) {
-            struct ct_lcleanup *c = &w->l->cleanups[s->cleanups[k] - 1];
-            if (lw_active(w, c, line, col, 0)) return 1;
-        }
-    }
     return 0;
 }
 
@@ -1360,6 +1666,68 @@ static int lw_active_for_return(struct Lower *w, int block, int ret_expr,
     return 0;
 }
 
+/* Print the statement-head hoists in emission order: optional temps, then
+   receiver temps with their initialisers, then an `into` receiver with its
+   spliced block. */
+static int lw_emit_hoists(struct Lower *w, int block)
+{
+    int i, k;
+
+    for (k = 1; k <= 3; k++) {
+        for (i = 0; i < w->h_n; i++) {
+            int sid, init_le = 0;
+            if (w->h_kind[i] != k) continue;
+            if (k != 1 && w->h_init[i] > 0) {
+                /* the initialiser is the hoisted expression itself (the
+                   emitter's `raw_call`); lower it with the map bypassed so
+                   it prints the call, not the temp. */
+                w->bypass_te = w->h_init[i];
+                init_le = lw_expr(w, w->h_init[i]);
+                w->bypass_te = 0;
+                if (init_le <= 0) return -1;
+            }
+            sid = lmod_new_stmt(w->l, LS_TEMPDECL, 0, 0, 0);
+            if (sid <= 0) { w->hard = 1; return -1; }
+            w->l->stmts[sid - 1].origin = w->h_temp[i];
+            w->l->stmts[sid - 1].expr = init_le;
+            w->l->stmts[sid - 1].type = w->h_type[i];
+            w->l->stmts[sid - 1].aux = w->h_cat[i];
+            w->l->stmts[sid - 1].kind = LS_TEMPDECL;
+            if (lmod_block_add_stmt(w->l, block, sid) != 0) {
+                w->hard = 1;
+                return -1;
+            }
+            if (k == 3 && w->h_blk[i] > 0) {
+                /* The into block is spliced at the same indentation, one
+                   statement at a time; each runs its own hoist pass. `h_blk`
+                   is the into TExpr id; kids 1.. are its statements. */
+                int j, t = w->h_blk[i];
+                if (t <= 0 || t > w->m->nexprs) { w->aborted = 1; return -1; }
+                for (j = 1; j < w->m->exprs[t - 1].nkids; j++) {
+                    int ss = 0;
+                    if (lw_one_stmt(w, w->m->exprs[t - 1].kids[j], block,
+                                    &ss) != 0) return -1;
+                    if (ss > 0 && lmod_block_add_stmt(w->l, block, ss) != 0) {
+                        w->hard = 1;
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+static int lw_hoist_for(struct Lower *w, int block, int teid, int top)
+{
+    if (teid <= 0) return 0;
+    lw_hoist_clear(w);
+    w->hoist_block = block;
+    if (lw_hoist_scan(w, teid, top) != 0) return -1;
+    if (w->h_n == 0) return 0;
+    return lw_emit_hoists(w, block);
+}
+
 static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
 {
     struct ct_tstmt *s;
@@ -1391,6 +1759,8 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             w->l->stmts[sid - 1].err_edge = v->is_unused ? 1 : 0;
             w->l->stmts[sid - 1].scope = s->scope;
             if (s->nkids > 1) { lw_abort(w, "L746"); return 0; }
+            if (s->nkids == 1 && lw_hoist_for(w, block, s->kids[0], 1) != 0)
+                return 0;
             sp = backend::tir::tmod_cspell(w->m, v->type);
             if (sp && (strncmp(sp, "struct ", 7) == 0
                        || strncmp(sp, "union ", 6) == 0)) {
@@ -1556,6 +1926,15 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             struct ct_texpr *t;
             if (s->nkids != 1) { lw_abort(w, "L757"); return 0; }
             t = &w->m->exprs[s->kids[0] - 1];
+            if (lw_hoist_for(w, block,
+                             t->kind == TK_ASSIGN ? t->kids[1] : s->kids[0], 1) != 0)
+                return 0;
+            if (t->kind == TK_INTO_TARGET) {
+                /* a bare `expr into { … };` is the promoted receiver and the
+                   spliced block only; the emitter prints no statement. */
+                *out = 0;
+                return 0;
+            }
             if (t->kind == TK_ASSIGN) {
                 sid = lmod_new_stmt(w->l, LS_ASSIGN, s->span.file, s->span.line, s->span.col);
                 if (sid <= 0) { w->hard = 1; return 0; }
@@ -1582,6 +1961,8 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             struct ct_lblock *b = &w->l->blocks[block - 1];
             if (b->term != LT_NONE) { lw_abort(w, "L783"); return 0; }
             if (s->nkids > 1) { lw_abort(w, "L784"); return 0; }
+            if (s->nkids == 1 && lw_hoist_for(w, block, s->kids[0], 1) != 0)
+                return 0;
             b->term = LT_RETURN;
             b->term_err = s->err_edge;
             b->span.file = s->span.file;
@@ -1610,6 +1991,7 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
         case TS_IF: {
             int cond, then_blk = 0, else_blk = 0, kid = 0;
             if (s->nkids < 2) { lw_abort(w, "L811"); return 0; }
+            if (lw_hoist_for(w, block, s->kids[0], 1) != 0) return 0;
             cond = lw_expr(w, s->kids[0]);
             if (cond <= 0) return 0;
             kid = 1;
@@ -1636,6 +2018,7 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
         case TS_WHILE: {
             int cond, body_blk;
             if (s->nkids < 2 || !(s->flags & 1)) { lw_abort(w, "L837"); return 0; }
+            if (lw_hoist_for(w, block, s->kids[0], 1) != 0) return 0;
             cond = lw_expr(w, s->kids[0]);
             if (cond <= 0) return 0;
             if (w->m->stmts[s->kids[1] - 1].kind != TS_BLOCK) { lw_abort(w, "L840"); return 0; }
@@ -1657,11 +2040,15 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
                 if (init <= 0) { lw_abort(w, "L856"); return 0; }
             }
             if (s->flags & 2) {
-                cond = lw_expr(w, s->kids[kid++]);
+                int ck = s->kids[kid++];
+                if (lw_hoist_for(w, block, ck, 1) != 0) return 0;
+                cond = lw_expr(w, ck);
                 if (cond <= 0) return 0;
             }
             if (s->flags & 4) {
-                step = lw_expr(w, s->kids[kid++]);
+                int sk = s->kids[kid++];
+                if (lw_hoist_for(w, block, sk, 1) != 0) return 0;
+                step = lw_expr(w, sk);
                 if (step <= 0) return 0;
             }
             if (s->flags & 8) {
@@ -1891,11 +2278,7 @@ static int lw_block_stmt(struct Lower *w, int tsid, int kind, int parent)
 static int lw_owns_handle(const char *sp)
 {
     if (!sp || !sp[0] || strchr(sp, '*')) return 0;
-    if (strstr(sp, "String")) return 1;
-    if (strncmp(sp, "struct ", 7) == 0) sp += 7;
-    if (strncmp(sp, "Option_", 7) == 0 || strncmp(sp, "Result_", 7) == 0)
-        return 1;
-    return 0;
+    return strstr(sp, "String") != 0;
 }
 
 static int lw_func_has_handle(struct Lower *w, int func_scope)
@@ -2054,6 +2437,9 @@ static int lw_lower_slice(struct Lower *w, int unit, int start)
                         d->kind, d->name ? d->name : "");
             continue;   /* the program shell prints every declaration */
         }
+        if (getenv("CT_LIR_DEBUG"))
+            fprintf(stderr, "lir: func decl '%s' body=%d template=%d unit=%d/%d\n",
+                    d->name ? d->name : "", d->body, d->is_template, d->unit, unit);
         if (lw_lower_func(w, d->id) != 0) {
             fprintf(stderr, "lir: a LIR pool refused a row\n");
             return 1;
@@ -2096,6 +2482,7 @@ pub int ct_lir_build_program(int prog, const char *path, const char *base,
         return 1;
     unit = m->nunits;
     w->unit = unit;
+    l->path = path;
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
         fprintf(stderr, "lir: cannot copy the scope table\n");
@@ -2150,6 +2537,10 @@ pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base)
     if (backend::tir::ct_tir_build_unit(up, mod_unit) != 0) return 1;
     unit = m->nunits;
     w->unit = unit;
+    {
+        struct Unit *uu = (struct Unit *)up;
+        if (uu) l->path = uu->path;
+    }
     (void)tmp_base;   /* per-function temp numbering: no seed from the emitter */
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
@@ -2248,6 +2639,121 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
         case LE_NAME:
             fputs(e->text ? e->text : "", g_lir_out);
             return 0;
+        case LE_SLICE: {
+            const char *et = e->text ? e->text : "";
+            int sub = e->op, aux = (int)e->num;
+            if (sub == 0) {
+                fputs("(*(", g_lir_out);
+                fputs(et, g_lir_out);
+                fputs(" *)__ct_slice_at(&(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs("), ", g_lir_out);
+                if (lw_pw_kid(w, e, 1, PW_EXPR) != 0) return -1;
+                fputs(", sizeof(", g_lir_out);
+                fputs(et, g_lir_out);
+                fputs(")))", g_lir_out);
+                return 0;
+            }
+            if (sub == 2) {
+                fputs("((", g_lir_out);
+                fputs(et, g_lir_out);
+                fputs(" *)__ct_slice_get(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(", ", g_lir_out);
+                if (lw_pw_kid(w, e, 1, PW_EXPR) != 0) return -1;
+                fputs(", sizeof(", g_lir_out);
+                fputs(et, g_lir_out);
+                fputs(")))", g_lir_out);
+                return 0;
+            }
+            if (aux == 3) {
+                fputs("(struct __ct_slice){ (void *)(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs("), (int)(sizeof(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(") / sizeof((", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(")[0])) }", g_lir_out);
+                return 0;
+            }
+            fputs("__ct_slice_range((void *)(", g_lir_out);
+            if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+            fputs(aux == 1 ? "), " : ").ptr, ", g_lir_out);
+            if (aux == 1) {
+                fputs("(int)(sizeof(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(") / sizeof((", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(")[0]))", g_lir_out);
+            } else {
+                fputs("(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(").len", g_lir_out);
+            }
+            fputs(", ", g_lir_out);
+            if (lw_pw_kid(w, e, 1, PW_EXPR) != 0) return -1;
+            fputs(", ", g_lir_out);
+            if (e->nkids > 2) {
+                if (lw_pw_kid(w, e, 2, PW_EXPR) != 0) return -1;
+            } else if (aux == 1) {
+                fputs("(int)(sizeof(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(") / sizeof((", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(")[0]))", g_lir_out);
+            } else {
+                fputs("(", g_lir_out);
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(").len", g_lir_out);
+            }
+            fprintf(g_lir_out, ", sizeof(%s), \"%s:%d\")", et,
+                    w->l->path ? w->l->path : "", e->span.line);
+            return 0;
+        }
+        case LE_COMPOUND: {
+            const char *sp = e->text ? e->text : "";
+            const char *tag = sp;
+            char base[512], items[8192];
+            int bl, nuses = 0, iused = 0;
+            if (strncmp(tag, "struct ", 7) == 0) tag += 7;
+            else if (strncmp(tag, "union ", 6) == 0) tag += 6;
+            bl = (int)strlen(tag);
+            while (bl > 0 && (tag[bl - 1] == '*' || tag[bl - 1] == ' ')) bl--;
+            if (bl > 0 && bl < (int)sizeof(base)) {
+                struct ct_tstruct *row;
+                memcpy(base, tag, (size_t)bl);
+                base[bl] = 0;
+                row = lw_struct_row(w, base);
+                if (row && row->nuses > 0) {
+                    nuses = 1;
+                    if (lw_vptr_items(w, base, "", items, (int)sizeof(items),
+                                      &iused, 0) != 0) return -1;
+                }
+            }
+            fprintf(g_lir_out, "(%s)", sp);
+            if (nuses && e->nkids == 1) {
+                struct ct_lexpr *k = &w->l->exprs[e->kids[0] - 1];
+                if (k->kind == LE_RAW && k->text) {
+                    const char *r = k->text;
+                    int len = (int)strlen(r), only = 1, q;
+                    if (len >= 2 && r[len - 1] == '}') {
+                        for (q = 1; q < len - 1; q++)
+                            if (r[q] != ' ' && r[q] != '\t'
+                                && r[q] != '\n' && r[q] != '\r') only = 0;
+                        if (only) {
+                            fprintf(g_lir_out, "{ %s }", items);
+                            return 0;
+                        }
+                        fwrite(r, 1, (size_t)(len - 1), g_lir_out);
+                        fprintf(g_lir_out, ", %s}", items);
+                        return 0;
+                    }
+                }
+            }
+            for (i = 0; i < e->nkids; i++)
+                if (lw_pw_kid(w, e, i, PW_EXPR) != 0) return -1;
+            return 0;
+        }
         case LE_STRLIT:
             if (e->op == 1) {
                 fprintf(g_lir_out,
@@ -2263,9 +2769,49 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
                 fputs(e->text ? e->text : "", g_lir_out);
             }
             return 0;
-        case LE_TEMP:
-            fputs(e->text ? e->text : "", g_lir_out);
+        case LE_TEMP: {
+            const char *nm = lmod_temp_name(w->l, (int)e->num, w->tmp_delta);
+            if (e->op == 1) fputs("(*", g_lir_out);
+            fputs(nm, g_lir_out);
+            if (e->op == 1) fputs(")", g_lir_out);
             return 0;
+        }
+        case LE_OPT: {
+            int temp = (int)e->num;
+            fputs("(", g_lir_out);
+            if (temp > 0) {
+                fprintf(g_lir_out, "(%s = ",
+                        lmod_temp_name(w->l, temp, w->tmp_delta));
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(")", g_lir_out);
+            } else if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                return -1;
+            }
+            fputs(" ? ", g_lir_out);
+            if (e->op == 1) {
+                if (temp > 0) fputs(lmod_temp_name(w->l, temp, w->tmp_delta),
+                                    g_lir_out);
+                else if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fprintf(g_lir_out, "->%s", e->text ? e->text : "");
+            } else if (e->op == 2) {
+                if (temp > 0) fputs(lmod_temp_name(w->l, temp, w->tmp_delta),
+                                    g_lir_out);
+                else if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs("[", g_lir_out);
+                if (lw_pw_kid(w, e, 1, PW_EXPR) != 0) return -1;
+                fputs("]", g_lir_out);
+            } else {
+                fprintf(g_lir_out, "%s_get(", e->text ? e->text : "");
+                if (temp > 0) fputs(lmod_temp_name(w->l, temp, w->tmp_delta),
+                                    g_lir_out);
+                else if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+                fputs(", ", g_lir_out);
+                if (lw_pw_kid(w, e, 1, PW_EXPR) != 0) return -1;
+                fputs(")", g_lir_out);
+            }
+            fputs(" : 0)", g_lir_out);
+            return 0;
+        }
         case LE_FIELD:
             if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
             fprintf(g_lir_out, ".%s", e->text ? e->text : "");
@@ -2635,6 +3181,27 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
             if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
             fputs(";\n", g_lir_out);
             return 0;
+        case LS_TEMPDECL: {
+            const char *nm = lmod_temp_name(w->l, s->origin, w->tmp_delta);
+            lw_ind(ind);
+            if (s->aux == 2) {
+                fprintf(g_lir_out, "%s * %s = &(", lmod_cspell(w->l, s->type),
+                        nm);
+                if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+                fputs(");\n", g_lir_out);
+            } else {
+                fprintf(g_lir_out, "%s %s", lmod_cspell(w->l, s->type), nm);
+                if (s->expr > 0) {
+                    fputs(" = ", g_lir_out);
+                    if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+                }
+                fputs(";\n", g_lir_out);
+            }
+            if (s->body_blk > 0) {
+                if (lw_pw_stmts_only(w, s->body_blk, ind) != 0) return -1;
+            }
+            return 0;
+        }
         case LS_DROP: {
             /* `if (x) { <T>_Drop_drop(x); free(x); x = 0; }` -- a user delete
                and an AutoDrop cleanup share this shape; the struct row decides

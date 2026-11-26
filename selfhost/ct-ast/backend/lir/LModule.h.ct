@@ -79,6 +79,9 @@ namespace backend::lir;
 #define LE_RANGEK          32
 #define LE_MCALL           33
 #define LE_STRLIT          34
+#define LE_COMPOUND        35
+#define LE_SLICE           36
+#define LE_OPT             37
 
 /* Binary / unary / assignment operator codes: the AST's, copied so the
    printing tables stay one table (Arena.h.ct is authoritative). */
@@ -129,6 +132,7 @@ namespace backend::lir;
 #define LS_DECLS           18
 #define LS_LOOP            19
 #define LS_FOREACH         20
+#define LS_TEMPDECL        21
 
 /* Jump kinds. */
 #define LJ_BREAK            1
@@ -381,6 +385,7 @@ pub struct LModule {
     int enabled;        /* the switch is on */
     int emitting;       /* printing in progress */
     const char *free_sym;
+    const char *path;    /* the unit's source path (slice bounds strings) */
     /* coverage counters for the report */
     int stat_funcs;      /* emitted functions the lowerer tried */
     int stat_funcs_ok;   /* ... of those, lowered end to end */

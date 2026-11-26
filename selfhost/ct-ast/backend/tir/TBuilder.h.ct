@@ -1248,10 +1248,13 @@ static int tb_expr_children(struct TBuilder *tb, int eid, int n)
         case N_OFFSETOF:
             return 0;
         case N_INTO:
-            /* receiver, then the spliced statement block */
+            /* receiver, then every spliced statement (the parser keeps them
+               as a sibling chain, not as one block) */
             tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
-            t = tb_stmt(tb, ar->nodes[n].b);
-            if (t > 0) tmod_expr_add_kid(tb->m, eid, t);
+            for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
+                t = tb_stmt(tb, c);
+                if (t > 0) tmod_expr_add_kid(tb->m, eid, t);
+            }
             return 0;
         case N_INTO_SELF:
             return 0;
@@ -1420,6 +1423,16 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
         case N_ADTCTOR:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
             break;
+        case N_SLICE_INDEX:
+        case N_SLICE_RANGE:
+        case N_SLICE_GET:
+            /* 0 index, 1 range, 2 get; `aux` carries the range's view form
+               (1 array, 2 slice, 3 whole array). */
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].op = k == N_SLICE_INDEX ? 0
+                                 : (k == N_SLICE_RANGE ? 1 : 2);
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
+            break;
         case N_INIT_RANGE:
         case N_INIT_BRACE:
         case N_INIT_MBRACE:
@@ -1439,6 +1452,20 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
             m->exprs[eid - 1].member =
                 runtime::text::ct_intern(ar->nodes[n].text);
+            break;
+        case N_INTO:
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
+            /* the AST node index: an INTO_SELF records its owner that way */
+            m->exprs[eid - 1].num = n;
+            break;
+        case N_INTO_SELF:
+            m->exprs[eid - 1].num = ar->nodes[n].num;
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
+            break;
+        case N_OPT:
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
             break;
         case N_BIN:
         case N_UNARY:
