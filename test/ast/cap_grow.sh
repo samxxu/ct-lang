@@ -145,8 +145,7 @@ run_case meth_ann "$w/meth_ann.ct" 0 || fail=1
 
 # MAX_LAYOUT_INSTS: 130 generic instances, plus an ADT payload that names the
 # last one by value, so the layout walk reaches index 129 (old bound 128).
-# MAX_LAYOUT_ADTS itself is shadowed by the C-class MAX_ADTS=64 (not opened in
-# C1); the state array grows anyway.
+# MAX_ADTS itself is dynamic (C3); the layout state array grows anyway.
 {
     i=0
     while [ "$i" -lt 60 ]; do

@@ -6178,8 +6178,11 @@ fi
 
 echo
 echo "== capacity limits (generated) =="
-# A fixed cap must fail loudly and never truncate. These fixtures are generated
-# (a 4097-line file is not worth checking in) and each asserts the message.
+# S1a-0 C4 / TEST-9: counting caps start at their initial value and grow, so the
+# fixtures below assert growth past the old value; only formal limits
+# (CAP_LIMIT / TEXT_LIMIT / NODE_LIMIT, OOM) and depth / error-recovery guards
+# stay negative. Everything is generated (a 4097-line file is not worth
+# checking in); the growth cases compile, the negative cases pin the message.
 cap_check() {
     cap_name="$1"
     cap_msg="$2"
@@ -6233,7 +6236,7 @@ else
     bad "cap funcs (1200 functions grow past the initial 512)" "$(cat "$work/cap-funcs.err")"
 fi
 # The initial table is 512 rows but the budget now grows on demand (SH-109);
-# the safety valve is MAX_FUNCS_MAX (65536). The old 512 hard-fail is gone.
+# the safety valve is CAP_LIMIT (65536). The old 512 hard-fail is gone.
 {
     i=0
     while [ "$i" -lt 511 ]; do printf 'int f%d(void) { return 0; }\n' "$i"; i=$((i + 1)); done

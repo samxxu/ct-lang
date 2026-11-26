@@ -79,9 +79,9 @@ CT
     fi
 done
 
-# 4. The discarded declarations do not consume MAX_TRAITS (64). Exactly 64 user
-#    traits plus `use Drop` must still compile; if the two built-in declarations
-#    were counted, the 65th/66th row would be refused.
+# 4. The discarded declarations do not consume user trait rows. Exactly 64
+#    user traits plus `use Drop` must still compile: the initial table is 64,
+#    so a built-in row would have forced a grow (it must not).
 {
     i=0
     while [ "$i" -lt 64 ]; do
@@ -96,7 +96,7 @@ CT
 } > "$work/maxtraits.ct"
 if ( cd "$root" && CT_CORE_DIR="$root/lib/core" "$ctast" check "$work/maxtraits.ct" ) \
         >"$work/maxtraits.log" 2>&1; then
-    ok "MAX_TRAITS is unchanged (64 user traits + use Drop compile)"
+    ok "built-ins do not consume user trait rows (64 + use Drop compile)"
 else
     bad "the built-in declarations consumed MAX_TRAITS" "$(head -2 "$work/maxtraits.log")"
 fi
