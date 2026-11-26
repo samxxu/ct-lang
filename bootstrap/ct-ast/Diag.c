@@ -1052,6 +1052,9 @@ const char * tool_diag_ct_diag_code_for_error(const char * msg) {
     if (strstr(msg, "lowering invariant I4")) {
         return "E-LOWER-007";
     }
+    if (strstr(msg, "is stored outside the call")) {
+        return "E-MEM-001";
+    }
     if (strstr(msg, "type mismatch")) {
         return "W-TYPE-002";
     }

@@ -57,6 +57,8 @@ const char *ct_diag_code_for_error(const char *msg)
     if (strstr(msg, "lowering invariant I2")) return "E-LOWER-005";
     if (strstr(msg, "lowering invariant I3")) return "E-LOWER-006";
     if (strstr(msg, "lowering invariant I4")) return "E-LOWER-007";
+    /* REQ-MEM-2 S7-c: the call-site write-summary finding. */
+    if (strstr(msg, "is stored outside the call")) return "E-MEM-001";
     /* the two escalations reuse the warning-class code, not a second one */
     if (strstr(msg, "type mismatch")) return "W-TYPE-002";
     if (strstr(msg, "arity mismatch")) return "W-TYPE-001";

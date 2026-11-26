@@ -60,6 +60,7 @@ $ ct-ast --diagnostics=json prog.ct -o /tmp/x.c
 | E-LOWER-005 | error | SH-111 I2：同一条边上 defer 晚于释放 | v0.88.3+（未发版） | `error: lowering invariant I2: ...` | test/ast/p111_invariants.sh |
 | E-LOWER-006 | error | SH-111 I3：errdefer 出现在正常出口 | v0.88.3+（未发版） | `error: lowering invariant I3: ...` | test/ast/p111_invariants.sh |
 | E-LOWER-007 | error | SH-111 I4：接收者临时缺失或重名 | v0.88.3+（未发版） | `error: lowering invariant I4: ...` | test/ast/p111_invariants.sh |
+| E-MEM-001 | error | REQ-MEM-2：未标 `borrow` 的形参被写入全局/字段/容器（调用点） | v1.2.0+（未发版） | `error: call to 'put': parameter 'c' is stored outside the call (write at line 4); declare the parameter 'borrow'` | test/ast/errors/mem2_n1_write_global.ct |
 | E-IR-101 | error | TIR V1：表达式/声明缺 `TypeId`，或类型参数逃出模板体（`v1.2.0+` 未发版） | v1.2.0+（未发版） | `error: TIR expression has no type id` | test/ir/run.sh |
 | E-IR-102 | error | TIR V2：值类别不合法（赋值目标 / `++`/`--` / 取址要求 place） | v1.2.0+（未发版） | `error: assignment target is not a place` | test/ir/run.sh |
 | E-IR-103 | error | TIR V3：调用无解析目标，或虚槽不属于接收者 trait、recipe 无 key | v1.2.0+（未发版） | `error: call has no resolved target` | test/ir/run.sh |
