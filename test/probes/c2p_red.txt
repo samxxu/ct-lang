@@ -69,3 +69,47 @@ output:
   2000-byte template name: instance encoded from the whole spelling
   2000-byte trait receiver: vptr initialiser and interface box kept whole
 c2p: 9 passed, 0 failed
+
+C2p-4 persistent type texts (baseline af193df6, frozen-seed compiler):
+command: bash test/ast/c2p_limits.sh <baseline-ct-ast>
+exit: 1
+output:
+  >160-byte qualified variable: resolved and emitted whole
+  >160-byte qualified call: resolved and emitted whole
+  200/1000-byte literals: kept whole
+  long diagnostic: the 150-byte struct name is kept whole
+  arity warning: the 300-byte callee name is kept whole
+  2000-byte struct type: local/field/param/return/receiver kept whole
+  2000-byte generic argument: instance field kept whole
+  2000-byte template name: instance encoded from the whole spelling
+  2000-byte trait receiver: vptr initialiser and interface box kept whole
+FAIL c2p: c2p4_trait_param: compile failed: .../c2p4_trait_param.ct:1:27: error: type is too long
+FAIL c2p: c2p4_trait_ret: compile failed: .../c2p4_trait_ret.ct:3:4035: error: return type is too long
+FAIL c2p: c2p4_closure: compile failed: .../c2p4_closure.ct:5:21: error: type is too long
+FAIL c2p: c2p4_map_binding: compile failed: .../mb/ops.m.ct:1:20: error: type is too long
+FAIL c2p: c2p4_adt_variant: compile failed: .../c2p4_adt_variant.ct:11:15: error: static method 'vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv' cannot be resolved: 'Shape' is a type name, not a variable ctc: 1 error(s) generated
+FAIL c2p: the generated C cut the 2000-byte ADT field name
+FAIL c2p: c2p4_type_alias: compile failed: .../alias/lib.h.ct:3:5: error: type alias is too long
+c2p: 9 passed, 7 failed
+
+green (C2p-4 implementation):
+command: bash test/ast/c2p_limits.sh <ct-ast built from this commit's seed>
+exit: 0
+output:
+  >160-byte qualified variable: resolved and emitted whole
+  >160-byte qualified call: resolved and emitted whole
+  200/1000-byte literals: kept whole
+  long diagnostic: the 150-byte struct name is kept whole
+  arity warning: the 300-byte callee name is kept whole
+  2000-byte struct type: local/field/param/return/receiver kept whole
+  2000-byte generic argument: instance field kept whole
+  2000-byte template name: instance encoded from the whole spelling
+  2000-byte trait receiver: vptr initialiser and interface box kept whole
+  2000-byte trait method parameter: kept whole in the signature
+  2000-byte trait method return: impl body and return kept whole
+  2000-byte closure parameter: trampoline kept whole
+  2000-byte map binding: host pair and recipe kept whole
+  2000-byte ADT variant name: constructor and match arm kept whole
+  2000-byte ADT field name: union member kept whole
+  2000-byte type alias target: expanded and emitted whole
+c2p: 16 passed, 0 failed
