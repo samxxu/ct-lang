@@ -8,8 +8,8 @@
 | 锚点 | `55c82d16`（2026-11-27） |
 | 依据 | [str-print-api 提案](../../docs/proposals/str-print-api.md)、[pointer-free-exemptions](../../docs/planning/pointer-free-exemptions.md) E3、[D-013](../../docs/decisions/D-013.md) |
 | 状态 | open |
-| 负责人 | REQ（提案人）；实施待 DEV |
-| 处置证据 | 提案已交（2026-11-27）：推荐 `Str.print()` / `Str.println()`，零分配；待 REVIEW 复核 + 一条 ADR 后进 S8c 前置 |
+| 负责人 | **DEV**（实施）；REVIEW 复核 + ADR 签收；REQ 验收 |
+| 处置证据 | 提案已交（2026-11-27）：推荐 `Str.print()` / `Str.println()`，零分配。**所有者 2026-11-27 批准方案 A**，施工卡已交 DEV：[lang30-str-print-construction](../../docs/design/lang30-str-print-construction.md)（P1–P2 前置 + T1–T6）。 |
 
 ## 1 现象
 
@@ -54,6 +54,7 @@ free(那个返回值);
 
 ## 6 关联
 
+- [lang30-str-print-construction](../../docs/design/lang30-str-print-construction.md)（**施工卡，DEV 入口**）
 - [str-print-api](../../docs/proposals/str-print-api.md)（提案）
 - [REQ-PRINT-1](../../docs/planning/requirements-pool.md)（需求池）
 - [TEST-27](../testing/test27-feature-examples-pointer-free.md)（S8c 交接单）
