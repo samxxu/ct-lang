@@ -1929,6 +1929,8 @@ ct build opt.ct -o opt && ./opt
 
 ## 15. `ref` / `out` 参数（Phase 78，v0.78.0 起可用）
 
+> 完整可跑样例：[examples/50_ref_out](../examples/50_ref_out/prog.ct)；本节代码是教学片段。
+
 源码里不再写 `&` / `*`：`ref` 表示可读写的借用参数，`out` 表示由被调方写出的参数。
 两者只在**形参表**里是关键字，`int out;`、`time_t *ref;` 仍然是普通声明。
 
@@ -2017,6 +2019,8 @@ v.push("s");            // argument 1: expected 'int', got 'char *'
 `ct build` / `ct compile` 的输出完全不变。
 
 ## 17. `Box<T>` 与 `new`（Phase 81，v0.81.0 起可用）
+
+> 完整可跑样例：[examples/52_box_new](../examples/52_box_new/prog.ct)；本节代码是教学片段。
 
 单个堆对象现在有 owning 句柄，不再手写 `malloc` / `free` / `T *`：
 
@@ -2306,6 +2310,8 @@ fixpoint: 3 rounds byte-identical
 
 ## 22. `String` / `Str`：拥有还是借用（Phase 80，v0.80.0 起可用）
 
+> 完整可跑样例：[examples/40_str_ownership](../examples/40_str_ownership/str_ownership.ct)；本节代码是教学片段。
+
 **判据只有一条**（与 [idioms §3](idioms.md) 同源）：这份数据过了这行还要活着 → `String`；只看一眼 → `Str`。
 
 ```ct
@@ -2342,6 +2348,8 @@ ct build greet.ct -o greet && ./greet
   `printf` 前用 `cstr()`，`.data` 不保证 NUL。
 
 ## 23. 切片 `T[]`：长度跟着指针走（Phase 79，v0.79.0 起可用）
+
+> 完整可跑样例：[examples/51_slice](../examples/51_slice/prog.ct)；本节代码是教学片段。
 
 ```ct
 int sum(int[] xs)
