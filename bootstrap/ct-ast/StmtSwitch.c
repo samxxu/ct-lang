@@ -431,29 +431,27 @@ static int frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_named_label(void 
     int tail;
     int line;
     int i;
-    char name[MAX_TEXT];
-    char msg[MAX_TEXT];
+    const char * name;
     (void)(_self);
     if (_self->in_defer) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a defer block cannot declare a label");
     }
     line = _self->lex->tokline;
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
+    name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!name)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     if (frontend_parse_ensure_label_capacity(_self, (_self->nlabels + 1)) != 0) {
         return (-1);
     }
     if (_self->__frontend_parse_stmtswitch_vptr->label_find(_self, name) >= 0) {
-        snprintf(msg, sizeof(msg), "duplicate label '%s'", name);
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("duplicate label '%s'", name));
     }
     s = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_LABEL);
     if (s < 0) {
         return (-1);
     }
-    _self->labels[_self->nlabels].name = runtime_text_ct_intern(name);
-    if ((!_self->labels[_self->nlabels].name)) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
+    _self->labels[_self->nlabels].name = name;
     _self->labels[_self->nlabels].line = line;
     _self->labels[_self->nlabels].depth = _self->ndefer_blocks;
     for (i = 0; i < _self->ndefer_blocks; i++) {
@@ -498,7 +496,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_goto(void *self) 
     struct frontend_parse_Stmt *_self = (struct frontend_parse_Stmt *)self;
     int s;
     int i;
-    char name[MAX_TEXT];
+    const char * name;
     (void)(_self);
     if (_self->in_errdefer) {
         return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "an errdefer block cannot transfer control", _self->mem->path);
@@ -517,12 +515,15 @@ static int frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_goto(void *self) 
     if (frontend_parse_ensure_goto_capacity(_self, (_self->ngotos + 1)) != 0) {
         return (-1);
     }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, name, sizeof(name));
-    _self->arena->nodes[s].text2 = runtime_text_ct_intern(name);
+    name = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!name)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    _self->arena->nodes[s].text2 = name;
     if ((!_self->arena->nodes[s].text2)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    _self->gotos[_self->ngotos].name = runtime_text_ct_intern(name);
+    _self->gotos[_self->ngotos].name = name;
     if ((!_self->gotos[_self->ngotos].name)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }

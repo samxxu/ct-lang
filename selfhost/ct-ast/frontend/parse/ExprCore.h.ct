@@ -36,7 +36,7 @@ pub trait ExprOps {
 
     int  into_block(int recv, const char *type, int line, int col);
 
-    int  into_member_check(int base, char *fname, int line, int col);
+    int  into_member_check(int base, const char *fname, int line, int col);
 
     int  parse_bitor(void);
 
