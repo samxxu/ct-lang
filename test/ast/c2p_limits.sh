@@ -34,6 +34,10 @@
 #          so a 2000-byte name survives the symbol lookup and every emitted
 #          spelling (prototype, definition, call, initialiser designator).
 #
+#   C2p-9 the remaining expression/statement/parser scratch rows: a map
+#          binding's recipe, the receiver type of an inherent `as` and the
+#          variable a diagnostic quotes are no longer cut at 159 bytes.
+#
 #   C2p-8 the emitter's remaining reader rows: the C base tag of a type,
 #          the interned lifetime prefix, the lower-cased vptr field name, the
 #          `Result` operand / column spellings, the map recipe parameter type
@@ -1004,6 +1008,117 @@ int main(void) { return $ns8::apply(3) - 5; }
 CT
 if run_product c2p8_closure_ns "$work/c2p8_closure_ns.ct"; then
     ok; printf '  long namespace closure: owner join kept whole\n'
+fi
+
+# ===========================================================================
+# C2p-9: the remaining expression / statement / parser scratch rows
+#
+# The units this batch covers still copied user text into `char[160]` local
+# rows: a map binding's recipe was refused once it passed 159 bytes, an
+# inherent `as` looked the receiver up under a cut spelling (so a 2000-byte
+# struct had "no conversion"), and a diagnostic naming a 2000-byte variable
+# was truncated to 159 bytes. The fixtures below pin the whole recipe, the
+# whole conversion receiver and the whole diagnostic; the long label /
+# pattern / foreach guards from C2p-7 stay in place above.
+# ===========================================================================
+
+# ---- C2p-9.1) a map binding recipe whose callee is 2000 bytes -----------
+# `parse_binding` captured the recipe into a 160-byte row and refused
+# anything longer, so a legal recipe naming a long function could not be
+# written at all.
+rc9=$(printf '%*s' 2000 '' | tr ' ' r)
+mkdir -p "$work/c2p9_recipe"
+cat >"$work/c2p9_recipe/shapes.h.ct" <<CT
+pub struct A9 { int v; }
+pub struct Num9 { int n; }
+pub struct Num9 ${rc9}_to_num(struct A9 x)
+{
+    Num9 r = { x.v + 7 };
+    return r;
+}
+CT
+cat >"$work/c2p9_recipe/ops.m.ct" <<CT
+map binding struct A9 -> struct Num9 {
+    from(x) -> ${rc9}_to_num(x);
+}
+CT
+cat >"$work/c2p9_recipe/prog.ct" <<CT
+import shapes;
+import ops;
+int main(void)
+{
+    struct A9 node = { 5 };
+    struct Num9 a = node;
+    return a.n - 12;
+}
+CT
+if mkdir -p "$work/c2p9_recipe_out" \
+   && "$CT" build --emit-c -I "$work/c2p9_recipe" "$work/c2p9_recipe/prog.ct" \
+        -o "$work/c2p9_recipe_out" >"$work/c2p9_recipe.log" 2>&1; then
+    if "$CC" -std=c99 -I "$work/c2p9_recipe_out" "$work/c2p9_recipe_out"/*.c \
+            -o "$work/c2p9_recipe.bin" >"$work/c2p9_recipe.cc" 2>&1 \
+       && "$work/c2p9_recipe.bin"; then
+        if grep -qF "${rc9}_to_num" "$work/c2p9_recipe_out/prog.c"; then
+            ok; printf '  2000-byte map recipe callee: captured and emitted whole\n'
+        else
+            bad "the generated C cut the 2000-byte map recipe callee"
+        fi
+    else
+        bad "c2p9_recipe: cc failed: $(head -2 "$work/c2p9_recipe.cc" | tr '\n' ' ')"
+    fi
+else
+    bad "c2p9_recipe: compile failed: $(head -2 "$work/c2p9_recipe.log" | tr '\n' ' ')"
+fi
+
+# ---- C2p-9.2) an inherent `as` on a 2000-byte struct --------------------
+# `bind_conv_ibase` copied the receiver type into a 160-byte row before
+# `find_struct`, so the inherent block was never found and a legal binding
+# site reported "no conversion from".
+as9=$(printf '%*s' 2000 '' | tr ' ' a)
+cat >"$work/c2p9_as.ct" <<CT
+struct NumA { int v; }
+struct $as9 { int v; }
+impl $as9 {
+    NumA as() {
+        NumA n = { self->v + 1 };
+        return n;
+    }
+}
+int main(void)
+{
+    struct $as9 node = { 5 };
+    NumA a = node;
+    return a.v - 6;
+}
+CT
+if run_product c2p9_as "$work/c2p9_as.ct"; then
+    if grep -qF "${as9}_as" "$work/c2p9_as.c"; then
+        ok; printf '  2000-byte conversion receiver: inherent as resolved whole\n'
+    else
+        bad "the generated C cut the 2000-byte conversion receiver"
+    fi
+fi
+
+# ---- C2p-9.3) a diagnostic naming a 2000-byte variable ------------------
+# The foreach diagnostics formatted the variable name into a 160-byte row,
+# so the error named a cut variable. A diagnostic must quote the spelling
+# the user wrote.
+fg9=$(printf '%*s' 2000 '' | tr ' ' f)
+cat >"$work/c2p9_diag.ct" <<CT
+int main(void)
+{
+    int $fg9 = 1;
+    foreach ($fg9) { }
+    return 0;
+}
+CT
+"$CT" "$work/c2p9_diag.ct" -o "$work/c2p9_diag.c" >"$work/c2p9_diag.log" 2>&1
+if [ $? -eq 0 ]; then
+    bad "c2p9_diag: an array-less foreach over an int was accepted"
+elif grep -qF "'$fg9'" "$work/c2p9_diag.log"; then
+    ok; printf '  2000-byte variable name: the diagnostic quotes it whole\n'
+else
+    bad "the foreach diagnostic cut the 2000-byte variable name"
 fi
 
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
