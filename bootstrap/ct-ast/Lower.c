@@ -66,6 +66,9 @@
 #define TS_EMPTY            22
 #define TS_DELETE           20
 #define TS_MATCH            18
+#define TS_SWITCH           11
+#define TS_CASE             12
+#define TS_DO               17
 #define RT_DIRECT            1
 #define RT_INDIRECT          2
 #define RT_VIRTUAL           3
@@ -178,6 +181,9 @@
 #define LS_MATCHBIND       25
 #define LS_MATCHYIELD      26
 #define LS_RETBLOCK        27
+#define LS_DO              28
+#define LS_SWITCH          15
+#define LS_CASE            16
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -188,6 +194,7 @@
 #define LB_FOR_BODY         6
 #define LB_DO_BODY          7
 #define LB_DEFER_BODY       8
+#define LB_SWITCH           9
 #define LT_NONE             0
 #define LT_RETURN           1
 #define LT_JUMP             2
@@ -372,6 +379,8 @@ static int lw_call_name(struct backend_lir_Lower *, struct backend_tir_ct_texpr 
 static int lw_block_stmt(struct backend_lir_Lower *, int, int, int);
 static int lw_push_loop(struct backend_lir_Lower *, int);
 static int lw_loop_id(struct backend_lir_Lower *);
+static int lw_push_break(struct backend_lir_Lower *, int);
+static int lw_break_id(struct backend_lir_Lower *);
 static int lw_chain(struct backend_lir_Lower *, int, int, int, int *, int *);
 static int lw_drop_base(struct backend_lir_Lower *, struct backend_lir_ct_lcleanup *, const char * *);
 static int lw_materialise(struct backend_lir_Lower *, int *, int, int, int, int, int, int, int *, int *);
@@ -389,13 +398,13 @@ static int lw_sb_release_stmt(struct backend_lir_Lower *, int, int, int);
 static int lw_one_stmt(struct backend_lir_Lower *, int, int, int *);
 static int lw_match_bind_stmt(struct backend_lir_Lower *, const char *, const char *, const char *, const char *, int);
 static int lw_match_arm_block(struct backend_lir_Lower *, int, int, int, int);
-static int lw_jump_cleanups(struct backend_lir_Lower *, int, int, int, int, int *, int *);
+static int lw_jump_cleanups(struct backend_lir_Lower *, int, int, int, int, int, int *, int *);
 static int lw_return_cleanups(struct backend_lir_Lower *, int, int, int, int, int *, int *);
 static int lw_lir_mentions(struct backend_lir_Lower *, int, const char *);
 static int lw_lir_returns(struct backend_lir_Lower *, int, const char *);
 static int lw_active_for_return(struct backend_lir_Lower *, int, int, int, int);
 static int lw_emit_hoists(struct backend_lir_Lower *, int);
-static int lw_hoist_for(struct backend_lir_Lower *, int, int, int);
+static int lw_hoist_for(struct backend_lir_Lower *, int, int, int, int);
 static int lw_fill_block(struct backend_lir_Lower *, int, int);
 static int lw_sb_tail(struct backend_lir_Lower *, int);
 static int lw_lower_func(struct backend_lir_Lower *, int);
@@ -1029,7 +1038,7 @@ static int lw_hoist_scan(struct backend_lir_Lower * w, int teid, int top) {
         }
         return 0;
     }
-    if ((((((t->op == 2) && ((t->kind == TK_CALL) || (t->kind == TK_INTRINSIC))) && (t->target_kind != RT_RECIPE)) && (t->aux != 6)) && (t->nkids >= 1))) {
+    if ((((((w->hoist_temps && (t->op == 2)) && ((t->kind == TK_CALL) || (t->kind == TK_INTRINSIC))) && (t->target_kind != RT_RECIPE)) && (t->aux != 6)) && (t->nkids >= 1))) {
         int chain[8];
         int nc = 0;
         int lvl = teid;
@@ -1076,7 +1085,10 @@ static int lw_hoist_scan(struct backend_lir_Lower * w, int teid, int top) {
         }
         if (nc > 0) {
             if ((!top)) {
-                w->aborted = 1;
+                if (getenv("CT_LIR_DEBUG")) {
+                    fprintf(stderr, "lir: hoist nested at line %d\n", w->m->exprs[(lvl - 1)].span.line);
+                }
+                lw_abort(w, "L4540");
                 return (-1);
             }
             for (i = (nc - 1); i >= 0; i--) {
@@ -1394,7 +1406,7 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
             if (((t->target_kind == RT_VIRTUAL) && (t->nkids >= 1))) {
                 int rk = w->m->exprs[(t->kids[0] - 1)].kind;
                 int trait_len = 0;
-                if ((((((lw_hoist_lookup(w, t->kids[0]) <= 0) && (rk != TK_NAME_LOCAL)) && (rk != TK_NAME_GLOBAL)) && (rk != TK_FIELD)) && (rk != TK_INDEX))) {
+                if ((((((((((lw_hoist_lookup(w, t->kids[0]) <= 0) && (rk != TK_NAME_LOCAL)) && (rk != TK_NAME_GLOBAL)) && (rk != TK_FIELD)) && (rk != TK_INDEX)) && (rk != TK_CALL)) && (rk != TK_INTRINSIC)) && (rk != TK_INTO_SELF)) && (rk != TK_INTO_TARGET))) {
                     lw_abort(w, "L4530");
                     return 0;
                 }
@@ -1962,6 +1974,27 @@ static int lw_loop_id(struct backend_lir_Lower * w) {
     }
     return w->loops[(w->nloops - 1)];
 }
+static int lw_push_break(struct backend_lir_Lower * w, int block) {
+    if (w->nbreaks >= w->breakcap) {
+        int cap = ((w->breakcap > 0) ? (w->breakcap * 2) : 16);
+        int * grown = (int *)(realloc(w->breaks, ((size_t)(cap) * sizeof((*grown)))));
+        if ((!grown)) {
+            w->hard = 1;
+            return (-1);
+        }
+        w->breaks = grown;
+        w->breakcap = cap;
+    }
+    w->breaks[w->nbreaks] = block;
+    w->nbreaks++;
+    return 0;
+}
+static int lw_break_id(struct backend_lir_Lower * w) {
+    if (w->nbreaks <= 0) {
+        return 0;
+    }
+    return w->breaks[(w->nbreaks - 1)];
+}
 static int lw_chain(struct backend_lir_Lower * w, int scope, int stop_scope, int stop_kind, int * out, int * nout) {
     int n = 0;
     while (scope > 0) {
@@ -2462,10 +2495,10 @@ static int lw_match_arm_block(struct backend_lir_Lower * w, int arm_tsid, int ma
     }
     return blk;
 }
-static int lw_jump_cleanups(struct backend_lir_Lower * w, int block, int edge, int line, int col, int * ids, int * n) {
+static int lw_jump_cleanups(struct backend_lir_Lower * w, int block, int edge, int is_cont, int line, int col, int * ids, int * n) {
     int chain[LX_MAX_CHAIN];
     int nchain = 0;
-    int loop = lw_loop_id(w);
+    int loop = (is_cont ? lw_loop_id(w) : lw_break_id(w));
     int stop_scope;
     if (loop <= 0) {
         return (-1);
@@ -2622,12 +2655,13 @@ static int lw_emit_hoists(struct backend_lir_Lower * w, int block) {
     }
     return 0;
 }
-static int lw_hoist_for(struct backend_lir_Lower * w, int block, int teid, int top) {
+static int lw_hoist_for(struct backend_lir_Lower * w, int block, int teid, int top, int temps) {
     if (teid <= 0) {
         return 0;
     }
     lw_hoist_clear(w);
     w->hoist_block = block;
+    w->hoist_temps = temps;
     if (lw_hoist_scan(w, teid, top) != 0) {
         return (-1);
     }
@@ -2688,7 +2722,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     lw_abort(w, "L746");
                     return 0;
                 }
-                if (((s->nkids == 1) && (lw_hoist_for(w, block, s->kids[0], 1) != 0))) {
+                if (((s->nkids == 1) && (lw_hoist_for(w, block, s->kids[0], 1, 1) != 0))) {
                     return 0;
                 }
                 if (s->nkids == 1) {
@@ -2908,7 +2942,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     return 0;
                 }
                 t = (&w->m->exprs[(s->kids[0] - 1)]);
-                if (lw_hoist_for(w, block, ((t->kind == TK_ASSIGN) ? t->kids[1] : s->kids[0]), 1) != 0) {
+                if (lw_hoist_for(w, block, ((t->kind == TK_ASSIGN) ? t->kids[1] : s->kids[0]), 1, 1) != 0) {
                     return 0;
                 }
                 if (t->kind == TK_INTO_TARGET) {
@@ -2961,7 +2995,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     lw_abort(w, "L784");
                     return 0;
                 }
-                if (((s->nkids == 1) && (lw_hoist_for(w, block, s->kids[0], 1) != 0))) {
+                if (((s->nkids == 1) && (lw_hoist_for(w, block, s->kids[0], 1, 1) != 0))) {
                     return 0;
                 }
                 if ((!w->stmt_is_last)) {
@@ -3073,7 +3107,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     lw_abort(w, "L811");
                     return 0;
                 }
-                if (lw_hoist_for(w, block, s->kids[0], 1) != 0) {
+                if (lw_hoist_for(w, block, s->kids[0], 1, 0) != 0) {
                     return 0;
                 }
                 cond = lw_expr(w, s->kids[0]);
@@ -3122,7 +3156,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     lw_abort(w, "L837");
                     return 0;
                 }
-                if (lw_hoist_for(w, block, s->kids[0], 1) != 0) {
+                if (lw_hoist_for(w, block, s->kids[0], 1, 0) != 0) {
                     return 0;
                 }
                 cond = lw_expr(w, s->kids[0]);
@@ -3170,7 +3204,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 }
                 if ((s->flags & 2)) {
                     int ck = s->kids[kid++];
-                    if (lw_hoist_for(w, block, ck, 1) != 0) {
+                    if (lw_hoist_for(w, block, ck, 1, 0) != 0) {
                         return 0;
                     }
                     cond = lw_expr(w, ck);
@@ -3180,7 +3214,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 }
                 if ((s->flags & 4)) {
                     int sk = s->kids[kid++];
-                    if (lw_hoist_for(w, block, sk, 1) != 0) {
+                    if (lw_hoist_for(w, block, sk, 1, 0) != 0) {
                         return 0;
                     }
                     step = lw_expr(w, sk);
@@ -3317,9 +3351,9 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 }
                 w->l->stmts[(sid - 1)].aux = ((s->kind == TS_BREAK) ? LJ_BREAK : LJ_CONTINUE);
                 w->l->stmts[(sid - 1)].err_edge = s->err_edge;
-                w->l->stmts[(sid - 1)].target = lw_loop_id(w);
+                w->l->stmts[(sid - 1)].target = ((s->kind == TS_BREAK) ? lw_break_id(w) : lw_loop_id(w));
                 w->l->stmts[(sid - 1)].scope = s->scope;
-                if (lw_jump_cleanups(w, block, s->err_edge, s->span.line, s->span.col, ids, (&n)) != 0) {
+                if (lw_jump_cleanups(w, block, s->err_edge, (s->kind == TS_CONT), s->span.line, s->span.col, ids, (&n)) != 0) {
                     return 0;
                 }
                 if (lw_add_cleanups_to_stmt(w, sid, ids, n) != 0) {
@@ -3376,6 +3410,121 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 w->l->stmts[(sid - 1)].name = base;
                 w->l->stmts[(sid - 1)].aux = ((s->aux == 1) ? 1 : 2);
                 w->l->stmts[(sid - 1)].assignable = (((((te->kind == TK_NAME_LOCAL) || (te->kind == TK_NAME_GLOBAL)) || (te->kind == TK_FIELD)) || (te->kind == TK_INDEX)) || (te->kind == TK_DEREF));
+                (*out) = sid;
+                return 0;
+            }
+        case TS_SWITCH:
+{
+                int cond;
+                int swblk;
+                if (s->nkids < 2) {
+                    lw_abort(w, "L7900");
+                    return 0;
+                }
+                if (lw_hoist_for(w, block, s->kids[0], 1, 0) != 0) {
+                    return 0;
+                }
+                cond = lw_expr(w, s->kids[0]);
+                if (cond <= 0) {
+                    return 0;
+                }
+                swblk = lw_block_stmt(w, s->kids[1], LB_SWITCH, block);
+                if (swblk <= 0) {
+                    return 0;
+                }
+                sid = backend_lir_lmod_new_stmt(w->l, LS_SWITCH, s->span.file, s->span.line, s->span.col);
+                if (sid <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].cond = cond;
+                w->l->stmts[(sid - 1)].body_blk = swblk;
+                (*out) = sid;
+                return 0;
+            }
+        case TS_CASE:
+{
+                int nval = (s->aux ? 0 : ((s->flags & 1) ? 2 : 1));
+                int i;
+                int v1 = 0;
+                int v2 = 0;
+                int cblk;
+                if (s->nkids < nval) {
+                    lw_abort(w, "L7910");
+                    return 0;
+                }
+                for (i = 0; i < nval; i++) {
+                    int ve = lw_expr(w, s->kids[i]);
+                    if (ve <= 0) {
+                        return 0;
+                    }
+                    if (i == 0) {
+                        v1 = ve;
+                    }
+                    else {
+                        v2 = ve;
+                    }
+                }
+                sid = backend_lir_lmod_new_stmt(w->l, LS_CASE, s->span.file, s->span.line, s->span.col);
+                if (sid <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].aux = s->aux;
+                w->l->stmts[(sid - 1)].expr = v1;
+                w->l->stmts[(sid - 1)].rhs = v2;
+                cblk = backend_lir_lmod_new_block(w->l, LB_BLOCK, s->scope, block);
+                if (cblk <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                for (i = nval; i < s->nkids; i++) {
+                    int sub = 0;
+                    if (lw_one_stmt(w, s->kids[i], cblk, (&sub)) != 0) {
+                        return 0;
+                    }
+                    if (((sub > 0) && (backend_lir_lmod_block_add_stmt(w->l, cblk, sub) != 0))) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                }
+                if (lw_tail_cleanups(w, cblk, s->scope, 0) != 0) {
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].body_blk = cblk;
+                if (backend_lir_lmod_block_add_stmt(w->l, block, sid) != 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                (*out) = 0;
+                return 0;
+            }
+        case TS_DO:
+{
+                int cond;
+                int body;
+                if (s->nkids < 2) {
+                    lw_abort(w, "L7920");
+                    return 0;
+                }
+                if (lw_hoist_for(w, block, s->kids[1], 1, 0) != 0) {
+                    return 0;
+                }
+                body = lw_block_stmt(w, s->kids[0], LB_DO_BODY, block);
+                if (body <= 0) {
+                    return 0;
+                }
+                cond = lw_expr(w, s->kids[1]);
+                if (cond <= 0) {
+                    return 0;
+                }
+                sid = backend_lir_lmod_new_stmt(w->l, LS_DO, s->span.file, s->span.line, s->span.col);
+                if (sid <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].cond = cond;
+                w->l->stmts[(sid - 1)].body_blk = body;
                 (*out) = sid;
                 return 0;
             }
@@ -3544,6 +3693,16 @@ static int lw_block_stmt(struct backend_lir_Lower * w, int tsid, int kind, int p
         if (lw_push_loop(w, blk) != 0) {
             return 0;
         }
+        if (lw_push_break(w, blk) != 0) {
+            return 0;
+        }
+    }
+    else {
+        if (kind == LB_SWITCH) {
+            if (lw_push_break(w, blk) != 0) {
+                return 0;
+            }
+        }
     }
     if (lw_fill_block(w, tsid, blk) != 0) {
         return 0;
@@ -3559,8 +3718,12 @@ static int lw_block_stmt(struct backend_lir_Lower * w, int tsid, int kind, int p
             w->l->blocks[(blk - 1)].term = LT_CONDJUMP;
         }
     }
+    if (kind == LB_SWITCH) {
+        w->nbreaks--;
+    }
     if (loop) {
         w->nloops--;
+        w->nbreaks--;
     }
     return blk;
 }
@@ -3803,6 +3966,10 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
     w->loops = 0;
     w->nloops = 0;
     w->loopcap = 0;
+    free(w->breaks);
+    w->breaks = 0;
+    w->nbreaks = 0;
+    w->breakcap = 0;
     return 0;
 }
 int backend_lir_ct_lir_build_unit(void * up, int mod_unit, int tmp_base) {
@@ -3857,6 +4024,10 @@ int backend_lir_ct_lir_build_unit(void * up, int mod_unit, int tmp_base) {
     w->loops = 0;
     w->nloops = 0;
     w->loopcap = 0;
+    free(w->breaks);
+    w->breaks = 0;
+    w->nbreaks = 0;
+    w->breakcap = 0;
     return 0;
 }
 static void lw_ind(int ind) {
@@ -4866,6 +5037,50 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
         case LS_CLOSURE_DECL:
             lw_ind(ind);
             fprintf(backend_lir_g_lir_out, "struct __ct_cl_env_%d __attribute__((unused)) ""__ct_cl_env_v_%d = { %s };\n", s->origin, s->origin, (s->name ? s->name : "0"));
+            return 0;
+        case LS_SWITCH:
+            lw_ind(ind);
+            fputs("switch (", backend_lir_g_lir_out);
+            if (lw_pw_expr(w, s->cond, PW_COND) != 0) {
+                return (-1);
+            }
+            fputs(") ", backend_lir_g_lir_out);
+            return lw_pw_block(w, s->body_blk, ind);
+        case LS_CASE:
+            lw_ind(ind);
+            if (s->aux) {
+                fputs("default:", backend_lir_g_lir_out);
+            }
+            else {
+                fputs("case ", backend_lir_g_lir_out);
+                if (((s->expr > 0) && (lw_pw_expr(w, s->expr, PW_EXPR) != 0))) {
+                    return (-1);
+                }
+                if (s->rhs > 0) {
+                    fputs(" ... ", backend_lir_g_lir_out);
+                    if (lw_pw_expr(w, s->rhs, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                }
+                fputs(":", backend_lir_g_lir_out);
+            }
+            fputs("\n", backend_lir_g_lir_out);
+            if (s->body_blk > 0) {
+                return lw_pw_stmts_only(w, s->body_blk, (ind + 1));
+            }
+            return 0;
+        case LS_DO:
+            lw_ind(ind);
+            fputs("do {\n", backend_lir_g_lir_out);
+            if (lw_pw_stmts_only(w, s->body_blk, (ind + 1)) != 0) {
+                return (-1);
+            }
+            lw_ind(ind);
+            fputs("} while (", backend_lir_g_lir_out);
+            if (lw_pw_expr(w, s->cond, PW_COND) != 0) {
+                return (-1);
+            }
+            fputs(");\n", backend_lir_g_lir_out);
             return 0;
         case LS_MATCH:
 {

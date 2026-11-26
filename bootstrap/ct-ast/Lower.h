@@ -144,12 +144,16 @@ struct backend_lir_Lower {
     int * loops;
     int nloops;
     int loopcap;
+    int * breaks;
+    int nbreaks;
+    int breakcap;
     int mode;
     int forced;
     int tmp_delta;
     int func_scope;
     int func_has_self;
     int stmt_is_last;
+    int hoist_temps;
     int tmp_start_temps;
     int bypass_te;
     int hoist_block;

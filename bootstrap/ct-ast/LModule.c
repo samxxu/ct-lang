@@ -103,6 +103,7 @@
 #define LS_MATCHBIND       25
 #define LS_MATCHYIELD      26
 #define LS_RETBLOCK        27
+#define LS_DO              28
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -113,6 +114,7 @@
 #define LB_FOR_BODY         6
 #define LB_DO_BODY          7
 #define LB_DEFER_BODY       8
+#define LB_SWITCH           9
 #define LT_NONE             0
 #define LT_RETURN           1
 #define LT_JUMP             2

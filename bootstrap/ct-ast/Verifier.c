@@ -44,6 +44,9 @@
 #define CL_HANDBACK          5
 #define SC_FUNC              1
 #define LB_DEFER_BODY        8
+#define LB_SWITCH            9
+#define LJ_BREAK             1
+#define LJ_CONTINUE          2
 #define LB_WHILE_BODY        5
 #define LB_FOR_BODY          6
 #define LB_DO_BODY           7
@@ -801,7 +804,7 @@ static int lver_v9(struct backend_lir_LModule * l) {
                     lfail(l, s->span.file, s->span.line, s->span.col, "E-IR-109", "jump target block does not exist");
                 }
                 else {
-                    if ((!lver_loop_kind(l->blocks[(s->target - 1)].kind))) {
+                    if (((!lver_loop_kind(l->blocks[(s->target - 1)].kind)) && (!((l->blocks[(s->target - 1)].kind == LB_SWITCH) && (s->aux == LJ_BREAK))))) {
                         lfail(l, s->span.file, s->span.line, s->span.col, "E-IR-109", "break/continue targets a non-loop block");
                     }
                 }

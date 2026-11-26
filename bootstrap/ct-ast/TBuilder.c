@@ -2120,6 +2120,7 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
                 backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].b, 0));
             }
             if (ar->nodes[n].c >= 0) {
+                m->stmts[(sid - 1)].flags |= 1;
                 backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].c, 0));
             }
             for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
