@@ -86,6 +86,8 @@ namespace backend::lir;
 #define LE_CLOSURE_ARG     39
 #define LE_CLOSURE_PAIR    40
 #define LE_CLOSURE_CALL    41
+#define LE_ADTCTOR         42
+#define LE_MATCHEXPR       43
 
 /* Binary / unary / assignment operator codes: the AST's, copied so the
    printing tables stay one table (Arena.h.ct is authoritative). */
@@ -138,6 +140,10 @@ namespace backend::lir;
 #define LS_FOREACH         20
 #define LS_TEMPDECL        21
 #define LS_CLOSURE_DECL    22
+#define LS_RELEASE         23
+#define LS_MATCH           24
+#define LS_MATCHBIND       25
+#define LS_MATCHYIELD      26
 
 /* Jump kinds. */
 #define LJ_BREAK            1
@@ -170,6 +176,7 @@ namespace backend::lir;
 #define LTK_SRET            5
 #define LTK_NEW             6
 #define LTK_Q               7
+#define LTK_MATCH           8
 
 /* RawC origins (contract §4.1). */
 #define LR_INCLUDE          1
@@ -238,9 +245,11 @@ pub struct ct_lstmt {
     const char *name;   /* declared name (LS_DECL), label (LS_GOTO/LS_LABEL) */
     const char *dims;   /* LS_DECL array dimensions as spelled, else "" */
     const char *spelling; /* LS_DECL: the source type spelling, verbatim */
+    const char *member;   /* LS_MATCHBIND: the payload field name */
     const char *count;  /* LS_DECL: the array's element count for a vptr loop */
     const char *vptr;   /* LS_DECL: generated vptr statements, one per line */
     int vptr_loop;      /* LS_DECL: 1 = the vptr lines sit inside a for loop */
+    int zero_init;      /* LS_DECL: an owning string local starts `= { 0 }` */
     int expr;           /* init / lhs / value / condition / subject */
     int rhs;            /* assignment rhs */
     int cond;
@@ -709,6 +718,7 @@ static const char *lir_tmp_prefix(int kind)
         case LTK_SRET: return "__ct_sret";
         case LTK_NEW: return "__ct_new";
         case LTK_Q: return "__ct_q";
+        case LTK_MATCH: return "__ct_match";
         default: return "__ct_tmp";
     }
 }

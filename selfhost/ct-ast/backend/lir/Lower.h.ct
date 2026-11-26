@@ -53,6 +53,9 @@ import backend::tir::TModule::ct_tstmt as ct_tstmt;
 import backend::tir::TModule::ct_tscope as ct_tscope;
 import backend::tir::TModule::ct_tvar as ct_tvar;
 import backend::tir::TModule::ct_tstruct as ct_tstruct;
+import backend::tir::TModule::ct_tadt as ct_tadt;
+import backend::tir::TModule::ct_tadvariant as ct_tadvariant;
+import backend::tir::TModule::ct_tadtfield as ct_tadtfield;
 import backend::tir::TModule::ct_tcleanup as ct_tcleanup;
 import backend::tir::TModule::TModule as TModule;
 import backend::tir::TBuilder;
@@ -98,6 +101,8 @@ import backend::verify::Verifier;
 #define TK_MATCH_ARM        18
 #define TK_ADT_CTOR         19
 #define TK_INTO_SELF        32
+#define TK_ADT_CTOR         19
+#define TK_MATCH_ARM        18
 #define TK_INIT_RANGE       34
 #define TK_INIT_BRACE       35
 #define TK_INIT_MBRACE      36
@@ -122,6 +127,7 @@ import backend::verify::Verifier;
 #define TS_LABEL            16
 #define TS_EMPTY            22
 #define TS_DELETE           20
+#define TS_MATCH            18
 
 #define RT_DIRECT            1
 #define RT_INDIRECT          2
@@ -192,6 +198,8 @@ import backend::verify::Verifier;
 #define LE_CLOSURE_ARG     39
 #define LE_CLOSURE_PAIR    40
 #define LE_CLOSURE_CALL    41
+#define LE_ADTCTOR         42
+#define LE_MATCHEXPR       43
 #define LB_SUB              2
 #define LB_MUL              3
 #define LB_DIV              4
@@ -234,6 +242,10 @@ import backend::verify::Verifier;
 #define LS_FOREACH         20
 #define LS_TEMPDECL        21
 #define LS_CLOSURE_DECL    22
+#define LS_RELEASE         23
+#define LS_MATCH           24
+#define LS_MATCHBIND       25
+#define LS_MATCHYIELD      26
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -257,6 +269,7 @@ import backend::verify::Verifier;
 #define LTK_SRET            5
 #define LTK_NEW             6
 #define LTK_Q               7
+#define LTK_MATCH           8
 
 #define LX_MAX_CHAIN 256
 
@@ -300,6 +313,11 @@ pub struct Lower {
     int h_cat[64];
     int h_blk[64];
     int h_n;
+    const char *sb_name[64]; /* SH-102 owning locals, declaration order */
+    int sb_block[64];
+    int sb_kind[64];
+    const char *sb_prefix[64];
+    int sb_n;
     int cv_ci[64];      /* closure bindings in scope: name -> closure id */
     const char *cv_name[64];
     int cv_n;
@@ -627,6 +645,16 @@ static int lw_func_has_cleanup(struct Lower *w, int func_scope)
     return 0;
 }
 
+static struct ct_tadt *lw_adt_row(struct Lower *w, const char *name)
+{
+    int id;
+
+    if (!name || !name[0]) return 0;
+    id = backend::tir::tmod_find_adt(w->m, name);
+    if (id <= 0) return 0;
+    return &w->m->adts[id - 1];
+}
+
 static int lw_type_needs_init(struct Lower *w, int tir_type)
 {
     const char *sp;
@@ -646,24 +674,6 @@ static int lw_type_needs_init(struct Lower *w, int tir_type)
     memcpy(buf, tag, (size_t)n);
     buf[n] = 0;
     return lw_struct_needs_init(w, buf, 0);
-}
-
-/* A return type whose value owns a handle carries the SH-102 lifetime rules
-   (retain at the call boundary, `__ct_sretN` around a return, a release on
-   every exit). Those are emitter bookkeeping, not yet a LIR row, so a
-   function returning one stays on the AST path and the unit is not "ready"
-   until S8 moves the rules. */
-static int lw_owning_spelling(const char *s)
-{
-    if (!s || !s[0]) return 0;
-    if (strstr(s, "String")) return 1;
-    if (strstr(s, "Str ")) return 1;
-    if (strncmp(s, "Str", 3) == 0) return 1;
-    if (strstr(s, "Vec<")) return 1;
-    if (strstr(s, "Option<")) return 1;
-    if (strstr(s, "Map<")) return 1;
-    if (strstr(s, "Box<")) return 1;
-    return 0;
 }
 
 static int lw_type_text(struct Lower *w, const char *spelling)
@@ -1249,16 +1259,6 @@ static int lw_expr(struct Lower *w, int teid)
                 int j = 0;
                 const char *k = t->target_key;
                 if (!k || !k[0]) { lw_abort(w, "L4533"); return 0; }
-                if (t->aux != 11 && t->nkids > 0) {
-                    int rk = w->m->exprs[t->kids[0] - 1].kind;
-                    if (lw_hoist_lookup(w, t->kids[0]) <= 0
-                        && rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
-                        && rk != TK_FIELD && rk != TK_INDEX) {
-                        /* an rvalue receiver would need a hoisted temp */
-                        lw_abort(w, "L4534");
-                        return 0;
-                    }
-                }
                 while (*k && j < (int)sizeof(nm) - 1) {
                     nm[j++] = *k == '.' ? '_' : *k;
                     k++;
@@ -1287,17 +1287,9 @@ static int lw_expr(struct Lower *w, int teid)
                    the first actual (`.` takes its address, `->` passes the
                    pointer, a static method has no receiver). */
                 char nm[1024];
-                int j = 0, stable = 1;
+                int j = 0;
                 const char *k = t->target_key;
                 if (!k || !k[0]) { lw_abort(w, "L4533"); return 0; }
-                if (t->aux != 11 && t->nkids > 0) {
-                    int rk = w->m->exprs[t->kids[0] - 1].kind;
-                    if (lw_hoist_lookup(w, t->kids[0]) <= 0
-                        && rk != TK_NAME_LOCAL && rk != TK_NAME_GLOBAL
-                        && rk != TK_FIELD && rk != TK_INDEX)
-                        stable = 0;
-                }
-                if (!stable) { lw_abort(w, "L4534"); return 0; }
                 while (*k && j < (int)sizeof(nm) - 1) {
                     nm[j++] = *k == '.' ? '_' : *k;
                     k++;
@@ -1340,11 +1332,19 @@ static int lw_expr(struct Lower *w, int teid)
                    recipe and are not in the S2 subset */
                 if (t->target_kind == RT_INTRINSIC
                     && t->target_b != 1 && t->target_b != 2
-                    && t->target_b != 3 && t->target_b != 4) {
-                    /* BI_STRING (4) is the libc string / memory family: each
-                       prints as its own name, exactly like an external call.
-                       The container / retain / release classes (5 / 7 / 8)
-                       still expand to a recipe the LIR does not carry. */
+                    && t->target_b != 3 && t->target_b != 4
+                    && t->target_b != 5 && t->target_b != 7
+                    && t->target_b != 8) {
+                    /* BI_STRING (4), BI_CONTAINER (5), BI_RETAIN (7) and
+                       BI_RELEASE (8) all name a C symbol of the product (a
+                       libc function, a built-in layer function, or a
+                       monomorphised `...__ctN`), so they print as their own
+                       name. Only the recipe classes need an expansion the
+                       LIR does not carry yet. */
+                    if (getenv("CT_LIR_DEBUG"))
+                        fprintf(stderr, "lir: L467 b=%d key=%s text=%s\n",
+                                t->target_b, t->target_key ? t->target_key : "",
+                                t->text ? t->text : "");
                     lw_abort(w, "L467");
                     return 0;
                 }
@@ -1492,6 +1492,67 @@ static int lw_expr(struct Lower *w, int teid)
                 w->l->exprs[e - 1].op = 1;
             else w->l->exprs[e - 1].op = 0;
             w->l->exprs[e - 1].type = lw_type(w, t->type);
+            return e;
+        }
+        case TK_ADT_CTOR: {
+            struct ct_tadt *a = lw_adt_row(w, t->text);
+            struct ct_tadvariant *v;
+            if (!a || t->num < 0 || t->num >= a->nvariants) {
+                lw_abort(w, "L7810");
+                return 0;
+            }
+            v = &a->variants[(int)t->num];
+            e = lmod_new_expr(w->l, LE_ADTCTOR, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            w->l->exprs[e - 1].text = a->full;
+            w->l->exprs[e - 1].num = t->num;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            for (i = 0; i < t->nkids; i++) {
+                if (i < v->nfields && lw_is_string_value(v->fields[i].type)) {
+                    int ak = w->m->exprs[t->kids[i] - 1].kind;
+                    if (ak == TK_NAME_LOCAL || ak == TK_NAME_GLOBAL
+                        || ak == TK_FIELD || ak == TK_INDEX) {
+                        /* an owning payload stored from a place needs the
+                           emitter's retain; not modelled */
+                        lw_abort(w, "L7811");
+                        return 0;
+                    }
+                }
+                if (lw_expr_kid(w, e, t->kids[i]) != 0) return 0;
+            }
+            return e;
+        }
+        case TK_MATCH_ARM: {
+            struct ct_tadt *a = lw_adt_row(w, t->text);
+            int temp, j;
+            if (!a) { lw_abort(w, "L7820"); return 0; }
+            temp = lmod_new_temp(w->l, LTK_MATCH, lw_type(w, t->type),
+                                 w->hoist_block);
+            if (temp <= 0) { w->hard = 1; return 0; }
+            e = lmod_new_expr(w->l, LE_MATCHEXPR, t->span.file, t->span.line,
+                              t->span.col);
+            if (e <= 0) { w->hard = 1; return 0; }
+            w->l->exprs[e - 1].text = a->full;
+            w->l->exprs[e - 1].member = t->member;   /* result type spelling */
+            w->l->exprs[e - 1].op = t->aux;          /* pointer subject */
+            w->l->exprs[e - 1].num = temp;
+            w->l->exprs[e - 1].type = lw_type(w, t->type);
+            {
+                int sub = lw_expr(w, t->kids[0]);
+                if (sub <= 0) return 0;
+                if (lmod_expr_add_kid(w->l, e, sub) != 0) { w->hard = 1; return 0; }
+            }
+            for (j = 1; j < t->nkids; j++) {
+                struct ct_tstmt *arm = &w->m->stmts[t->kids[j] - 1];
+                int blk = lw_match_arm_block(w, t->kids[j], temp, 1, 0);
+                if (blk <= 0) { lw_abort(w, "L7821"); return 0; }
+                if (lmod_expr_add_kid(w->l, e, (int)arm->num) != 0
+                    || lmod_expr_add_kid(w->l, e, blk) != 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+            }
             return e;
         }
         case TK_CLOSURE:
@@ -1781,7 +1842,258 @@ static int lw_tail_cleanups(struct Lower *w, int blk, int scope, int skip_owned)
 /* ------------------------------------------------------------------------- */
 /* Statements                                                                */
 /* ------------------------------------------------------------------------- */
+/* SH-102 in LIR: the owning string handles (`String` / `U16String` values)
+   are tracked per block. A declaration with no initialiser gets `= { 0 }`,
+   every exit releases the live handles in reverse declaration order, and a
+   `return` materialises its value into `__ct_sretN` first (SH-45) so the
+   release cannot run under the value it feeds. */
+static int lw_is_string_value(const char *sp)
+{
+    const char *b;
+    size_t n;
+
+    if (!sp || !sp[0]) return 0;
+    b = sp;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    while (*b == ' ' || *b == '\t') b++;
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) n--;
+    if (n == 0 || b[n - 1] == '*') return 0;
+    if (n == 6 && strncmp(b, "String", 6) == 0) return 1;
+    if (n == 9 && strncmp(b, "U16String", 9) == 0) return 2;
+    return 0;
+}
+
+/* Does an ADT own a handle through any payload field? Mirrors the emitter's
+   `adt_owns`: a String/U16String field or an owning container/ADT field. */
+static int lw_adt_owns(struct Lower *w, const char *tag, int depth)
+{
+    struct ct_tadt *a = lw_adt_row(w, tag);
+    int i, j;
+
+    if (!a || depth > 4) return 0;
+    for (i = 0; i < a->nvariants; i++)
+        for (j = 0; j < a->variants[i].nfields; j++) {
+            const char *ft = a->variants[i].fields[j].type;
+            if (lw_is_string_value(ft)) return 1;
+            if (ft && (strstr(ft, "Vec_") || strstr(ft, "Map_")
+                       || strstr(ft, "Option_") || strstr(ft, "Result_")
+                       || strstr(ft, "Box_")))
+                return 1;
+            if (ft && lw_adt_owns(w, ft, depth + 1)) return 1;
+        }
+    return 0;
+}
+
+/* The owning-value kind of a local: 0 none, 1 String, 2 U16String, 3 an
+   owning user ADT (`Msg`). */
+static int lw_own_kind(struct Lower *w, const char *sp)
+{
+    int k = lw_is_string_value(sp);
+    char buf[512];
+    const char *b;
+    int n;
+
+    if (k) return k;
+    if (!sp || !sp[0]) return 0;
+    b = sp;
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    n = (int)strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '*')) {
+        if (b[n - 1] == '*') return 0;
+        n--;
+    }
+    if (n <= 0 || n >= (int)sizeof(buf)) return 0;
+    memcpy(buf, b, (size_t)n);
+    buf[n] = 0;
+    if (!lw_adt_row(w, buf)) return 0;
+    return lw_adt_owns(w, buf, 0) ? 3 : 0;
+}
+
+/* The release spelling of an owning kind: `String` / `U16String` / ADT tag. */
+static const char *lw_own_prefix(struct Lower *w, const char *sp, int kind)
+{
+    if (kind == 1) return "String";
+    if (kind == 2) return "U16String";
+    {
+        static char buf[256];
+        const char *b = sp;
+        struct ct_tadt *a;
+        int n;
+        if (strncmp(b, "struct ", 7) == 0) b += 7;
+        n = (int)strlen(b);
+        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '*')) n--;
+        if (n <= 0 || n >= (int)sizeof(buf)) return "String";
+        memcpy(buf, b, (size_t)n);
+        buf[n] = 0;
+        a = lw_adt_row(w, buf);
+        return a ? a->full : buf;
+    }
+}
+
+static int lw_sb_add(struct Lower *w, const char *name, int block, int kind,
+                     const char *prefix)
+{
+    if (w->sb_n >= 64) return -1;
+    w->sb_name[w->sb_n] = runtime::text::ct_intern(name ? name : "");
+    w->sb_block[w->sb_n] = block;
+    w->sb_kind[w->sb_n] = kind;
+    w->sb_prefix[w->sb_n] = runtime::text::ct_intern(prefix ? prefix : "String");
+    w->sb_n++;
+    return 0;
+}
+
+/* Is `blk` the block itself or an ancestor of it? */
+static int lw_block_within(struct Lower *w, int blk, int cand)
+{
+    while (blk > 0 && blk <= w->l->nblocks) {
+        if (blk == cand) return 1;
+        blk = w->l->blocks[blk - 1].parent;
+    }
+    return 0;
+}
+
+/* A release statement for one tracked handle. */
+static int lw_sb_release_stmt(struct Lower *w, int i, int kind, int ind_span)
+{
+    int e, sid;
+    (void)ind_span;
+    (void)kind;
+    e = lmod_new_expr(w->l, LE_NAME, 0, 0, 0);
+    if (e <= 0) { w->hard = 1; return -1; }
+    w->l->exprs[e - 1].text = w->sb_name[i];
+    w->l->exprs[e - 1].type = lmod_type(w->l, "void");
+    sid = lmod_new_stmt(w->l, LS_RELEASE, 0, 0, 0);
+    if (sid <= 0) { w->hard = 1; return -1; }
+    w->l->stmts[sid - 1].expr = e;
+    w->l->stmts[sid - 1].name = w->sb_prefix[i];
+    return sid;
+}
+
 static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out);
+
+/* A match arm body: bindings first (the emitter injects them into the arm's
+   block), then the statements. An expression arm's single yield assignment is
+   replaced by `__ct_mresN = <expr>;`. */
+static int lw_match_bind_stmt(struct Lower *w, const char *type, const char *name,
+                              const char *field, const char *cname,
+                              int match_temp)
+{
+    int sid;
+    int k;
+
+    sid = lmod_new_stmt(w->l, LS_MATCHBIND, 0, 0, 0);
+    if (sid <= 0) { w->hard = 1; return -1; }
+    w->l->stmts[sid - 1].spelling = runtime::text::ct_intern(type ? type : "");
+    w->l->stmts[sid - 1].name = runtime::text::ct_intern(name ? name : "");
+    w->l->stmts[sid - 1].member = runtime::text::ct_intern(field ? field : "");
+    w->l->stmts[sid - 1].fname = runtime::text::ct_intern(cname ? cname : "");
+    w->l->stmts[sid - 1].target = match_temp;
+    k = lw_is_string_value(type);
+    w->l->stmts[sid - 1].aux = k;
+    return sid;
+}
+
+static int lw_match_arm_block(struct Lower *w, int arm_tsid, int match_temp,
+                              int is_expr, int parent)
+{
+    struct ct_tstmt *arm, *body;
+    int body_tsid, blk, i;
+    const char *enc;
+
+    if (arm_tsid <= 0 || arm_tsid > w->m->nstmts) return 0;
+    arm = &w->m->stmts[arm_tsid - 1];
+    body_tsid = is_expr ? (arm->nkids >= 2 ? arm->kids[1] : 0)
+                        : (arm->nkids >= 1 ? arm->kids[0] : 0);
+    if (body_tsid <= 0 || body_tsid > w->m->nstmts) {
+        if (getenv("CT_LIR_DEBUG")) {
+            int q;
+            fprintf(stderr, "lir: arm body id=%d nkids=%d enc=%s", body_tsid,
+                    arm->nkids, arm->text ? arm->text : "");
+            for (q = 0; q < arm->nkids; q++) {
+                int kid = arm->kids[q];
+                fprintf(stderr, " kid%d=%d", q, kid);
+                if (kid > 0 && kid <= w->m->nexprs)
+                    fprintf(stderr, "(xkind=%d)", w->m->exprs[kid - 1].kind);
+                if (kid > 0 && kid <= w->m->nstmts)
+                    fprintf(stderr, "(skind=%d)", w->m->stmts[kid - 1].kind);
+            }
+            fprintf(stderr, "\n");
+        }
+        return 0;
+    }
+    body = &w->m->stmts[body_tsid - 1];
+    if (body->kind != TS_BLOCK) {
+        if (getenv("CT_LIR_DEBUG")) fprintf(stderr, "lir: arm body kind=%d\n", body->kind);
+        return 0;
+    }
+    blk = lmod_new_block(w->l, LB_BLOCK, body->scope, parent);
+    if (blk <= 0) { w->hard = 1; return 0; }
+    w->l->blocks[blk - 1].span.file = body->span.file;
+    w->l->blocks[blk - 1].span.line = body->span.line;
+    w->l->blocks[blk - 1].span.col = body->span.col;
+    /* bindings: `field|name|type;` each */
+    enc = arm->text ? arm->text : "";
+    while (*enc) {
+        char fl[512], nm[512], ty[512];
+        int a = 0, b = 0, c = 0;
+        while (*enc && *enc != '|') { if (a < (int)sizeof(fl) - 1) fl[a++] = *enc; enc++; }
+        fl[a] = 0;
+        if (*enc == '|') enc++;
+        while (*enc && *enc != '|') { if (b < (int)sizeof(nm) - 1) nm[b++] = *enc; enc++; }
+        nm[b] = 0;
+        if (*enc == '|') enc++;
+        while (*enc && *enc != ';') { if (c < (int)sizeof(ty) - 1) ty[c++] = *enc; enc++; }
+        ty[c] = 0;
+        if (*enc == ';') enc++;
+        {
+            int bs = lw_match_bind_stmt(w, ty, nm, fl, arm->text2,
+                                        match_temp);
+            int ok2 = lw_own_kind(w, ty);
+            if (bs <= 0) {
+                if (getenv("CT_LIR_DEBUG")) fprintf(stderr, "lir: arm bind fail\n");
+                return 0;
+            }
+            if (ok2 && lw_sb_add(w, nm, blk, ok2,
+                                 lw_own_prefix(w, ty, ok2)) != 0) {
+                w->hard = 1;
+                return 0;
+            }
+            if (lmod_block_add_stmt(w->l, blk, bs) != 0) { w->hard = 1; return 0; }
+        }
+    }
+    for (i = 0; i < body->nkids; i++) {
+        int sid = 0;
+        if (is_expr && i == 0
+            && w->m->stmts[body->kids[i] - 1].kind == TS_EXPR
+            && w->m->stmts[body->kids[i] - 1].nkids >= 1
+            && w->m->exprs[w->m->stmts[body->kids[i] - 1].kids[0] - 1].kind
+               == TK_ASSIGN) {
+            struct ct_texpr *yt = &w->m->exprs[
+                w->m->stmts[body->kids[i] - 1].kids[0] - 1];
+            int re;
+            if (yt->kind != TK_ASSIGN || yt->nkids < 2) {
+                if (getenv("CT_LIR_DEBUG")) fprintf(stderr, "lir: yield kind=%d kids=%d\n", yt->kind, yt->nkids);
+                return 0;
+            }
+            re = lw_expr(w, yt->kids[1]);
+            if (re <= 0) return 0;
+            sid = lmod_new_stmt(w->l, LS_MATCHYIELD, 0, 0, 0);
+            if (sid <= 0) { w->hard = 1; return 0; }
+            w->l->stmts[sid - 1].expr = re;
+            w->l->stmts[sid - 1].target = match_temp;
+        } else if (lw_one_stmt(w, body->kids[i], blk, &sid) != 0) {
+            return 0;
+        }
+        if (sid > 0 && lmod_block_add_stmt(w->l, blk, sid) != 0) {
+            w->hard = 1;
+            return 0;
+        }
+    }
+    if (lw_tail_cleanups(w, blk, body->scope, 0) != 0) return 0;
+    if (lw_sb_tail(w, blk) != 0) return 0;
+    return blk;
+}
 
 static int lw_jump_cleanups(struct Lower *w, int block, int edge, int line,
                             int col, int *ids, int *n)
@@ -2125,6 +2437,17 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
                     }
                 }
             }
+            {
+                int sk = lw_own_kind(w, sp);
+                if (sk && !v->is_static) {
+                    if (lw_sb_add(w, v->name, block, sk,
+                                  lw_own_prefix(w, sp, sk)) != 0) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                    if (s->nkids == 0) w->l->stmts[sid - 1].zero_init = 1;
+                }
+            }
             if (s->nkids == 1) {
                 e = lw_expr(w, s->kids[0]);
                 if (e <= 0) return 0;
@@ -2206,13 +2529,49 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             if (lw_return_cleanups(w, block, s->err_edge, s->span.line,
                                    s->span.col, ids, &n) != 0) return 0;
             if (lw_add_cleanups_to_block(w, block, ids, n) != 0) return 0;
-            if (b->ret_expr > 0 && w->ret_type > 0
-                && strcmp(lmod_cspell(w->l, w->ret_type), "void") != 0
-                && lw_active_for_return(w, block, b->ret_expr,
-                                        s->span.line, s->span.col)) {
-                int t = lmod_new_temp(w->l, LTK_RET, w->ret_type, block);
-                if (t <= 0) { w->hard = 1; return 0; }
-                b->ret_temp = t;
+            {
+                /* SH-102 first: a live owning string handle forces the value
+                   into `__ct_sretN` and releases the other handles first. */
+                int q, moved = -1, active = 0;
+                int void_ret = w->ret_type > 0
+                    && strcmp(lmod_cspell(w->l, w->ret_type), "void") == 0;
+                for (q = 0; q < w->sb_n; q++)
+                    if (lw_block_within(w, block, w->sb_block[q])) active++;
+                if (active > 0) {
+                    if (s->nkids == 1 && w->m->exprs[s->kids[0] - 1].kind
+                        == TK_NAME_LOCAL) {
+                        const char *nm = w->m->exprs[s->kids[0] - 1].text;
+                        for (q = w->sb_n - 1; q >= 0; q--)
+                            if (w->sb_name[q] && strcmp(w->sb_name[q], nm) == 0
+                                && lw_block_within(w, block, w->sb_block[q])) {
+                                moved = q;
+                                break;
+                            }
+                    }
+                    if (!void_ret) {
+                        int t = lmod_new_temp(w->l, LTK_SRET, w->ret_type,
+                                              block);
+                        if (t <= 0) { w->hard = 1; return 0; }
+                        b->ret_temp = t;
+                    }
+                    for (q = w->sb_n - 1; q >= 0; q--) {
+                        int rsid;
+                        if (q == moved) continue;
+                        if (!lw_block_within(w, block, w->sb_block[q])) continue;
+                        rsid = lw_sb_release_stmt(w, q, 1, 0);
+                        if (rsid <= 0) return 0;
+                        if (lmod_block_add_cleanup(w->l, block, rsid) != 0) {
+                            w->hard = 1;
+                            return 0;
+                        }
+                    }
+                } else if (b->ret_expr > 0 && w->ret_type > 0 && !void_ret
+                           && lw_active_for_return(w, block, b->ret_expr,
+                                                   s->span.line, s->span.col)) {
+                    int t = lmod_new_temp(w->l, LTK_RET, w->ret_type, block);
+                    if (t <= 0) { w->hard = 1; return 0; }
+                    b->ret_temp = t;
+                }
             }
             /* consumed by the block terminator, no separate statement */
             *out = 0;
@@ -2410,6 +2769,34 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
             *out = sid;
             return 0;
         }
+        case TS_MATCH: {
+            struct ct_tadt *a = lw_adt_row(w, s->text);
+            int temp, j;
+            if (!a) { lw_abort(w, "L7830"); return 0; }
+            temp = lmod_new_temp(w->l, LTK_MATCH, 0, block);
+            if (temp <= 0) { w->hard = 1; return 0; }
+            sid = lmod_new_stmt(w->l, LS_MATCH, s->span.file, s->span.line,
+                                s->span.col);
+            if (sid <= 0) { w->hard = 1; return 0; }
+            e = lw_expr(w, s->kids[0]);
+            if (e <= 0) return 0;
+            w->l->stmts[sid - 1].expr = e;
+            w->l->stmts[sid - 1].name = a->full;
+            w->l->stmts[sid - 1].origin = temp;
+            w->l->stmts[sid - 1].aux = s->aux;
+            for (j = 1; j < s->nkids; j++) {
+                struct ct_tstmt *arm = &w->m->stmts[s->kids[j] - 1];
+                int blk = lw_match_arm_block(w, s->kids[j], temp, 0, block);
+                if (blk <= 0) { lw_abort(w, "L7831"); return 0; }
+                if (lmod_stmt_add_kid(w->l, sid, (int)arm->num) != 0
+                    || lmod_stmt_add_kid(w->l, sid, blk) != 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+            }
+            *out = sid;
+            return 0;
+        }
         case TS_GOTO: {
             if (!s->text || !s->text[0]) { lw_abort(w, "L899"); return 0; }
             sid = lmod_new_stmt(w->l, LS_GOTO, s->span.file, s->span.line, s->span.col);
@@ -2485,6 +2872,10 @@ static int lw_block_stmt(struct Lower *w, int tsid, int kind, int parent)
         if (lw_tail_cleanups(w, blk, s->scope,
                              w->l->blocks[blk - 1].term == LT_RETURN) != 0)
             return 0;
+        /* SH-102: the block's own owning handles are released at its closing
+           brace, in reverse declaration order -- even after a `return` (the
+           emitter prints that dead code too). */
+        if (lw_sb_tail(w, blk) != 0) return 0;
         /* the fall-out terminator for condition blocks: a CondJump back to
            the loop header / to the join, recorded for the S8 CFG pass */
         if (kind == LB_WHILE_BODY || kind == LB_FOR_BODY) {
@@ -2498,36 +2889,20 @@ static int lw_block_stmt(struct Lower *w, int tsid, int kind, int parent)
 /* ------------------------------------------------------------------------- */
 /* Functions and the program                                                 */
 /* ------------------------------------------------------------------------- */
-/* SH-102: an owning handle local / parameter gets emitter bookkeeping the
-   LIR does not carry yet -- a zero-init declaration, a retain at entry, a
-   release on every exit, and an `__ct_sretN` around a return. Those bodies
-   stay on the AST path. `String` / `U16String` and the owning ADT instances
-   are the spellings `sb_life_prefix_text` recognises; a borrowed `Str` view
-   and any pointer are not. Erring wide here only costs coverage, never a
-   byte. */
-static int lw_owns_handle(const char *sp)
+/* The owning locals declared in `blk` are released at its closing brace, in
+   reverse declaration order. */
+static int lw_sb_tail(struct Lower *w, int blk)
 {
-    if (!sp || !sp[0] || strchr(sp, '*')) return 0;
-    return strstr(sp, "String") != 0;
-}
+    int q;
 
-static int lw_func_has_handle(struct Lower *w, int func_scope)
-{
-    int i, k;
-
-    if (func_scope <= 0) return 0;
-    for (i = 0; i < w->m->nscopes; i++) {
-        struct ct_tscope *sc = &w->m->scopes[i];
-        int s = sc->id;
-        while (s > 0 && s != func_scope) s = lw_scope_parent(w, s);
-        if (s != func_scope) continue;
-        for (k = 0; k < sc->nvars; k++) {
-            int vi = sc->vars[k];
-            struct ct_tvar *v;
-            if (vi <= 0 || vi > w->m->nvars) continue;
-            v = &w->m->vars[vi - 1];
-            if (lw_owns_handle(backend::tir::tmod_cspell(w->m, v->type)))
-                return 1;
+    for (q = w->sb_n - 1; q >= 0; q--) {
+        int rsid;
+        if (w->sb_block[q] != blk) continue;
+        rsid = lw_sb_release_stmt(w, q, w->sb_kind[q], 0);
+        if (rsid <= 0) return -1;
+        if (lmod_block_add_tail(w->l, blk, rsid) != 0) {
+            w->hard = 1;
+            return -1;
         }
     }
     return 0;
@@ -2544,8 +2919,6 @@ static int lw_lower_func(struct Lower *w, int decl)
     w->l->stat_funcs++;
     rs = backend::tir::tmod_cspell(w->m, d->type);
     if (!rs) rs = "void";
-    if (lw_owning_spelling(rs)) { w->l->ready = 0; return 0; }
-    if (lw_func_has_handle(w, d->scope)) { w->l->ready = 0; return 0; }
     f = lmod_new_func(w->l, d->name, lw_type_text(w, rs), decl);
     if (f <= 0) { w->hard = 1; return 0; }
     w->l->funcs[f - 1].is_static = d->is_static;
@@ -2558,6 +2931,7 @@ static int lw_lower_func(struct Lower *w, int decl)
     w->func_scope = d->scope;
     w->func_has_self = 0;
     w->cv_n = 0;
+    w->sb_n = 0;
     w->h_nmap = 0;
     w->h_into_n = 0;
     w->ret_type = w->l->funcs[f - 1].ret;
@@ -3026,6 +3400,51 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
             }
             fputs(")", g_lir_out);
             return 0;
+        case LE_ADTCTOR: {
+            struct ct_tadt *a = lw_adt_row(w, e->text);
+            struct ct_tadvariant *v;
+            int j;
+            if (!a || e->num < 0 || e->num >= a->nvariants) return -1;
+            v = &a->variants[(int)e->num];
+            fprintf(g_lir_out, "((struct %s){ .tag = %d", a->full, (int)e->num);
+            if (v->nfields > 0) {
+                fprintf(g_lir_out, ", .u = { .%s = { ", v->cname);
+                for (j = 0; j < e->nkids && j < v->nfields; j++) {
+                    if (j > 0) fputs(", ", g_lir_out);
+                    fprintf(g_lir_out, ".%s = (", v->fields[j].name);
+                    if (lw_pw_kid(w, e, j, PW_EXPR) != 0) return -1;
+                    fputs(")", g_lir_out);
+                }
+                fputs(" } }", g_lir_out);
+            }
+            fputs(" })", g_lir_out);
+            return 0;
+        }
+        case LE_MATCHEXPR: {
+            int kn = (int)e->num;
+            int k = lmod_temp_num(w->l, kn, w->tmp_delta);
+            const char *m = lmod_temp_name(w->l, kn, w->tmp_delta);
+            int narm = (e->nkids - 1) / 2, j;
+            fprintf(g_lir_out, "({ struct %s %s = (", e->text ? e->text : "", m);
+            if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
+            fprintf(g_lir_out, "); %s __ct_mres%d = (%s){0}; ",
+                    e->member ? e->member : "int", k,
+                    e->member ? e->member : "int");
+            for (j = 0; j < narm; j++) {
+                int variant = e->kids[1 + 2 * j];
+                int blk = e->kids[2 + 2 * j];
+                if (j == narm - 1) {
+                    if (narm > 1) fputs("else ", g_lir_out);
+                } else {
+                    fputs(j == 0 ? "if (" : "else if (", g_lir_out);
+                    fprintf(g_lir_out, "%s%stag == %d) ", m,
+                            e->op ? "->" : ".", variant);
+                }
+                if (lw_pw_block(w, blk, 0) != 0) return -1;
+            }
+            fprintf(g_lir_out, "__ct_mres%d; })", k);
+            return 0;
+        }
         case LE_TRY: {
             const char *q = lmod_temp_name(w->l, (int)e->num, w->tmp_delta);
             int qn = lmod_temp_num(w->l, (int)e->num, w->tmp_delta);
@@ -3387,6 +3806,7 @@ static int lw_pw_decl(struct Lower *w, struct ct_lstmt *s, int ind, int inline_f
                                             : lmod_cspell(w->l, s->type),
             s->name ? s->name : "", s->dims ? s->dims : "");
     if (!inline_form && s->err_edge) fputs(" __attribute__((unused))", g_lir_out);
+    if (s->zero_init && s->expr <= 0) fputs(" = { 0 }", g_lir_out);
     if (s->expr > 0) {
         struct ct_lexpr *ie = &w->l->exprs[s->expr - 1];
         int self_assign = ie->kind == LE_INIT_RANGE
@@ -3473,6 +3893,58 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
                     "struct __ct_cl_env_%d __attribute__((unused)) "
                     "__ct_cl_env_v_%d = { %s };\n", s->origin, s->origin,
                     s->name ? s->name : "0");
+            return 0;
+        case LS_MATCH: {
+            const char *m = lmod_temp_name(w->l, s->origin, w->tmp_delta);
+            int narm = s->nkids / 2, j;
+            lw_ind(ind);
+            fprintf(g_lir_out, "struct %s %s __attribute__((unused)) = (",
+                    s->name ? s->name : "", m);
+            if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+            fputs(");\n", g_lir_out);
+            for (j = 0; j < narm; j++) {
+                int variant = s->kids[2 * j];
+                int blk = s->kids[2 * j + 1];
+                lw_ind(ind);
+                if (j == narm - 1) {
+                    if (narm > 1) fputs("else ", g_lir_out);
+                } else {
+                    fputs(j == 0 ? "if (" : "else if (", g_lir_out);
+                    fprintf(g_lir_out, "%s%stag == %d) ", m,
+                            s->aux ? "->" : ".", variant);
+                }
+                if (lw_pw_block(w, blk, ind) != 0) return -1;
+            }
+            return 0;
+        }
+        case LS_MATCHBIND: {
+            const char *m = lmod_temp_name(w->l, s->target, w->tmp_delta);
+            lw_ind(ind);
+            fprintf(g_lir_out, "%s %s __attribute__((unused)) = ",
+                    s->spelling ? s->spelling : "int",
+                    s->name ? s->name : "");
+            if (s->aux == 1 || s->aux == 2)
+                fprintf(g_lir_out, "%s_retain(&(",
+                        s->aux == 2 ? "U16String" : "String");
+            fprintf(g_lir_out, "%s.u.%s.%s", m, s->fname ? s->fname : "",
+                    s->member ? s->member : "");
+            if (s->aux == 1 || s->aux == 2) fputs("))", g_lir_out);
+            fputs(";\n", g_lir_out);
+            return 0;
+        }
+        case LS_MATCHYIELD: {
+            int k = lmod_temp_num(w->l, s->target, w->tmp_delta);
+            lw_ind(ind);
+            fprintf(g_lir_out, "__ct_mres%d = ", k);
+            if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+            fputs(";\n", g_lir_out);
+            return 0;
+        }
+        case LS_RELEASE:
+            lw_ind(ind);
+            fprintf(g_lir_out, "%s_release(&", s->name ? s->name : "String");
+            if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
+            fputs(");\n", g_lir_out);
             return 0;
         case LS_TEMPDECL: {
             const char *nm = lmod_temp_name(w->l, s->origin, w->tmp_delta);

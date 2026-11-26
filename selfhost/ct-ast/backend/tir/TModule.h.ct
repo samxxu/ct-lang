@@ -308,6 +308,7 @@ pub struct ct_texpr {
 pub struct ct_tstmt {
     int id;
     int kind;
+    long num;           /* match arm: the variant index */
     struct ct_tspan span;
     int scope;
     int *kids;
@@ -386,6 +387,31 @@ pub struct ct_tstruct {
     int uses_handback;  /* the built-in `Handback`: no vptr, `borrow` calls it */
     int has_drop_impl;  /* an `impl Drop` body exists in the program */
     int drop_visible;   /* that body is visible from the emitting unit */
+}
+
+/* One ADT row: the source and C names plus each variant's emitted union
+   member and payload fields. `match` / ADT constructors print from this
+   table, so a lowering never re-reads Symbols. */
+pub struct ct_tadtfield {
+    const char *name;
+    const char *type;
+}
+
+pub struct ct_tadvariant {
+    const char *name;
+    const char *cname;
+    struct ct_tadtfield *fields;
+    int nfields;
+    int fcap;
+}
+
+pub struct ct_tadt {
+    int id;
+    const char *name;
+    const char *full;
+    struct ct_tadvariant *variants;
+    int nvariants;
+    int vcap;
 }
 
 pub struct ct_tinst {
@@ -486,6 +512,9 @@ pub struct TModule {
     struct ct_tstruct *structs;
     int nstructs;
     int stcap;
+    struct ct_tadt *adts;
+    int nadts;
+    int adcap;
     struct ct_troot *roots;
     int nroots;
     int rcap;
@@ -625,6 +654,12 @@ pub int tmod_struct_add_use(struct TModule *self, int srow, const char *use);
 pub int tmod_struct_add_field(struct TModule *self, int srow, const char *name,
                               const char *type, const char *dims);
 pub int tmod_find_struct(struct TModule *self, const char *name);
+pub int tmod_new_adt(struct TModule *self, const char *name, const char *full);
+pub int tmod_adt_add_variant(struct TModule *self, int adt, const char *name,
+                             const char *cname);
+pub int tmod_adt_add_field(struct TModule *self, int adt, int variant,
+                           const char *name, const char *type);
+pub int tmod_find_adt(struct TModule *self, const char *name);
 pub int tmod_add_root(struct TModule *self, int kind, int unit, const char *name);
 pub int tmod_graph_node(struct TModule *self, int kind, int id);
 pub int tmod_graph_edge(struct TModule *self, int from, int to, int kind,
@@ -1117,6 +1152,78 @@ pub int tmod_find_struct(struct TModule *self, const char *name)
     if (!name || !name[0]) return 0;
     for (i = 0; i < self->nstructs; i++)
         if (strcmp(self->structs[i].name, name) == 0) return self->structs[i].id;
+    return 0;
+}
+
+pub int tmod_new_adt(struct TModule *self, const char *name, const char *full)
+{
+    int slot, id;
+    const char *pn, *pf;
+
+    if (tir_reserve((void **)&self->adts, &self->adcap, self->nadts + 1,
+                    (int)sizeof(struct ct_tadt)) != 0) return -1;
+    pn = runtime::text::ct_intern(name ? name : "");
+    pf = runtime::text::ct_intern(full ? full : "");
+    if (!pn || !pf) return -1;
+    slot = self->nadts;
+    id = slot + 1;
+    self->adts[slot].id = id;
+    self->adts[slot].name = pn;
+    self->adts[slot].full = pf;
+    self->nadts++;
+    return id;
+}
+
+pub int tmod_adt_add_variant(struct TModule *self, int adt, const char *name,
+                             const char *cname)
+{
+    struct ct_tadt *a;
+    const char *pn, *pc;
+
+    if (adt <= 0 || adt > self->nadts) return -1;
+    a = &self->adts[adt - 1];
+    if (tir_reserve((void **)&a->variants, &a->vcap, a->nvariants + 1,
+                    (int)sizeof(struct ct_tadvariant)) != 0) return -1;
+    pn = runtime::text::ct_intern(name ? name : "");
+    pc = runtime::text::ct_intern(cname ? cname : "");
+    if (!pn || !pc) return -1;
+    a->variants[a->nvariants].name = pn;
+    a->variants[a->nvariants].cname = pc;
+    a->nvariants++;
+    return 0;
+}
+
+pub int tmod_adt_add_field(struct TModule *self, int adt, int variant,
+                           const char *name, const char *type)
+{
+    struct ct_tadt *a;
+    struct ct_tadvariant *v;
+    const char *pn, *pt;
+
+    if (adt <= 0 || adt > self->nadts) return -1;
+    a = &self->adts[adt - 1];
+    if (variant < 0 || variant >= a->nvariants) return -1;
+    v = &a->variants[variant];
+    if (tir_reserve((void **)&v->fields, &v->fcap, v->nfields + 1,
+                    (int)sizeof(struct ct_tadtfield)) != 0) return -1;
+    pn = runtime::text::ct_intern(name ? name : "");
+    pt = runtime::text::ct_intern(type ? type : "");
+    if (!pn || !pt) return -1;
+    v->fields[v->nfields].name = pn;
+    v->fields[v->nfields].type = pt;
+    v->nfields++;
+    return 0;
+}
+
+pub int tmod_find_adt(struct TModule *self, const char *name)
+{
+    int i;
+
+    if (!name || !name[0]) return 0;
+    for (i = 0; i < self->nadts; i++)
+        if ((self->adts[i].name && strcmp(self->adts[i].name, name) == 0)
+            || (self->adts[i].full && strcmp(self->adts[i].full, name) == 0))
+            return self->adts[i].id;
     return 0;
 }
 
