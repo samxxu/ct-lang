@@ -6354,11 +6354,13 @@ cap_check closure_bind "too many closure bindings in one frame" "$work/cap_closu
 } >"$work/cap_closure_nest.ct"
 cap_check closure_nest "a closure is nested too deeply (limit 16)" "$work/cap_closure_nest.ct"
 
-# TEST-25: the distinct-call table (`io_names[1024]`) had no boundary fixture.
-# One generated file with 1024 different callees must pass; one more must fail
+# TEST-25: the distinct-call table (`io_names[2048]`) had no boundary fixture.
+# One generated file with 2048 different callees must pass; one more must fail
 # loudly, naming the unit and the limit instead of the old bare "too many
 # distinct calls". Declarations are enough: the table counts source names, not
-# resolved bodies, so the fixture stays cheap to compile.
+# resolved bodies, so the fixture stays cheap to compile. The capacity doubled
+# in v1-PH-2 S5 (the pattern scratch's DNF/guard helpers); the boundary moves
+# with it so the negative still exercises the real edge.
 gen_io_names() {
     cap_n="$1"
     cap_out="$2"
@@ -6371,15 +6373,15 @@ gen_io_names() {
         printf '    return 0;\n}\n'
     } >"$cap_out"
 }
-gen_io_names 1024 "$work/cap_io_names_max.ct"
+gen_io_names 2048 "$work/cap_io_names_max.ct"
 if "$work/ct-ast" "$work/cap_io_names_max.ct" -o "$work/cap-io-names-max.c" \
         >"$work/cap-io-names-max.out" 2>"$work/cap-io-names-max.err"; then
-    ok "cap io_names (1024 distinct calls accepted)"
+    ok "cap io_names (2048 distinct calls accepted)"
 else
-    bad "cap io_names (1024 distinct calls accepted)" "$(cat "$work/cap-io-names-max.err")"
+    bad "cap io_names (2048 distinct calls accepted)" "$(cat "$work/cap-io-names-max.err")"
 fi
-gen_io_names 1025 "$work/cap_io_names.ct"
-cap_check io_names "too many distinct calls in unit 'cap_io_names.ct' (limit 1024)" "$work/cap_io_names.ct"
+gen_io_names 2049 "$work/cap_io_names.ct"
+cap_check io_names "too many distinct calls in unit 'cap_io_names.ct' (limit 2048)" "$work/cap_io_names.ct"
 
 # A struct whose body opens on the line after its name makes the parser look
 # ahead across a newline. The lookahead has to restore the lexer's line state
