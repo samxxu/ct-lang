@@ -24,9 +24,8 @@ examples/*/*.h
 *.swo
 *~
 
-# VS Code extension packaging output (editors/vscode)
+# Editor packaging output (the VS Code extension now lives in samxxu/ct-vscode)
 *.vsix
-editors/**/node_modules/
 
 # Local agent tooling (skills, caches) — not part of the shipped project
 .trae/
