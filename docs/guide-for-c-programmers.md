@@ -33,6 +33,118 @@
 
 **关键认知：以上每一行都不是「语法糖」那么简单——糖下面的所有权语义由编译器强制。**
 
+### 1.1 同样的东西用 Ct 写（C 对照）
+
+下面每组的左侧是 **C 互操作/对照写法**，不是本文推荐写法；右侧是同一件事的 Ct 日常写法。
+完整可跑样例见 [examples/50_ref_out](../examples/50_ref_out/prog.ct)、
+[51_slice](../examples/51_slice/prog.ct)、[52_box_new](../examples/52_box_new/prog.ct)、
+[53_match_adt](../examples/53_match_adt/prog.ct) 与 [66_functor](../examples/66_functor/prog.ct)。
+
+**字符串：谁拥有**
+
+```c
+/* C 对照：调用方分配，调用方释放 */
+char *greet(const char *name)
+{
+    char *r = malloc(strlen("hello, ") + strlen(name) + 1);
+    strcpy(r, "hello, ");
+    strcat(r, name);
+    return r;
+}
+```
+
+```ct
+String greet(Str name)
+{
+    return str_concat("hello, ", name);
+}
+```
+
+**数组：长度跟指针走**
+
+```c
+int sum(const int *a, int n)
+{
+    int total = 0;
+    for (int i = 0; i < n; i++) total += a[i];
+    return total;
+}
+```
+
+```ct
+int sum(int[] a)
+{
+    int total = 0;
+    for (int i = 0; i < a.len; i++) total = total + a[i];
+    return total;
+}
+```
+
+**出参：意图写在签名里**
+
+```c
+void inc(int *x)
+{
+    (*x) = (*x) + 1;
+}
+```
+
+```ct
+void inc(ref int x)
+{
+    x = x + 1;
+}
+```
+
+**单对象堆分配：句柄代替裸指针**
+
+```c
+struct Point *p = malloc(sizeof *p);
+p->x = 3;
+p->y = 4;
+/* ... */
+free(p);
+```
+
+```ct
+Box<Point> p = new Point { 3, 4 };
+p.x = 3;
+p.y = 4;
+p.release();
+```
+
+**多形态：`match` 代替 `kind + switch`**
+
+```c
+enum Kind { KIND_TEXT, KIND_EMPTY };
+struct Msg { enum Kind kind; char *text; };
+
+switch (m.kind) {
+case KIND_TEXT:  puts(m.text); break;
+case KIND_EMPTY: puts("empty"); break;
+}
+```
+
+```ct
+enum Msg {
+    Text(String body),
+    Empty(),
+}
+
+match (m) {
+    Msg.Text(body) => {
+        printf("%s\n", body.cstr());
+        body.release();
+    }
+    Msg.Empty() => {
+        printf("empty\n");
+    }
+}
+```
+
+C 侧之所以还出现 `char *` / `malloc` / `->`，是因为它展示的是 C 互操作边界；Ct 侧不要求这些。
+原有的 C 指针段保留作对照，等价 Ct 写法以本节与 §3–§7 为准。
+
 ## 2. 指针退场后的世界：三层结构
 
 ```
