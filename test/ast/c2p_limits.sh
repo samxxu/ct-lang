@@ -1226,6 +1226,36 @@ if run_product c2p10_member_sub "$work/c2p10_member_sub.ct"; then
     fi
 fi
 
+
+# ---- C2p-10.5) `ct check --types` on a 2000-byte Result payload --------
+# `chk_type`'s NK_TRY arm wrote the operand's payload spelling into 160-byte
+# rows before `result_tag` / `result_cols` read it, so the `--types` pass saw a
+# cut `Result<...>` and rejected a legal `?` with "'?' needs a Result operand".
+cat >"$work/c2p10_types.ct" <<CT
+struct $lt10 { int n; };
+Result<struct $lt10, char *> f(int n)
+{
+    if (n < 0) return err: (Result<struct $lt10, char *>){ 0, 0, "neg" };
+    return (Result<struct $lt10, char *>){ 1, (struct $lt10){ .n = n }, 0 };
+}
+Result<struct $lt10, char *> g(int n)
+{
+    struct $lt10 v = f(n)?;
+    return (Result<struct $lt10, char *>){ 1, v, 0 };
+}
+int main(void)
+{
+    struct $lt10 r = g(4).value;
+    return r.n - 4;
+}
+CT
+"$CT" check --types "$work/c2p10_types.ct" >"$work/c2p10_types.log" 2>&1
+if [ $? -eq 0 ]; then
+    ok; printf '  2000-byte Result payload: `ct check --types` keeps the `?` legal\n'
+else
+    bad "c2p10_types: ct check --types rejected the 2000-byte Result: $(head -2 "$work/c2p10_types.log" | tr '\n' ' ')"
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
 
 [ "$fail" -eq 0 ]
