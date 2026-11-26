@@ -273,7 +273,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
     if (_self->lex->tok != T_ID) {
         return 0;
     }
-    if ((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box") || (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Box") && (frontend_sym_ct_tmpl_find("Box") >= 0)))) {
+    if ((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box") || (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Box") && (frontend_sym_ct_tmpl_find("Box", (-1)) >= 0)))) {
         return _self->ex->__frontend_parse_exprstatictype_vptr->tok_is_type_name(_self->ex);
     }
     if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "_Alignas")) {
@@ -342,7 +342,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
                     p++;
                 }
             }
-            if ((((*p) == '<') && ((frontend_sym_ct_tmpl_find(qn) >= 0) || ((strncmp(qn, "core_", 5) == 0) && ((frontend_sym_ct_tmpl_find((qn + 5)) >= 0) || (strcmp((qn + 5), "box") == 0)))))) {
+            if ((((*p) == '<') && ((frontend_sym_ct_tmpl_find(qn, (-1)) >= 0) || ((strncmp(qn, "core_", 5) == 0) && ((frontend_sym_ct_tmpl_find((qn + 5), (-1)) >= 0) || (strcmp((qn + 5), "box") == 0)))))) {
                 return 1;
             }
             if ((!((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || ((*p) == '_')) || ((*p) == '*')))) {
@@ -351,7 +351,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_is_decl_start(void *self) 
             if ((((rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, qn)) != 0) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {
                 return 1;
             }
-            if ((((strncmp(qn, "core_", 5) == 0) && ((rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, (qn + 5))) != 0)) && ((_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0) || (frontend_sym_ct_tmpl_find((qn + 5)) >= 0)))) {
+            if ((((strncmp(qn, "core_", 5) == 0) && ((rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, (qn + 5))) != 0)) && ((_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0) || (frontend_sym_ct_tmpl_find((qn + 5), (-1)) >= 0)))) {
                 return 1;
             }
             if ((((strncmp(qn, "core_utf16_", 11) == 0) && ((rn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, (qn + 11))) != 0)) && (_self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rn) >= 0))) {

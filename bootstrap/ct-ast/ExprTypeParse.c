@@ -402,7 +402,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
             if (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "struct")) {
                 const char * sname;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                if (((_self->lex->tok == T_ID) && (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0))) {
+                if (((_self->lex->tok == T_ID) && (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), _self->cur_unit) >= 0))) {
                     if (_self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, out, cap) != 0) {
                         return (-1);
                     }
@@ -515,7 +515,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                                 if (strcmp(resq, "box") == 0) {
                                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'box<T>' is no longer supported; write 'Box<T>'");
                                 }
-                                if (frontend_sym_ct_tmpl_find(resq) >= 0) {
+                                if (frontend_sym_ct_tmpl_find(resq, _self->cur_unit) >= 0) {
                                     frontend_parse_g_expr_inst_override = runtime_text_ct_intern(resq);
                                     if ((!frontend_parse_g_expr_inst_override)) {
                                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -616,7 +616,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 if ((!bclosed)) {
                     break;
                 }
-                if (frontend_sym_ct_tmpl_find("Box") < 0) {
+                if (frontend_sym_ct_tmpl_find("Box", _self->cur_unit) < 0) {
                     break;
                 }
                 if (_self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, out, cap) != 0) {
@@ -625,7 +625,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 n = (int)(strlen(out));
                 continue;
             }
-            if (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
+            if (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), _self->cur_unit) >= 0) {
                 if (_self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, out, cap) != 0) {
                     return (-1);
                 }
@@ -1002,7 +1002,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     if (strcmp(tname, "box") == 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'box<T>' is no longer supported; write 'Box<T>'");
     }
-    ti2 = frontend_sym_ct_tmpl_find(tname);
+    ti2 = frontend_sym_ct_tmpl_find(tname, _self->cur_unit);
     tp = frontend_sym_ct_tmpls((&tn));
     if (((!tp) || (ti2 < 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "internal: template row vanished");
@@ -1112,7 +1112,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type(void
     if (((((((strcmp(tname, "Map") == 0) && (nargs >= 1)) && (strcmp(carg[0], "int") != 0)) && (strcmp(carg[0], "long") != 0)) && (strcmp(carg[0], "char*") != 0)) && (strcmp(carg[0], "struct String") != 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("Map does not support key type '%s' (key types: int, long, char *, String)", carg[0]));
     }
-    enc = frontend_sym_ct_inst_encode_text(tname, nargs, carg);
+    enc = frontend_sym_ct_inst_encode_text(((tp[ti2].shadow && tp[ti2].cbase) ? tp[ti2].cbase : tname), nargs, carg);
     if ((!enc)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }

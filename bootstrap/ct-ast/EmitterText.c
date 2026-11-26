@@ -325,7 +325,7 @@ const char * backend_emit_elem_ret_ctype(int inst, const char * text) {
     if ((((!ins) || (inst < 0)) || (inst >= k))) {
         return (const char *)(0);
     }
-    ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
+    ti = ins[inst].tmpl_row;
     tps = frontend_sym_ct_tmpls((&tn));
     cur = (text ? text : "");
     if (((ti >= 0) && tps)) {

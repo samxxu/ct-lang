@@ -402,12 +402,15 @@ struct frontend_sym_StructTmpl {
     int owner;
     int is_adt;
     int adt;
+    int shadow;
+    const char * cbase;
     char path[1024];
     int line;
 };
 struct frontend_sym_StructInst {
     const char * name;
     const char * tmpl;
+    int tmpl_row;
     char * * carg;
     char * * ctype;
     int acap;
@@ -421,6 +424,7 @@ struct frontend_sym_StructInst {
 };
 struct frontend_sym_StructImpl {
     const char * tmpl;
+    int tmpl_row;
     int ntparams;
     char * * tparam;
     int tcap;
@@ -482,6 +486,7 @@ struct frontend_sym_Symbols {
     const char * * type_target;
     int ntype;
     int typecap;
+    int builtin_tmpl_hi;
     struct frontend_sym_Trait * traits;
     int ntraits;
     int traitscap;
@@ -525,11 +530,11 @@ struct frontend_sym_Symbols {
 struct frontend_sym_StructTmpl * frontend_sym_ct_tmpls(int *);
 struct frontend_sym_StructInst * frontend_sym_ct_insts(int *);
 struct frontend_sym_StructImpl * frontend_sym_ct_impls(int *);
-int frontend_sym_ct_impl_find(const char *, int, char * *, const char *);
+int frontend_sym_ct_impl_find(const char *, int, int, char * *, const char *);
 int frontend_sym_ct_impl_add(const char *, int, char * *, int, char * *, const char *, int, int, int);
 int frontend_sym_ct_impl_matches(int, int);
 int frontend_sym_ct_method_bind(int, int, char * *, char * *, int);
-int frontend_sym_ct_tmpl_find(const char *);
+int frontend_sym_ct_tmpl_find(const char *, int);
 int frontend_sym_ct_tmpl_add(const char *, const char *, int, char * *, char * *, int, int, const char *, int);
 int frontend_sym_ct_inst_find(const char *);
 int frontend_sym_ct_inst_add(const char *, const char *, int, char * *, char * *, int, int, int, int);

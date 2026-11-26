@@ -471,7 +471,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_tok_is_type_name(vo
                 }
             }
         }
-        if (((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Box") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box")) && (frontend_sym_ct_tmpl_find("Box") >= 0))) {
+        if (((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "Box") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box")) && (frontend_sym_ct_tmpl_find("Box", _self->cur_unit) >= 0))) {
             size_t p2 = _self->lex->pos;
             int d2 = 0;
             int closed = 0;

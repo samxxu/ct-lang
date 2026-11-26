@@ -3032,7 +3032,12 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     if (((templ && pre_adt) && name[0])) {
         struct frontend_sym_StructTmpl * tps_e;
         int tn_e;
-        if (frontend_sym_ct_tmpl_find(name) >= 0) {
+        int tbx_e;
+        int shadowable_e;
+        tbx_e = frontend_sym_ct_tmpl_find(name, _self->cur_unit);
+        tps_e = frontend_sym_ct_tmpls((&tn_e));
+        shadowable_e = (((tbx_e >= 0) && (tbx_e < _self->sym->builtin_tmpl_hi)) && ((strcmp(name, "Option") == 0) || (strcmp(name, "Result") == 0)));
+        if (((tbx_e >= 0) && (((!tps_e) || ((tps_e[tbx_e].owner == _self->cur_unit) && (tbx_e >= _self->sym->builtin_tmpl_hi))) || (!shadowable_e)))) {
             return tool_diag_ct_sem_error(ltline, ltcol, tool_sh_ct_scratch_fmt("generic ADT '%s' conflicts with an existing generic type of the same name", name), _self->mem->path);
         }
         early_ti = frontend_sym_ct_tmpl_add(name, qname, nt, tparam, bound, is_pub, _self->cur_unit, _self->mem->path, tline);
@@ -3258,8 +3263,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
             }
-            if (((early_ti < 0) && (frontend_sym_ct_tmpl_find(name) >= 0))) {
-                return tool_diag_ct_sem_error(tline, tcol, tool_sh_ct_scratch_fmt("generic ADT '%s' conflicts with an existing generic type of the same name", name), _self->mem->path);
+            if (early_ti < 0) {
+                int tbx_l = frontend_sym_ct_tmpl_find(name, _self->cur_unit);
+                int tn_l;
+                struct frontend_sym_StructTmpl * tps_l = frontend_sym_ct_tmpls((&tn_l));
+                int shadowable_l = (((tbx_l >= 0) && (tbx_l < _self->sym->builtin_tmpl_hi)) && ((strcmp(name, "Option") == 0) || (strcmp(name, "Result") == 0)));
+                if (((tbx_l >= 0) && (((!tps_l) || ((tps_l[tbx_l].owner == _self->cur_unit) && (tbx_l >= _self->sym->builtin_tmpl_hi))) || (!shadowable_l)))) {
+                    return tool_diag_ct_sem_error(tline, tcol, tool_sh_ct_scratch_fmt("generic ADT '%s' conflicts with an existing generic type of the same name", name), _self->mem->path);
+                }
             }
             if (early_ti < 0) {
                 ti5 = frontend_sym_ct_tmpl_add(name, qname, nt, tparam, bound, is_pub, _self->cur_unit, _self->mem->path, tline);
@@ -4955,7 +4966,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
     _self->ex->in_generic_ntparam = nt;
     _self->ex->in_generic_bound = "";
 {
-        int tbi = frontend_sym_ct_tmpl_find(tmpl);
+        int tbi = frontend_sym_ct_tmpl_find(tmpl, _self->cur_unit);
         int tbn;
         int kb;
         struct frontend_sym_StructTmpl * tps = frontend_sym_ct_tmpls((&tbn));
@@ -4979,7 +4990,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         }
     }
 {
-        int tbi2 = frontend_sym_ct_tmpl_find(tmpl);
+        int tbi2 = frontend_sym_ct_tmpl_find(tmpl, _self->cur_unit);
         int tbn2;
         struct frontend_sym_StructTmpl * tps2 = frontend_sym_ct_tmpls((&tbn2));
         (void)(tbn2);
@@ -5035,7 +5046,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                 tpub = _self->sym->structs[tsi].is_pub;
             }
             else {
-                int tbi3 = frontend_sym_ct_tmpl_find(tmpl);
+                int tbi3 = frontend_sym_ct_tmpl_find(tmpl, _self->cur_unit);
                 int tbn3;
                 struct frontend_sym_StructTmpl * tps3 = frontend_sym_ct_tmpls((&tbn3));
                 if ((((tbi3 >= 0) && tps3) && tps3[tbi3].is_adt)) {
@@ -5595,7 +5606,7 @@ static int check_struct_bounds(struct frontend_parse_Parser * self) {
         if (((ins[i].owner != self->cur_unit) || (ins[i].line <= 0))) {
             continue;
         }
-        ti = frontend_sym_ct_tmpl_find(ins[i].tmpl);
+        ti = ins[i].tmpl_row;
         if (ti < 0) {
             continue;
         }

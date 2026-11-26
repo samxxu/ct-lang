@@ -267,7 +267,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_new_ahead(void *self) {
                         res = 1;
                     }
                     else {
-                        if (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) {
+                        if (frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), _self->cur_unit) >= 0) {
                             res = 1;
                         }
                         else {
@@ -344,7 +344,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
     if (((strcmp(base, "String") == 0) || (strcmp(base, "Str") == 0))) {
         return tool_diag_ct_sem_error(nline, ncol, "'new String' / 'new Str' is not supported; use the literal, 'to_string()' or 'as_str()'", _self->sup->mem->path);
     }
-    if (frontend_sym_ct_tmpl_find("Box") < 0) {
+    if (frontend_sym_ct_tmpl_find("Box", _self->cur_unit) < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the built-in `Box` layer is missing (set CT_CORE_DIR, or the legacy CT_STD_DIR)");
     }
     if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{")))) {

@@ -4405,7 +4405,7 @@ static const char * sb_expr_type_text(struct backend_emit_Emitter * self, int n)
                     struct frontend_sym_StructInst * ins2 = frontend_sym_ct_insts((&nt));
                     int k2 = (ins2 ? frontend_sym_ct_inst_find(self->sym->structs[si].name) : (-1));
                     if (k2 >= 0) {
-                        int tm = frontend_sym_ct_tmpl_find(ins2[k2].tmpl);
+                        int tm = ins2[k2].tmpl_row;
                         int ntm;
                         int tf;
                         struct frontend_sym_StructTmpl * tps2 = frontend_sym_ct_tmpls((&ntm));
@@ -7049,7 +7049,7 @@ static int emit_struct_insts(struct backend_emit_Emitter * self, int u, int head
         if (insts[i].emitted) {
             continue;
         }
-        tmpl = frontend_sym_ct_tmpl_find(insts[i].tmpl);
+        tmpl = insts[i].tmpl_row;
         if (tmpl < 0) {
             continue;
         }
@@ -7238,7 +7238,7 @@ static int impl_emit_method(struct backend_emit_Emitter * self, int ki, int ii, 
     (void)(nimpls);
     (void)(ntmpls);
     iname = ins[ii].name;
-    tmpl = frontend_sym_ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     exported = ((((tmpl >= 0) && tps[tmpl].is_pub) && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr);
     if (inst_elem_foreign(self, ii)) {
         exported = 0;
@@ -7545,7 +7545,7 @@ static int inst_elem_foreign(struct backend_emit_Emitter * self, int ii) {
     if ((((((strcmp(ins[ii].tmpl, "Vec") != 0) && (strcmp(ins[ii].tmpl, "Map") != 0)) && (strcmp(ins[ii].tmpl, "MapEntry") != 0)) && (strcmp(ins[ii].tmpl, "Option") != 0)) && (strcmp(ins[ii].tmpl, "Result") != 0))) {
         return 0;
     }
-    tmpl = frontend_sym_ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     if (((tmpl < 0) || (tps[tmpl].owner < 0))) {
         return 0;
     }
@@ -7584,7 +7584,7 @@ static int inst_visible_in_unit(struct backend_emit_Emitter * self, int ii) {
     if ((((!ins) || (ii < 0)) || (ii >= n))) {
         return 0;
     }
-    tmpl = frontend_sym_ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     tps = frontend_sym_ct_tmpls((&tn));
     if ((!(((((tps && (tmpl >= 0)) && tps[tmpl].is_pub) && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr) && (!inst_elem_foreign(self, ii))))) {
         return (ins[ii].owner == self->cur_unit);
@@ -7796,7 +7796,7 @@ static int emit_struct_impls(struct backend_emit_Emitter * self, int u, int head
         }
     }
     for (ki = 0; ki < nimpls; ki++) {
-        tmpl = frontend_sym_ct_tmpl_find(im[ki].tmpl);
+        tmpl = im[ki].tmpl_row;
         if (header) {
             int via_hdr;
             if (((tmpl < 0) || ((u >= 0) && (im[ki].owner != u)))) {
@@ -8048,7 +8048,7 @@ static int shell_owned_here(struct backend_emit_Emitter * self, int ii) {
     if (((((!ins) || (!tps)) || (ii < 0)) || (ii >= n))) {
         return 0;
     }
-    tmpl = frontend_sym_ct_tmpl_find(ins[ii].tmpl);
+    tmpl = ins[ii].tmpl_row;
     if (tmpl < 0) {
         return 0;
     }

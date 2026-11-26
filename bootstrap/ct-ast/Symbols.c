@@ -161,11 +161,11 @@ extern void U16String_Drop_drop(void *self);
 struct frontend_sym_StructTmpl * frontend_sym_ct_tmpls(int *);
 struct frontend_sym_StructInst * frontend_sym_ct_insts(int *);
 struct frontend_sym_StructImpl * frontend_sym_ct_impls(int *);
-int frontend_sym_ct_impl_find(const char *, int, char * *, const char *);
+int frontend_sym_ct_impl_find(const char *, int, int, char * *, const char *);
 int frontend_sym_ct_impl_add(const char *, int, char * *, int, char * *, const char *, int, int, int);
 int frontend_sym_ct_impl_matches(int, int);
 int frontend_sym_ct_method_bind(int, int, char * *, char * *, int);
-int frontend_sym_ct_tmpl_find(const char *);
+int frontend_sym_ct_tmpl_find(const char *, int);
 int frontend_sym_ct_tmpl_add(const char *, const char *, int, char * *, char * *, int, int, const char *, int);
 int frontend_sym_ct_inst_find(const char *);
 int frontend_sym_ct_inst_add(const char *, const char *, int, char * *, char * *, int, int, int, int);
@@ -2575,12 +2575,53 @@ struct frontend_sym_StructInst * frontend_sym_ct_insts(int * n) {
     }
     return frontend_sym_g_insts;
 }
-int frontend_sym_ct_tmpl_find(const char * name) {
+int frontend_sym_ct_tmpl_find(const char * name, int unit) {
     int i;
     int n;
-    struct frontend_sym_StructTmpl * t = frontend_sym_ct_tmpls((&n));
-    for (i = 0; i < n; i++) {
-        if (strcmp(t[i].name, name) == 0) {
+    int b;
+    int ntb;
+    struct frontend_sym_Symbols * sym;
+    struct frontend_sym_StructTmpl * t;
+    if (((!name) || (!name[0]))) {
+        return (-1);
+    }
+    t = frontend_sym_ct_tmpls((&n));
+    sym = frontend_sym_symbols_get();
+    if (((!t) || (!sym))) {
+        return (-1);
+    }
+    for (i = (n - 1); i >= 0; i--) {
+        if ((((t[i].owner == unit) && (i >= sym->builtin_tmpl_hi)) && (strcmp(t[i].name, name) == 0))) {
+            return i;
+        }
+    }
+    if (unit >= 0) {
+        ntb = sym->ntb;
+        for (b = (ntb - 1); b >= 0; b--) {
+            if (((!sym->tbare[b]) || (strcmp(sym->tbare[b], name) != 0))) {
+                continue;
+            }
+            for (i = (n - 1); i >= 0; i--) {
+                if (((t[i].full && sym->tfull[b]) && (strcmp(t[i].full, sym->tfull[b]) == 0))) {
+                    return i;
+                }
+            }
+        }
+    }
+    for (i = (n - 1); i >= 0; i--) {
+        if (((i < sym->builtin_tmpl_hi) && (strcmp(t[i].name, name) == 0))) {
+            return i;
+        }
+    }
+    if (unit < 0) {
+        for (i = (n - 1); i >= 0; i--) {
+            if (strcmp(t[i].name, name) == 0) {
+                return i;
+            }
+        }
+    }
+    for (i = (n - 1); i >= 0; i--) {
+        if (((!t[i].shadow) && (strcmp(t[i].name, name) == 0))) {
             return i;
         }
     }
@@ -2590,10 +2631,25 @@ int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, ch
     int i;
     int n;
     int k;
+    int shadow;
+    struct frontend_sym_Symbols * sym;
     struct frontend_sym_StructTmpl * t;
-    i = frontend_sym_ct_tmpl_find(name);
+    sym = frontend_sym_symbols_get();
+    t = frontend_sym_ct_tmpls((&n));
+    for (i = (n - 1); (t && (i >= 0)); i--) {
+        if ((((t[i].owner == owner) && (i >= (sym ? sym->builtin_tmpl_hi : 0))) && (strcmp(t[i].name, name) == 0))) {
+            return i;
+        }
+    }
+    i = frontend_sym_ct_tmpl_find(name, owner);
+    shadow = 0;
     if (i >= 0) {
-        return i;
+        if (((sym && (i < sym->builtin_tmpl_hi)) && ((strcmp(name, "Option") == 0) || (strcmp(name, "Result") == 0)))) {
+            shadow = 1;
+        }
+        else {
+            return i;
+        }
     }
     if (((ntprm < 0) || (ntprm > CAP_LIMIT))) {
         return (-1);
@@ -2635,6 +2691,14 @@ int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, ch
     t[n].owner = owner;
     t[n].is_adt = 0;
     t[n].adt = (-1);
+    t[n].shadow = shadow;
+    t[n].cbase = t[n].name;
+    if (shadow) {
+        t[n].cbase = runtime_text_ct_internf("ct_adt_%s", ((full && full[0]) ? full : name));
+        if ((!t[n].cbase)) {
+            return (-1);
+        }
+    }
     snprintf(t[n].path, 1024, "%s", path);
     t[n].line = line;
     frontend_sym_g_ntmpls++;
@@ -2655,10 +2719,12 @@ int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, ch
     int i;
     int n;
     int k;
+    int row;
     struct frontend_sym_StructInst * t;
     if (((nargs < 0) || (nargs > CAP_LIMIT))) {
         return (-1);
     }
+    row = frontend_sym_ct_tmpl_find(tmpl, owner);
     i = frontend_sym_ct_inst_find(name);
     t = frontend_sym_ct_insts((&n));
     if (i >= 0) {
@@ -2669,6 +2735,9 @@ int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, ch
             if (((((!t[i].carg[k]) || (!args)) || (!args[k])) || (strcmp(t[i].carg[k], args[k]) != 0))) {
                 return (-2);
             }
+        }
+        if (((t[i].tmpl_row < 0) && (row >= 0))) {
+            t[i].tmpl_row = row;
         }
         if ((carried && (!t[i].carried))) {
             t[i].carried = 1;
@@ -2691,6 +2760,7 @@ int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, ch
     if ((!t[n].tmpl)) {
         return (-1);
     }
+    t[n].tmpl_row = row;
     t[n].nargs = nargs;
     t[n].carg = frontend_sym_ct_rows_reserve(t[n].carg, t[n].acap, nargs, (&t[n].acap));
     if (((nargs > 0) && ((!t[n].carg) || (t[n].acap < nargs)))) {
@@ -2758,7 +2828,7 @@ struct frontend_sym_StructImpl * frontend_sym_ct_impls(int * n) {
     }
     return frontend_sym_g_impls;
 }
-int frontend_sym_ct_impl_find(const char * tmpl, int nargs, char * * pats, const char * use) {
+int frontend_sym_ct_impl_find(const char * tmpl, int tmpl_row, int nargs, char * * pats, const char * use) {
     int i;
     int n;
     int k;
@@ -2766,6 +2836,9 @@ int frontend_sym_ct_impl_find(const char * tmpl, int nargs, char * * pats, const
     struct frontend_sym_StructImpl * t = frontend_sym_ct_impls((&n));
     for (i = 0; i < n; i++) {
         if (strcmp(t[i].tmpl, tmpl) != 0) {
+            continue;
+        }
+        if (t[i].tmpl_row != tmpl_row) {
             continue;
         }
         if (t[i].nargs != nargs) {
@@ -2792,11 +2865,13 @@ int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, char * * tparams, int
     int i;
     int n;
     int k;
+    int row;
     struct frontend_sym_StructImpl * t = frontend_sym_ct_impls((&n));
     if (((((ntprm < 0) || (ntprm > CAP_LIMIT)) || (nargs < 0)) || (nargs > CAP_LIMIT))) {
         return (-1);
     }
-    i = frontend_sym_ct_impl_find(tmpl, nargs, pats, use);
+    row = frontend_sym_ct_tmpl_find(tmpl, owner);
+    i = frontend_sym_ct_impl_find(tmpl, row, nargs, pats, use);
     if (i >= 0) {
         return i;
     }
@@ -2812,6 +2887,7 @@ int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, char * * tparams, int
     if ((!t[n].tmpl)) {
         return (-1);
     }
+    t[n].tmpl_row = row;
     t[n].ntparams = ntprm;
     t[n].tparam = frontend_sym_ct_rows_reserve(t[n].tparam, t[n].tcap, ntprm, (&t[n].tcap));
     if (((ntprm > 0) && ((!t[n].tparam) || (t[n].tcap < ntprm)))) {
@@ -2928,6 +3004,9 @@ int frontend_sym_ct_impl_matches(int ii, int inst) {
     if (strcmp(t[ii].tmpl, ins[inst].tmpl) != 0) {
         return 0;
     }
+    if (t[ii].tmpl_row != ins[inst].tmpl_row) {
+        return 0;
+    }
     if (t[ii].nargs != ins[inst].nargs) {
         return 0;
     }
@@ -3034,6 +3113,26 @@ int frontend_sym_ct_inst_resolve(const char * in, char * out, int cap) {
         return (-1);
     }
     found = frontend_sym_ct_inst_find(enc);
+    if (found < 0) {
+        int sti;
+        int stn;
+        struct frontend_sym_StructTmpl * stps = frontend_sym_ct_tmpls((&stn));
+        for (sti = (stn - 1); (stps && (sti >= 0)); sti--) {
+            const char * senc;
+            if ((((!stps[sti].shadow) || (!stps[sti].cbase)) || (strcmp(stps[sti].name, name) != 0))) {
+                continue;
+            }
+            senc = frontend_sym_ct_inst_encode_text(stps[sti].cbase, nargs, args);
+            if ((!senc)) {
+                continue;
+            }
+            found = frontend_sym_ct_inst_find(senc);
+            if (found >= 0) {
+                enc = senc;
+                break;
+            }
+        }
+    }
     if (found < 0) {
         ins = frontend_sym_ct_insts((&nins));
         for (k = 0; (ins && (k < nins)); k++) {

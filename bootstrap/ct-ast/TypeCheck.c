@@ -262,7 +262,7 @@ static const char * frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_re
     }
     ret = _self->arena->nodes[m].text;
     ins = frontend_sym_ct_insts((&k));
-    ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
+    ti = ins[inst].tmpl_row;
     tp = frontend_sym_ct_tmpls((&tn));
     if (((ti >= 0) && tp)) {
         for (j = 0; j < tp[ti].ntparams; j++) {

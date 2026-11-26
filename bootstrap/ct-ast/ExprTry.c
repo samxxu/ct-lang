@@ -325,6 +325,9 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTry_result_tag_text(v
     if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
         return (const char *)(0);
     }
+    if (((ins[inst].tmpl_row < 0) || (ins[inst].tmpl_row >= _self->sym->builtin_tmpl_hi))) {
+        return (const char *)(0);
+    }
     return buf;
 }
 
@@ -353,6 +356,9 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTry_result_cols_text(
         return (const char *)(0);
     }
     if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
+        return (const char *)(0);
+    }
+    if (((ins[inst].tmpl_row < 0) || (ins[inst].tmpl_row >= _self->sym->builtin_tmpl_hi))) {
         return (const char *)(0);
     }
     if (err) {

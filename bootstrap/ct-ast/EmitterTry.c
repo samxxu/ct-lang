@@ -172,6 +172,9 @@ static const char * backend_emit_Emitter_backend_emit_EmitterTryOps_try_result_t
     if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
         return (const char *)(0);
     }
+    if (((ins[inst].tmpl_row < 0) || (ins[inst].tmpl_row >= _self->sym->builtin_tmpl_hi))) {
+        return (const char *)(0);
+    }
     return runtime_text_ct_intern(buf);
 }
 
@@ -185,6 +188,9 @@ static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_result_cols(void 
         return 0;
     }
     if (((strcmp(ins[inst].tmpl, "Result") != 0) || (ins[inst].nargs != 2))) {
+        return 0;
+    }
+    if (((ins[inst].tmpl_row < 0) || (ins[inst].tmpl_row >= _self->sym->builtin_tmpl_hi))) {
         return 0;
     }
     if (snprintf(val, (size_t)(vcap), "%s", ins[inst].ctype[0]) >= vcap) {

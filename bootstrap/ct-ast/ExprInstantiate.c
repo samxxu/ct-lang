@@ -418,7 +418,7 @@ static const char * frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_subs
         inst = frontend_sym_ct_inst_find(base);
         if (inst >= 0) {
             ins = frontend_sym_ct_insts((&k));
-            ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
+            ti = ins[inst].tmpl_row;
             tp = frontend_sym_ct_tmpls((&tn));
             if (((ti >= 0) && tp)) {
                 for (k = 0; k < tp[ti].ntparams; k++) {
@@ -483,7 +483,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_elem_for
         return 0;
     }
     ins = frontend_sym_ct_insts((&k));
-    ti2 = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
+    ti2 = ins[inst].tmpl_row;
     if (((ti2 < 0) || (tps[ti2].owner < 0))) {
         return 0;
     }
@@ -509,7 +509,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     int pi2;
     int nt2;
     int carried2;
-    ti2 = frontend_sym_ct_tmpl_find(tname);
+    ti2 = frontend_sym_ct_tmpl_find(tname, _self->cur_unit);
     tp = frontend_sym_ct_tmpls((&tn));
     if (((!tp) || (ti2 < 0))) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "internal: template row vanished");
@@ -538,7 +538,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
             }
         }
     }
-    enc = frontend_sym_ct_inst_encode_text(tname, nargs, args);
+    enc = frontend_sym_ct_inst_encode_text(((tp[ti2].shadow && tp[ti2].cbase) ? tp[ti2].cbase : tname), nargs, args);
     if ((!enc)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
@@ -724,11 +724,18 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nest
             return 0;
         }
     }
-    ti2 = frontend_sym_ct_tmpl_find(name);
+    ti2 = frontend_sym_ct_tmpl_find(name, _self->cur_unit);
     if (ti2 < 0) {
         return 0;
     }
-    enc = frontend_sym_ct_inst_encode_text(name, nargs, cargs);
+{
+        int tn2;
+        struct frontend_sym_StructTmpl * tp2 = frontend_sym_ct_tmpls((&tn2));
+        if ((!tp2)) {
+            return 0;
+        }
+        enc = frontend_sym_ct_inst_encode_text(((tp2[ti2].shadow && tp2[ti2].cbase) ? tp2[ti2].cbase : name), nargs, cargs);
+    }
     if ((!enc)) {
         return 0;
     }

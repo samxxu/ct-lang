@@ -2715,7 +2715,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
     if (_self->lex->tok == T_ID) {
         id_line = _self->lex->tokline;
         id_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-        if ((((frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex)) >= 0) || (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box") && (frontend_sym_ct_tmpl_find("Box") >= 0))) && _self->__frontend_parse_exprinstantiate_vptr->static_call_ahead(_self))) {
+        if ((((frontend_sym_ct_tmpl_find(_self->lex->__frontend_lex_lexops_vptr->tok_cstr(_self->lex), _self->cur_unit) >= 0) || (_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "box") && (frontend_sym_ct_tmpl_find("Box", _self->cur_unit) >= 0))) && _self->__frontend_parse_exprinstantiate_vptr->static_call_ahead(_self))) {
             const char * ibase;
             const char * sm;
             int mn;
@@ -4786,8 +4786,17 @@ static int bind_conv_explicit_to(struct frontend_parse_Expr * self, int recv, co
     }
 {
         char * aa[1];
+        const char * obase = "Option";
+        int oti;
+        int otn;
+        struct frontend_sym_StructTmpl * otp;
         aa[0] = (char *)(target);
-        enc = frontend_sym_ct_inst_encode_text("Option", 1, aa);
+        oti = frontend_sym_ct_tmpl_find("Option", self->cur_unit);
+        otp = frontend_sym_ct_tmpls((&otn));
+        if (((((oti >= 0) && otp) && otp[oti].shadow) && otp[oti].cbase)) {
+            obase = otp[oti].cbase;
+        }
+        enc = frontend_sym_ct_inst_encode_text(obase, 1, aa);
         if ((!enc)) {
             return tool_diag_ct_sem_error(line, col, "the strict conversion target is too long", self->sup->mem->path);
         }

@@ -286,7 +286,7 @@ int frontend_parse_expr_is_builtin_Box_type(const char * type) {
     if ((!ins)) {
         return 0;
     }
-    ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
+    ti = ins[inst].tmpl_row;
     tps = frontend_sym_ct_tmpls((&tn));
     if (((ti < 0) || (!tps))) {
         return 0;

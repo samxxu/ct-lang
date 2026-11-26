@@ -2030,6 +2030,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     frontend_parse_ct_parse_set_json(_self->diag_json, (_self->check_mode ? 0 : 1), _self->diag_codes);
     tool_diag_ct_diag_set_codes(_self->diag_codes);
     _self->build_mode = 1;
+    _self->sym->builtin_tmpl_hi = CAP_LIMIT;
     _self->nbuiltin = 0;
     _self->computed_live = 0;
     _self->builtin_live[0] = 0;
@@ -2084,6 +2085,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             fprintf(stderr, "ctc: %d error(s) generated\n", tool_diag_ct_diag_nsem());
             return 1;
         }
+    }
+{
+        int btn;
+        frontend_sym_ct_tmpls((&btn));
+        _self->sym->builtin_tmpl_hi = btn;
     }
     _self->sym->nfunc_base = _self->sym->nfunc;
 {
@@ -3288,7 +3294,7 @@ static int cycle_is_builtin_Box(struct frontend_module_Module * m, const char * 
     if ((!ins)) {
         return 0;
     }
-    ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
+    ti = ins[inst].tmpl_row;
     tps = frontend_sym_ct_tmpls((&tn));
     if (((ti < 0) || (!tps))) {
         return 0;

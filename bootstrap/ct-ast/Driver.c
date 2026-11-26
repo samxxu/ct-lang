@@ -750,10 +750,16 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     _self->p->nparams = 0;
     _self->p->ncalls = 0;
     _self->p->cur_func = "";
+    _self->sym->builtin_tmpl_hi = 65536;
     stdprog = _self->__tool_driver_driverops_vptr->load_builtin(_self, in);
     if (stdprog == (-2)) {
         frontend_parse_ct_parse_report();
         return 1;
+    }
+{
+        int btn;
+        frontend_sym_ct_tmpls((&btn));
+        _self->sym->builtin_tmpl_hi = btn;
     }
     _self->sym->nfunc_base = _self->sym->nfunc;
     io_from = _self->m->__frontend_module_moduleops_vptr->io_call_count(_self->m);
