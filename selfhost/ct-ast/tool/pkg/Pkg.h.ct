@@ -26,10 +26,10 @@ import tool::pkg::PkgIndex;
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* old flat lock text (8 * 512) */
 /* S1a-0 C2d: the formal bound for the lock text (doubling stops here). */
-#define MAX_LOCK_MAX   65536             /* = TEXT_LIMIT; S1a-0 C2d */
+#define CAP_LIMIT   65536             /* = TEXT_LIMIT; S1a-0 C2d */
 #define MAX_PKG_DEPS   16
 /* S1a-0 C1: formal cap for MAX_PKG_DEPS (an initial size, not a ceiling). */
-#define MAX_PKG_DEPS_MAX 65536
+#define CAP_LIMIT 65536
 /* S1a-0 C2e: the initial text size, not a ceiling (it doubles to TEXT_LIMIT). */
 #define MAX_PKG_CMD    2048
 /* S1a-0 C2e: mirror of the formal text bound in frontend/sym/Limits.h.ct.
@@ -38,7 +38,7 @@ import tool::pkg::PkgIndex;
 #define MAX_PKG_DEPTH  8
 #define MAX_PKG_GITERR 8                /* PKG-23: trailing git stderr lines */
 #define MAX_INDEX_ROWS 1024             /* PKG-18: one package version per list row */
-#define MAX_INDEX_ROWS_MAX 65536        /* S1a-0 C1: formal cap for MAX_INDEX_ROWS */
+#define CAP_LIMIT 65536        /* S1a-0 C1: formal cap for MAX_INDEX_ROWS */
 
 namespace tool::pkg;
 /* PKG-18 `ct index refresh`: one generated six-field row held in memory until
@@ -184,7 +184,7 @@ struct PkgRec {
 /* S1a-0 C1: the lock's four columns travel together, and `install` adds the
    row's include root, so one heap row replaces the four parallel
    `[MAX_PKG_DEPS]` arrays. Readers hold a pointer plus a capacity; growth
-   doubles from MAX_PKG_DEPS to MAX_PKG_DEPS_MAX and zeroes the new rows. */
+   doubles from MAX_PKG_DEPS to CAP_LIMIT and zeroes the new rows. */
 struct LockRow {
     const char *name;
     char ver[32];
@@ -217,7 +217,7 @@ struct Pkg {
     int  nowned;
     int  ownedcap;
     /* S1a-0 C2d: the accumulated ct.lock text grows from MAX_LOCK (the old
-       fixed 4096) to MAX_LOCK_MAX; `locklen` is the bytes in use. */
+       fixed 4096) to CAP_LIMIT; `locklen` is the bytes in use. */
     char *lock;
     int  lockcap;
     int  locklen;
@@ -544,7 +544,6 @@ static int pkg_text_fgets(struct Pkg *self, char **buf, int *cap, FILE *f)
    compared loosely. */
 
 #define MAX_DIGEST_FILES 4096
-#define MAX_DIGEST_FILES_MAX 65536
 
 static const char *g_hexd = "0123456789abcdef";
 
@@ -763,9 +762,9 @@ static int sha_paths_add(struct ShaPaths *sp, const char *rel)
 
     if (sp->n >= sp->cap) {
         c = sp->cap > 0 ? sp->cap * 2 : MAX_DIGEST_FILES;
-        while (c <= sp->n && c < MAX_DIGEST_FILES_MAX) c *= 2;
-        if (c > MAX_DIGEST_FILES_MAX) c = MAX_DIGEST_FILES_MAX;
-        if (sp->n >= MAX_DIGEST_FILES_MAX) return -1;
+        while (c <= sp->n && c < CAP_LIMIT) c *= 2;
+        if (c > CAP_LIMIT) c = CAP_LIMIT;
+        if (sp->n >= CAP_LIMIT) return -1;
         grown = (char **)realloc(sp->row, (size_t)c * sizeof(*grown));
         if (!grown) return -1;
         sp->row = grown;
@@ -1060,7 +1059,7 @@ static int pkg_git_diag(struct Pkg *self, const char *errfile, const char *cache
 }
 
 /* S1a-0 C1/C2k: the package tables grow by doubling from the old 16-row limit
-   to MAX_PKG_DEPS_MAX. Every growth zeroes the new rows and writes the new base
+   to CAP_LIMIT. Every growth zeroes the new rows and writes the new base
    back through the caller's slot. A failure returns -1 (the caller reports
    OOM), never a silent truncation. `pkg_ptrrows_ensure` grows the row-of-
    pointers used by `-I` roots and lock-root notes: each entry is its own
@@ -1071,8 +1070,8 @@ static int pkg_ptrrows_ensure(char ***rows, int *cap, int need)
     char **grown;
     if (need <= *cap) return 0;
     c = *cap > 0 ? *cap : MAX_PKG_DEPS;
-    while (c < need && c < MAX_PKG_DEPS_MAX) c *= 2;
-    if (c > MAX_PKG_DEPS_MAX) c = MAX_PKG_DEPS_MAX;
+    while (c < need && c < CAP_LIMIT) c *= 2;
+    if (c > CAP_LIMIT) c = CAP_LIMIT;
     if (need > c) return -1;
     grown = (char **)realloc(*rows, (size_t)c * sizeof(*grown));
     if (!grown) return -1;
@@ -1095,8 +1094,8 @@ static int pkg_recs_ensure(struct Pkg *self, int need)
     struct PkgRec *grown;
     if (need <= self->reccap) return 0;
     c = self->reccap > 0 ? self->reccap : MAX_PKG_DEPS;
-    while (c < need && c < MAX_PKG_DEPS_MAX) c *= 2;
-    if (c > MAX_PKG_DEPS_MAX) c = MAX_PKG_DEPS_MAX;
+    while (c < need && c < CAP_LIMIT) c *= 2;
+    if (c > CAP_LIMIT) c = CAP_LIMIT;
     if (need > c) return -1;
     grown = (struct PkgRec *)realloc(self->recs, (size_t)c * sizeof(*grown));
     if (!grown) return -1;
@@ -1114,8 +1113,8 @@ static int pkg_deps_ensure(struct DepList *deps, int need)
 
     if (need <= deps->cap) return 0;
     c = deps->cap > 0 ? deps->cap : MAX_PKG_DEPS;
-    while (c < need && c < MAX_PKG_DEPS_MAX) c *= 2;
-    if (c > MAX_PKG_DEPS_MAX) c = MAX_PKG_DEPS_MAX;
+    while (c < need && c < CAP_LIMIT) c *= 2;
+    if (c > CAP_LIMIT) c = CAP_LIMIT;
     if (need > c) return -1;
     grown = (char **)realloc(deps->spec, (size_t)c * sizeof(*grown));
     if (!grown) return -1;
@@ -1141,8 +1140,8 @@ static int pkg_lockrows_ensure(struct LockRow **rows, int *cap, int need)
     struct LockRow *grown;
     if (need <= *cap) return 0;
     c = *cap > 0 ? *cap : MAX_PKG_DEPS;
-    while (c < need && c < MAX_PKG_DEPS_MAX) c *= 2;
-    if (c > MAX_PKG_DEPS_MAX) c = MAX_PKG_DEPS_MAX;
+    while (c < need && c < CAP_LIMIT) c *= 2;
+    if (c > CAP_LIMIT) c = CAP_LIMIT;
     if (need > c) return -1;
     grown = (struct LockRow *)realloc(*rows, (size_t)c * sizeof(*grown));
     if (!grown) return -1;
@@ -1158,8 +1157,8 @@ static int pkg_lockparsed_ensure(struct LockParsedRow **rows, int *cap, int need
     struct LockParsedRow *grown;
     if (need <= *cap) return 0;
     c = *cap > 0 ? *cap : MAX_PKG_DEPS;
-    while (c < need && c < MAX_PKG_DEPS_MAX) c *= 2;
-    if (c > MAX_PKG_DEPS_MAX) c = MAX_PKG_DEPS_MAX;
+    while (c < need && c < CAP_LIMIT) c *= 2;
+    if (c > CAP_LIMIT) c = CAP_LIMIT;
     if (need > c) return -1;
     grown = (struct LockParsedRow *)realloc(*rows, (size_t)c * sizeof(*grown));
     if (!grown) return -1;
@@ -2420,7 +2419,7 @@ impl PkgOps for Pkg {
             fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
             return -1;
         }
-        if ((size_t)sz >= MAX_LOCK_MAX) {
+        if ((size_t)sz >= CAP_LIMIT) {
             fclose(f);
             fprintf(stderr, "ctc: './ct.pkg' is too large\n");
             return -1;
@@ -3177,7 +3176,7 @@ impl PkgOps for Pkg {
    instead of through a struct accessor. */
 static struct Pkg g_pkg;
 
-/* S1a-0 C2d: the lock text doubles from MAX_LOCK to MAX_LOCK_MAX. A need over
+/* S1a-0 C2d: the lock text doubles from MAX_LOCK to CAP_LIMIT. A need over
    the formal bound and a failed realloc both return -1; callers print the
    "too large" / OOM message. The block belongs to `self` until the process
    ends, like the other unit-wide tables. */
@@ -3188,8 +3187,8 @@ static int pkg_lock_reserve(struct Pkg *self, int need)
 
     if (need <= self->lockcap) return 0;
     cap = self->lockcap > 0 ? self->lockcap : MAX_LOCK;
-    while (cap < need && cap < MAX_LOCK_MAX) cap *= 2;
-    if (cap > MAX_LOCK_MAX) cap = MAX_LOCK_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
     grown = (char *)realloc(self->lock, (size_t)cap);
     if (!grown) return -1;
@@ -4193,13 +4192,13 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
         }
         if (nrows >= rows_cap) {
             /* S1a-0 C1: the row table doubles from MAX_INDEX_ROWS up to
-               MAX_INDEX_ROWS_MAX; the old 1024-row refusal is gone. */
+               CAP_LIMIT; the old 1024-row refusal is gone. */
             int ncap;
             struct IndexRow *grown;
             ncap = rows_cap > 0 ? rows_cap : MAX_INDEX_ROWS;
-            while (ncap <= nrows && ncap < MAX_INDEX_ROWS_MAX) ncap *= 2;
-            if (ncap > MAX_INDEX_ROWS_MAX) ncap = MAX_INDEX_ROWS_MAX;
-            if (nrows >= MAX_INDEX_ROWS_MAX) {
+            while (ncap <= nrows && ncap < CAP_LIMIT) ncap *= 2;
+            if (ncap > CAP_LIMIT) ncap = CAP_LIMIT;
+            if (nrows >= CAP_LIMIT) {
                 if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
                                   "package list has more than 65536 rows") != 0)
                     goto refresh_oom;
@@ -4805,7 +4804,7 @@ static int pkg_update_v2(const char *prog)
     f = fopen("./ct.lock", "r");
     if (!f) { fprintf(stderr, "ctc: no './ct.lock'; run `%s get` first\n", prog); return 1; }
     if (fseek(f, 0, SEEK_END) != 0 || (sz = ftell(f)) < 0
-        || (size_t)sz >= MAX_LOCK_MAX || fseek(f, 0, SEEK_SET) != 0) {
+        || (size_t)sz >= CAP_LIMIT || fseek(f, 0, SEEK_SET) != 0) {
         fprintf(stderr, "ctc: ct.lock is too large to update\n");
         fclose(f);
         return 1;
@@ -4905,7 +4904,7 @@ static int pkg_update_v2(const char *prog)
     /* the rewritten lock is the old text with one row replaced; size it from
        both rather than the old fixed buffer */
     outcap = (int)strlen(buf) + (int)strlen(g_pkg.lock) + 2;
-    if (outcap > MAX_LOCK_MAX) {
+    if (outcap > CAP_LIMIT) {
         free(buf);
         fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
         return 1;
@@ -5200,15 +5199,15 @@ static int pkg_migrate(const char *prog)
                 return 1;
             }
             if (w < outcap - outlen) break;
-            if (outcap >= MAX_LOCK_MAX
-                || outlen + w + 1 > MAX_LOCK_MAX) {
+            if (outcap >= CAP_LIMIT
+                || outlen + w + 1 > CAP_LIMIT) {
                 fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
                 free(out);
                 fclose(f);
                 return 1;
             }
             outcap *= 2;
-            if (outcap > MAX_LOCK_MAX) outcap = MAX_LOCK_MAX;
+            if (outcap > CAP_LIMIT) outcap = CAP_LIMIT;
             {
                 char *grown = (char *)realloc(out, (size_t)outcap);
                 if (!grown) {

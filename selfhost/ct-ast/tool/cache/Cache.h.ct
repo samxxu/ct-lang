@@ -23,7 +23,7 @@ import tool::sh::Sh;
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_KEY  768
 /* S1a-0 C2b: the key grows on demand from MAX_KEY to the formal text bound. */
-#define MAX_KEY_MAX 65536
+#define CAP_LIMIT 65536
 
 namespace tool::cache;
 pub trait CacheOps {
@@ -106,9 +106,9 @@ impl CacheOps for Cache {
                              path, stamp, self->digest(imports), dep);
             if (w < 0) { free(buf); return -1; }
             if (w < cap) break;
-            if (cap >= MAX_KEY_MAX) { free(buf); return -3; }
+            if (cap >= CAP_LIMIT) { free(buf); return -3; }
             ncap = cap * 2;
-            if (ncap > MAX_KEY_MAX) ncap = MAX_KEY_MAX;
+            if (ncap > CAP_LIMIT) ncap = CAP_LIMIT;
             grown = (char *)realloc(buf, (size_t)ncap);
             if (!grown) { free(buf); return -2; }
             buf = grown;

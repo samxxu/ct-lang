@@ -34,11 +34,9 @@ import tool::sh::Sh;
 #define MAX_TEXT   160
 #define TEXT_LIMIT 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_METHODS 64
-#define MAX_METHODS_MAX 65536
 #define MAX_MAPS   64
-#define MAX_MAPS_MAX 65536
 
 /* token kinds (the scanner only needs these three) */
 #define T_EOF    0
@@ -82,8 +80,8 @@ static int mapb_ensure_maps(struct MapBuild *self, int need)
     struct MapTable *grown;
     if (need <= *self->mapcap) return 0;
     cap = *self->mapcap > 0 ? *self->mapcap : MAX_MAPS;
-    while (cap < need && cap < MAX_MAPS_MAX) cap *= 2;
-    if (cap > MAX_MAPS_MAX) cap = MAX_MAPS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return self->sup->fail("out of memory");
     grown = (struct MapTable *)realloc(*self->maps, (size_t)cap * sizeof(*grown));
     if (!grown) return self->sup->fail("out of memory");
@@ -103,8 +101,8 @@ static int mapb_ensure_binds(struct MapBuild *self, struct MapTable *m, int need
     struct MapBind *grown;
     if (need <= m->bcap) return 0;
     cap = m->bcap > 0 ? m->bcap : MAX_METHODS;
-    while (cap < need && cap < MAX_METHODS_MAX) cap *= 2;
-    if (cap > MAX_METHODS_MAX) cap = MAX_METHODS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return self->sup->fail("out of memory");
     grown = (struct MapBind *)realloc(m->b, (size_t)cap * sizeof(*grown));
     if (!grown) return self->sup->fail("out of memory");
@@ -125,8 +123,8 @@ static int mapb_ensure_params(struct MapBuild *self, struct MapBind *b, int need
     int *sizes;
     if (need <= b->pcap) return 0;
     cap = b->pcap > 0 ? b->pcap : MAX_PARAMS;
-    while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
-    if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return self->sup->fail("out of memory");
     params = (const char **)realloc((void *)b->params, (size_t)cap * sizeof(*params));
     if (!params) return self->sup->fail("out of memory");

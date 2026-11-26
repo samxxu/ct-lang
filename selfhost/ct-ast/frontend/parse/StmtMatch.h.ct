@@ -34,9 +34,8 @@ import frontend::type::TypeCheck;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
-#define MAX_ADT_FIELDS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_LABELS 64
-#define MAX_LABELS_MAX 65536
 #define B_COMMA 19
 #define B_ADD 1
 #define B_SUB 2
@@ -355,8 +354,8 @@ impl StmtMatch for Stmt {
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a binding name");
                     if (nb >= nbind) {
-                        ncap = nbind > MAX_ADT_FIELDS_MAX / 2
-                                   ? MAX_ADT_FIELDS_MAX : nbind * 2;
+                        ncap = nbind > CAP_LIMIT / 2
+                                   ? CAP_LIMIT : nbind * 2;
                         if (nb >= ncap)
                             return self->sup->fail("too many bindings in one match arm");
                         bind_names = frontend::sym::ct_text_rows_reserve(
@@ -692,8 +691,8 @@ impl StmtMatch for Stmt {
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a binding name");
                     if (nb >= nbind) {
-                        ncap = nbind > MAX_ADT_FIELDS_MAX / 2
-                                   ? MAX_ADT_FIELDS_MAX : nbind * 2;
+                        ncap = nbind > CAP_LIMIT / 2
+                                   ? CAP_LIMIT : nbind * 2;
                         if (nb >= ncap)
                             return self->sup->fail("too many bindings in one match arm");
                         bind_names = frontend::sym::ct_text_rows_reserve(

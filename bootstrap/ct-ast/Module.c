@@ -23,11 +23,9 @@
 #include <unistd.h>
 #define MAX_TEXT   160
 #define MAX_UNITS  64
-#define MAX_UNITS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_IMPORTS 32
-#define MAX_IMPORTS_MAX 65536
 #define MAX_INCDIRS 16
-#define MAX_INCDIRS_MAX 65536
 #define MAX_FLAGS  1024                 /* accumulated --cflags / --ldflags */
 #define MAX_CMD    8192                 /* one composed cc command line */
 #define MAX_KEY    768                  /* one unit's incremental-cache key */
@@ -252,11 +250,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_ensure_unit_capacity
         return 0;
     }
     cap = ((_self->unitcap > 0) ? _self->unitcap : MAX_UNITS);
-    while (((cap < need) && (cap < MAX_UNITS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_UNITS_MAX) {
-        cap = MAX_UNITS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
@@ -281,11 +279,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_ensure_incdir_capaci
         return 0;
     }
     cap = ((_self->inccap > 0) ? _self->inccap : MAX_INCDIRS);
-    while (((cap < need) && (cap < MAX_INCDIRS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_INCDIRS_MAX) {
-        cap = MAX_INCDIRS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
@@ -310,11 +308,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_ensure_unit_dep_capa
         return 0;
     }
     cap = ((_self->units[u].depcap > 0) ? _self->units[u].depcap : MAX_IMPORTS);
-    while (((cap < need) && (cap < MAX_IMPORTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_IMPORTS_MAX) {
-        cap = MAX_IMPORTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
@@ -344,11 +342,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_ensure_reach(void *s
         return 0;
     }
     cap = ((_self->reachcap > 0) ? _self->reachcap : MAX_UNITS);
-    while (((cap < need) && (cap < MAX_UNITS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_UNITS_MAX) {
-        cap = MAX_UNITS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
@@ -1846,7 +1844,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
             return 1;
         }
-        if (ninput >= MAX_UNITS_MAX) {
+        if (ninput >= CAP_LIMIT) {
             fprintf(stderr, "ctc: out of memory\n");
             return 1;
         }

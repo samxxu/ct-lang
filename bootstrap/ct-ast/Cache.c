@@ -9,7 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #define MAX_KEY  768
-#define MAX_KEY_MAX 65536
+#define CAP_LIMIT 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -141,13 +141,13 @@ static int tool_cache_Cache_tool_cache_CacheOps_key(void *self, const char * pat
         if (w < cap) {
             break;
         }
-        if (cap >= MAX_KEY_MAX) {
+        if (cap >= CAP_LIMIT) {
             free(buf);
             return (-3);
         }
         ncap = (cap * 2);
-        if (ncap > MAX_KEY_MAX) {
-            ncap = MAX_KEY_MAX;
+        if (ncap > CAP_LIMIT) {
+            ncap = CAP_LIMIT;
         }
         grown = (char *)(realloc(buf, (size_t)(ncap)));
         if ((!grown)) {

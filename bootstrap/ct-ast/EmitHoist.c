@@ -26,14 +26,12 @@
 #include <ctype.h>
 #define TEXT_LIMIT 65536
 #define MAX_HOISTS 4
-#define MAX_HOISTS_MAX 65536
+#define CAP_LIMIT 65536
 #define N_MATSEQ 73
 #define N_INTO 63
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
-#define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 #define N_PP      2
 #define N_FUNC    3
 #define N_BLOCK   4
@@ -130,9 +128,7 @@
 #define P_INC 1
 #define MAX_LAYOUT_DEPTH 32
 #define MAX_LAYOUT_ADTS 64
-#define MAX_LAYOUT_ADTS_MAX 65536
 #define MAX_LAYOUT_INSTS 128
-#define MAX_LAYOUT_INSTS_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -326,8 +322,8 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_hoist_scan(void *self, in
             if (nc >= chaincap) {
                 int ncap = ((chaincap > 0) ? (chaincap * 2) : MAX_HOISTS);
                 int * grown;
-                if (ncap > MAX_HOISTS_MAX) {
-                    ncap = MAX_HOISTS_MAX;
+                if (ncap > CAP_LIMIT) {
+                    ncap = CAP_LIMIT;
                 }
                 if (nc >= ncap) {
                     free(chain);
@@ -499,11 +495,11 @@ int backend_emit_ensure_hoist_capacity(struct backend_emit_Emitter * self, int n
         return 0;
     }
     cap = ((self->hoistcap > 0) ? self->hoistcap : MAX_HOISTS);
-    while (((cap < need) && (cap < MAX_HOISTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_HOISTS_MAX) {
-        cap = MAX_HOISTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
@@ -524,11 +520,11 @@ int backend_emit_ensure_into_capacity(struct backend_emit_Emitter * self, int ne
         return 0;
     }
     cap = ((self->intocap > 0) ? self->intocap : MAX_INTOS);
-    while (((cap < need) && (cap < MAX_INTOS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_INTOS_MAX) {
-        cap = MAX_INTOS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->__backend_emit_emitops_vptr->fail(self, "out of memory");

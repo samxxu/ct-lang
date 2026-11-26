@@ -16,7 +16,7 @@
 #include <string.h>
 #define MAX_TEXT 160
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
+#define CAP_LIMIT 65536
 #define N_ADTCTOR 81
 #define T_ID 1
 #define T_PUNCT 4

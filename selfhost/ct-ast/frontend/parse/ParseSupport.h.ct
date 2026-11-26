@@ -28,11 +28,9 @@ import tool::sh::Sh;
    units). Raised 256 -> 512 together with the other three mirrors. */
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_RAW_INIT 4096
-#define MAX_RAW_INIT_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 #define MAX_TEXT 160
 #define T_EOF 0
 #define T_ID 1
@@ -629,7 +627,7 @@ impl SupportOps for ParseSupport {
         if (i < 0) {
             if (self->sym->ensure_fn_capacity(self->sym->nfunc + 1) != 0)
                 return self->fail(tool::sh::ct_scratch_fmt(
-                    "too many functions (limit %d, whole program)", MAX_FUNCS_MAX));
+                    "too many functions (limit %d, whole program)", CAP_LIMIT));
             i = self->sym->nfunc;
             self->sym->nfunc++;
             self->sym->funcs[i].name = runtime::text::ct_intern(name);
@@ -976,7 +974,7 @@ impl SupportOps for ParseSupport {
     }
 
     /* S1a-0 C1: the capture buffer doubles from MAX_RAW_INIT up to
-       MAX_RAW_INIT_MAX; only the resource limit reports a failure. */
+       CAP_LIMIT; only the resource limit reports a failure. */
     int ensure_raw(int need)
     {
         int cap;
@@ -984,8 +982,8 @@ impl SupportOps for ParseSupport {
         (void)self;
         if (need <= self->rawcap) return 0;
         cap = self->rawcap > 0 ? self->rawcap : MAX_RAW_INIT;
-        while (cap < need && cap < MAX_RAW_INIT_MAX) cap *= 2;
-        if (cap > MAX_RAW_INIT_MAX) cap = MAX_RAW_INIT_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (char *)realloc(self->raw, (size_t)cap);
         if (!grown) return self->fail("out of memory");

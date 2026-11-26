@@ -42,11 +42,9 @@ import frontend::module::ModuleBoundary;
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 #define MAX_UNITS  64
-#define MAX_UNITS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_IMPORTS 32
-#define MAX_IMPORTS_MAX 65536
 #define MAX_INCDIRS 16
-#define MAX_INCDIRS_MAX 65536
 #define MAX_FLAGS  1024                 /* accumulated --cflags / --ldflags */
 #define MAX_CMD    8192                 /* one composed cc command line */
 #define MAX_KEY    768                  /* one unit's incremental-cache key */
@@ -709,8 +707,8 @@ impl ModuleOps for Module {
         (void)self;
         if (need <= self->unitcap) return 0;
         cap = self->unitcap > 0 ? self->unitcap : MAX_UNITS;
-        while (cap < need && cap < MAX_UNITS_MAX) cap *= 2;
-        if (cap > MAX_UNITS_MAX) cap = MAX_UNITS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct Unit *)realloc(self->units, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -731,8 +729,8 @@ impl ModuleOps for Module {
         (void)self;
         if (need <= self->inccap) return 0;
         cap = self->inccap > 0 ? self->inccap : MAX_INCDIRS;
-        while (cap < need && cap < MAX_INCDIRS_MAX) cap *= 2;
-        if (cap > MAX_INCDIRS_MAX) cap = MAX_INCDIRS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (const char **)realloc((void *)self->incdirs,
                                        (size_t)cap * sizeof(*grown));
@@ -754,8 +752,8 @@ impl ModuleOps for Module {
         (void)self;
         if (need <= self->units[u].depcap) return 0;
         cap = self->units[u].depcap > 0 ? self->units[u].depcap : MAX_IMPORTS;
-        while (cap < need && cap < MAX_IMPORTS_MAX) cap *= 2;
-        if (cap > MAX_IMPORTS_MAX) cap = MAX_IMPORTS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         deps = (char *)realloc(self->units[u].dep, (size_t)cap * MAX_TEXT);
         if (!deps) return self->fail("out of memory");
@@ -779,8 +777,8 @@ impl ModuleOps for Module {
         (void)self;
         if (need <= self->reachcap) return 0;
         cap = self->reachcap > 0 ? self->reachcap : MAX_UNITS;
-        while (cap < need && cap < MAX_UNITS_MAX) cap *= 2;
-        if (cap > MAX_UNITS_MAX) cap = MAX_UNITS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (char *)realloc(self->reach, (size_t)cap);
         if (!grown) return self->fail("out of memory");
@@ -2244,7 +2242,7 @@ impl ModuleOps for Module {
                 fprintf(stderr, "ctc: unknown option '%s'\n", argv[i]);
                 return 1;
             }
-            if (ninput >= MAX_UNITS_MAX) {
+            if (ninput >= CAP_LIMIT) {
                 fprintf(stderr, "ctc: out of memory\n");
                 return 1;
             }

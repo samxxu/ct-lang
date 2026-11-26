@@ -15,9 +15,8 @@
 #define MAX_TEXT 160
 #define TEXT_LIMIT 65536
 #define MAX_INIT_ITEM 4096
-#define MAX_INIT_ITEM_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_INIT_TEXT 16384
-#define MAX_INIT_TEXT_MAX 65536
 #define N_CALL   7
 #define N_VAR    10
 #define N_MATCH  78
@@ -1766,7 +1765,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     len = (int)(strlen(raw));
     if (((len < 2) || (raw[(len - 1)] != '}'))) {
         need = (len + 1);
-        if (need > MAX_INIT_TEXT_MAX) {
+        if (need > CAP_LIMIT) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
         }
         if (init_text_reserve((&buf), (&cap), need) != 0) {
@@ -1781,7 +1780,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     if ((!item)) {
         return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
     }
-    fixedcap = MAX_INIT_TEXT_MAX;
+    fixedcap = CAP_LIMIT;
     fixed = (char *)(malloc((size_t)(fixedcap)));
     if ((!fixed)) {
         free(item);
@@ -1833,7 +1832,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
                         return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
                     }
                     need = (((int)(strlen(buf)) + (int)(strlen(fixed))) + 3);
-                    if (need > MAX_INIT_TEXT_MAX) {
+                    if (need > CAP_LIMIT) {
                         free(item);
                         free(fixed);
                         free(buf);
@@ -1865,7 +1864,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
         return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
     }
     need = (((int)(strlen(buf)) + (int)(strlen(fixed))) + 3);
-    if (need > MAX_INIT_TEXT_MAX) {
+    if (need > CAP_LIMIT) {
         free(item);
         free(fixed);
         free(buf);
@@ -1879,7 +1878,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     }
     strcat(buf, fixed);
     strcat(buf, "}");
-    namedcap = MAX_INIT_TEXT_MAX;
+    namedcap = CAP_LIMIT;
     named = (char *)(malloc((size_t)(namedcap)));
     if ((!named)) {
         free(item);
@@ -1900,7 +1899,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
         return _self->__frontend_type_typeops_vptr->fail(_self, "initializer text exceeds 65536 bytes");
     }
     need = ((int)(strlen(named)) + 1);
-    if (need > MAX_INIT_TEXT_MAX) {
+    if (need > CAP_LIMIT) {
         free(item);
         free(fixed);
         free(named);
@@ -2529,11 +2528,11 @@ static int init_text_reserve(char * * buf, int * cap, int need) {
         return 0;
     }
     ncap = (((*cap) > 0) ? (*cap) : MAX_INIT_TEXT);
-    while (((ncap < need) && (ncap < MAX_INIT_TEXT_MAX))) {
+    while (((ncap < need) && (ncap < CAP_LIMIT))) {
         ncap *= 2;
     }
-    if (ncap > MAX_INIT_TEXT_MAX) {
-        ncap = MAX_INIT_TEXT_MAX;
+    if (ncap > CAP_LIMIT) {
+        ncap = CAP_LIMIT;
     }
     if (need > ncap) {
         return (-1);

@@ -81,15 +81,13 @@ import frontend::parse::ExprStaticType;
    BSS, not a product change. */
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 /* Mirror of Symbols.h.ct's whole-program budget; macros do not cross units. */
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 /* Phase 32 S7: the argument start positions of the call being parsed. The
    array is a stack: a nested call appends after its parent's frame.
-   S1a-0 C1: MAX_ARG_POS is the starting capacity, MAX_ARG_POS_MAX the valve. */
+   S1a-0 C1: MAX_ARG_POS is the starting capacity, CAP_LIMIT the valve. */
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
 /* S1a-0 C2o: one formal text bound (mirror of frontend/sym/Limits.h.ct). */
@@ -932,7 +930,7 @@ static int bind_conv_arith(struct Expr *self, int left, int right, int line, int
 
 /* S1a-0 C1: the per-argument position frame is two parallel int blocks.
    Both grow together and the new slots are zeroed; only allocation failure
-   (or the MAX_ARG_POS_MAX valve) can stop it. */
+   (or the CAP_LIMIT valve) can stop it. */
 static int ensure_arg_capacity(struct Expr *self, int need)
 {
     int cap;
@@ -940,8 +938,8 @@ static int ensure_arg_capacity(struct Expr *self, int need)
 
     if (need <= self->argcap) return 0;
     cap = self->argcap > 0 ? self->argcap : MAX_ARG_POS;
-    while (cap < need && cap < MAX_ARG_POS_MAX) cap *= 2;
-    if (cap > MAX_ARG_POS_MAX) cap = MAX_ARG_POS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return self->sup->fail("out of memory");
     lines = (int *)realloc(self->arg_line, (size_t)cap * sizeof(*lines));
     if (!lines) return self->sup->fail("out of memory");

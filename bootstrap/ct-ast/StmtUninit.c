@@ -27,9 +27,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define MAX_TEXT 160
-#define MAX_ADT_FIELDS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_LABELS 64
-#define MAX_LABELS_MAX 65536
 #define B_COMMA 19
 #define B_ADD 1
 #define B_SUB 2

@@ -50,15 +50,13 @@ import backend::emit::EmitInit;
 /* S1a-0 C2p-5: the formal text bound (mirror of Symbols/Limits). */
 #define TEXT_LIMIT 65536
 #define MAX_HOISTS 4
-#define MAX_HOISTS_MAX 65536
+#define CAP_LIMIT 65536
 /* Phase 30: the receiver block and its `$` / `.name` reference. */
 #define N_MATSEQ 73
 #define N_INTO 63
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
-#define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 
 /* the node kinds this unit dispatches on (D32: one tag, one dispatch) */
 #define N_PP      2
@@ -3889,9 +3887,7 @@ static void emit_slice_helpers(struct Emitter *self)
  * `MAX_LAYOUT_INSTS` 128); the ADT/instance tables grow beyond them. */
 #define MAX_LAYOUT_DEPTH 32
 #define MAX_LAYOUT_ADTS 64
-#define MAX_LAYOUT_ADTS_MAX 65536
 #define MAX_LAYOUT_INSTS 128
-#define MAX_LAYOUT_INSTS_MAX 65536
 
 /* S1a-0 C1: the three layout-state arrays grow with the actual table counts.
    `MAX_LAYOUT_*` is only the starting capacity; a layout walk never silently
@@ -3909,8 +3905,8 @@ static int ensure_adt_layout_state(int need)
     int *grown;
     if (need <= g_adt_layout_cap) return 0;
     cap = g_adt_layout_cap > 0 ? g_adt_layout_cap : MAX_LAYOUT_ADTS;
-    while (cap < need && cap < MAX_LAYOUT_ADTS_MAX) cap *= 2;
-    if (cap > MAX_LAYOUT_ADTS_MAX) cap = MAX_LAYOUT_ADTS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
     grown = (int *)realloc(g_adt_layout_state, (size_t)cap * sizeof(*grown));
     if (!grown) return -1;
@@ -3926,8 +3922,8 @@ static int ensure_inst_layout_state(int need)
     int *grown;
     if (need <= g_inst_layout_cap) return 0;
     cap = g_inst_layout_cap > 0 ? g_inst_layout_cap : MAX_LAYOUT_INSTS;
-    while (cap < need && cap < MAX_LAYOUT_INSTS_MAX) cap *= 2;
-    if (cap > MAX_LAYOUT_INSTS_MAX) cap = MAX_LAYOUT_INSTS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
     grown = (int *)realloc(g_inst_layout_state, (size_t)cap * sizeof(*grown));
     if (!grown) return -1;
@@ -3943,8 +3939,8 @@ static int ensure_shell_emit_state(int need)
     int *grown;
     if (need <= g_shell_emit_cap) return 0;
     cap = g_shell_emit_cap > 0 ? g_shell_emit_cap : MAX_LAYOUT_INSTS;
-    while (cap < need && cap < MAX_LAYOUT_INSTS_MAX) cap *= 2;
-    if (cap > MAX_LAYOUT_INSTS_MAX) cap = MAX_LAYOUT_INSTS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
     grown = (int *)realloc(g_shell_emit_state, (size_t)cap * sizeof(*grown));
     if (!grown) return -1;

@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10321 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10317 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=68745 io_cap=1024
+     emitted_before=48223 emitted_after=68663 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -210,6 +210,10 @@
       字段改 `const char *` + `ct_intern`/`ct_intern_join`，写点带显式 OOM
       分支；Emitter.h.ct 10153 -> 10154，发射 C 65713 -> 66061（Symbols/
       Parser/MapBuild 的写点行数与检查分支），切片清单仍为 76)
+     (S1a-0 C4 后复测：`Limits.h.ct` 归并为 `CAP_LIMIT` / `TEXT_LIMIT` / `NODE_LIMIT`，
+      删除 40 个 `*_MAX` 镜像宏并各留一个 `CAP_LIMIT`；`Emitter.h.ct` 10321 -> 10317，
+      发射 C 68745 -> 68663 行（仅 .c；差值是每单元少掉的 `#define ..._MAX` 行），
+      切片清单仍为 76，判别式仍各读 1 次)
 -->
 
 ## 1 切片清单

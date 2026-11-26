@@ -26,14 +26,12 @@
 #include <ctype.h>
 #define MAX_TEXT   160
 #define MAX_HOISTS 4
-#define MAX_HOISTS_MAX 65536
+#define CAP_LIMIT 65536
 #define N_MATSEQ 73
 #define N_INTO 63
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
-#define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 #define N_PP      2
 #define N_FUNC    3
 #define N_BLOCK   4
@@ -130,9 +128,7 @@
 #define P_INC 1
 #define MAX_LAYOUT_DEPTH 32
 #define MAX_LAYOUT_ADTS 64
-#define MAX_LAYOUT_ADTS_MAX 65536
 #define MAX_LAYOUT_INSTS 128
-#define MAX_LAYOUT_INSTS_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

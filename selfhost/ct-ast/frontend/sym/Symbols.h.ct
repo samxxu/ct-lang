@@ -8,12 +8,11 @@
  * keep its own position-carrying failures while this unit reports the bare
  * message.
  *
- * Macros do not cross a unit boundary, so this unit declares the symbol-table
- * caps; a unit that reads one of them mirrors the value listed here (MAX_TEXT
- * 160, MAX_PARAMS 16, MAX_FUNCS 512, MAX_VARS 4096, MAX_SCOPE 256, MAX_TYPES
- * 256, MAX_METHODS 64, MAX_TRAITS 64, MAX_STRUCTS 128, MAX_FIELDS 64). The
- * array lengths are spelled out as literals because a `pub struct` lands in the
- * generated header, which carries no macros.
+ * Macros do not cross a unit boundary, so each unit that sizes a table spells
+ * the cap itself and mirrors `frontend/sym/Limits.h.ct`. Counting tables start
+ * at their `MAX_*` initial value and double to `CAP_LIMIT`; text stops at
+ * `TEXT_LIMIT`. The array lengths are spelled out as literals because a
+ * `pub struct` lands in the generated header, which carries no macros.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,62 +22,42 @@ import frontend::sym::SymbolsTypeText;
 import runtime::text::Intern;
 import tool::sh::Sh;
 
-/* Contract-tested caps (TEST-9): check-ast.sh generates one overflow fixture for
-   MAX_PARAMS, MAX_METHODS, MAX_FUNCS, MAX_SCOPE, MAX_VARS, MAX_FIELDS and
-   MAX_STRUCTS (MAX_MAPS and MAX_ERRORS are covered in its map and recovery
-   sections). The rest are reachable but stay unfixtured on purpose: each case
-   costs a generator plus a text contract, and the return has flattened. Pin one
-   only when that cap is about to change. */
+/* TEST-9 / S1a-0 C4: the counting caps start at the initial value and grow on
+   demand. The generated fixtures assert growth past the old value
+   (`check-ast.sh` capacity section, `test/ast/cap_*.sh`); only the formal
+   limits (`CAP_LIMIT` / `TEXT_LIMIT` / `NODE_LIMIT`, OOM) and the depth /
+   error-recovery guards keep negative fixtures. */
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
-#define MAX_PARAMS_MAX 65536
+#define CAP_LIMIT 65536
 /* Whole-program budget: `nfunc` accumulates across every unit in one build
    (build mode shares one symbol table), so this is one cap for the entire
    program, not a per-unit allowance. The table itself is MAX_FUNCS + 64 rows.
    Raised 256 -> 512 when ct-ast hit the 256 ceiling exactly (Phase 54 S0). */
 #define MAX_FUNCS   512
-#define MAX_FUNCS_MAX 65536
 #define MAX_IMPORT_ALIASES 24
-#define MAX_IMPORT_ALIASES_MAX 65536
 #define MAX_VARS    4096
-#define MAX_VARS_MAX 65536
 #define MAX_SCOPE   256
-#define MAX_SCOPE_MAX 65536
 #define MAX_TYPES   256
-#define MAX_TYPES_MAX 65536
 #define MAX_METHODS 64
-#define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
-#define MAX_TRAITS_MAX 65536
 #define MAX_STRUCTS 128
-#define MAX_STRUCTS_MAX 65536
 #define MAX_EXPORTED_TYPES 128
-#define MAX_EXPORTED_TYPES_MAX 65536
 #define MAX_FIELDS  64
-#define MAX_FIELDS_MAX 65536
 #define MAX_TYPE_ALIASES 64
-#define MAX_TYPE_ALIASES_MAX 65536
 #define MAX_GLOBAL_TYPE_ALIASES 256
-#define MAX_GLOBAL_TYPE_ALIASES_MAX 65536
 #define MAX_ALIAS_CHAIN 32
 #define MAX_CLOSURES 64
-#define MAX_CLOSURES_MAX 65536
 #define MAX_GENERIC_INSTS 64
-#define MAX_GENERIC_INSTS_MAX 65536
 #define MAX_STRUCT_TPLS 64
-#define MAX_STRUCT_TPLS_MAX 65536
 #define MAX_STRUCT_INSTS 128
-#define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
-#define MAX_STRUCT_TPARAMS_MAX 65536
 #define MAX_STRUCT_IMPLS 64
-#define MAX_STRUCT_IMPLS_MAX 65536
 /* Phase 78 S2b: one row per inherent method carrying ref/out annotations.
    Trait methods use their existing MethodSig row; this table only covers an
    implementation block that has no trait. */
 #define MAX_METH_ANN 256
-#define MAX_METH_ANN_MAX 65536
 
 namespace frontend::sym;
 /* A compile-time synonym for a type spelling. It never reaches the generated C;
@@ -428,7 +407,7 @@ pub trait SymbolOps {
     int  ensure_fn_capacity(int need);
     /* S1a-0 C1: grow function `fi`'s parameter rows to hold `need` positions.
        The three blocks move together and the new slots are zeroed; -1 only at
-       allocation failure or past MAX_PARAMS_MAX. */
+       allocation failure or past CAP_LIMIT. */
     int  ensure_fn_param_capacity(int fi, int need);
     /* S1a-0 C1: the variable table and the scope stack grow on demand. */
     int  ensure_var_capacity(int need);
@@ -472,7 +451,7 @@ pub trait SymbolOps {
     int  ensure_trait_table_capacity(int need);
     /* S1a-0 C1: grow trait `ti`'s method block to hold `need` rows. The new
        slots are zeroed; -1 (an `out of memory` message) only at allocation
-       failure or past MAX_METHODS_MAX. The parser calls this before writing
+       failure or past CAP_LIMIT. The parser calls this before writing
        the row it just parsed. */
     int  ensure_trait_capacity(int ti, int need);
     /* S1a-0 C1: grow method `mi` of trait `ti` to hold `need` parameter rows. */
@@ -668,16 +647,13 @@ pub int ct_inst_resolve(const char *in, char *out, int cap);
 
    S1a-0 C3: the three counts grow on demand. `MAX_ADTS` / `MAX_ADT_VARIANTS`
    / `MAX_ADT_FIELDS` are only the starting capacities; the formal ceiling is
-   `MAX_ADTS_MAX` / `MAX_ADT_VARIANTS_MAX` / `MAX_ADT_FIELDS_MAX` (65536, an
+   `CAP_LIMIT` / `CAP_LIMIT` / `CAP_LIMIT` (65536, an
    OOM guard, not a language limit). The blocks are heap rows owned by the
    enclosing row, so a realloc of the ADT table never moves a variant block.
    Caps are literals: the generated header carries no macros. */
 #define MAX_ADTS 64
-#define MAX_ADTS_MAX 65536
 #define MAX_ADT_VARIANTS 96
-#define MAX_ADT_VARIANTS_MAX 65536
 #define MAX_ADT_FIELDS 8
-#define MAX_ADT_FIELDS_MAX 65536
 pub struct AdtField {
     /* S1a-0 C2p-4: interned texts, so a 2000-byte payload field name or type
        is not cut at the old 160-byte row. */
@@ -869,15 +845,15 @@ impl SymbolOps for Symbols {
        the generated C either. */
     /* SH-109: grow the function table on demand instead of treating 512 as
        a hard whole-program limit. 512 is the initial capacity; the safety
-       valve is MAX_FUNCS_MAX (65536). */
+       valve is CAP_LIMIT (65536). */
     int ensure_fn_capacity(int need)
     {
         int cap;
         void *grown;
         if (need <= self->fncap) return 0;
         cap = self->fncap > 0 ? self->fncap : MAX_FUNCS + 64;
-        while (cap < need && cap < MAX_FUNCS_MAX) cap *= 2;
-        if (cap > MAX_FUNCS_MAX) cap = MAX_FUNCS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return -1;
         grown = realloc(self->funcs, (size_t)cap * sizeof(*self->funcs));
         if (!grown) return -1;
@@ -898,8 +874,8 @@ impl SymbolOps for Symbols {
         if (fi < 0 || fi >= self->nfunc) return self->fail("function table out of range");
         if (need <= self->funcs[fi].pcap) return 0;
         cap = self->funcs[fi].pcap > 0 ? self->funcs[fi].pcap : MAX_PARAMS;
-        while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
-        if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         types = (const char **)realloc(self->funcs[fi].ptype,
                                        (size_t)cap * sizeof(*types));
@@ -932,8 +908,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->varcap) return 0;
         cap = self->varcap > 0 ? self->varcap : MAX_VARS;
-        while (cap < need && cap < MAX_VARS_MAX) cap *= 2;
-        if (cap > MAX_VARS_MAX) cap = MAX_VARS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct Var *)realloc(self->vars, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -950,8 +926,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->scopecap) return 0;
         cap = self->scopecap > 0 ? self->scopecap : MAX_SCOPE;
-        while (cap < need && cap < MAX_SCOPE_MAX) cap *= 2;
-        if (cap > MAX_SCOPE_MAX) cap = MAX_SCOPE_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (int *)realloc(self->scope, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -974,8 +950,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->typecap) return 0;
         cap = self->typecap > 0 ? self->typecap : MAX_TYPES;
-        while (cap < need && cap < MAX_TYPES_MAX) cap *= 2;
-        if (cap > MAX_TYPES_MAX) cap = MAX_TYPES_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         names = (const char **)realloc(self->types, (size_t)cap * sizeof(*names));
         if (!names) return self->fail("out of memory");
@@ -1007,8 +983,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->ginstcap) return 0;
         cap = self->ginstcap > 0 ? self->ginstcap : MAX_GENERIC_INSTS;
-        while (cap < need && cap < MAX_GENERIC_INSTS_MAX) cap *= 2;
-        if (cap > MAX_GENERIC_INSTS_MAX) cap = MAX_GENERIC_INSTS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct GenericInst *)realloc(self->ginsts, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1026,8 +1002,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->closurecap) return 0;
         cap = self->closurecap > 0 ? self->closurecap : MAX_CLOSURES;
-        while (cap < need && cap < MAX_CLOSURES_MAX) cap *= 2;
-        if (cap > MAX_CLOSURES_MAX) cap = MAX_CLOSURES_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct Closure *)realloc(self->closures, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1045,8 +1021,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->taliascap) return 0;
         cap = self->taliascap > 0 ? self->taliascap : MAX_TYPE_ALIASES;
-        while (cap < need && cap < MAX_TYPE_ALIASES_MAX) cap *= 2;
-        if (cap > MAX_TYPE_ALIASES_MAX) cap = MAX_TYPE_ALIASES_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct TypeAlias *)realloc(self->taliases, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1064,8 +1040,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->gtaliascap) return 0;
         cap = self->gtaliascap > 0 ? self->gtaliascap : MAX_GLOBAL_TYPE_ALIASES;
-        while (cap < need && cap < MAX_GLOBAL_TYPE_ALIASES_MAX) cap *= 2;
-        if (cap > MAX_GLOBAL_TYPE_ALIASES_MAX) cap = MAX_GLOBAL_TYPE_ALIASES_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct TypeAlias *)realloc(self->gtaliases, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1533,9 +1509,9 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->structcap) return 0;
         cap = self->structcap > 0 ? self->structcap : MAX_STRUCTS + MAX_STRUCT_INSTS;
-        while (cap < need && cap < MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX) cap *= 2;
-        if (cap > MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX)
-            cap = MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX;
+        while (cap < need && cap < CAP_LIMIT + CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT + CAP_LIMIT)
+            cap = CAP_LIMIT + CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct StructDef *)realloc(self->structs, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1554,8 +1530,8 @@ impl SymbolOps for Symbols {
         if (si < 0 || si >= self->nstructs) return self->fail("struct table out of range");
         if (need <= self->structs[si].fcap) return 0;
         cap = self->structs[si].fcap > 0 ? self->structs[si].fcap : MAX_FIELDS;
-        while (cap < need && cap < MAX_FIELDS_MAX) cap *= 2;
-        if (cap > MAX_FIELDS_MAX) cap = MAX_FIELDS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct Field *)realloc(self->structs[si].fields,
                                         (size_t)cap * sizeof(*grown));
@@ -1577,8 +1553,8 @@ impl SymbolOps for Symbols {
         if (!t || ti < 0 || ti >= n) return self->fail("template table out of range");
         if (need <= t[ti].fcap) return 0;
         cap = t[ti].fcap > 0 ? t[ti].fcap : MAX_FIELDS;
-        while (cap < need && cap < MAX_FIELDS_MAX) cap *= 2;
-        if (cap > MAX_FIELDS_MAX) cap = MAX_FIELDS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct Field *)realloc(t[ti].fields, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1633,7 +1609,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->find_struct(name);
         if (i >= 0) return i;
-        if (self->nstruct_inst >= MAX_STRUCT_INSTS_MAX) return self->fail("out of memory");
+        if (self->nstruct_inst >= CAP_LIMIT) return self->fail("out of memory");
         i = self->add_struct(name);
         if (i < 0) return -1;
         self->structs[i].is_inst = 1;
@@ -1660,8 +1636,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->traitscap) return 0;
         cap = self->traitscap > 0 ? self->traitscap : MAX_TRAITS;
-        while (cap < need && cap < MAX_TRAITS_MAX) cap *= 2;
-        if (cap > MAX_TRAITS_MAX) cap = MAX_TRAITS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct Trait *)realloc(self->traits, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1674,7 +1650,7 @@ impl SymbolOps for Symbols {
 
     /* S1a-0 C1: the method rows are a per-trait heap block, so the cap is a
        starting capacity rather than a limit. Doubling is bounded by
-       MAX_METHODS_MAX; the caller has an index, never a row address, so the
+       CAP_LIMIT; the caller has an index, never a row address, so the
        `traits` block moving underneath does not matter. */
     int ensure_trait_capacity(int ti, int need)
     {
@@ -1684,8 +1660,8 @@ impl SymbolOps for Symbols {
         if (ti < 0 || ti >= self->ntraits) return self->fail("trait table out of range");
         if (need <= self->traits[ti].mcap) return 0;
         cap = self->traits[ti].mcap > 0 ? self->traits[ti].mcap : MAX_METHODS;
-        while (cap < need && cap < MAX_METHODS_MAX) cap *= 2;
-        if (cap > MAX_METHODS_MAX) cap = MAX_METHODS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct MethodSig *)realloc(self->traits[ti].m,
                                            (size_t)cap * sizeof(*grown));
@@ -1711,8 +1687,8 @@ impl SymbolOps for Symbols {
         if (mi < 0 || mi > self->traits[ti].nm) return self->fail("method table out of range");
         if (need <= self->traits[ti].m[mi].pcap) return 0;
         cap = self->traits[ti].m[mi].pcap > 0 ? self->traits[ti].m[mi].pcap : MAX_PARAMS;
-        while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
-        if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         types = (const char **)realloc(self->traits[ti].m[mi].ptype,
                                        (size_t)cap * sizeof(*types));
@@ -1736,8 +1712,8 @@ impl SymbolOps for Symbols {
         struct MethAnn *grown;
         if (need <= self->methcap) return 0;
         cap = self->methcap > 0 ? self->methcap : MAX_METH_ANN;
-        while (cap < need && cap < MAX_METH_ANN_MAX) cap *= 2;
-        if (cap > MAX_METH_ANN_MAX) cap = MAX_METH_ANN_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         grown = (struct MethAnn *)realloc(self->meth, (size_t)cap * sizeof(*grown));
         if (!grown) return self->fail("out of memory");
@@ -1756,8 +1732,8 @@ impl SymbolOps for Symbols {
         if (mi < 0 || mi >= self->nmeth) return self->fail("annotation table out of range");
         if (need <= self->meth[mi].pcap) return 0;
         cap = self->meth[mi].pcap > 0 ? self->meth[mi].pcap : MAX_PARAMS;
-        while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
-        if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         anns = (char *)realloc(self->meth[mi].pann, (size_t)cap);
         if (!anns) return self->fail("out of memory");
@@ -2083,7 +2059,7 @@ impl SymbolOps for Symbols {
 
     /* Grow the import-alias rows to at least `need`. Mirrors the other S1a-0
        ensure_* blocks: double from the current capacity (24 initially) up to
-       MAX_IMPORT_ALIASES_MAX, and fail with the OOM message past that. */
+       CAP_LIMIT, and fail with the OOM message past that. */
     int ensure_alias_capacity(int need)
     {
         int cap;
@@ -2092,8 +2068,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->aliascap) return 0;
         cap = self->aliascap > 0 ? self->aliascap : MAX_IMPORT_ALIASES;
-        while (cap < need && cap < MAX_IMPORT_ALIASES_MAX) cap *= 2;
-        if (cap > MAX_IMPORT_ALIASES_MAX) cap = MAX_IMPORT_ALIASES_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         names = (const char **)realloc(self->alias_name, (size_t)cap * sizeof(*names));
         if (!names) return self->fail("out of memory");
@@ -2142,8 +2118,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (need <= self->tbcap) return 0;
         cap = self->tbcap > 0 ? self->tbcap : MAX_EXPORTED_TYPES;
-        while (cap < need && cap < MAX_EXPORTED_TYPES_MAX) cap *= 2;
-        if (cap > MAX_EXPORTED_TYPES_MAX) cap = MAX_EXPORTED_TYPES_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
         names = (const char **)realloc(self->tbare, (size_t)cap * sizeof(*names));
         if (!names) return self->fail("out of memory");
@@ -2702,8 +2678,8 @@ static int tmpls_grow(int need)
 
     if (need <= g_tmplscap) return 0;
     cap = g_tmplscap > 0 ? g_tmplscap : MAX_STRUCT_TPLS;
-    while (cap < need && cap < MAX_STRUCT_TPLS_MAX) cap *= 2;
-    if (cap > MAX_STRUCT_TPLS_MAX) cap = MAX_STRUCT_TPLS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
     grown = (struct StructTmpl *)realloc(g_tmpls, (size_t)cap * sizeof(*grown));
     if (!grown) return -1;
@@ -2720,8 +2696,8 @@ static int insts_grow(int need)
 
     if (need <= g_instscap) return 0;
     cap = g_instscap > 0 ? g_instscap : MAX_STRUCT_INSTS;
-    while (cap < need && cap < MAX_STRUCT_INSTS_MAX) cap *= 2;
-    if (cap > MAX_STRUCT_INSTS_MAX) cap = MAX_STRUCT_INSTS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
     grown = (struct StructInst *)realloc(g_insts, (size_t)cap * sizeof(*grown));
     if (!grown) return -1;
@@ -2778,7 +2754,7 @@ int ct_tmpl_add(const char *name, const char *full, int ntprm,
 
     i = ct_tmpl_find(name);
     if (i >= 0) return i;
-    if (ntprm < 0 || ntprm > MAX_STRUCT_TPARAMS_MAX) return -1;
+    if (ntprm < 0 || ntprm > CAP_LIMIT) return -1;
     if (tmpls_grow(g_ntmpls + 1) != 0) return -1;
     t = ct_tmpls(&n);
     if (!t) return -1;
@@ -2825,7 +2801,7 @@ int ct_inst_add(const char *name, const char *tmpl, int nargs,
     int i, n, k;
     struct StructInst *t;
 
-    if (nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return -1;
+    if (nargs < 0 || nargs > CAP_LIMIT) return -1;
     i = ct_inst_find(name);
     t = ct_insts(&n);
     if (i >= 0) {
@@ -2878,8 +2854,8 @@ static int impls_grow(int need)
 
     if (need <= g_implscap) return 0;
     cap = g_implscap > 0 ? g_implscap : MAX_STRUCT_IMPLS;
-    while (cap < need && cap < MAX_STRUCT_IMPLS_MAX) cap *= 2;
-    if (cap > MAX_STRUCT_IMPLS_MAX) cap = MAX_STRUCT_IMPLS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
     grown = (struct StructImpl *)realloc(g_impls, (size_t)cap * sizeof(*grown));
     if (!grown) return -1;
@@ -2932,8 +2908,8 @@ int ct_impl_add(const char *tmpl, int ntprm, char **tparams,
     int i, n, k;
     struct StructImpl *t = ct_impls(&n);
 
-    if (ntprm < 0 || ntprm > MAX_STRUCT_TPARAMS_MAX
-        || nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return -1;
+    if (ntprm < 0 || ntprm > CAP_LIMIT
+        || nargs < 0 || nargs > CAP_LIMIT) return -1;
     i = ct_impl_find(tmpl, nargs, pats, use);
     if (i >= 0) return i;
     if (impls_grow(g_nimpls + 1) != 0) return -1;
@@ -3154,7 +3130,7 @@ static int g_adtcap;
 
 /* S1a-0 C3: double the ADT table to hold `need` rows. The rows hold pointers to
    their own variant/field blocks, so a realloc moves the rows only. -1 is OOM or
-   the formal ceiling (`MAX_ADTS_MAX`), which the caller reports as a capacity
+   the formal ceiling (`CAP_LIMIT`), which the caller reports as a capacity
    error. */
 static int adt_ensure(int need)
 {
@@ -3162,11 +3138,11 @@ static int adt_ensure(int need)
     struct Adt *p;
 
     if (need <= g_adtcap) return 0;
-    if (need > MAX_ADTS_MAX) return -1;
+    if (need > CAP_LIMIT) return -1;
     cap = g_adtcap > 0 ? g_adtcap : MAX_ADTS;
     while (cap < need) {
-        if (cap > MAX_ADTS_MAX / 2) {
-            cap = MAX_ADTS_MAX;
+        if (cap > CAP_LIMIT / 2) {
+            cap = CAP_LIMIT;
             break;
         }
         cap *= 2;
@@ -3197,11 +3173,11 @@ static int adt_ensure_variants(int adt, int need)
 
     if (!g_adts || adt < 0 || adt >= g_nadts) return -1;
     if (need <= g_adts[adt].vcap) return 0;
-    if (need > MAX_ADT_VARIANTS_MAX) return -1;
+    if (need > CAP_LIMIT) return -1;
     cap = g_adts[adt].vcap > 0 ? g_adts[adt].vcap : MAX_ADT_VARIANTS;
     while (cap < need) {
-        if (cap > MAX_ADT_VARIANTS_MAX / 2) {
-            cap = MAX_ADT_VARIANTS_MAX;
+        if (cap > CAP_LIMIT / 2) {
+            cap = CAP_LIMIT;
             break;
         }
         cap *= 2;
@@ -3222,12 +3198,12 @@ static int adt_ensure_fields(int adt, int v, int need)
     if (!g_adts || adt < 0 || adt >= g_nadts) return -1;
     if (v < 0 || v >= g_adts[adt].nvariants) return -1;
     if (need <= g_adts[adt].variants[v].fcap) return 0;
-    if (need > MAX_ADT_FIELDS_MAX) return -1;
+    if (need > CAP_LIMIT) return -1;
     cap = g_adts[adt].variants[v].fcap > 0 ? g_adts[adt].variants[v].fcap
                                            : MAX_ADT_FIELDS;
     while (cap < need) {
-        if (cap > MAX_ADT_FIELDS_MAX / 2) {
-            cap = MAX_ADT_FIELDS_MAX;
+        if (cap > CAP_LIMIT / 2) {
+            cap = CAP_LIMIT;
             break;
         }
         cap *= 2;

@@ -12,52 +12,30 @@
 #include <ctype.h>
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
-#define MAX_PARAMS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS   512
-#define MAX_FUNCS_MAX 65536
 #define MAX_IMPORT_ALIASES 24
-#define MAX_IMPORT_ALIASES_MAX 65536
 #define MAX_VARS    4096
-#define MAX_VARS_MAX 65536
 #define MAX_SCOPE   256
-#define MAX_SCOPE_MAX 65536
 #define MAX_TYPES   256
-#define MAX_TYPES_MAX 65536
 #define MAX_METHODS 64
-#define MAX_METHODS_MAX 65536
 #define MAX_TRAITS  64
-#define MAX_TRAITS_MAX 65536
 #define MAX_STRUCTS 128
-#define MAX_STRUCTS_MAX 65536
 #define MAX_EXPORTED_TYPES 128
-#define MAX_EXPORTED_TYPES_MAX 65536
 #define MAX_FIELDS  64
-#define MAX_FIELDS_MAX 65536
 #define MAX_TYPE_ALIASES 64
-#define MAX_TYPE_ALIASES_MAX 65536
 #define MAX_GLOBAL_TYPE_ALIASES 256
-#define MAX_GLOBAL_TYPE_ALIASES_MAX 65536
 #define MAX_ALIAS_CHAIN 32
 #define MAX_CLOSURES 64
-#define MAX_CLOSURES_MAX 65536
 #define MAX_GENERIC_INSTS 64
-#define MAX_GENERIC_INSTS_MAX 65536
 #define MAX_STRUCT_TPLS 64
-#define MAX_STRUCT_TPLS_MAX 65536
 #define MAX_STRUCT_INSTS 128
-#define MAX_STRUCT_INSTS_MAX 65536
 #define MAX_STRUCT_TPARAMS 2
-#define MAX_STRUCT_TPARAMS_MAX 65536
 #define MAX_STRUCT_IMPLS 64
-#define MAX_STRUCT_IMPLS_MAX 65536
 #define MAX_METH_ANN 256
-#define MAX_METH_ANN_MAX 65536
 #define MAX_ADTS 64
-#define MAX_ADTS_MAX 65536
 #define MAX_ADT_VARIANTS 96
-#define MAX_ADT_VARIANTS_MAX 65536
 #define MAX_ADT_FIELDS 8
-#define MAX_ADT_FIELDS_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -202,11 +180,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity(void *
         return 0;
     }
     cap = ((_self->fncap > 0) ? _self->fncap : (MAX_FUNCS + 64));
-    while (((cap < need) && (cap < MAX_FUNCS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_FUNCS_MAX) {
-        cap = MAX_FUNCS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);
@@ -234,11 +212,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_param_capacity(
         return 0;
     }
     cap = ((_self->funcs[fi].pcap > 0) ? _self->funcs[fi].pcap : MAX_PARAMS);
-    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_PARAMS_MAX) {
-        cap = MAX_PARAMS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -274,11 +252,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_var_capacity(void 
         return 0;
     }
     cap = ((_self->varcap > 0) ? _self->varcap : MAX_VARS);
-    while (((cap < need) && (cap < MAX_VARS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_VARS_MAX) {
-        cap = MAX_VARS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -302,11 +280,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity(voi
         return 0;
     }
     cap = ((_self->scopecap > 0) ? _self->scopecap : MAX_SCOPE);
-    while (((cap < need) && (cap < MAX_SCOPE_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_SCOPE_MAX) {
-        cap = MAX_SCOPE_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -332,11 +310,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity(void
         return 0;
     }
     cap = ((_self->typecap > 0) ? _self->typecap : MAX_TYPES);
-    while (((cap < need) && (cap < MAX_TYPES_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_TYPES_MAX) {
-        cap = MAX_TYPES_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -372,11 +350,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_ginst_capacity(voi
         return 0;
     }
     cap = ((_self->ginstcap > 0) ? _self->ginstcap : MAX_GENERIC_INSTS);
-    while (((cap < need) && (cap < MAX_GENERIC_INSTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_GENERIC_INSTS_MAX) {
-        cap = MAX_GENERIC_INSTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -400,11 +378,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_closure_capacity(v
         return 0;
     }
     cap = ((_self->closurecap > 0) ? _self->closurecap : MAX_CLOSURES);
-    while (((cap < need) && (cap < MAX_CLOSURES_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_CLOSURES_MAX) {
-        cap = MAX_CLOSURES_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -428,11 +406,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_alias_capacit
         return 0;
     }
     cap = ((_self->taliascap > 0) ? _self->taliascap : MAX_TYPE_ALIASES);
-    while (((cap < need) && (cap < MAX_TYPE_ALIASES_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_TYPE_ALIASES_MAX) {
-        cap = MAX_TYPE_ALIASES_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -456,11 +434,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_global_type_alias_
         return 0;
     }
     cap = ((_self->gtaliascap > 0) ? _self->gtaliascap : MAX_GLOBAL_TYPE_ALIASES);
-    while (((cap < need) && (cap < MAX_GLOBAL_TYPE_ALIASES_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_GLOBAL_TYPE_ALIASES_MAX) {
-        cap = MAX_GLOBAL_TYPE_ALIASES_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -986,11 +964,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity(vo
         return 0;
     }
     cap = ((_self->structcap > 0) ? _self->structcap : (MAX_STRUCTS + MAX_STRUCT_INSTS));
-    while (((cap < need) && (cap < (MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX)))) {
+    while (((cap < need) && (cap < (CAP_LIMIT + CAP_LIMIT)))) {
         cap *= 2;
     }
-    if (cap > (MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX)) {
-        cap = (MAX_STRUCTS_MAX + MAX_STRUCT_INSTS_MAX);
+    if (cap > (CAP_LIMIT + CAP_LIMIT)) {
+        cap = (CAP_LIMIT + CAP_LIMIT);
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1017,11 +995,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_field_capac
         return 0;
     }
     cap = ((_self->structs[si].fcap > 0) ? _self->structs[si].fcap : MAX_FIELDS);
-    while (((cap < need) && (cap < MAX_FIELDS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_FIELDS_MAX) {
-        cap = MAX_FIELDS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1051,11 +1029,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_tmpl_field_capacit
         return 0;
     }
     cap = ((t[ti].fcap > 0) ? t[ti].fcap : MAX_FIELDS);
-    while (((cap < need) && (cap < MAX_FIELDS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_FIELDS_MAX) {
-        cap = MAX_FIELDS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1128,7 +1106,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct_inst(void *sel
     if (i >= 0) {
         return i;
     }
-    if (_self->nstruct_inst >= MAX_STRUCT_INSTS_MAX) {
+    if (_self->nstruct_inst >= CAP_LIMIT) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
     i = _self->__frontend_sym_symbolops_vptr->add_struct(_self, name);
@@ -1161,11 +1139,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_table_capaci
         return 0;
     }
     cap = ((_self->traitscap > 0) ? _self->traitscap : MAX_TRAITS);
-    while (((cap < need) && (cap < MAX_TRAITS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_TRAITS_MAX) {
-        cap = MAX_TRAITS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1192,11 +1170,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_trait_capacity(voi
         return 0;
     }
     cap = ((_self->traits[ti].mcap > 0) ? _self->traits[ti].mcap : MAX_METHODS);
-    while (((cap < need) && (cap < MAX_METHODS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_METHODS_MAX) {
-        cap = MAX_METHODS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1226,11 +1204,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_param_capacit
         return 0;
     }
     cap = ((_self->traits[ti].m[mi].pcap > 0) ? _self->traits[ti].m[mi].pcap : MAX_PARAMS);
-    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_PARAMS_MAX) {
-        cap = MAX_PARAMS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1259,11 +1237,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_ann_capacity(
         return 0;
     }
     cap = ((_self->methcap > 0) ? _self->methcap : MAX_METH_ANN);
-    while (((cap < need) && (cap < MAX_METH_ANN_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_METH_ANN_MAX) {
-        cap = MAX_METH_ANN_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1289,11 +1267,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_meth_ann_param_cap
         return 0;
     }
     cap = ((_self->meth[mi].pcap > 0) ? _self->meth[mi].pcap : MAX_PARAMS);
-    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_PARAMS_MAX) {
-        cap = MAX_PARAMS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1675,11 +1653,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_alias_capacity(voi
         return 0;
     }
     cap = ((_self->aliascap > 0) ? _self->aliascap : MAX_IMPORT_ALIASES);
-    while (((cap < need) && (cap < MAX_IMPORT_ALIASES_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_IMPORT_ALIASES_MAX) {
-        cap = MAX_IMPORT_ALIASES_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -1739,11 +1717,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_bare_capacity(void
         return 0;
     }
     cap = ((_self->tbcap > 0) ? _self->tbcap : MAX_EXPORTED_TYPES);
-    while (((cap < need) && (cap < MAX_EXPORTED_TYPES_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_EXPORTED_TYPES_MAX) {
-        cap = MAX_EXPORTED_TYPES_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
@@ -2473,11 +2451,11 @@ static int tmpls_grow(int need) {
         return 0;
     }
     cap = ((frontend_sym_g_tmplscap > 0) ? frontend_sym_g_tmplscap : MAX_STRUCT_TPLS);
-    while (((cap < need) && (cap < MAX_STRUCT_TPLS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_STRUCT_TPLS_MAX) {
-        cap = MAX_STRUCT_TPLS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);
@@ -2498,11 +2476,11 @@ static int insts_grow(int need) {
         return 0;
     }
     cap = ((frontend_sym_g_instscap > 0) ? frontend_sym_g_instscap : MAX_STRUCT_INSTS);
-    while (((cap < need) && (cap < MAX_STRUCT_INSTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_STRUCT_INSTS_MAX) {
-        cap = MAX_STRUCT_INSTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);
@@ -2572,7 +2550,7 @@ int frontend_sym_ct_tmpl_add(const char * name, const char * full, int ntprm, ch
     if (i >= 0) {
         return i;
     }
-    if (((ntprm < 0) || (ntprm > MAX_STRUCT_TPARAMS_MAX))) {
+    if (((ntprm < 0) || (ntprm > CAP_LIMIT))) {
         return (-1);
     }
     if (tmpls_grow((frontend_sym_g_ntmpls + 1)) != 0) {
@@ -2631,7 +2609,7 @@ int frontend_sym_ct_inst_add(const char * name, const char * tmpl, int nargs, ch
     int n;
     int k;
     struct frontend_sym_StructInst * t;
-    if (((nargs < 0) || (nargs > MAX_STRUCT_TPARAMS_MAX))) {
+    if (((nargs < 0) || (nargs > CAP_LIMIT))) {
         return (-1);
     }
     i = frontend_sym_ct_inst_find(name);
@@ -2697,11 +2675,11 @@ static int impls_grow(int need) {
         return 0;
     }
     cap = ((frontend_sym_g_implscap > 0) ? frontend_sym_g_implscap : MAX_STRUCT_IMPLS);
-    while (((cap < need) && (cap < MAX_STRUCT_IMPLS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_STRUCT_IMPLS_MAX) {
-        cap = MAX_STRUCT_IMPLS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);
@@ -2768,7 +2746,7 @@ int frontend_sym_ct_impl_add(const char * tmpl, int ntprm, char * * tparams, int
     int n;
     int k;
     struct frontend_sym_StructImpl * t = frontend_sym_ct_impls((&n));
-    if (((((ntprm < 0) || (ntprm > MAX_STRUCT_TPARAMS_MAX)) || (nargs < 0)) || (nargs > MAX_STRUCT_TPARAMS_MAX))) {
+    if (((((ntprm < 0) || (ntprm > CAP_LIMIT)) || (nargs < 0)) || (nargs > CAP_LIMIT))) {
         return (-1);
     }
     i = frontend_sym_ct_impl_find(tmpl, nargs, pats, use);
@@ -3052,13 +3030,13 @@ static int adt_ensure(int need) {
     if (need <= frontend_sym_g_adtcap) {
         return 0;
     }
-    if (need > MAX_ADTS_MAX) {
+    if (need > CAP_LIMIT) {
         return (-1);
     }
     cap = ((frontend_sym_g_adtcap > 0) ? frontend_sym_g_adtcap : MAX_ADTS);
     while (cap < need) {
-        if (cap > (MAX_ADTS_MAX / 2)) {
-            cap = MAX_ADTS_MAX;
+        if (cap > (CAP_LIMIT / 2)) {
+            cap = CAP_LIMIT;
             break;
         }
         cap *= 2;
@@ -3092,13 +3070,13 @@ static int adt_ensure_variants(int adt, int need) {
     if (need <= frontend_sym_g_adts[adt].vcap) {
         return 0;
     }
-    if (need > MAX_ADT_VARIANTS_MAX) {
+    if (need > CAP_LIMIT) {
         return (-1);
     }
     cap = ((frontend_sym_g_adts[adt].vcap > 0) ? frontend_sym_g_adts[adt].vcap : MAX_ADT_VARIANTS);
     while (cap < need) {
-        if (cap > (MAX_ADT_VARIANTS_MAX / 2)) {
-            cap = MAX_ADT_VARIANTS_MAX;
+        if (cap > (CAP_LIMIT / 2)) {
+            cap = CAP_LIMIT;
             break;
         }
         cap *= 2;
@@ -3123,13 +3101,13 @@ static int adt_ensure_fields(int adt, int v, int need) {
     if (need <= frontend_sym_g_adts[adt].variants[v].fcap) {
         return 0;
     }
-    if (need > MAX_ADT_FIELDS_MAX) {
+    if (need > CAP_LIMIT) {
         return (-1);
     }
     cap = ((frontend_sym_g_adts[adt].variants[v].fcap > 0) ? frontend_sym_g_adts[adt].variants[v].fcap : MAX_ADT_FIELDS);
     while (cap < need) {
-        if (cap > (MAX_ADT_FIELDS_MAX / 2)) {
-            cap = MAX_ADT_FIELDS_MAX;
+        if (cap > (CAP_LIMIT / 2)) {
+            cap = CAP_LIMIT;
             break;
         }
         cap *= 2;

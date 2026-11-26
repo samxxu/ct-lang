@@ -14,11 +14,9 @@
 #include <stdio.h>
 #include <string.h>
 #define MAX_RAW_INIT 4096
-#define MAX_RAW_INIT_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 #define MAX_TEXT 160
 #define T_EOF 0
 #define T_ID 1
@@ -615,7 +613,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
     fresh = 0;
     if (i < 0) {
         if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self->sym, (_self->sym->nfunc + 1)) != 0) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, tool_sh_ct_scratch_fmt("too many functions (limit %d, whole program)", MAX_FUNCS_MAX));
+            return _self->__frontend_parse_supportops_vptr->fail(_self, tool_sh_ct_scratch_fmt("too many functions (limit %d, whole program)", CAP_LIMIT));
         }
         i = _self->sym->nfunc;
         _self->sym->nfunc++;
@@ -994,11 +992,11 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_ensure_raw(void
         return 0;
     }
     cap = ((_self->rawcap > 0) ? _self->rawcap : MAX_RAW_INIT);
-    while (((cap < need) && (cap < MAX_RAW_INIT_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_RAW_INIT_MAX) {
-        cap = MAX_RAW_INIT_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");

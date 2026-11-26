@@ -25,9 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define MAX_TEXT 160
-#define MAX_ADT_FIELDS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_LABELS 64
-#define MAX_LABELS_MAX 65536
 #define B_COMMA 19
 #define B_ADD 1
 #define B_SUB 2
@@ -657,11 +656,11 @@ int frontend_parse_ensure_label_capacity(struct frontend_parse_Stmt * self, int 
         return 0;
     }
     cap = ((self->labelcap > 0) ? self->labelcap : MAX_LABELS);
-    while (((cap < need) && (cap < MAX_LABELS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_LABELS_MAX) {
-        cap = MAX_LABELS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
@@ -682,11 +681,11 @@ int frontend_parse_ensure_goto_capacity(struct frontend_parse_Stmt * self, int n
         return 0;
     }
     cap = ((self->gotocap > 0) ? self->gotocap : MAX_LABELS);
-    while (((cap < need) && (cap < MAX_LABELS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_LABELS_MAX) {
-        cap = MAX_LABELS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");

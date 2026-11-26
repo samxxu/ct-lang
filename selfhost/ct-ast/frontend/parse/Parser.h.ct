@@ -44,16 +44,12 @@ import frontend::sym::SymbolsTypeText;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FIELDS 64
-#define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
-#define MAX_IMPORTS_MAX 65536
 #define MAX_MAPS 64
 #define MAX_METHODS 64
-#define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 #define MAX_TEXT 160
 /* S1a-0 C2: a raw block is stored in the growable literal pool, so the old
    fixed MAX_RAW_BLOCK 32768 is gone; only the formal text bound remains. */
@@ -690,7 +686,7 @@ impl ParseDeclOps for Parser {
        name instead: `a::b::C` is the unit, `D` is what it exports and `E` is how
        this file spells it. */
     /* S1a-0 C1: the import list grows by doubling from MAX_IMPORTS, with
-       MAX_IMPORTS_MAX as the formal ceiling. A build's imports are recorded
+       CAP_LIMIT as the formal ceiling. A build's imports are recorded
        while `scan_only` is set, so the pass that decides the dependency graph
        never depends on a fixed 32-row table. */
     int ensure_rels(int need)
@@ -701,8 +697,8 @@ impl ParseDeclOps for Parser {
         (void)self;
         if (need <= self->relcap) return 0;
         cap = self->relcap > 0 ? self->relcap : MAX_IMPORTS;
-        while (cap < need && cap < MAX_IMPORTS_MAX) cap *= 2;
-        if (cap > MAX_IMPORTS_MAX) cap = MAX_IMPORTS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->sup->fail("out of memory");
         grown = (const char **)realloc(self->rels, (size_t)cap * sizeof(*grown));
         if (!grown) return self->sup->fail("out of memory");
@@ -2623,8 +2619,8 @@ impl ParseOps for Parser {
         (void)self;
         if (need <= self->pendcap) return 0;
         cap = self->pendcap > 0 ? self->pendcap : MAX_FIELDS;
-        while (cap < need && cap < MAX_FIELDS_MAX) cap *= 2;
-        if (cap > MAX_FIELDS_MAX) cap = MAX_FIELDS_MAX;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->sup->fail("out of memory");
         grown = (struct Field *)realloc(self->pend_fields, (size_t)cap * sizeof(*grown));
         if (!grown) return self->sup->fail("out of memory");
@@ -3893,7 +3889,7 @@ impl ParseOps for Parser {
                 return self->sup->fail("a trait method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
             /* S1a-0 C1: the method block grows on demand; only the OOM valve
-               (MAX_METHODS_MAX) can stop it now. */
+               (CAP_LIMIT) can stop it now. */
             if (self->sym->ensure_trait_capacity(ti, self->sym->traits[ti].nm + 1) != 0)
                 return -1;
             mi = self->sym->traits[ti].nm;

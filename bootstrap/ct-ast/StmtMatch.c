@@ -22,9 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define MAX_TEXT 160
-#define MAX_ADT_FIELDS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_LABELS 64
-#define MAX_LABELS_MAX 65536
 #define B_COMMA 19
 #define B_ADD 1
 #define B_SUB 2
@@ -463,7 +462,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match(void *self) 
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding name");
                 }
                 if (nb >= nbind) {
-                    ncap = ((nbind > (MAX_ADT_FIELDS_MAX / 2)) ? MAX_ADT_FIELDS_MAX : (nbind * 2));
+                    ncap = ((nbind > (CAP_LIMIT / 2)) ? CAP_LIMIT : (nbind * 2));
                     if (nb >= ncap) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
                     }
@@ -900,7 +899,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_parse_match_expr(void *s
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding name");
                 }
                 if (nb >= nbind) {
-                    ncap = ((nbind > (MAX_ADT_FIELDS_MAX / 2)) ? MAX_ADT_FIELDS_MAX : (nbind * 2));
+                    ncap = ((nbind > (CAP_LIMIT / 2)) ? CAP_LIMIT : (nbind * 2));
                     if (nb >= ncap) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many bindings in one match arm");
                     }

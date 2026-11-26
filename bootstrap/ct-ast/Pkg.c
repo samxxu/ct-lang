@@ -14,17 +14,16 @@
 #include <stdarg.h>
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* old flat lock text (8 * 512) */
-#define MAX_LOCK_MAX   65536             /* = TEXT_LIMIT; S1a-0 C2d */
+#define CAP_LIMIT   65536             /* = TEXT_LIMIT; S1a-0 C2d */
 #define MAX_PKG_DEPS   16
-#define MAX_PKG_DEPS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_PKG_CMD    2048
 #define TEXT_LIMIT     65536
 #define MAX_PKG_DEPTH  8
 #define MAX_PKG_GITERR 8                /* PKG-23: trailing git stderr lines */
 #define MAX_INDEX_ROWS 1024             /* PKG-18: one package version per list row */
-#define MAX_INDEX_ROWS_MAX 65536        /* S1a-0 C1: formal cap for MAX_INDEX_ROWS */
+#define CAP_LIMIT 65536        /* S1a-0 C1: formal cap for MAX_INDEX_ROWS */
 #define MAX_DIGEST_FILES 4096
-#define MAX_DIGEST_FILES_MAX 65536
 #define INDEX_ERR_STRIDE   560
 #define INDEX_ERR_KIND_OFF 4
 #define INDEX_ERR_MSG_OFF  36
@@ -1837,7 +1836,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_remember_dep(void *self, const char * sp
         fprintf(stderr, "ctc: cannot read './ct.pkg'\n");
         return (-1);
     }
-    if ((size_t)(sz) >= MAX_LOCK_MAX) {
+    if ((size_t)(sz) >= CAP_LIMIT) {
         fclose(f);
         fprintf(stderr, "ctc: './ct.pkg' is too large\n");
         return (-1);
@@ -3197,13 +3196,13 @@ static int sha_paths_add(struct tool_pkg_ShaPaths * sp, const char * rel) {
     char * copy;
     if (sp->n >= sp->cap) {
         c = ((sp->cap > 0) ? (sp->cap * 2) : MAX_DIGEST_FILES);
-        while (((c <= sp->n) && (c < MAX_DIGEST_FILES_MAX))) {
+        while (((c <= sp->n) && (c < CAP_LIMIT))) {
             c *= 2;
         }
-        if (c > MAX_DIGEST_FILES_MAX) {
-            c = MAX_DIGEST_FILES_MAX;
+        if (c > CAP_LIMIT) {
+            c = CAP_LIMIT;
         }
-        if (sp->n >= MAX_DIGEST_FILES_MAX) {
+        if (sp->n >= CAP_LIMIT) {
             return (-1);
         }
         grown = (char * *)(realloc(sp->row, ((size_t)(c) * sizeof((*grown)))));
@@ -3489,11 +3488,11 @@ static int pkg_ptrrows_ensure(char * * * rows, int * cap, int need) {
         return 0;
     }
     c = (((*cap) > 0) ? (*cap) : MAX_PKG_DEPS);
-    while (((c < need) && (c < MAX_PKG_DEPS_MAX))) {
+    while (((c < need) && (c < CAP_LIMIT))) {
         c *= 2;
     }
-    if (c > MAX_PKG_DEPS_MAX) {
-        c = MAX_PKG_DEPS_MAX;
+    if (c > CAP_LIMIT) {
+        c = CAP_LIMIT;
     }
     if (need > c) {
         return (-1);
@@ -3517,11 +3516,11 @@ static int pkg_recs_ensure(struct tool_pkg_Pkg * self, int need) {
         return 0;
     }
     c = ((self->reccap > 0) ? self->reccap : MAX_PKG_DEPS);
-    while (((c < need) && (c < MAX_PKG_DEPS_MAX))) {
+    while (((c < need) && (c < CAP_LIMIT))) {
         c *= 2;
     }
-    if (c > MAX_PKG_DEPS_MAX) {
-        c = MAX_PKG_DEPS_MAX;
+    if (c > CAP_LIMIT) {
+        c = CAP_LIMIT;
     }
     if (need > c) {
         return (-1);
@@ -3542,11 +3541,11 @@ static int pkg_deps_ensure(struct tool_pkg_DepList * deps, int need) {
         return 0;
     }
     c = ((deps->cap > 0) ? deps->cap : MAX_PKG_DEPS);
-    while (((c < need) && (c < MAX_PKG_DEPS_MAX))) {
+    while (((c < need) && (c < CAP_LIMIT))) {
         c *= 2;
     }
-    if (c > MAX_PKG_DEPS_MAX) {
-        c = MAX_PKG_DEPS_MAX;
+    if (c > CAP_LIMIT) {
+        c = CAP_LIMIT;
     }
     if (need > c) {
         return (-1);
@@ -3576,11 +3575,11 @@ static int pkg_lockrows_ensure(struct tool_pkg_LockRow * * rows, int * cap, int 
         return 0;
     }
     c = (((*cap) > 0) ? (*cap) : MAX_PKG_DEPS);
-    while (((c < need) && (c < MAX_PKG_DEPS_MAX))) {
+    while (((c < need) && (c < CAP_LIMIT))) {
         c *= 2;
     }
-    if (c > MAX_PKG_DEPS_MAX) {
-        c = MAX_PKG_DEPS_MAX;
+    if (c > CAP_LIMIT) {
+        c = CAP_LIMIT;
     }
     if (need > c) {
         return (-1);
@@ -3601,11 +3600,11 @@ static int pkg_lockparsed_ensure(struct tool_pkg_LockParsedRow * * rows, int * c
         return 0;
     }
     c = (((*cap) > 0) ? (*cap) : MAX_PKG_DEPS);
-    while (((c < need) && (c < MAX_PKG_DEPS_MAX))) {
+    while (((c < need) && (c < CAP_LIMIT))) {
         c *= 2;
     }
-    if (c > MAX_PKG_DEPS_MAX) {
-        c = MAX_PKG_DEPS_MAX;
+    if (c > CAP_LIMIT) {
+        c = CAP_LIMIT;
     }
     if (need > c) {
         return (-1);
@@ -3626,11 +3625,11 @@ static int pkg_lock_reserve(struct tool_pkg_Pkg * self, int need) {
         return 0;
     }
     cap = ((self->lockcap > 0) ? self->lockcap : MAX_LOCK);
-    while (((cap < need) && (cap < MAX_LOCK_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_LOCK_MAX) {
-        cap = MAX_LOCK_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);
@@ -4683,13 +4682,13 @@ int tool_pkg_pkg_index_refresh(int argc, char * * argv, const char * prog, const
             int ncap;
             struct tool_pkg_IndexRow * grown;
             ncap = ((rows_cap > 0) ? rows_cap : MAX_INDEX_ROWS);
-            while (((ncap <= nrows) && (ncap < MAX_INDEX_ROWS_MAX))) {
+            while (((ncap <= nrows) && (ncap < CAP_LIMIT))) {
                 ncap *= 2;
             }
-            if (ncap > MAX_INDEX_ROWS_MAX) {
-                ncap = MAX_INDEX_ROWS_MAX;
+            if (ncap > CAP_LIMIT) {
+                ncap = CAP_LIMIT;
             }
-            if (nrows >= MAX_INDEX_ROWS_MAX) {
+            if (nrows >= CAP_LIMIT) {
                 if (tool_pkg_index_err_add((&errs), (&nerr), (&cerr), lineno, "list", "package list has more than 65536 rows") != 0) {
                     goto refresh_oom;
                 }
@@ -5321,7 +5320,7 @@ static int pkg_update_v2(const char * prog) {
         fprintf(stderr, "ctc: no './ct.lock'; run `%s get` first\n", prog);
         return 1;
     }
-    if (((((fseek(f, 0, SEEK_END) != 0) || ((sz = ftell(f)) < 0)) || ((size_t)(sz) >= MAX_LOCK_MAX)) || (fseek(f, 0, SEEK_SET) != 0))) {
+    if (((((fseek(f, 0, SEEK_END) != 0) || ((sz = ftell(f)) < 0)) || ((size_t)(sz) >= CAP_LIMIT)) || (fseek(f, 0, SEEK_SET) != 0))) {
         fprintf(stderr, "ctc: ct.lock is too large to update\n");
         fclose(f);
         return 1;
@@ -5427,7 +5426,7 @@ static int pkg_update_v2(const char * prog) {
     snprintf(newver, sizeof(newver), "%s", tool_pkg_g_pkg.recs[(tool_pkg_g_pkg.nrecs - 1)].version);
     outlen = 0;
     outcap = (((int)(strlen(buf)) + (int)(strlen(tool_pkg_g_pkg.lock))) + 2);
-    if (outcap > MAX_LOCK_MAX) {
+    if (outcap > CAP_LIMIT) {
         free(buf);
         fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
         return 1;
@@ -5760,15 +5759,15 @@ static int pkg_migrate(const char * prog) {
             if (w < (outcap - outlen)) {
                 break;
             }
-            if (((outcap >= MAX_LOCK_MAX) || (((outlen + w) + 1) > MAX_LOCK_MAX))) {
+            if (((outcap >= CAP_LIMIT) || (((outlen + w) + 1) > CAP_LIMIT))) {
                 fprintf(stderr, "ctc: ct.lock is too large to migrate\n");
                 free(out);
                 fclose(f);
                 return 1;
             }
             outcap *= 2;
-            if (outcap > MAX_LOCK_MAX) {
-                outcap = MAX_LOCK_MAX;
+            if (outcap > CAP_LIMIT) {
+                outcap = CAP_LIMIT;
             }
 {
                 char * grown = (char *)(realloc(out, (size_t)(outcap)));

@@ -17,11 +17,9 @@
 #define MAX_TEXT   160
 #define TEXT_LIMIT 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_METHODS 64
-#define MAX_METHODS_MAX 65536
 #define MAX_MAPS   64
-#define MAX_MAPS_MAX 65536
 #define T_EOF    0
 #define T_ID     1
 #define T_PUNCT  4
@@ -1031,11 +1029,11 @@ static int mapb_ensure_maps(struct frontend_parse_MapBuild * self, int need) {
         return 0;
     }
     cap = (((*self->mapcap) > 0) ? (*self->mapcap) : MAX_MAPS);
-    while (((cap < need) && (cap < MAX_MAPS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_MAPS_MAX) {
-        cap = MAX_MAPS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
@@ -1056,11 +1054,11 @@ static int mapb_ensure_binds(struct frontend_parse_MapBuild * self, struct front
         return 0;
     }
     cap = ((m->bcap > 0) ? m->bcap : MAX_METHODS);
-    while (((cap < need) && (cap < MAX_METHODS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_METHODS_MAX) {
-        cap = MAX_METHODS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
@@ -1084,11 +1082,11 @@ static int mapb_ensure_params(struct frontend_parse_MapBuild * self, struct fron
         return 0;
     }
     cap = ((b->pcap > 0) ? b->pcap : MAX_PARAMS);
-    while (((cap < need) && (cap < MAX_PARAMS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_PARAMS_MAX) {
-        cap = MAX_PARAMS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");

@@ -17,7 +17,7 @@ import tool::sh::Sh;
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT    160
 #define MAX_STRUCT_TPARAMS 2
-#define MAX_STRUCT_TPARAMS_MAX 65536
+#define CAP_LIMIT 65536
 
 namespace frontend::sym;
 /* A stateless unit: the type exists only because a unit file is
@@ -33,7 +33,7 @@ pub const char *adt_strip_type_text(const char *in);
 pub int ct_generic_subst(const char *in, const char *word, const char *repl, char *out, int cap);
 /* S1a-0 C3: every cap is a starting capacity, not a language limit. A "row
    block" is an array of `char *`, one MAX_TEXT buffer per row; the block grows
-   by doubling to MAX_STRUCT_TPARAMS_MAX (the formal/OOM ceiling). Rows are
+   by doubling to CAP_LIMIT (the formal/OOM ceiling). Rows are
    zeroed on allocation, and an existing row keeps its buffer across a grow, so
    a caller can reserve once and keep appending. */
 pub char **ct_rows_reserve(char **rows, int have, int need, int *got);
@@ -171,13 +171,13 @@ char **ct_rows_reserve(char **rows, int have, int need, int *got)
         if (got) *got = have;
         return rows;
     }
-    if (need > MAX_STRUCT_TPARAMS_MAX) {
+    if (need > CAP_LIMIT) {
         if (got) *got = have;
         return rows;
     }
     cap = have > 0 ? have : MAX_STRUCT_TPARAMS;
-    while (cap < need && cap < MAX_STRUCT_TPARAMS_MAX) cap *= 2;
-    if (cap > MAX_STRUCT_TPARAMS_MAX) cap = MAX_STRUCT_TPARAMS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) {
         if (got) *got = have;
         return rows;
@@ -211,13 +211,13 @@ const char **ct_text_rows_reserve(const char **rows, int have, int need, int *go
         if (got) *got = have;
         return rows;
     }
-    if (need > MAX_STRUCT_TPARAMS_MAX) {
+    if (need > CAP_LIMIT) {
         if (got) *got = have;
         return rows;
     }
     cap = have > 0 ? have : MAX_STRUCT_TPARAMS;
-    while (cap < need && cap < MAX_STRUCT_TPARAMS_MAX) cap *= 2;
-    if (cap > MAX_STRUCT_TPARAMS_MAX) cap = MAX_STRUCT_TPARAMS_MAX;
+    while (cap < need && cap < CAP_LIMIT) cap *= 2;
+    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) {
         if (got) *got = have;
         return rows;
@@ -310,7 +310,7 @@ const char *ct_inst_encode_text(const char *tmpl, int nargs, char **args)
     const char *enc;
     const char *pooled;
 
-    if (nargs < 0 || nargs > MAX_STRUCT_TPARAMS_MAX) return (const char *)0;
+    if (nargs < 0 || nargs > CAP_LIMIT) return (const char *)0;
     if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
     if (tool::sh::ct_text_cat(&buf, &cap, tmpl ? tmpl : "") != 0) goto fail;
     for (i = 0; i < nargs; i++) {
@@ -393,7 +393,7 @@ int ct_inst_split(const char *in, const char **name, int *nargs, char **args, in
                 int len = (int)(b - a);
                 const char *raw;
                 const char *canon;
-                if (*nargs >= argcap || *nargs >= MAX_STRUCT_TPARAMS_MAX
+                if (*nargs >= argcap || *nargs >= CAP_LIMIT
                     || len <= 0) return -1;
                 raw = runtime::text::ct_intern_len(a, len);
                 if (!raw) return -1;
@@ -643,7 +643,7 @@ int impl_pat_split(const char *pat, const char **name, char **args, int argcap, 
     for (p = lt + 1; p <= end; p++) {
         if (p == end || (*p == ',' && depth == 0)) {
             const char *arg;
-            if (n >= argcap || n >= MAX_STRUCT_TPARAMS_MAX) return 0;
+            if (n >= argcap || n >= CAP_LIMIT) return 0;
             sl = (int)(p - seg);
             while (sl > 0 && (*seg == ' ' || *seg == '\t')) {
                 seg++;

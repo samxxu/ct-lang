@@ -66,11 +66,9 @@ import frontend::parse::ExprBinding;
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
 #define N_ADDR 27
@@ -285,10 +283,10 @@ impl ExprCallCheck for Expr {
         if (*self->ncalls >= *self->callcap) {
             int cap;
             struct Call *grown;
-            if (*self->ncalls >= MAX_CALLS_MAX) return self->sup->fail("out of memory");
+            if (*self->ncalls >= CAP_LIMIT) return self->sup->fail("out of memory");
             cap = *self->callcap > 0 ? *self->callcap : MAX_CALLS;
-            while (cap <= *self->ncalls && cap < MAX_CALLS_MAX) cap *= 2;
-            if (cap > MAX_CALLS_MAX) cap = MAX_CALLS_MAX;
+            while (cap <= *self->ncalls && cap < CAP_LIMIT) cap *= 2;
+            if (cap > CAP_LIMIT) cap = CAP_LIMIT;
             grown = (struct Call *)realloc(*self->calls, (size_t)cap * sizeof(*grown));
             if (!grown) return self->sup->fail("out of memory");
             memset(grown + *self->callcap, 0,

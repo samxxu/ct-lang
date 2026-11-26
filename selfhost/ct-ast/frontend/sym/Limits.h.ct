@@ -12,6 +12,12 @@
  * `Limits` type, and the macros would still stay in this unit. It is the
  * source the generator reads, not linkable state.
  *
+ * S1a-0 C4: there are exactly three formal limits. Every counting table
+ * starts at its `MAX_*` initial value below and doubles on demand; the first
+ * allocation is the only place the initial value is read. The formal limits
+ * are OOM guards, not user-visible language limits -- a real program must not
+ * reach them. Only the depth / error-recovery guards keep a fixed value.
+ *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 namespace frontend::sym;
@@ -21,95 +27,70 @@ pub struct Limits {
     int unused;
 }
 
-/* The formal text bound (S1a-0 C2): one text / path / command buffer stops at
-   65536 bytes. It is a resource guard, not a language limit -- a real program
-   must not reach it. A unit that sizes text by it mirrors this define. */
-#define TEXT_LIMIT                   65536
+/* ------------------------------------------------------------------------- */
+/* The three formal limits (OOM / resource guards; never language limits).    */
+/* ------------------------------------------------------------------------- */
 
+/* One text / path / command buffer stops at 65536 bytes. */
+#define TEXT_LIMIT                   65536
+/* One counting table stops at 65536 rows. */
+#define CAP_LIMIT                    65536
+/* The AST arena stops at 16M nodes (the initial arena is MAX_NODES below). */
+#define NODE_LIMIT                16777216
+
+/* ------------------------------------------------------------------------- */
+/* Initial capacities (one allocation; each table doubles up to CAP_LIMIT).   */
+/* ------------------------------------------------------------------------- */
 #define MAX_ADTS                     64
-#define MAX_ADTS_MAX                 65536
 #define MAX_ADT_FIELDS               8
-#define MAX_ADT_FIELDS_MAX           65536
 #define MAX_ADT_VARIANTS             96
-#define MAX_ADT_VARIANTS_MAX         65536
-#define MAX_ALIAS_CHAIN              32
 #define MAX_ARG_POS                  32
-#define MAX_ARG_POS_MAX              65536
 #define MAX_CALLS                    8192
-#define MAX_CALLS_MAX                65536
 #define MAX_CLOSURES                 64
-#define MAX_CLOSURES_MAX                  65536
 #define MAX_DIGEST_FILES             4096
-#define MAX_DIGEST_FILES_MAX         65536
 #define MAX_EXPORTED_TYPES           128
-#define MAX_EXPORTED_TYPES_MAX       65536
 #define MAX_FIELDS                   64
-#define MAX_FIELDS_MAX               65536
 #define MAX_FUNCS                    512
-#define MAX_FUNCS_MAX                65536
 #define MAX_GENERIC_INSTS            64
-#define MAX_GENERIC_INSTS_MAX             65536
 #define MAX_GLOBAL_TYPE_ALIASES      256
-#define MAX_GLOBAL_TYPE_ALIASES_MAX       65536
 #define MAX_HOISTS                   4
-#define MAX_HOISTS_MAX               65536
-#define MAX_IMPORTS                  32
-#define MAX_IMPORTS_MAX              65536
 #define MAX_IMPORT_ALIASES           24
-#define MAX_IMPORT_ALIASES_MAX       65536
+#define MAX_IMPORTS                  32
 #define MAX_INCDIRS                  16
-#define MAX_INCDIRS_MAX              65536
 #define MAX_INIT_ITEM                4096
-#define MAX_INIT_ITEM_MAX            65536
 #define MAX_INIT_TEXT                16384
-#define MAX_INIT_TEXT_MAX            65536
 #define MAX_INTOS                    4
-#define MAX_INTOS_MAX                65536
 #define MAX_KEY                      768
-#define MAX_KEY_MAX                  65536
 #define MAX_LABELS                   64
-#define MAX_LABELS_MAX               65536
 #define MAX_LAYOUT_ADTS              64
-#define MAX_LAYOUT_ADTS_MAX          65536
-#define MAX_LAYOUT_DEPTH             32
 #define MAX_LAYOUT_INSTS             128
-#define MAX_LAYOUT_INSTS_MAX         65536
 #define MAX_MAPS                     64
-#define MAX_MAPS_MAX                 65536
 #define MAX_METHODS                  64
-#define MAX_METHODS_MAX              65536
 #define MAX_METH_ANN                 256
-#define MAX_METH_ANN_MAX             65536
 #define MAX_NODES                    262144
 #define MAX_PARAMS                   16
-#define MAX_PARAMS_MAX               65536
 #define MAX_PKG_CMD                  2048
 #define MAX_PKG_DEPS                 16
-#define MAX_PKG_DEPS_MAX             65536
-#define MAX_PKG_DEPTH                8
 #define MAX_RAW_INIT                 4096
-#define MAX_RAW_INIT_MAX             65536
 #define MAX_SCOPE                    256
-#define MAX_SCOPE_MAX                65536
 #define MAX_STRUCTS                  128
-#define MAX_STRUCTS_MAX              65536
 #define MAX_STRUCT_IMPLS             64
-#define MAX_STRUCT_IMPLS_MAX              65536
 #define MAX_STRUCT_INSTS             128
-#define MAX_STRUCT_INSTS_MAX         65536
 #define MAX_STRUCT_TPARAMS           2
-#define MAX_STRUCT_TPARAMS_MAX       65536
 #define MAX_STRUCT_TPLS              64
-#define MAX_STRUCT_TPLS_MAX               65536
+/* Only the five fixed short scratch rows still size by it (integer digits or
+   protected short spans); user text no longer stops at this value. */
 #define MAX_TEXT                     160
 #define MAX_TRAITS                   64
-#define MAX_TRAITS_MAX               65536
 #define MAX_TYPES                    256
-#define MAX_TYPES_MAX                65536
 #define MAX_TYPE_ALIASES             64
-#define MAX_TYPE_ALIASES_MAX              65536
 #define MAX_UNITS                    64
-#define MAX_UNITS_MAX                65536
 #define MAX_VARS                     4096
-#define MAX_VARS_MAX                 65536
 #define MAX_WARNINGS                 32
+
+/* ------------------------------------------------------------------------- */
+/* Depth / error-recovery guards (the only fixed values that stay).          */
+/* ------------------------------------------------------------------------- */
+#define MAX_ALIAS_CHAIN              32
+#define MAX_LAYOUT_DEPTH             32
+#define MAX_PKG_DEPTH                8

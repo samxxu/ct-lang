@@ -59,11 +59,9 @@ import frontend::parse::ExprSubscript;
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
 #define N_ADDR 27

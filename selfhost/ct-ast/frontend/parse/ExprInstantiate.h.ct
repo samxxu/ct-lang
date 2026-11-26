@@ -68,11 +68,9 @@ import frontend::parse::ExprClosure;
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
 #define TEXT_LIMIT 65536
@@ -162,7 +160,7 @@ impl ExprInstantiate for Expr {
         if (self->sym->ensure_ginst_capacity(self->sym->nginsts + 1) != 0) return -1;
         if (self->sym->ensure_fn_capacity(self->sym->nfunc + 1) != 0)
             return self->sup->fail(tool::sh::ct_scratch_fmt(
-                "too many functions (limit %d, whole program)", MAX_FUNCS_MAX));
+                "too many functions (limit %d, whole program)", CAP_LIMIT));
         /* `<name>__ct<N>`; a user function may already hold the spelling, so a
            numeric suffix is retried a bounded number of times (R6). Another
            unit's static instance is not a collision in this unit's C file. */

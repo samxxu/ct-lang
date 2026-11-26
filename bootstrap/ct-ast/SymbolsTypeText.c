@@ -11,7 +11,7 @@
 #include <ctype.h>
 #define MAX_TEXT    160
 #define MAX_STRUCT_TPARAMS 2
-#define MAX_STRUCT_TPARAMS_MAX 65536
+#define CAP_LIMIT 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -253,18 +253,18 @@ char * * frontend_sym_ct_rows_reserve(char * * rows, int have, int need, int * g
         }
         return rows;
     }
-    if (need > MAX_STRUCT_TPARAMS_MAX) {
+    if (need > CAP_LIMIT) {
         if (got) {
             (*got) = have;
         }
         return rows;
     }
     cap = ((have > 0) ? have : MAX_STRUCT_TPARAMS);
-    while (((cap < need) && (cap < MAX_STRUCT_TPARAMS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_STRUCT_TPARAMS_MAX) {
-        cap = MAX_STRUCT_TPARAMS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         if (got) {
@@ -306,18 +306,18 @@ const char * * frontend_sym_ct_text_rows_reserve(const char * * rows, int have, 
         }
         return rows;
     }
-    if (need > MAX_STRUCT_TPARAMS_MAX) {
+    if (need > CAP_LIMIT) {
         if (got) {
             (*got) = have;
         }
         return rows;
     }
     cap = ((have > 0) ? have : MAX_STRUCT_TPARAMS);
-    while (((cap < need) && (cap < MAX_STRUCT_TPARAMS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_STRUCT_TPARAMS_MAX) {
-        cap = MAX_STRUCT_TPARAMS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         if (got) {
@@ -470,7 +470,7 @@ const char * frontend_sym_ct_inst_encode_text(const char * tmpl, int nargs, char
     int k;
     const char * enc;
     const char * pooled;
-    if (((nargs < 0) || (nargs > MAX_STRUCT_TPARAMS_MAX))) {
+    if (((nargs < 0) || (nargs > CAP_LIMIT))) {
         return (const char *)(0);
     }
     if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
@@ -580,7 +580,7 @@ int frontend_sym_ct_inst_split(const char * in, const char * * name, int * nargs
                 int len = (int)((b - a));
                 const char * raw;
                 const char * canon;
-                if (((((*nargs) >= argcap) || ((*nargs) >= MAX_STRUCT_TPARAMS_MAX)) || (len <= 0))) {
+                if (((((*nargs) >= argcap) || ((*nargs) >= CAP_LIMIT)) || (len <= 0))) {
                     return (-1);
                 }
                 raw = runtime_text_ct_intern_len(a, len);
@@ -881,7 +881,7 @@ int frontend_sym_impl_pat_split(const char * pat, const char * * name, char * * 
     for (p = (lt + 1); p <= end; p++) {
         if (((p == end) || (((*p) == ',') && (depth == 0)))) {
             const char * arg;
-            if (((n >= argcap) || (n >= MAX_STRUCT_TPARAMS_MAX))) {
+            if (((n >= argcap) || (n >= CAP_LIMIT))) {
                 return 0;
             }
             sl = (int)((p - seg));

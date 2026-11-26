@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """limits_sync.py - one authority for the ct-ast capacity caps (SH-94).
 
-`selfhost/ct-ast/frontend/sym/Limits.h.ct` is the only place a `MAX_*` cap value
-is chosen. The other `.h.ct` units still have to spell the macro themselves:
+`selfhost/ct-ast/frontend/sym/Limits.h.ct` is the only place a cap value is
+chosen. The other `.h.ct` units still have to spell the macro themselves:
 ct macros do not cross a translation unit (each `.h.ct` becomes its own `.c`,
 and the generated header carries types only), so a cap used in N units needs N
-`#define`s. Those defines are *mirrors* of the authority, maintained here:
+`#define`s. Those defines are *mirrors* of the authority, maintained here.
 
-  * `--check`   every `MAX_*` define under `selfhost/ct-ast` agrees with the
+The synced set is the three formal limits (`CAP_LIMIT`, `TEXT_LIMIT`,
+`NODE_LIMIT`) plus every `MAX_*` initial value / depth guard:
+
+  * `--check`   every synced define under `selfhost/ct-ast` agrees with the
                 authority, every authority cap is mirrored at least once, and
-                no unit invents a `MAX_*` cap the authority does not list;
+                no unit invents a cap the authority does not list;
   * `--write`   rewrite a mirror's value in place, keeping the line's spelling
                 (the emitted C is byte-identical when the value already agrees);
   * `--selftest` build a throwaway tree with one drifted mirror and require
@@ -32,8 +35,8 @@ import tempfile
 
 AUTHORITY = os.path.join("selfhost", "ct-ast", "frontend", "sym", "Limits.h.ct")
 SCAN_ROOT = os.path.join("selfhost", "ct-ast")
-CAP = re.compile(r"^#define\s+(MAX_[A-Z0-9_]+)\s+([0-9]+)\s*$")
-CAP_LINE = re.compile(r"^(?P<pre>#define\s+(?P<name>MAX_[A-Z0-9_]+)\s+)(?P<val>[0-9]+)(?P<post>\s*)$")
+CAP = re.compile(r"^#define\s+(MAX_[A-Z0-9_]+|CAP_LIMIT|TEXT_LIMIT|NODE_LIMIT)\s+([0-9]+)\s*$")
+CAP_LINE = re.compile(r"^(?P<pre>#define\s+(?P<name>MAX_[A-Z0-9_]+|CAP_LIMIT|TEXT_LIMIT|NODE_LIMIT)\s+)(?P<val>[0-9]+)(?P<post>\s*)$")
 
 
 def iter_units(root):
@@ -60,7 +63,7 @@ def read_authority(root):
                     % (AUTHORITY, lineno, name, caps[name], value))
             caps[name] = value
     if not caps:
-        raise SystemExit("limits_sync: %s declares no MAX_* cap" % AUTHORITY)
+        raise SystemExit("limits_sync: %s declares no capacity cap" % AUTHORITY)
     return caps
 
 
@@ -136,13 +139,13 @@ def selftest():
         os.makedirs(os.path.join(root, SCAN_ROOT, "frontend", "parse"))
         auth = os.path.join(root, AUTHORITY)
         with open(auth, "w", encoding="utf-8") as fh:
-            fh.write("#define MAX_TEST 16\n#define MAX_OTHER 64\n")
+            fh.write("#define MAX_TEST 16\n#define MAX_OTHER 64\n#define CAP_LIMIT 65536\n")
         unit = os.path.join(root, SCAN_ROOT, "frontend", "parse", "A.h.ct")
         with open(unit, "w", encoding="utf-8") as fh:
-            fh.write("#define MAX_TEST    16\n#define MAX_OTHER   64\n")
+            fh.write("#define MAX_TEST    16\n#define MAX_OTHER   64\n#define CAP_LIMIT   65536\n")
         other = os.path.join(root, SCAN_ROOT, "frontend", "parse", "B.h.ct")
         with open(other, "w", encoding="utf-8") as fh:
-            fh.write("#define MAX_TEST   16\n")
+            fh.write("#define MAX_TEST   16\n#define CAP_LIMIT 65536\n")
         if check(root) != 0:
             print("limits_sync: selftest FAIL (clean tree rejected)", file=sys.stderr)
             return 1

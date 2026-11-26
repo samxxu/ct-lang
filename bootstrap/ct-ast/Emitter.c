@@ -29,14 +29,12 @@
 #define MAX_TEXT   160
 #define TEXT_LIMIT 65536
 #define MAX_HOISTS 4
-#define MAX_HOISTS_MAX 65536
+#define CAP_LIMIT 65536
 #define N_MATSEQ 73
 #define N_INTO 63
 #define N_INTO_SELF 64
 #define MAX_INTOS 4
-#define MAX_INTOS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 #define N_PP      2
 #define N_FUNC    3
 #define N_BLOCK   4
@@ -133,9 +131,7 @@
 #define P_INC 1
 #define MAX_LAYOUT_DEPTH 32
 #define MAX_LAYOUT_ADTS 64
-#define MAX_LAYOUT_ADTS_MAX 65536
 #define MAX_LAYOUT_INSTS 128
-#define MAX_LAYOUT_INSTS_MAX 65536
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -7681,11 +7677,11 @@ static int ensure_adt_layout_state(int need) {
         return 0;
     }
     cap = ((backend_emit_g_adt_layout_cap > 0) ? backend_emit_g_adt_layout_cap : MAX_LAYOUT_ADTS);
-    while (((cap < need) && (cap < MAX_LAYOUT_ADTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_LAYOUT_ADTS_MAX) {
-        cap = MAX_LAYOUT_ADTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);
@@ -7706,11 +7702,11 @@ static int ensure_inst_layout_state(int need) {
         return 0;
     }
     cap = ((backend_emit_g_inst_layout_cap > 0) ? backend_emit_g_inst_layout_cap : MAX_LAYOUT_INSTS);
-    while (((cap < need) && (cap < MAX_LAYOUT_INSTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_LAYOUT_INSTS_MAX) {
-        cap = MAX_LAYOUT_INSTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);
@@ -7731,11 +7727,11 @@ static int ensure_shell_emit_state(int need) {
         return 0;
     }
     cap = ((backend_emit_g_shell_emit_cap > 0) ? backend_emit_g_shell_emit_cap : MAX_LAYOUT_INSTS);
-    while (((cap < need) && (cap < MAX_LAYOUT_INSTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_LAYOUT_INSTS_MAX) {
-        cap = MAX_LAYOUT_INSTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return (-1);

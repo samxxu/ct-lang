@@ -21,16 +21,12 @@
 #include <stdlib.h>
 #include <string.h>
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FIELDS 64
-#define MAX_FIELDS_MAX 65536
 #define MAX_IMPORTS 32
-#define MAX_IMPORTS_MAX 65536
 #define MAX_MAPS 64
 #define MAX_METHODS 64
-#define MAX_METHODS_MAX 65536
 #define MAX_PARAMS 16
-#define MAX_PARAMS_MAX 65536
 #define MAX_TEXT 160
 #define TEXT_LIMIT 65536
 #define MAX_TRAITS 64
@@ -399,11 +395,11 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_ensure_rels(void *s
         return 0;
     }
     cap = ((_self->relcap > 0) ? _self->relcap : MAX_IMPORTS);
-    while (((cap < need) && (cap < MAX_IMPORTS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_IMPORTS_MAX) {
-        cap = MAX_IMPORTS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -2241,11 +2237,11 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_ensure_pend_fields(void
         return 0;
     }
     cap = ((_self->pendcap > 0) ? _self->pendcap : MAX_FIELDS);
-    while (((cap < need) && (cap < MAX_FIELDS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_FIELDS_MAX) {
-        cap = MAX_FIELDS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");

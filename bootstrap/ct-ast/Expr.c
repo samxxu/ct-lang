@@ -53,11 +53,9 @@
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
 #define TEXT_LIMIT 65536
@@ -4972,11 +4970,11 @@ static int ensure_arg_capacity(struct frontend_parse_Expr * self, int need) {
         return 0;
     }
     cap = ((self->argcap > 0) ? self->argcap : MAX_ARG_POS);
-    while (((cap < need) && (cap < MAX_ARG_POS_MAX))) {
+    while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
-    if (cap > MAX_ARG_POS_MAX) {
-        cap = MAX_ARG_POS_MAX;
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
     }
     if (need > cap) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");

@@ -48,10 +48,9 @@ import frontend::parse::StmtUninit;
 /* S1a-0 C2p-6: the formal text bound (mirror of Symbols/Limits); the _Alignas
    prefix is built in a block of this size instead of a 160-byte row. */
 #define TEXT_LIMIT 65536
-/* S1a-0 C3: the binding-name scratch ceiling (OOM guard only). */
-#define MAX_ADT_FIELDS_MAX 65536
+/* S1a-0 C4: the formal counting-table bound (OOM guard only). */
+#define CAP_LIMIT 65536
 #define MAX_LABELS 64
-#define MAX_LABELS_MAX 65536
 
 #define B_COMMA 19
 #define B_ADD 1
@@ -1011,7 +1010,7 @@ static int stmt_owning_struct(struct Stmt *self, const char *typebuf)
    `struct Msg`) and in whitespace, so the tag and spacing are dropped before
    the arms are compared. */
 /* S1a-0 C1: the label and goto rows are two growable blocks. Each grows by
-   doubling from MAX_LABELS until MAX_LABELS_MAX; the new rows are zeroed and
+   doubling from MAX_LABELS until CAP_LIMIT; the new rows are zeroed and
    the block is owned by the singleton, so `func_begin` only resets the count.
    Allocation failure is the only failure left (`out of memory`). */
 impl StmtOps for Stmt {

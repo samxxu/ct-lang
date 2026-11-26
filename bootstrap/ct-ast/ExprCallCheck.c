@@ -49,11 +49,9 @@
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
 #define N_ADDR 27
@@ -264,15 +262,15 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_record_call(void *se
     if ((*_self->ncalls) >= (*_self->callcap)) {
         int cap;
         struct frontend_module_Call * grown;
-        if ((*_self->ncalls) >= MAX_CALLS_MAX) {
+        if ((*_self->ncalls) >= CAP_LIMIT) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         cap = (((*_self->callcap) > 0) ? (*_self->callcap) : MAX_CALLS);
-        while (((cap <= (*_self->ncalls)) && (cap < MAX_CALLS_MAX))) {
+        while (((cap <= (*_self->ncalls)) && (cap < CAP_LIMIT))) {
             cap *= 2;
         }
-        if (cap > MAX_CALLS_MAX) {
-            cap = MAX_CALLS_MAX;
+        if (cap > CAP_LIMIT) {
+            cap = CAP_LIMIT;
         }
         grown = (struct frontend_module_Call *)(realloc((*_self->calls), ((size_t)(cap) * sizeof((*grown)))));
         if ((!grown)) {

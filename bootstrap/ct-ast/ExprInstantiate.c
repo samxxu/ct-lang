@@ -51,11 +51,9 @@
 #define B_SUB 2
 #define B_XOR 14
 #define MAX_CALLS 8192
-#define MAX_CALLS_MAX 65536
+#define CAP_LIMIT 65536
 #define MAX_FUNCS 512
-#define MAX_FUNCS_MAX 65536
 #define MAX_ARG_POS 32
-#define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
 #define TEXT_LIMIT 65536
@@ -213,7 +211,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
         return (-1);
     }
     if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self->sym, (_self->sym->nfunc + 1)) != 0) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("too many functions (limit %d, whole program)", MAX_FUNCS_MAX));
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("too many functions (limit %d, whole program)", CAP_LIMIT));
     }
     taken = 1;
     for (suffix = 0; ((suffix <= 8) && taken); suffix++) {
