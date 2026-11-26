@@ -8,7 +8,9 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypeText.h.ct"
 #include <stdio.h>
@@ -93,6 +95,9 @@ extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
 int frontend_parse_arg_class(const char *, const char *, char *, int, char *, int);
+int frontend_parse_arg_class_text(const char *, const char *, const char * *, const char * *);
+const char * frontend_parse_tbase_text(const char *);
+const char * frontend_parse_tnorm_text(const char *);
 int frontend_parse_id_char(int);
 int frontend_parse_inst_impl_score(int);
 int frontend_parse_plist_next(const char *, int *, char *, int);
@@ -106,16 +111,83 @@ void frontend_parse_tnorm(const char *, char *, int);
 int frontend_parse_tnumeric(const char *);
 int frontend_parse_tscalar(const char *);
 int frontend_parse_tstars(const char *);
-int frontend_parse_arg_class(const char * formal, const char * actual, char * fb, int fcap, char * ab, int acap) {
-    char fk[MAX_TEXT];
-    char ak[MAX_TEXT];
+const char * frontend_parse_tnorm_text(const char * in) {
+    char * buf = 0;
+    int cap = 0;
+    int prev;
+    int q;
+    const char * pooled;
+    char one[2];
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
+    }
+    prev = 0;
+    while ((*in)) {
+        q = frontend_parse_qual_at(in, prev);
+        if (q) {
+            in += q;
+            continue;
+        }
+        if ((((((*in) != ' ') && ((*in) != '\t')) && ((*in) != '\n')) && ((*in) != '\r'))) {
+            one[0] = (*in);
+            one[1] = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), one) != 0) {
+                goto fail;
+            }
+        }
+        prev = frontend_parse_id_char((unsigned char)((*in)));
+        in++;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+const char * frontend_parse_tbase_text(const char * k) {
+    char * buf = 0;
+    int cap = 0;
+    const char * pooled;
+    char one[2];
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
+    }
+    while ((*k)) {
+        if ((*k) != '*') {
+            one[0] = (*k);
+            one[1] = 0;
+            if (tool_sh_ct_text_cat((&buf), (&cap), one) != 0) {
+                goto fail;
+            }
+        }
+        k++;
+    }
+    pooled = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+int frontend_parse_arg_class_text(const char * formal, const char * actual, const char * * fb, const char * * ab) {
+    const char * fk;
+    const char * ak;
     int fd;
     int ad;
     int cf;
     int ca;
-    frontend_parse_tnorm(formal, fk, sizeof(fk));
-    frontend_parse_tnorm(actual, ak, sizeof(ak));
-    if (((!fk[0]) || (!ak[0]))) {
+    if (fb) {
+        (*fb) = "";
+    }
+    if (ab) {
+        (*ab) = "";
+    }
+    fk = frontend_parse_tnorm_text(formal);
+    ak = frontend_parse_tnorm_text(actual);
+    if (((((!fk) || (!ak)) || (!fk[0])) || (!ak[0]))) {
         return (-1);
     }
     if (strcmp(fk, ak) == 0) {
@@ -124,13 +196,17 @@ int frontend_parse_arg_class(const char * formal, const char * actual, char * fb
     if ((strchr(fk, '(') || strchr(ak, '('))) {
         return (-1);
     }
-    frontend_parse_tbase(fk, fb, fcap);
-    frontend_parse_tbase(ak, ab, acap);
-    if (((!fb[0]) || (!ab[0]))) {
+    if (fb) {
+        (*fb) = frontend_parse_tbase_text(fk);
+    }
+    if (ab) {
+        (*ab) = frontend_parse_tbase_text(ak);
+    }
+    if (((((((!fb) || (!ab)) || (!(*fb))) || (!(*ab))) || (!(*fb)[0])) || (!(*ab)[0]))) {
         return (-1);
     }
-    cf = frontend_parse_tclass(formal, fb);
-    ca = frontend_parse_tclass(actual, ab);
+    cf = frontend_parse_tclass(formal, (*fb));
+    ca = frontend_parse_tclass(actual, (*ab));
     if (((cf < 0) || (ca < 0))) {
         return (-1);
     }
@@ -158,6 +234,27 @@ int frontend_parse_arg_class(const char * formal, const char * actual, char * fb
         return 1;
     }
     return 2;
+}
+int frontend_parse_arg_class(const char * formal, const char * actual, char * fb, int fcap, char * ab, int acap) {
+    const char * f;
+    const char * a;
+    int r = frontend_parse_arg_class_text(formal, actual, (&f), (&a));
+    if (fb) {
+        fb[0] = 0;
+    }
+    if (ab) {
+        ab[0] = 0;
+    }
+    if (r < 0) {
+        return r;
+    }
+    if (snprintf(fb, (size_t)(fcap), "%s", f) >= fcap) {
+        return (-1);
+    }
+    if (snprintf(ab, (size_t)(acap), "%s", a) >= acap) {
+        return (-1);
+    }
+    return r;
 }
 int frontend_parse_id_char(int c) {
     return (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_'));
@@ -261,19 +358,34 @@ int frontend_parse_slice_array_len(const char * dims) {
     return v;
 }
 int frontend_parse_subst_tparam(const char * spell, char * * names, char * * vals, int n, char * out, int cap) {
-    char k[MAX_TEXT];
-    char p[MAX_TEXT];
+    const char * k;
+    char * kbuf = 0;
+    int kcap = 0;
     int i;
-    int j = 0;
-    for (i = 0; (spell[i] && ((j + 1) < (int)(sizeof(k)))); i++) {
-        if (((spell[i] != ' ') && (spell[i] != '\t'))) {
-            k[j++] = spell[i];
+    char one[2];
+    if (tool_sh_ct_text_init((&kbuf), (&kcap), 64) != 0) {
+        return (-1);
+    }
+    for (i = 0; spell[i]; i++) {
+        if (((spell[i] == ' ') || (spell[i] == '\t'))) {
+            continue;
+        }
+        one[0] = spell[i];
+        one[1] = 0;
+        if (tool_sh_ct_text_cat((&kbuf), (&kcap), one) != 0) {
+            tool_sh_ct_text_free((&kbuf), (&kcap));
+            return (-1);
         }
     }
-    k[j] = 0;
+    k = runtime_text_ct_intern(kbuf);
+    tool_sh_ct_text_free((&kbuf), (&kcap));
+    if ((!k)) {
+        return (-1);
+    }
     for (i = 0; i < n; i++) {
         const char * nv = ((names && names[i]) ? names[i] : "");
         const char * vv = ((vals && vals[i]) ? vals[i] : "");
+        const char * p;
         if ((!nv[0])) {
             continue;
         }
@@ -281,7 +393,10 @@ int frontend_parse_subst_tparam(const char * spell, char * * names, char * * val
             snprintf(out, (size_t)(cap), "%s", vv);
             return 0;
         }
-        snprintf(p, sizeof(p), "%s*", nv);
+        p = runtime_text_ct_internf("%s*", nv);
+        if ((!p)) {
+            return (-1);
+        }
         if (strcmp(k, p) == 0) {
             snprintf(out, (size_t)(cap), "%s *", vv);
             return 0;
@@ -358,28 +473,21 @@ void frontend_parse_tnorm(const char * in, char * out, int cap) {
     out[n] = 0;
 }
 int frontend_parse_tnumeric(const char * in) {
-    char tok[MAX_TEXT];
-    int n;
-    int any;
-    n = 0;
-    any = 0;
+    int any = 0;
     for (; ; ) {
+        const char * start;
+        char * tok;
         while (((((*in) == ' ') || ((*in) == '\t')) || ((*in) == '*'))) {
             in++;
         }
         if ((!(*in))) {
             break;
         }
-        n = 0;
+        start = in;
         while (((((*in) && ((*in) != ' ')) && ((*in) != '\t')) && ((*in) != '*'))) {
-            if ((n + 2) >= MAX_TEXT) {
-                return 0;
-            }
-            tok[n] = (*in);
-            n++;
             in++;
         }
-        tok[n] = 0;
+        tok = tool_sh_ct_scratch_fmt("%.*s", (int)((in - start)), start);
         if ((!frontend_parse_tscalar(tok))) {
             return 0;
         }

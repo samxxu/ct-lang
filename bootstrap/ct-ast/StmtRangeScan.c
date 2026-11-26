@@ -3,6 +3,7 @@
 #include "StmtRangeScan.h"
 #include "Lexer.h"
 #include "StmtRangeText.h"
+#include "Intern.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtRangeScan.h.ct"
 #include <stdio.h>
@@ -89,7 +90,9 @@ extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
 void frontend_parse_range_spelling(struct frontend_lex_Lexer *, char *, int);
+const char * frontend_parse_range_spelling_text(struct frontend_lex_Lexer *);
 int frontend_parse_range_bound_value(struct frontend_lex_Lexer *, long *, char *, int);
+int frontend_parse_range_bound_value_text(struct frontend_lex_Lexer *, long *, const char * *);
 void frontend_parse_range_spelling(struct frontend_lex_Lexer * lx, char * out, int cap) {
     int i = 0;
     if (lx->tok == T_NUM) {
@@ -110,15 +113,42 @@ void frontend_parse_range_spelling(struct frontend_lex_Lexer * lx, char * out, i
         snprintf(out, (size_t)(cap), "%s", "end of file");
     }
 }
-int frontend_parse_range_bound_value(struct frontend_lex_Lexer * lx, long * out, char * spell, int cap) {
-    char text[MAX_TEXT];
+const char * frontend_parse_range_spelling_text(struct frontend_lex_Lexer * lx) {
+    const char * t;
+    if (lx->tok == T_NUM) {
+        int n = (lx->pos - lx->tokstart);
+        if (n > 0) {
+            t = runtime_text_ct_intern_len((lx->src + lx->tokstart), n);
+        }
+        else {
+            t = (const char *)(0);
+        }
+    }
+    else {
+        t = runtime_text_ct_intern_len(lx->tokstr.ptr, lx->tokstr.len);
+    }
+    if ((!t)) {
+        return (const char *)(0);
+    }
+    if ((!t[0])) {
+        t = runtime_text_ct_intern("end of file");
+    }
+    return t;
+}
+int frontend_parse_range_bound_value_text(struct frontend_lex_Lexer * lx, long * out, const char * * spell) {
+    const char * text;
     const char * p;
     long v = 0;
     int base = 10;
     int d;
     int nd = 0;
-    frontend_parse_range_spelling(lx, text, (int)(sizeof(text)));
-    snprintf(spell, (size_t)(cap), "%s", text);
+    text = frontend_parse_range_spelling_text(lx);
+    if ((!text)) {
+        return 1;
+    }
+    if (spell) {
+        (*spell) = text;
+    }
     if (((lx->tok != T_NUM) || lx->tokfloat)) {
         return 1;
     }
@@ -152,4 +182,10 @@ int frontend_parse_range_bound_value(struct frontend_lex_Lexer * lx, long * out,
     }
     (*out) = v;
     return 0;
+}
+int frontend_parse_range_bound_value(struct frontend_lex_Lexer * lx, long * out, char * spell, int cap) {
+    const char * t = "";
+    int rc = frontend_parse_range_bound_value_text(lx, out, (&t));
+    snprintf(spell, (size_t)(cap), "%s", t);
+    return rc;
 }

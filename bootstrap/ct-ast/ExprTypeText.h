@@ -15,7 +15,9 @@
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
+#include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 
 
 struct ct_buf;
@@ -97,6 +99,9 @@ struct frontend_parse_ExprTypeText {
     int unused;
 };
 int frontend_parse_arg_class(const char *, const char *, char *, int, char *, int);
+int frontend_parse_arg_class_text(const char *, const char *, const char * *, const char * *);
+const char * frontend_parse_tbase_text(const char *);
+const char * frontend_parse_tnorm_text(const char *);
 int frontend_parse_id_char(int);
 int frontend_parse_inst_impl_score(int);
 int frontend_parse_plist_next(const char *, int *, char *, int);

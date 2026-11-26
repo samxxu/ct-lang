@@ -30,6 +30,7 @@ import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -70,6 +71,7 @@ import frontend::parse::ExprTypes;
 #define MAX_ARG_POS_MAX 65536
 #define MAX_GENERIC_INSTS 64
 #define MAX_TEXT 160
+#define TEXT_LIMIT 65536
 #define N_ADDR 27
 #define N_ARROW 25
 #define N_ASSIGN 13
@@ -139,35 +141,55 @@ pub int bind_conv_struct_like(struct Expr *self, const char *t)
     return self->sym->find_struct(t) >= 0;
 }
 
-pub int bind_conv_ibase(struct Expr *self, const char *stype, char *out, int cap, int *is_ptr)
+/* S1a-0 C2p-9: the pool-text form. `bind_conv_ibase` used to copy the
+   receiver into a 160-byte row before `find_struct`, so a 2000-byte struct
+   had no inherent block and a legal binding site said "no conversion". The
+   trimmed spelling is interned, so the whole type survives the lookup and
+   the returned pointer is stable for the rest of the parse. */
+pub const char *bind_conv_ibase_text(struct Expr *self, const char *stype, int *is_ptr)
 {
-    char b[MAX_TEXT];
-    size_t n;
+    const char *b = stype ? stype : "";
+    const char *base;
+    size_t n = strlen(b);
 
-    snprintf(b, sizeof b, "%s", stype);
-    n = strlen(b);
-    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) b[--n] = 0;
     *is_ptr = 0;
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) n--;
     if (n > 0 && b[n - 1] == '*') {
         *is_ptr = 1;
-        b[--n] = 0;
-        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) b[--n] = 0;
+        n--;
+        while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) n--;
     }
-    if (strncmp(b, "struct ", 7) != 0 && strncmp(b, "union ", 6) != 0) {
-        if (self->sym->find_struct(b) < 0) return 0;
-        if (snprintf(out, (size_t)cap, "struct %s", b) >= cap) return 0;
-        return 1;
+    base = runtime::text::ct_intern_len(b, (int)n);
+    if (!base) return (const char *)0;
+    if (strncmp(base, "struct ", 7) != 0 && strncmp(base, "union ", 6) != 0) {
+        if (self->sym->find_struct(base) < 0) return (const char *)0;
+        base = runtime::text::ct_internf("struct %s", base);
+        if (!base) return (const char *)0;
     }
-    if (snprintf(out, (size_t)cap, "%s", b) >= cap) return 0;
+    return base;
+}
+
+/* The caller-sized form kept for the sites outside this batch; it now
+   delegates to the pool-text form and only fails when the answer cannot fit
+   the caller's (still 160-byte) row. */
+pub int bind_conv_ibase(struct Expr *self, const char *stype, char *out, int cap, int *is_ptr)
+{
+    const char *t = bind_conv_ibase_text(self, stype, is_ptr);
+    if (!t) return 0;
+    if (snprintf(out, (size_t)cap, "%s", t) >= cap) return 0;
     return 1;
 }
 
-pub int bind_conv_inherent(struct Expr *self, const char *stype, const char *method, char *ret, int cap, int *is_ptr)
+pub int bind_conv_inherent_text(struct Expr *self, const char *stype, const char *method, const char **ret, int *is_ptr)
 {
-    char ibase[MAX_TEXT];
-    int m, np;
+    const char *ibase;
+    char *buf = 0;
+    int cap = 0, m, np;
+    const char *pooled;
 
-    if (!bind_conv_ibase(self, stype, ibase, sizeof ibase, is_ptr)) return -1;
+    if (ret) *ret = "";
+    ibase = bind_conv_ibase_text(self, stype, is_ptr);
+    if (!ibase) return -1;
     m = self->inst_inherent_method(ibase, method);
     if (m == -2) return -2;
     if (m < 0) return -1;
@@ -177,19 +199,38 @@ pub int bind_conv_inherent(struct Expr *self, const char *stype, const char *met
         for (pi = self->arena->nodes[m].a; pi > 0; pi = self->arena->nodes[pi].next) np++;
     }
     if (np != 0) return -3;
-    ret[0] = 0;
-    if (!self->sup->ty->inst_method_ret(ibase, method, ret, cap)) {
-        snprintf(ret, (size_t)cap, "%s", self->arena->nodes[m].text);
+    if (tool::sh::ct_text_init(&buf, &cap, TEXT_LIMIT) != 0) return -1;
+    if (!self->sup->ty->inst_method_ret(ibase, method, buf, cap)) {
+        if (tool::sh::ct_text_printf(&buf, &cap, "%s", self->arena->nodes[m].text) != 0) {
+            tool::sh::ct_text_free(&buf, &cap);
+            return -1;
+        }
     }
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    if (!pooled) return -1;
+    if (ret) *ret = pooled;
     return m;
 }
 
-pub int bind_conv_maps(struct Expr *self, const char *stype, const char *method, char *ret, int cap)
+pub int bind_conv_inherent(struct Expr *self, const char *stype, const char *method, char *ret, int cap, int *is_ptr)
+{
+    const char *t;
+    int m = bind_conv_inherent_text(self, stype, method, &t, is_ptr);
+    ret[0] = 0;
+    if (m < 0) return m;
+    if (snprintf(ret, (size_t)cap, "%s", t) >= cap) return -1;
+    return m;
+}
+
+pub int bind_conv_maps_text(struct Expr *self, const char *stype, const char *method, const char **ret)
 {
     const char *sk;
     const char *hk;
+    const char *hit = (const char *)0;
     int i, j, seen = 0;
 
+    if (ret) *ret = "";
     sk = bind_conv_key_text(stype);
     if (!sk) return -1;
     for (i = 0; i < *self->nmaps; i++) {
@@ -204,11 +245,21 @@ pub int bind_conv_maps(struct Expr *self, const char *stype, const char *method,
             if (strcmp((*self->maps)[i].b[j].method, method) != 0) continue;
             if ((*self->maps)[i].b[j].nparams - (*self->maps)[i].b[j].recv != 0) continue;
             if (ti < 0 || mi < 0 || mi >= self->sym->traits[ti].nm) continue;
-            if (!ret[0]) snprintf(ret, (size_t)cap, "%s",
-                                  self->sym->traits[ti].m[mi].ret);
+            if (!hit) hit = self->sym->traits[ti].m[mi].ret;
             seen++;
         }
     }
+    if (ret) *ret = hit ? hit : "";
+    return seen;
+}
+
+pub int bind_conv_maps(struct Expr *self, const char *stype, const char *method, char *ret, int cap)
+{
+    const char *t;
+    int seen = bind_conv_maps_text(self, stype, method, &t);
+    ret[0] = 0;
+    if (seen < 0) return seen;
+    if (seen > 0 && snprintf(ret, (size_t)cap, "%s", t) >= cap) return -1;
     return seen;
 }
 
@@ -257,24 +308,23 @@ pub int bind_conv_call_binding(struct Expr *self, int recv, const char *stype,
 /* Does any conversion (inherent or mapped) exist for this source spelling? */
 pub int bind_conv_any(struct Expr *self, const char *stype, const char *method)
 {
-    char ret[MAX_TEXT];
+    const char *ret;
     int ptr = 0;
 
-    ret[0] = 0;
-    if (bind_conv_inherent(self, stype, method, ret, sizeof ret, &ptr) >= 0) return 1;
-    ret[0] = 0;
-    if (bind_conv_maps(self, stype, method, ret, sizeof ret) > 0) return 1;
+    if (bind_conv_inherent_text(self, stype, method, &ret, &ptr) >= 0) return 1;
+    if (bind_conv_maps_text(self, stype, method, &ret) > 0) return 1;
     return 0;
 }
 
 pub int bind_conv_call(struct Expr *self, int recv, const char *stype, const char *method, const char *target, int line, int col)
 {
     int n, ptr = 0;
-    char ibase[MAX_TEXT];
+    const char *ibase;
+    const char *ret = "";
 
-    if (bind_conv_ibase(self, stype, ibase, sizeof ibase, &ptr)) {
+    if ((ibase = bind_conv_ibase_text(self, stype, &ptr)) != (const char *)0) {
         /* an inherent method wins over a mapping trait (D-020 lookup order) */
-        if (bind_conv_inherent(self, stype, method, ibase, (int)sizeof ibase, &ptr) >= 0) {
+        if (bind_conv_inherent_text(self, stype, method, &ret, &ptr) >= 0) {
             n = self->sup->new_node(N_MCALL);
             if (n < 0) return -1;
             self->arena->nodes[n].aux = ptr ? 10 : 9;
@@ -322,9 +372,8 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
     const char *st;
     const char *sk;
     const char *tk;
-    char ret[MAX_TEXT];
-    char tr[MAX_TEXT];
-    char msg[MAX_TEXT * 2];
+    const char *ret = "";
+    const char *tr;
     int ptr = 0, nm, ip = 0, mm;
 
     /* D-020 §6.3: off means v1.0 -- no implicit conversion at any binding site */
@@ -339,20 +388,20 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
     if (!sk || !tk) return expr;
     if (strcmp(sk, tk) == 0) return expr;
     /* an interface target is filled by the boxing pass, not by a conversion */
-    if (self->sup->iface_ref_type(target, tr, sizeof tr, &ip)
+    if (self->sup->iface_ref_type_text(target, &tr, &ip)
         && self->sym->find_trait(tr) >= 0)
         return expr;
-    ret[0] = 0;
-    mm = bind_conv_inherent(self, st, "as", ret, sizeof ret, &ptr);
+    mm = bind_conv_inherent_text(self, st, "as", &ret, &ptr);
     if (mm >= 0) {
         const char *rk = bind_conv_key_text(ret);
         if (!rk) return expr;
         if (strcmp(rk, tk) == 0)
             return bind_conv_call(self, expr, st, "as", target, line, col);
-        snprintf(msg, sizeof msg,
+        return tool::diag::ct_sem_error(line, col,
+            tool::sh::ct_scratch_fmt(
                  "no conversion from '%s' to '%s': inherent 'as' answers '%s'",
-                 st, target, ret);
-        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                 st, target, ret),
+            self->sup->mem->path);
     }
     if (mm == -2)
         return tool::diag::ct_sem_error(line, col,
@@ -365,8 +414,7 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
        before the method table. */
     if (bind_conv_binding(self, st, target) > 0)
         return bind_conv_call_binding(self, expr, st, target, line, col);
-    ret[0] = 0;
-    nm = bind_conv_maps(self, st, "as", ret, sizeof ret);
+    nm = bind_conv_maps_text(self, st, "as", &ret);
     if (nm > 0)
         return bind_conv_call(self, expr, st, "as", target, line, col);
     /* No candidate. Under `--types` the existing kernel owns the
@@ -386,12 +434,13 @@ pub int bind_conv_site(struct Expr *self, int expr, const char *target, int line
         || strstr(st, "Box_") != 0 || strstr(target, "Box_") != 0)
         return expr;
     if (bind_conv_struct_like(self, st) && bind_conv_struct_like(self, target)) {
-        snprintf(msg, sizeof msg,
+        return tool::diag::ct_sem_error(line, col,
+            tool::sh::ct_scratch_fmt(
                  "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', "
                  "import a mapping trait that declares 'as', or import a mapping unit "
                  "with a 'map binding' for this pair",
-                 st, target, st);
-        return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                 st, target, st),
+            self->sup->mem->path);
     }
     return expr;
 }

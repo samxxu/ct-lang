@@ -16,6 +16,7 @@
 #include "ParseSupport.h"
 #include "Expr.h"
 #include "Diag.h"
+#include "Intern.h"
 
 
 struct ct_buf;
@@ -101,7 +102,9 @@ int frontend_parse_map_brace_target(const char *, char *, int, char *, int, char
 int frontend_parse_range_digit(int, int);
 int frontend_parse_range_dim_value(const char *, long *);
 void frontend_parse_range_element_spelling(const char *, char *, int);
+const char * frontend_parse_range_element_spelling_text(const char *);
 int frontend_parse_range_vec_target(const char *, char *, int, char *, int);
+int frontend_parse_range_vec_target_text(const char *, const char * *, const char * *);
 int frontend_parse_vbrace_type_same(const char *, const char *);
 
 #endif

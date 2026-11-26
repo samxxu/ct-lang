@@ -11,6 +11,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -183,14 +184,13 @@ const struct frontend_parse_ExprCallCheck_vtbl frontend_parse_Expr_frontend_pars
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+int frontend_parse_argtype_mismatch_text(struct frontend_parse_Expr *, int, int, int, int, const char * *);
 static int frontend_parse_Expr_frontend_parse_ExprCallCheck_arity_check(void *self, int line, int col, const char * callee, int got, int want) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
     if (got == want) {
         return 0;
     }
-    snprintf(msg, sizeof(msg), "takes %d argument(s), %d given", want, got);
-    if (_self->sup->__frontend_parse_supportops_vptr->arity_warn(_self->sup, line, col, callee, msg) != 0) {
+    if (_self->sup->__frontend_parse_supportops_vptr->arity_warn(_self->sup, line, col, callee, tool_sh_ct_scratch_fmt("takes %d argument(s), %d given", want, got)) != 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many warnings");
     }
     return 0;
@@ -222,114 +222,21 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_map_arity(void *self
 
 static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_mismatch(void *self, int args, int fi, int ti, int mi, char * msg, int cap) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    const char * at = "";
-    char fb[MAX_TEXT];
-    char ab[MAX_TEXT];
-    const char * ft;
-    int cur;
-    int k;
-    int np;
-    int skip;
-    int r;
-    if (fi >= 0) {
-        np = _self->sym->funcs[fi].nparams;
+    const char * m = "";
+    int r = frontend_parse_argtype_mismatch_text(_self, args, fi, ti, mi, (&m));
+    if (msg) {
+        snprintf(msg, (size_t)(cap), "%s", m);
     }
-    else {
-        np = _self->sym->traits[ti].m[mi].nparams;
-    }
-    cur = args;
-    k = 0;
-    while (((cur > 0) && (k < np))) {
-        skip = 0;
-        if (fi >= 0) {
-            ft = _self->sym->funcs[fi].ptype[k];
-        }
-        else {
-            ft = _self->sym->traits[ti].m[mi].ptype[k];
-        }
-        if (((fi >= 0) && _self->sym->funcs[fi].pdim[k][0])) {
-            skip = 1;
-        }
-        if (((!skip) && strchr(ft, '['))) {
-            skip = 1;
-        }
-        if ((!skip)) {
-            char itr[MAX_TEXT];
-            int iip = 0;
-            if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type(_self->sup, ft, itr, sizeof(itr), (&iip))) {
-                skip = 1;
-            }
-        }
-        if (((!skip) && (_self->arena->nodes[cur].kind == N_CAST))) {
-            skip = 1;
-        }
-        if (((!skip) && _self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, cur))) {
-            skip = 1;
-        }
-        if (((((!skip) && (_self->arena->nodes[cur].kind == N_NUM)) && (_self->arena->nodes[cur].num == 0)) && strchr(ft, '*'))) {
-            skip = 1;
-        }
-        if (((!skip) && (_self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(_self->sup, cur, (&at)) != 0))) {
-            skip = 1;
-        }
-        if (((!skip) && strchr(at, '['))) {
-            skip = 1;
-        }
-        if ((!skip)) {
-            int fdp = 0;
-            int adp = 0;
-            const char * q;
-            for (q = ft; (*q); q++) {
-                if ((*q) == '*') {
-                    fdp++;
-                }
-            }
-            for (q = at; (*q); q++) {
-                if ((*q) == '*') {
-                    adp++;
-                }
-            }
-            r = frontend_parse_arg_class(ft, at, fb, sizeof(fb), ab, sizeof(ab));
-            if (r == 2) {
-                int fs = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (fb + 6));
-                int as = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, (ab + 6));
-                r = (((fs < 0) || (as < 0)) ? (-1) : ((fs != as) ? 2 : 0));
-            }
-            if (r == 2) {
-                snprintf(msg, cap, "argument %d: expected '%s', got '%s'", (k + 1), ft, at);
-                if (((fdp == 0) || (adp == 0))) {
-                    return 2;
-                }
-                return 1;
-            }
-            if (r == 1) {
-                snprintf(msg, cap, "argument %d: expected '%s', got '%s'", (k + 1), ft, at);
-                if ((((fdp == 0) || (adp == 0)) && ((frontend_parse_tclass(ft, fb) == 1) || (frontend_parse_tclass(at, ab) == 1)))) {
-                    return 2;
-                }
-                return 1;
-            }
-        }
-        if (_self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, cur)) {
-            k += 2;
-        }
-        else {
-            k++;
-        }
-        cur = _self->arena->nodes[cur].next;
-    }
-    return 0;
+    return r;
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_check(void *self, int line, int col, const char * callee, int args, int fi, int ti, int mi) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
-    char full[MAX_TEXT];
+    const char * msg = "";
     int r;
-    r = _self->__frontend_parse_exprcallcheck_vptr->argtype_mismatch(_self, args, fi, ti, mi, msg, sizeof(msg));
+    r = frontend_parse_argtype_mismatch_text(_self, args, fi, ti, mi, (&msg));
     if (r == 2) {
-        snprintf(full, sizeof(full), "type mismatch: '%s' %s", callee, msg);
-        return tool_diag_ct_sem_error(line, col, full, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type mismatch: '%s' %s", callee, msg), _self->sup->mem->path);
     }
     if (r == 1) {
         if (_self->sup->__frontend_parse_supportops_vptr->type_warn(_self->sup, line, col, callee, msg) != 0) {
@@ -341,13 +248,11 @@ static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_check(void *
 
 static int frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_check_static(void *self, int line, int col, const char * callee, int args, int ti, int mi) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char msg[MAX_TEXT];
-    char full[MAX_TEXT];
-    if ((!_self->__frontend_parse_exprcallcheck_vptr->argtype_mismatch(_self, args, (-1), ti, mi, msg, sizeof(msg)))) {
+    const char * msg = "";
+    if ((!frontend_parse_argtype_mismatch_text(_self, args, (-1), ti, mi, (&msg)))) {
         return 0;
     }
-    snprintf(full, sizeof(full), "type mismatch: '%s' %s", callee, msg);
-    return tool_diag_ct_sem_error(line, col, full, _self->sup->mem->path);
+    return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("type mismatch: '%s' %s", callee, msg), _self->sup->mem->path);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprCallCheck_record_call(void *self, const char * callee, int line) {
@@ -399,3 +304,111 @@ const struct frontend_parse_ExprCallCheck_vtbl frontend_parse_Expr_frontend_pars
     .record_call = frontend_parse_Expr_frontend_parse_ExprCallCheck_record_call
 };
 
+int frontend_parse_argtype_mismatch_text(struct frontend_parse_Expr * self, int args, int fi, int ti, int mi, const char * * out) {
+    const char * at = "";
+    const char * fb;
+    const char * ab;
+    const char * ft;
+    int cur;
+    int k;
+    int np;
+    int skip;
+    int r;
+    if (out) {
+        (*out) = "";
+    }
+    if (fi >= 0) {
+        np = self->sym->funcs[fi].nparams;
+    }
+    else {
+        np = self->sym->traits[ti].m[mi].nparams;
+    }
+    cur = args;
+    k = 0;
+    while (((cur > 0) && (k < np))) {
+        skip = 0;
+        if (fi >= 0) {
+            ft = self->sym->funcs[fi].ptype[k];
+        }
+        else {
+            ft = self->sym->traits[ti].m[mi].ptype[k];
+        }
+        if (((fi >= 0) && self->sym->funcs[fi].pdim[k][0])) {
+            skip = 1;
+        }
+        if (((!skip) && strchr(ft, '['))) {
+            skip = 1;
+        }
+        if ((!skip)) {
+            const char * itr = "";
+            int iip = 0;
+            if (self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(self->sup, ft, (&itr), (&iip))) {
+                skip = 1;
+            }
+        }
+        if (((!skip) && (self->arena->nodes[cur].kind == N_CAST))) {
+            skip = 1;
+        }
+        if (((!skip) && self->__frontend_parse_exprclosure_vptr->arg_is_closure(self, cur))) {
+            skip = 1;
+        }
+        if (((((!skip) && (self->arena->nodes[cur].kind == N_NUM)) && (self->arena->nodes[cur].num == 0)) && strchr(ft, '*'))) {
+            skip = 1;
+        }
+        if (((!skip) && (self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(self->sup, cur, (&at)) != 0))) {
+            skip = 1;
+        }
+        if (((!skip) && strchr(at, '['))) {
+            skip = 1;
+        }
+        if ((!skip)) {
+            int fdp = 0;
+            int adp = 0;
+            const char * q;
+            for (q = ft; (*q); q++) {
+                if ((*q) == '*') {
+                    fdp++;
+                }
+            }
+            for (q = at; (*q); q++) {
+                if ((*q) == '*') {
+                    adp++;
+                }
+            }
+            r = frontend_parse_arg_class_text(ft, at, (&fb), (&ab));
+            if (r == 2) {
+                int fs = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, (fb + 6));
+                int as = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, (ab + 6));
+                r = (((fs < 0) || (as < 0)) ? (-1) : ((fs != as) ? 2 : 0));
+            }
+            if (r == 2) {
+                const char * m = tool_sh_ct_scratch_fmt("argument %d: expected '%s', got '%s'", (k + 1), ft, at);
+                if (out) {
+                    (*out) = m;
+                }
+                if (((fdp == 0) || (adp == 0))) {
+                    return 2;
+                }
+                return 1;
+            }
+            if (r == 1) {
+                const char * m = tool_sh_ct_scratch_fmt("argument %d: expected '%s', got '%s'", (k + 1), ft, at);
+                if (out) {
+                    (*out) = m;
+                }
+                if ((((fdp == 0) || (adp == 0)) && ((frontend_parse_tclass(ft, fb) == 1) || (frontend_parse_tclass(at, ab) == 1)))) {
+                    return 2;
+                }
+                return 1;
+            }
+        }
+        if (self->__frontend_parse_exprclosure_vptr->arg_is_closure(self, cur)) {
+            k += 2;
+        }
+        else {
+            k++;
+        }
+        cur = self->arena->nodes[cur].next;
+    }
+    return 0;
+}

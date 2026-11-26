@@ -14,6 +14,7 @@
 
 import frontend::lex::Lexer;
 import frontend::parse::StmtRangeText;
+import runtime::text::Intern;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -27,7 +28,9 @@ pub struct StmtRangeScan {
 }
 
 pub void range_spelling(struct Lexer *lx, char *out, int cap);
+pub const char *range_spelling_text(struct Lexer *lx);
 pub int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap);
+pub int range_bound_value_text(struct Lexer *lx, long *out, const char **spell);
 
 pub void range_spelling(struct Lexer *lx, char *out, int cap)
 {
@@ -49,15 +52,35 @@ pub void range_spelling(struct Lexer *lx, char *out, int cap)
     if (!out[0]) snprintf(out, (size_t)cap, "%s", "end of file");
 }
 
-pub int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap)
+/* S1a-0 C2p-9: the whole token spelling as a pool text. A range bound is
+   usually a short number, but the diagnostic must quote whatever was written
+   (`0x...`, a 2000-byte identifier), so there is no 160-byte row. */
+pub const char *range_spelling_text(struct Lexer *lx)
 {
-    char text[MAX_TEXT];
+    const char *t;
+
+    if (lx->tok == T_NUM) {
+        int n = lx->pos - lx->tokstart;
+        if (n > 0) t = runtime::text::ct_intern_len(lx->src + lx->tokstart, n);
+        else t = (const char *)0;
+    } else {
+        t = runtime::text::ct_intern_len(lx->tokstr.ptr, lx->tokstr.len);
+    }
+    if (!t) return (const char *)0;
+    if (!t[0]) t = runtime::text::ct_intern("end of file");
+    return t;
+}
+
+pub int range_bound_value_text(struct Lexer *lx, long *out, const char **spell)
+{
+    const char *text;
     const char *p;
     long v = 0;
     int base = 10, d, nd = 0;
 
-    range_spelling(lx, text, (int)sizeof text);
-    snprintf(spell, (size_t)cap, "%s", text);
+    text = range_spelling_text(lx);
+    if (!text) return 1;
+    if (spell) *spell = text;
     if (lx->tok != T_NUM || lx->tokfloat) return 1;
     p = text;
     if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
@@ -80,4 +103,12 @@ pub int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap)
     }
     *out = v;
     return 0;
+}
+
+pub int range_bound_value(struct Lexer *lx, long *out, char *spell, int cap)
+{
+    const char *t = "";
+    int rc = range_bound_value_text(lx, out, &t);
+    snprintf(spell, (size_t)cap, "%s", t);
+    return rc;
 }

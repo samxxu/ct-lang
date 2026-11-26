@@ -9,6 +9,7 @@
 #include "ParseSupport.h"
 #include "Expr.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "StmtRangeText.h"
 #include "StmtRangeScan.h"
 #include "StmtScope.h"
@@ -177,6 +178,7 @@ extern void U16String_Drop_drop(void *self);
 int frontend_parse_jump_push(struct frontend_parse_Stmt *, int, int);
 void frontend_parse_jump_pop(struct frontend_parse_Stmt *, int);
 int frontend_parse_range_bound(struct frontend_parse_Stmt *, long *);
+int frontend_parse_range_element_bad_text(struct frontend_parse_Stmt *, const char *, const char *, const char * *);
 int frontend_parse_range_element_bad(struct frontend_parse_Stmt *, const char *, const char *, char *, int);
 int frontend_parse_kw_paren_ahead(struct frontend_parse_Stmt *, const char *);
 static int frontend_parse_Stmt_frontend_parse_StmtLoop_loop_ahead(void *self) {
@@ -202,7 +204,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
     int nb;
     int vi;
     int bounds[2];
-    char msg[MAX_TEXT];
     const char * t = "";
     const char * ct = "";
     const char * p;
@@ -265,12 +266,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
             vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
         }
         if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
-            snprintf(msg, sizeof(msg), "a loop bound must be an integer (got the array '%s')", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a loop bound must be an integer (got the array '%s')", _self->sym->vars[vi].name), _self->mem->path);
         }
         if (((_self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(_self->sup, e, (&ct)) == 0) && strchr(ct, '['))) {
-            snprintf(msg, sizeof(msg), "a loop bound must be an integer (got '%s')", ct);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a loop bound must be an integer (got '%s')", ct), _self->mem->path);
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&t)) != 0) {
             continue;
@@ -288,13 +287,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
             }
         }
         if (((((strchr(t, '*') || strchr(t, '[')) || strchr(t, '(')) || (strncmp(t, "struct ", 7) == 0)) || (strncmp(t, "union ", 6) == 0))) {
-            snprintf(msg, sizeof(msg), "a loop bound must be an integer (got '%s')", t);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a loop bound must be an integer (got '%s')", t), _self->mem->path);
         }
         cls = frontend_parse_loop_count_class(t);
         if (cls == 0) {
-            snprintf(msg, sizeof(msg), "count must be an integer (got '%s'); the value is converted to int", t);
-            if (tool_diag_ct_type_warn(line, col, "loop", msg, _self->mem->path) != 0) {
+            if (tool_diag_ct_type_warn(line, col, "loop", tool_sh_ct_scratch_fmt("count must be an integer (got '%s'); the value is converted to int", t), _self->mem->path) != 0) {
                 return (-1);
             }
         }
@@ -346,7 +343,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     int aux;
     int inst;
     int nargs;
-    char msg[MAX_TEXT];
+    const char * msg;
     const char * elem;
     const char * ex;
     const char * tr;
@@ -423,8 +420,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
                     mt = frontend_sym_ct_inst_find(tag);
                 }
                 if (((mt >= 0) && (strcmp(frontend_sym_ct_insts((&nd))[mt].tmpl, "MapEntry") == 0))) {
-                    snprintf(msg, sizeof(msg), "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)", ins[inst].ctype[kk]);
-                    return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+                    return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)", ins[inst].ctype[kk]), _self->mem->path);
                 }
             }
             if (aux == 2) {
@@ -440,17 +436,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     }
     if (aux == 0) {
         if ((_self->sym->vars[vi].is_param || _self->sym->vars[vi].is_fnparam)) {
-            snprintf(msg, sizeof(msg), "foreach cannot iterate the array parameter '%s' (its length is lost)", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot iterate the array parameter '%s' (its length is lost)", _self->sym->vars[vi].name), _self->mem->path);
         }
         if ((!_self->sym->vars[vi].dims[0])) {
-            snprintf(msg, sizeof(msg), "foreach needs an array or a Vec/Map; '%s' is not iterable", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach needs an array or a Vec/Map; '%s' is not iterable", _self->sym->vars[vi].name), _self->mem->path);
         }
         elem = _self->sym->vars[vi].type;
         if (((_self->sym->vars[vi].dims[0] != '[') || strchr(elem, '('))) {
-            snprintf(msg, sizeof(msg), "foreach cannot iterate '%s'; its declarator is not a plain array", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot iterate '%s'; its declarator is not a plain array", _self->sym->vars[vi].name), _self->mem->path);
         }
         nd = 0;
         for (p = _self->sym->vars[vi].dims; (*p); p++) {
@@ -459,12 +452,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
             }
         }
         if (nd > 1) {
-            snprintf(msg, sizeof(msg), "foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name), _self->mem->path);
         }
         if ((_self->sym->vars[vi].is_global && strstr(_self->sym->vars[vi].dims, "[]"))) {
-            snprintf(msg, sizeof(msg), "foreach needs an array with a known length ('%s')", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach needs an array with a known length ('%s')", _self->sym->vars[vi].name), _self->mem->path);
         }
         bare = 1;
         for (q = elem; (*q); q++) {
@@ -473,12 +464,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
             }
         }
         if (((bare && (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias_text(_self->sym, elem, (&ex)) == 0)) && strchr(ex, '['))) {
-            snprintf(msg, sizeof(msg), "foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name), _self->mem->path);
         }
         if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, elem, (&tr), (&ip)) && (!ip))) {
-            snprintf(msg, sizeof(msg), "foreach cannot copy interface values ('%s')", _self->sym->vars[vi].name);
-            return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot copy interface values ('%s')", _self->sym->vars[vi].name), _self->mem->path);
         }
     }
     if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
@@ -522,15 +511,15 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     for (nd = body; nd < _self->arena->nnode; nd++) {
         int k0 = _self->arena->nodes[nd].kind;
         if (((k0 == N_DECL) && ((strcmp(_self->arena->nodes[nd].text2, "item") == 0) || (strcmp(_self->arena->nodes[nd].text2, "i") == 0)))) {
-            snprintf(msg, sizeof(msg), "cannot redeclare the foreach binding '%s'", _self->arena->nodes[nd].text2);
+            msg = tool_sh_ct_scratch_fmt("cannot redeclare the foreach binding '%s'", _self->arena->nodes[nd].text2);
         }
         else {
             if ((((aux == 2) && (k0 == N_VAR)) && (strcmp(_self->arena->nodes[nd].text2, "i") == 0))) {
-                snprintf(msg, sizeof(msg), "'i' has no meaning in a Map foreach; use item.key / item.value");
+                msg = "'i' has no meaning in a Map foreach; use item.key / item.value";
             }
             else {
                 if ((((((aux != 2) && ((((k0 == N_ASSIGN) || (k0 == N_POST)) || (k0 == N_PRE)) || (k0 == N_ADDR))) && (_self->arena->nodes[nd].a >= 0)) && (_self->arena->nodes[_self->arena->nodes[nd].a].kind == N_VAR)) && (strcmp(_self->arena->nodes[_self->arena->nodes[nd].a].text2, "i") == 0))) {
-                    snprintf(msg, sizeof(msg), "the foreach index 'i' is read-only");
+                    msg = "the foreach index 'i' is read-only";
                 }
                 else {
                     continue;
@@ -653,18 +642,15 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_range_init(void *se
     int col;
     int save_dollar;
     int is_vec;
-    char elemtype[MAX_TEXT];
-    char iname[MAX_TEXT];
-    char why[MAX_TEXT];
-    char msg[256];
+    const char * elemtype = "";
+    const char * iname = "";
+    const char * why = "";
     const char * close;
     line = _self->lex->tokline;
     col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
-    elemtype[0] = 0;
-    iname[0] = 0;
     is_vec = 0;
     if ((!_self->arena->nodes[n].text3[0])) {
-        is_vec = frontend_parse_range_vec_target(type, elemtype, (int)(sizeof(elemtype)), iname, (int)(sizeof(iname)));
+        is_vec = frontend_parse_range_vec_target_text(type, (&elemtype), (&iname));
         if ((!is_vec)) {
             return tool_diag_ct_sem_error(line, col, "a range initializer declares an array", _self->mem->path);
         }
@@ -687,12 +673,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_range_init(void *se
         return tool_diag_ct_sem_error(line, col, "too many range elements (limit 1024)", _self->mem->path);
     }
     if ((((!is_vec) && frontend_parse_range_dim_value(_self->arena->nodes[n].text3, (&dim))) && (dim != (long)(cnt)))) {
-        snprintf(msg, sizeof(msg), "the array size '%ld' does not match the range (%ld elements)", dim, (long)(cnt));
-        return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("the array size '%ld' does not match the range (%ld elements)", dim, (long)(cnt)), _self->mem->path);
     }
-    if (frontend_parse_range_element_bad(_self, (is_vec ? elemtype : type), (is_vec ? "" : _self->arena->nodes[n].text3), why, (int)(sizeof(why)))) {
-        snprintf(msg, sizeof(msg), "a range initializer cannot initialize '%s' elements", why);
-        return tool_diag_ct_sem_error(line, col, msg, _self->mem->path);
+    if (frontend_parse_range_element_bad_text(_self, (is_vec ? elemtype : type), (is_vec ? "" : _self->arena->nodes[n].text3), (&why))) {
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a range initializer cannot initialize '%s' elements", why), _self->mem->path);
     }
     if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
         close = ")";
@@ -776,8 +760,7 @@ void frontend_parse_jump_pop(struct frontend_parse_Stmt * self, int with_cont) {
     }
 }
 int frontend_parse_range_bound(struct frontend_parse_Stmt * self, long * out) {
-    char spell[MAX_TEXT];
-    char msg[256];
+    const char * spell;
     int neg = 0;
     int rc;
     int line;
@@ -794,48 +777,58 @@ int frontend_parse_range_bound(struct frontend_parse_Stmt * self, long * out) {
     if ((((!neg) && (self->lex->tok == T_PUNCT)) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, "("))) {
         return tool_diag_ct_sem_error(line, col, "a range initializer needs both bounds", self->mem->path);
     }
-    rc = frontend_parse_range_bound_value(self->lex, (&v), spell, (int)(sizeof(spell)));
+    rc = frontend_parse_range_bound_value_text(self->lex, (&v), (&spell));
     if (rc == 2) {
         return tool_diag_ct_sem_error(line, col, "a range bound is out of range", self->mem->path);
     }
     if (rc == 1) {
-        snprintf(msg, sizeof(msg), "a range bound must be an integer literal (got '%s')", spell);
-        return tool_diag_ct_sem_error(line, col, msg, self->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a range bound must be an integer literal (got '%s')", spell), self->mem->path);
     }
     self->sup->__frontend_parse_supportops_vptr->lex_next(self->sup);
     (*out) = (neg ? (-v) : v);
     return 0;
 }
-int frontend_parse_range_element_bad(struct frontend_parse_Stmt * self, const char * type, const char * dims, char * why, int cap) {
-    char tr[MAX_TEXT];
-    char tmp[MAX_TEXT];
+int frontend_parse_range_element_bad_text(struct frontend_parse_Stmt * self, const char * type, const char * dims, const char * * why) {
+    const char * tr;
     const char * first;
     int ip = 0;
     size_t n;
+    if (why) {
+        (*why) = "";
+    }
     first = strchr(dims, '[');
     if ((first && strchr((first + 1), '['))) {
-        frontend_parse_range_element_spelling(type, why, cap);
-        n = strlen(why);
-        snprintf((why + n), ((size_t)(cap) - n), "%s", (first + 1));
+        if (why) {
+            (*why) = tool_sh_ct_scratch_fmt("%s%s", frontend_parse_range_element_spelling_text(type), (first + 1));
+        }
         return 1;
     }
-    if ((self->sup->__frontend_parse_supportops_vptr->iface_ref_type(self->sup, type, tr, (int)(sizeof(tr)), (&ip)) && (!ip))) {
-        frontend_parse_range_element_spelling(type, why, cap);
+    if ((self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(self->sup, type, (&tr), (&ip)) && (!ip))) {
+        if (why) {
+            (*why) = frontend_parse_range_element_spelling_text(type);
+        }
         return 1;
     }
-    snprintf(tmp, sizeof(tmp), "%s", type);
-    n = strlen(tmp);
-    while (((n > 0) && ((tmp[(n - 1)] == ' ') || (tmp[(n - 1)] == '\t')))) {
+    n = strlen(type);
+    while (((n > 0) && ((type[(n - 1)] == ' ') || (type[(n - 1)] == '\t')))) {
         n--;
     }
-    if (((n > 0) && (tmp[(n - 1)] == '*'))) {
+    if (((n > 0) && (type[(n - 1)] == '*'))) {
         return 0;
     }
     if ((strstr(type, "struct ") || strstr(type, "union "))) {
-        frontend_parse_range_element_spelling(type, why, cap);
+        if (why) {
+            (*why) = frontend_parse_range_element_spelling_text(type);
+        }
         return 1;
     }
     return 0;
+}
+int frontend_parse_range_element_bad(struct frontend_parse_Stmt * self, const char * type, const char * dims, char * why, int cap) {
+    const char * w = "";
+    int r = frontend_parse_range_element_bad_text(self, type, dims, (&w));
+    snprintf(why, (size_t)(cap), "%s", w);
+    return r;
 }
 int frontend_parse_kw_paren_ahead(struct frontend_parse_Stmt * self, const char * kw) {
     int sp;

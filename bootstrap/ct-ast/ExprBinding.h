@@ -18,6 +18,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -112,8 +113,11 @@ struct frontend_parse_ExprBinding {
     int unused;
 };
 int frontend_parse_bind_conv_struct_like(struct frontend_parse_Expr *, const char *);
+const char * frontend_parse_bind_conv_ibase_text(struct frontend_parse_Expr *, const char *, int *);
 int frontend_parse_bind_conv_ibase(struct frontend_parse_Expr *, const char *, char *, int, int *);
+int frontend_parse_bind_conv_inherent_text(struct frontend_parse_Expr *, const char *, const char *, const char * *, int *);
 int frontend_parse_bind_conv_inherent(struct frontend_parse_Expr *, const char *, const char *, char *, int, int *);
+int frontend_parse_bind_conv_maps_text(struct frontend_parse_Expr *, const char *, const char *, const char * *);
 int frontend_parse_bind_conv_maps(struct frontend_parse_Expr *, const char *, const char *, char *, int);
 int frontend_parse_bind_conv_binding(struct frontend_parse_Expr *, const char *, const char *);
 int frontend_parse_bind_conv_call_binding(struct frontend_parse_Expr *, int, const char *, const char *, int, int);

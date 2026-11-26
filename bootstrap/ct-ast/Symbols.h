@@ -113,6 +113,7 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*declare_const)(void *, const char *, const char *, const char *, int);
     int (*is_const_name)(void *, const char *);
     int (*var_cname)(void *, const char *, char *, int);
+    const char * (*var_cname_text)(void *, const char *);
     int (*var_ambiguous)(void *, const char *);
     const char * (*find_qualified_global)(void *, const char *, const char *);
     int (*find_var)(void *, const char *);

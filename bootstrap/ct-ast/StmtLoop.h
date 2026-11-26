@@ -18,6 +18,7 @@
 #include "ParseSupport.h"
 #include "Expr.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "StmtRangeText.h"
 #include "StmtRangeScan.h"
 #include "StmtScope.h"
@@ -110,6 +111,7 @@ struct frontend_parse_StmtLoop {
 int frontend_parse_jump_push(struct frontend_parse_Stmt *, int, int);
 void frontend_parse_jump_pop(struct frontend_parse_Stmt *, int);
 int frontend_parse_range_bound(struct frontend_parse_Stmt *, long *);
+int frontend_parse_range_element_bad_text(struct frontend_parse_Stmt *, const char *, const char *, const char * *);
 int frontend_parse_range_element_bad(struct frontend_parse_Stmt *, const char *, const char *, char *, int);
 int frontend_parse_kw_paren_ahead(struct frontend_parse_Stmt *, const char *);
 

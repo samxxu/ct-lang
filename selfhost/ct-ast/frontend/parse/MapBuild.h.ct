@@ -28,9 +28,11 @@ import frontend::parse::ParseSupport;
 import runtime::text::Intern;
 import frontend::sym::Symbols;
 import tool::diag::Diag;
+import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
+#define TEXT_LIMIT 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_METHODS 64
@@ -49,7 +51,7 @@ import tool::diag::Diag;
 namespace frontend::parse;
 pub trait MapBuildOps {
     int  check_call(char *b, const char *inst);
-    int  rewrite_globals(char *s);
+    int  rewrite_globals(const char *s, const char **out);
     int  parse(int unit);
     int  parse_binding(int line, int col, int unit);
 }
@@ -118,7 +120,7 @@ static int mapb_ensure_binds(struct MapBuild *self, struct MapTable *m, int need
 static int mapb_ensure_params(struct MapBuild *self, struct MapBind *b, int need)
 {
     int cap, i;
-    char **params;
+    const char **params;
     int *uses;
     int *sizes;
     if (need <= b->pcap) return 0;
@@ -126,12 +128,9 @@ static int mapb_ensure_params(struct MapBuild *self, struct MapBind *b, int need
     while (cap < need && cap < MAX_PARAMS_MAX) cap *= 2;
     if (cap > MAX_PARAMS_MAX) cap = MAX_PARAMS_MAX;
     if (need > cap) return self->sup->fail("out of memory");
-    params = (char **)realloc(b->params, (size_t)cap * sizeof(*params));
+    params = (const char **)realloc((void *)b->params, (size_t)cap * sizeof(*params));
     if (!params) return self->sup->fail("out of memory");
-    for (i = b->pcap; i < cap; i++) {
-        params[i] = (char *)calloc(MAX_TEXT, 1);
-        if (!params[i]) return self->sup->fail("out of memory");
-    }
+    for (i = b->pcap; i < cap; i++) params[i] = "";
     uses = (int *)realloc(b->uses, (size_t)cap * sizeof(*uses));
     if (!uses) return self->sup->fail("out of memory");
     memset(uses + b->pcap, 0, (size_t)(cap - b->pcap) * sizeof(*uses));
@@ -188,10 +187,13 @@ static int mapb_param_index(struct MapBind *b, const char *name)
    count the evaluation and `sizeof` occurrences for the emitter. */
 static int check_static_call(struct MapBuild *self, struct MapTable *m, struct MapBind *b)
 {
-    char tok[MAX_TEXT];
-    char prev[MAX_TEXT];
-    char pn[MAX_TEXT];
-    char msg[MAX_TEXT];
+    /* S1a-0 C2p-9: the recipe's identifiers may be 2000 bytes, so the token
+       and the `prev` context word are pool/run-scoped texts. `prev` only ever
+       holds a fixed keyword, a punctuation spelling or the previous token. */
+    char *tok;
+    char prevbuf[2];
+    const char *prev;
+    const char *pn;
     const char *p;
     int depth, n, i, seen_callee, member, after_type, after_sizeof, after_inc, inc;
     int seen_ellipsis;
@@ -233,7 +235,9 @@ static int check_static_call(struct MapBuild *self, struct MapTable *m, struct M
         b->uses[i] = 0;
         b->sizeofs[i] = 0;
     }
-    prev[0] = 0;
+    prevbuf[0] = 0;
+    prevbuf[1] = 0;
+    prev = "";
     seen_callee = 0;
     seen_ellipsis = 0;
     p = b->call;
@@ -247,8 +251,9 @@ static int check_static_call(struct MapBuild *self, struct MapTable *m, struct M
                 p++;
             }
             if (*p) p++;
-            prev[0] = '?';
-            prev[1] = 0;
+            prevbuf[0] = '?';
+            prevbuf[1] = 0;
+            prev = prevbuf;
             continue;
         }
         /* the forwarded tail: it must be the last argument, so no named
@@ -263,28 +268,24 @@ static int check_static_call(struct MapBuild *self, struct MapTable *m, struct M
             if (*r != ')')
                 return self->sup->fail("'...' must be the last recipe argument");
             seen_ellipsis = 1;
-            snprintf(prev, sizeof prev, "...");
+            prev = "...";
             p += 3;
             continue;
         }
         if (*p == '+' && *(p + 1) == '+') {
-            snprintf(prev, sizeof prev, "++");
+            prev = "++";
             p += 2;
             continue;
         }
         if (*p == '-' && *(p + 1) == '-') {
-            snprintf(prev, sizeof prev, "--");
+            prev = "--";
             p += 2;
             continue;
         }
         if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_') {
-            n = 0;
-            while (mapb_ident((unsigned char)*p) && n + 1 < MAX_TEXT) {
-                tok[n] = *p;
-                n++;
-                p++;
-            }
-            tok[n] = 0;
+            const char *tstart = p;
+            while (mapb_ident((unsigned char)*p)) p++;
+            tok = tool::sh::ct_scratch_fmt("%.*s", (int)(p - tstart), tstart);
             member = (strcmp(prev, ".") == 0 || strcmp(prev, "->") == 0);
             after_type = mapb_type_word(prev);
             after_sizeof = (strcmp(prev, "sizeof") == 0);
@@ -293,8 +294,8 @@ static int check_static_call(struct MapBuild *self, struct MapTable *m, struct M
             if (i >= 0) {
                 if (after_inc || after_sizeof) {
                     if (after_inc) {
-                        snprintf(msg, sizeof msg, "map recipe modifies binding parameter '%s'", tok);
-                        return self->sup->fail(msg);
+                        return self->sup->fail(tool::sh::ct_scratch_fmt(
+                            "map recipe modifies binding parameter '%s'", tok));
                     }
                     b->sizeofs[i]++;
                 } else {
@@ -308,8 +309,8 @@ static int check_static_call(struct MapBuild *self, struct MapTable *m, struct M
                     if (*q == '<' && *(q + 1) == '<' && *(q + 2) == '=') inc = 1;
                     if (*q == '>' && *(q + 1) == '>' && *(q + 2) == '=') inc = 1;
                     if (inc) {
-                        snprintf(msg, sizeof msg, "map recipe modifies binding parameter '%s'", tok);
-                        return self->sup->fail(msg);
+                        return self->sup->fail(tool::sh::ct_scratch_fmt(
+                            "map recipe modifies binding parameter '%s'", tok));
                     }
                     b->uses[i]++;
                 }
@@ -326,27 +327,24 @@ static int check_static_call(struct MapBuild *self, struct MapTable *m, struct M
                         r++;
                         while (*r == ' ' || *r == '\t' || *r == '\n' || *r == '\r') r++;
                         n = 0;
-                        while (mapb_ident((unsigned char)r[n]) && n + 1 < MAX_TEXT) {
-                            pn[n] = r[n];
-                            n++;
-                        }
-                        pn[n] = 0;
-                        if (n > 0 && mapb_param_index(b, pn) >= 0) {
-                            snprintf(msg, sizeof msg,
-                                     "map recipe takes 'sizeof %s', not 'sizeof(%s)'", pn, pn);
-                            return self->sup->fail(msg);
+                        while (mapb_ident((unsigned char)r[n])) n++;
+                        if (n > 0) {
+                            pn = tool::sh::ct_scratch_fmt("%.*s", n, r);
+                            if (mapb_param_index(b, pn) >= 0) {
+                                return self->sup->fail(tool::sh::ct_scratch_fmt(
+                                    "map recipe takes 'sizeof %s', not 'sizeof(%s)'", pn, pn));
+                            }
                         }
                     }
                 }
             } else if (!seen_callee || member || after_type || mapb_all_caps(tok)) {
                 /* the callee, a member name, a type word's tag, or a macro */
             } else {
-                snprintf(msg, sizeof msg,
-                         "map recipe names '%s' but it is not a binding parameter", tok);
-                return self->sup->fail(msg);
+                return self->sup->fail(tool::sh::ct_scratch_fmt(
+                    "map recipe names '%s' but it is not a binding parameter", tok));
             }
             seen_callee = 1;
-            snprintf(prev, sizeof prev, "%s", tok);
+            prev = tok;
             continue;
         }
         /* Whitespace never becomes `prev`: the context tests (`sizeof p`,
@@ -358,23 +356,57 @@ static int check_static_call(struct MapBuild *self, struct MapTable *m, struct M
         }
         /* operators and punctuation: `->` must stay two characters */
         if (*p == '-' && *(p + 1) == '>') {
-            snprintf(prev, sizeof prev, "->");
+            prev = "->";
             p += 2;
             continue;
         }
-        prev[0] = *p;
-        prev[1] = 0;
+        prevbuf[0] = *p;
+        prevbuf[1] = 0;
+        prev = prevbuf;
         p++;
     }
     return 0;
 }
 
+/* S1a-0 C2p-9: capture the recipe verbatim from the lexer cursor to the
+   top-level ';' into one run-scoped block. The old loop copied into a
+   `char[160]` row and refused a longer recipe; the formal TEXT_LIMIT is the
+   only bound now (ct_scratch_alloc reports it explicitly). */
+static char *mapb_capture(struct MapBuild *self, int *endpos)
+{
+    const char *src = self->lex->src;
+    int i = self->lex->pos, start, end, q = 0, depth = 0, c;
+    char *buf;
+
+    while (src[i] == ' ' || src[i] == '\t' || src[i] == '\n' || src[i] == '\r') i++;
+    start = i;
+    for (;;) {
+        c = (unsigned char)src[i];
+        if (c == 0) return (char *)0;
+        if (q == 0 && depth == 0 && c == ';') break;
+        if (q == 0 && (c == '"' || c == '\'')) q = c;
+        else if (q != 0 && c == q) q = 0;
+        else if (q != 0 && c == '\\' && src[i + 1]) i++;
+        else if (q == 0 && c == '(') depth++;
+        else if (q == 0 && c == ')') depth--;
+        i++;
+    }
+    end = i;
+    while (end > start && (src[end - 1] == ' ' || src[end - 1] == '\t'
+                           || src[end - 1] == '\n' || src[end - 1] == '\r')) end--;
+    buf = tool::sh::ct_scratch_alloc(end - start + 1);
+    if (end > start) memcpy(buf, src + start, (size_t)(end - start));
+    buf[end - start] = 0;
+    *endpos = i;
+    return buf;
+}
+
 impl MapBuildOps for MapBuild {
     int check_call(char *b, const char *inst)
     {
-        char msg[MAX_TEXT];
-        char arg[MAX_TEXT];
-        char root[MAX_TEXT];
+        char *arg;
+        char *root;
+        int argcap;
         const char *p;
         const char *w;
         const char *b4;
@@ -386,6 +418,12 @@ impl MapBuildOps for MapBuild {
         (void)self;
 
         bb = (struct MapBind *)b;
+        /* S1a-0 C2p-9: the argument rows grow with the recipe itself; the old
+           `char[160]` refused a legal argument once the call passed 159 bytes. */
+        argcap = (int)strlen(bb->call) + 2;
+        if (argcap < 2) argcap = 2;
+        arg = tool::sh::ct_scratch_alloc(argcap);
+        root = tool::sh::ct_scratch_alloc(argcap);
         p = bb->call;
         for (;;) {
             if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') { p++; continue; }
@@ -408,26 +446,26 @@ impl MapBuildOps for MapBuild {
                 if (depth == 0 && (*p == ',' || *p == ')')) break;
                 if (*p == '"' || *p == '\'') {
                     q = *p;
-                    if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                    if (n + 1 >= argcap) return self->sup->fail("a map argument is too long");
                     arg[n] = (char)q; n++; p++;
                     while (*p && *p != (char)q) {
                         if (*p == '\\' && *(p + 1)) {
-                            if (n + 2 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                            if (n + 2 >= argcap) return self->sup->fail("a map argument is too long");
                             arg[n] = *p; n++; p++;
                             arg[n] = *p; n++; p++;
                             continue;
                         }
-                        if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                        if (n + 1 >= argcap) return self->sup->fail("a map argument is too long");
                         arg[n] = *p; n++; p++;
                     }
                     if (*p != (char)q) return self->sup->fail("unterminated literal in a map call");
-                    if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                    if (n + 1 >= argcap) return self->sup->fail("a map argument is too long");
                     arg[n] = *p; n++; p++;
                     continue;
                 }
                 if (*p == '(') depth++;
                 else if (*p == ')') depth--;
-                if (n + 1 >= MAX_TEXT) return self->sup->fail("a map argument is too long");
+                if (n + 1 >= argcap) return self->sup->fail("a map argument is too long");
                 arg[n] = *p; n++; p++;
             }
             arg[n] = 0;
@@ -482,7 +520,7 @@ impl MapBuildOps for MapBuild {
                 rl = 0;
                 while ((*w >= 'a' && *w <= 'z') || (*w >= 'A' && *w <= 'Z')
                        || (*w >= '0' && *w <= '9') || *w == '_') {
-                    if (rl + 1 < MAX_TEXT) { root[rl] = *w; rl++; }
+                    if (rl + 1 < argcap) { root[rl] = *w; rl++; }
                     w++;
                 }
                 root[rl] = 0;
@@ -499,7 +537,7 @@ impl MapBuildOps for MapBuild {
                     if (strcmp(root, bb->params[k]) == 0) ok = 1;
                 if (!ok && self->sym->find_var(root) >= 0) ok = 1;
                 /* CT has no preprocessor: an ALL_CAPS name is a macro constant
-                   (MAX_TEXT, NULL, ...), accepted verbatim by the expression
+                   (argcap, NULL, ...), accepted verbatim by the expression
                    side too (frontend::parse::Expr). */
                 if (!ok) {
                     ci = (root[0] != 0);
@@ -514,8 +552,8 @@ impl MapBuildOps for MapBuild {
                 }
             }
             if (!ok) {
-                snprintf(msg, sizeof msg, "map argument '%s' is not allowed", arg + ai);
-                return self->sup->fail(msg);
+                return self->sup->fail(tool::sh::ct_scratch_fmt(
+                    "map argument '%s' is not allowed", arg + ai));
             }
             if (*p == ',') { p++; continue; }
             if (*p == ')') continue;
@@ -531,72 +569,80 @@ impl MapBuildOps for MapBuild {
        namespace). Identifiers after `.` / `->` are member names and literals are
        skipped; everything else is looked up, and an unknown name is left alone
        (it is a C function or macro the `#include` brought in). */
-    int rewrite_globals(char *s)
+    int rewrite_globals(const char *s, const char **out)
     {
-        char out[MAX_TEXT];
-        char cn[MAX_TEXT];
-        char tok[MAX_TEXT];
-        int i, o, k, prev, member, q;
+        /* S1a-0 C2p-9: the wrapper body grows with the recipe and with the
+           mangled global names it joins, so it is a run-scoped TEXT_LIMIT
+           block rather than a 160-byte row. */
+        char *o = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
+        int i = 0, n = 0, prev, member, q;
         (void)self;
 
-        i = 0;
-        o = 0;
-        out[0] = 0;
+        *out = "";
         while (s[i]) {
             if (s[i] == '"' || s[i] == '\'') {
                 q = (unsigned char)s[i];
-                if (o + 2 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
-                out[o] = s[i];
-                o++;
+                if (n + 2 >= TEXT_LIMIT) return self->sup->fail("the bound call is too long");
+                o[n] = s[i];
+                n++;
                 i++;
                 while (s[i]) {
-                    if (o + 2 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
-                    out[o] = s[i];
-                    o++;
+                    if (n + 2 >= TEXT_LIMIT) return self->sup->fail("the bound call is too long");
+                    o[n] = s[i];
+                    n++;
                     if (s[i] == '\\' && s[i + 1]) {
-                        out[o] = s[i + 1];
-                        o++;
+                        o[n] = s[i + 1];
+                        n++;
                         i += 2;
                         continue;
                     }
                     if ((unsigned char)s[i] == q) { i++; break; }
                     i++;
                 }
-                out[o] = 0;
+                o[n] = 0;
                 continue;
             }
             if (!((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') || s[i] == '_')) {
-                if (o + 2 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
-                out[o] = s[i];
-                o++;
-                out[o] = 0;
+                if (n + 2 >= TEXT_LIMIT) return self->sup->fail("the bound call is too long");
+                o[n] = s[i];
+                n++;
+                o[n] = 0;
                 i++;
                 continue;
             }
-            prev = o - 1;
-            while (prev >= 0 && (out[prev] == ' ' || out[prev] == '\t')) prev--;
+            prev = n - 1;
+            while (prev >= 0 && (o[prev] == ' ' || o[prev] == '\t')) prev--;
             member = 0;
-            if (prev >= 0 && out[prev] == '.') member = 1;
-            if (prev > 0 && out[prev] == '>' && out[prev - 1] == '-') member = 1;
-            k = 0;
-            while ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z')
-                   || (s[i] >= '0' && s[i] <= '9') || s[i] == '_') {
-                if (k + 1 < MAX_TEXT) { tok[k] = s[i]; k++; }
-                i++;
-            }
-            tok[k] = 0;
-            if (!member && self->sym->var_cname(tok, cn, sizeof cn) == 0) {
-                if (o + (int)strlen(cn) + 1 >= MAX_TEXT)
-                    return self->sup->fail("the bound call is too long");
-                snprintf(out + o, (size_t)(MAX_TEXT - o), "%s", cn);
-                o += (int)strlen(cn);
-            } else {
-                if (o + k + 1 >= MAX_TEXT) return self->sup->fail("the bound call is too long");
-                snprintf(out + o, (size_t)(MAX_TEXT - o), "%s", tok);
-                o += k;
+            if (prev >= 0 && o[prev] == '.') member = 1;
+            if (prev > 0 && o[prev] == '>' && o[prev - 1] == '-') member = 1;
+            {
+                const char *start = s + i;
+                const char *cn;
+                char *tok;
+                size_t l;
+                while ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z')
+                       || (s[i] >= '0' && s[i] <= '9') || s[i] == '_')
+                    i++;
+                tok = tool::sh::ct_scratch_fmt("%.*s", (int)(s + i - start), start);
+                cn = member ? (const char *)0 : self->sym->var_cname_text(tok);
+                if (cn) {
+                    l = strlen(cn);
+                    if ((size_t)n + l + 1 >= (size_t)TEXT_LIMIT)
+                        return self->sup->fail("the bound call is too long");
+                    memcpy(o + n, cn, l);
+                    n += (int)l;
+                } else {
+                    l = (size_t)(s + i - start);
+                    if ((size_t)n + l + 1 >= (size_t)TEXT_LIMIT)
+                        return self->sup->fail("the bound call is too long");
+                    memcpy(o + n, start, l);
+                    n += (int)l;
+                }
+                o[n] = 0;
             }
         }
-        snprintf(s, MAX_TEXT, "%s", out);
+        *out = runtime::text::ct_intern(o);
+        if (!*out) return self->sup->fail("out of memory");
         return 0;
     }
 
@@ -613,12 +659,11 @@ impl MapBuildOps for MapBuild {
            type is not refused by the old MAX_TEXT scratch rows. */
         const char *src;
         const char *dst;
-        char param[MAX_TEXT];
-        char callbuf[MAX_TEXT];
-        char msg[MAX_TEXT * 2];
+        const char *param;
+        char *callbuf;
         struct MapTable *m;
         struct MapBind *b;
-        int i, n, c, q, depth, eof, long_call, k;
+        int i, k;
 
         (void)line;
         (void)col;
@@ -644,7 +689,9 @@ impl MapBuildOps for MapBuild {
         if (self->sup->expect("(") != 0) return -1;
         if (self->lex->tok != T_ID)
             return self->sup->fail("expected a binding parameter name");
-        self->lex->tok_copy(param, sizeof param);
+        param = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                             self->lex->tokstr.len);
+        if (!param) return self->sup->fail("out of memory");
         self->sup->lex_next();
         if (self->sup->expect(")") != 0) return -1;
         if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("->")))
@@ -677,7 +724,7 @@ impl MapBuildOps for MapBuild {
         if (mapb_ensure_params(self, b, 1) != 0) return -1;
         b->method = runtime::text::ct_intern("from");
         if (!b->method) return self->sup->fail("out of memory");
-        snprintf(b->params[0], MAX_TEXT, "%s", param);
+        b->params[0] = param;
         b->nparams = 1;
         b->ti = -1;
         b->mi = -1;
@@ -689,37 +736,8 @@ impl MapBuildOps for MapBuild {
         b->line = line;
         /* capture the recipe verbatim, exactly like the static `map trait`
            path: it is validated as one call, then expanded at the use site */
-        i = self->lex->pos;
-        n = 0;
-        q = 0;
-        depth = 0;
-        eof = 0;
-        long_call = 0;
-        while (self->lex->src[i] == ' ' || self->lex->src[i] == '\t'
-               || self->lex->src[i] == '\n' || self->lex->src[i] == '\r') i++;
-        for (;;) {
-            c = (unsigned char)self->lex->src[i];
-            if (c == 0) { eof = 1; break; }
-            if (q == 0 && depth == 0 && c == ';') break;
-            if (n + 1 >= MAX_TEXT) { long_call = 1; break; }
-            if (q == 0 && (c == '"' || c == '\'')) q = c;
-            else if (q != 0 && c == q) q = 0;
-            else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
-                callbuf[n] = (char)c;
-                n++;
-                i++;
-                c = (unsigned char)self->lex->src[i];
-            } else if (q == 0 && c == '(') depth++;
-            else if (q == 0 && c == ')') depth--;
-            callbuf[n] = (char)c;
-            n++;
-            i++;
-        }
-        if (eof) return self->sup->fail("unterminated map binding recipe");
-        if (long_call) return self->sup->fail("map binding recipe is too long");
-        while (n > 0 && (callbuf[n - 1] == ' ' || callbuf[n - 1] == '\t'
-                         || callbuf[n - 1] == '\n' || callbuf[n - 1] == '\r')) n--;
-        callbuf[n] = 0;
+        callbuf = mapb_capture(self, &i);
+        if (!callbuf) return self->sup->fail("unterminated map binding recipe");
         self->lex->pos = i;
         self->sup->lex_next();
         if (self->sup->expect(";") != 0) return -1;
@@ -733,10 +751,11 @@ impl MapBuildOps for MapBuild {
             if ((*self->maps)[k].unit != unit) continue;
             if (strcmp((*self->maps)[k].host_type, src) != 0) continue;
             if (strcmp((*self->maps)[k].bind_dst, dst) != 0) continue;
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "duplicate map binding for '%s' -> '%s' (first at %s:%d)",
-                     src, dst, (*self->maps)[k].path, (*self->maps)[k].line);
-            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+                     src, dst, (*self->maps)[k].path, (*self->maps)[k].line),
+                self->sup->mem->path);
         }
         (*self->nmaps)++;
         return NO_NODE;
@@ -757,12 +776,11 @@ impl MapBuildOps for MapBuild {
         const char *hostpath;
         const char *hostcn;
         const char *host_type;
-        char wname[MAX_TEXT];
-        char callbuf[MAX_TEXT];
-        char msg[MAX_TEXT];
+        char *wname;
+        char *callbuf;
         struct MapTable *m;
         struct MapBind *b;
-        int line, ti, mi, np, k, i, j, n, q, depth, eof, long_call, c, bound, col, k2, j2, ident, ns_host;
+        int line, ti, mi, np, k, i, j, bound, col, k2, j2, ident, ns_host;
         int is_static, type_host, want;
         (void)self;
 
@@ -825,10 +843,9 @@ impl MapBuildOps for MapBuild {
                 /* Nothing is synthesised: a typo would become a silent host. A
                    `void *name;` placeholder is the documented workaround, and a
                    namespace host (SH-20) is the object-free form. */
-                snprintf(msg, sizeof msg,
+                return self->sup->fail(tool::sh::ct_scratch_fmt(
                          "map instance '%s' is not declared (use 'void *%s;' as its host)",
-                         inst, inst);
-                return self->sup->fail(msg);
+                         inst, inst));
             }
             /* `Var.cname` is already a pool text (S1a-0 C2p-5), so the C
                spelling is copied by pointer, never cut by a caller row. */
@@ -918,11 +935,11 @@ impl MapBuildOps for MapBuild {
            type-host ambiguity check at the call site covers its duplicates.) */
         for (k2 = 0; !is_static && k2 < *self->nmaps; k2++)
             if (strcmp((*self->maps)[k2].prefix, prefix) == 0) {
-                char dmsg[512];
-                snprintf(dmsg, sizeof dmsg,
+                tool::diag::ct_sem_error(line, col,
+                    tool::sh::ct_scratch_fmt(
                          "duplicate map of trait '%s' for instance '%s' (first at %s:%d)",
-                         tname, inst, (*self->maps)[k2].path, (*self->maps)[k2].line);
-                tool::diag::ct_sem_error(line, col, dmsg, self->sup->mem->path);
+                         tname, inst, (*self->maps)[k2].path, (*self->maps)[k2].line),
+                    self->sup->mem->path);
                 if (self->sup->skip_body() != 0) return -1;
                 return NO_NODE;
             }
@@ -962,9 +979,8 @@ impl MapBuildOps for MapBuild {
             for (k = 0; k < self->sym->traits[ti].nm; k++)
                 if (strcmp(self->sym->traits[ti].m[k].name, b->method) == 0) { mi = k; break; }
             if (mi < 0) {
-                snprintf(msg, sizeof msg, "'%s' is not a method of trait '%s'",
-                         b->method, rtrait);
-                return self->sup->fail(msg);
+                return self->sup->fail(tool::sh::ct_scratch_fmt(
+                         "'%s' is not a method of trait '%s'", b->method, rtrait));
             }
             self->sup->lex_next();
             if (self->sup->expect("(") != 0) return -1;
@@ -984,7 +1000,9 @@ impl MapBuildOps for MapBuild {
                     }
                     if (self->lex->tok != T_ID) return self->sup->fail("expected a parameter name");
                     if (mapb_ensure_params(self, b, np + 1) != 0) return -1;
-                    self->lex->tok_copy(b->params[np], MAX_TEXT);
+                    b->params[np] = runtime::text::ct_intern_len(
+                        self->lex->tokstr.ptr, self->lex->tokstr.len);
+                    if (!b->params[np]) return self->sup->fail("out of memory");
                     np++;
                     self->sup->lex_next();
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
@@ -1002,14 +1020,12 @@ impl MapBuildOps for MapBuild {
             want = self->sym->traits[ti].m[mi].nparams + (type_host ? 1 : 0);
             if (np != want) {
                 if (type_host)
-                    snprintf(msg, sizeof msg,
+                    return self->sup->fail(tool::sh::ct_scratch_fmt(
                              "a type host binding has %d parameters but method '%s' takes %d",
-                             np, b->method, self->sym->traits[ti].m[mi].nparams);
-                else
-                    snprintf(msg, sizeof msg,
+                             np, b->method, self->sym->traits[ti].m[mi].nparams));
+                return self->sup->fail(tool::sh::ct_scratch_fmt(
                              "map binding for '%s' takes %d parameter(s), the trait declares %d",
-                             b->method, np, self->sym->traits[ti].m[mi].nparams);
-                return self->sup->fail(msg);
+                             b->method, np, self->sym->traits[ti].m[mi].nparams));
             }
             /* the tail marker and the signature must agree: without `...` the
                recipe would drop the extra actuals silently, and a fixed method
@@ -1022,38 +1038,8 @@ impl MapBuildOps for MapBuild {
                 return self->sup->fail("expected '->'");
             /* Capture the RHS verbatim from self->lex->pos: no lex_next has run since the
                '->' token, so self->lex->pos sits just past it (the parse_init_raw trick). */
-            i = self->lex->pos;
-            n = 0;
-            q = 0;
-            depth = 0;
-            eof = 0;
-            long_call = 0;
-            while (self->lex->src[i] == ' ' || self->lex->src[i] == '\t'
-                   || self->lex->src[i] == '\n' || self->lex->src[i] == '\r') i++;
-            for (;;) {
-                c = (unsigned char)self->lex->src[i];
-                if (c == 0) { eof = 1; break; }
-                if (q == 0 && depth == 0 && c == ';') break;
-                if (n + 1 >= MAX_TEXT) { long_call = 1; break; }
-                if (q == 0 && (c == '"' || c == '\'')) {
-                    q = c;
-                } else if (q != 0 && c == q) {
-                    q = 0;
-                } else if (q != 0 && c == '\\' && self->lex->src[i + 1]) {
-                    callbuf[n] = (char)c; n++; i++;
-                    c = (unsigned char)self->lex->src[i];
-                } else if (q == 0 && c == '(') {
-                    depth++;
-                } else if (q == 0 && c == ')') {
-                    depth--;
-                }
-                callbuf[n] = (char)c; n++; i++;
-            }
-            if (eof) return self->sup->fail("unterminated map call");
-            if (long_call) return self->sup->fail("map call is too long");
-            while (n > 0 && (callbuf[n - 1] == ' ' || callbuf[n - 1] == '\t'
-                             || callbuf[n - 1] == '\n' || callbuf[n - 1] == '\r')) n--;
-            callbuf[n] = 0;
+            callbuf = mapb_capture(self, &i);
+            if (!callbuf) return self->sup->fail("unterminated map call");
             self->lex->pos = i;
             self->sup->lex_next();
             /* `-> f` with a bare name binds the C function itself: no wrapper is
@@ -1079,10 +1065,16 @@ impl MapBuildOps for MapBuild {
                 if (b->direct && m->ns_host)
                     return self->sup->fail("a namespace host has no self: bind with a wrapper call");
                 if (!b->direct && self->check_call((char *)b, inst) != 0) return -1;
-                if (!b->direct && self->rewrite_globals(callbuf) != 0) return -1;
+                if (!b->direct) {
+                    if (self->rewrite_globals(callbuf, &b->call) != 0) return -1;
+                }
             }
-            b->call = runtime::text::ct_intern(callbuf);
-            if (!b->call) return self->sup->fail("out of memory");
+            /* a rewritten body is already a pool text; the static / direct
+               paths intern the captured recipe itself */
+            if (is_static || b->direct) {
+                b->call = runtime::text::ct_intern(callbuf);
+                if (!b->call) return self->sup->fail("out of memory");
+            }
             if (self->sup->expect(";") != 0) return -1;
             /* `wrapper` and `method` are sibling arrays of the same struct, so
                GCC's -Wrestrict cannot prove they miss each other; build the
@@ -1091,7 +1083,7 @@ impl MapBuildOps for MapBuild {
                 b->wrapper = runtime::text::ct_intern("");
                 if (!b->wrapper) return self->sup->fail("out of memory");
             } else {
-                snprintf(wname, sizeof wname, "%s_%s", m->prefix, b->method);
+                wname = tool::sh::ct_scratch_fmt("%s_%s", m->prefix, b->method);
                 b->wrapper = runtime::text::ct_intern(wname);
                 if (!b->wrapper) return self->sup->fail("out of memory");
             }
@@ -1106,9 +1098,8 @@ impl MapBuildOps for MapBuild {
         for (i = 0; i < m->nb; i++) {
             for (j = i + 1; j < m->nb; j++)
                 if (strcmp(m->b[i].method, m->b[j].method) == 0) {
-                    snprintf(msg, sizeof msg, "duplicate binding for method '%s'",
-                             m->b[i].method);
-                    return self->sup->fail(msg);
+                    return self->sup->fail(tool::sh::ct_scratch_fmt(
+                             "duplicate binding for method '%s'", m->b[i].method));
                 }
         }
         for (k = 0; k < self->sym->traits[ti].nm; k++) {
@@ -1119,9 +1110,9 @@ impl MapBuildOps for MapBuild {
                     break;
                 }
             if (!bound) {
-                snprintf(msg, sizeof msg, "trait method '%s' is not bound by the map",
-                         self->sym->traits[ti].m[k].name);
-                return self->sup->fail(msg);
+                return self->sup->fail(tool::sh::ct_scratch_fmt(
+                         "trait method '%s' is not bound by the map",
+                         self->sym->traits[ti].m[k].name));
             }
         }
         (*self->nmaps)++;

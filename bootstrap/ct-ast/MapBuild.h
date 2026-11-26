@@ -16,6 +16,7 @@
 #include "Intern.h"
 #include "Symbols.h"
 #include "Diag.h"
+#include "Sh.h"
 
 
 struct ct_buf;
@@ -95,7 +96,7 @@ struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct frontend_parse_MapBuildOps_vtbl {
     int (*check_call)(void *, char *, const char *);
-    int (*rewrite_globals)(void *, char *);
+    int (*rewrite_globals)(void *, const char *, const char * *);
     int (*parse)(void *, int);
     int (*parse_binding)(void *, int, int, int);
 };

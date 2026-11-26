@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=10321 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=68377 io_cap=1024
+     emitted_before=48223 emitted_after=68571 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -49,6 +49,11 @@
       `Result` 操作数/列、Drop 字段类型改 pool 文本或精确块；`Emitter.h.ct`
       10318 -> 10321，发射 C 68353 -> 68377 行（仅 .c），切片清单仍为 76，
       判别式仍各读 1 次)
+     (S1a-0 C2p-9 后复测：`ExprBinding`/`MapBuild`/`StmtLoop`/`StmtRangeText`/
+      `StmtRangeScan`/`ExprCallCheck`/`ExprTypeText` 的 recipe、类型比较键与
+      诊断改 pool 文本或 `ct_scratch_fmt`，`MapBind.params` 改指针行；
+      `Emitter.h.ct` 不变（10321），发射 C 68377 -> 68571 行（仅 .c），
+      切片清单仍为 76，判别式仍各读 1 次)
      (LANG-26 后复测：`out` 写回转换与 `CT_BINDING_CONVERSION` 开关落在
       Expr.h.ct / Emitter.h.ct / Arena.h.ct；Emitter.h.ct 10343 -> 10415，
       发射 C 54413 -> 54712，切片清单不变)

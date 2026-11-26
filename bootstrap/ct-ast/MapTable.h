@@ -88,7 +88,7 @@ struct frontend_module_Call {
 };
 struct frontend_module_MapBind {
     const char * method;
-    char * * params;
+    const char * * params;
     int pcap;
     int nparams;
     int ti;

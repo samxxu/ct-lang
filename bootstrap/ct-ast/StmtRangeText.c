@@ -8,6 +8,7 @@
 #include "ParseSupport.h"
 #include "Expr.h"
 #include "Diag.h"
+#include "Intern.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtRangeText.h.ct"
 #include <limits.h>
@@ -97,10 +98,21 @@ int frontend_parse_map_brace_target(const char *, char *, int, char *, int, char
 int frontend_parse_range_digit(int, int);
 int frontend_parse_range_dim_value(const char *, long *);
 void frontend_parse_range_element_spelling(const char *, char *, int);
+const char * frontend_parse_range_element_spelling_text(const char *);
 int frontend_parse_range_vec_target(const char *, char *, int, char *, int);
+int frontend_parse_range_vec_target_text(const char *, const char * *, const char * *);
 int frontend_parse_vbrace_type_same(const char *, const char *);
+static int range_word_is(const char *, int, const char *);
+static int range_word_is(const char * w, int n, const char * kw) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (((!kw[i]) || (w[i] != kw[i]))) {
+            return 0;
+        }
+    }
+    return (kw[n] == 0);
+}
 int frontend_parse_loop_count_class(const char * t) {
-    char w[MAX_TEXT];
     int n;
     int words;
     if (((strchr(t, '*') || strchr(t, '[')) || strchr(t, '('))) {
@@ -114,28 +126,27 @@ int frontend_parse_loop_count_class(const char * t) {
     }
     words = 0;
     while ((*t)) {
+        const char * w;
         while ((((*t) == ' ') || ((*t) == '\t'))) {
             t++;
         }
         if ((!(*t))) {
             break;
         }
+        w = t;
         n = 0;
         while ((((*t) && ((*t) != ' ')) && ((*t) != '\t'))) {
-            if (n < (MAX_TEXT - 1)) {
-                w[n++] = (*t);
-            }
             t++;
+            n++;
         }
-        w[n] = 0;
-        if (((strcmp(w, "const") == 0) || (strcmp(w, "volatile") == 0))) {
+        if ((range_word_is(w, n, "const") || range_word_is(w, n, "volatile"))) {
             continue;
         }
         words = 1;
-        if ((((((((strcmp(w, "char") == 0) || (strcmp(w, "short") == 0)) || (strcmp(w, "int") == 0)) || (strcmp(w, "long") == 0)) || (strcmp(w, "signed") == 0)) || (strcmp(w, "unsigned") == 0)) || (strcmp(w, "_Bool") == 0))) {
+        if (((((((range_word_is(w, n, "char") || range_word_is(w, n, "short")) || range_word_is(w, n, "int")) || range_word_is(w, n, "long")) || range_word_is(w, n, "signed")) || range_word_is(w, n, "unsigned")) || range_word_is(w, n, "_Bool"))) {
             continue;
         }
-        if ((((strcmp(w, "float") == 0) || (strcmp(w, "double") == 0)) || (strcmp(w, "void") == 0))) {
+        if (((range_word_is(w, n, "float") || range_word_is(w, n, "double")) || range_word_is(w, n, "void"))) {
             return 0;
         }
         return (-1);
@@ -206,6 +217,9 @@ int frontend_parse_range_dim_value(const char * dims, long * out) {
     return 1;
 }
 void frontend_parse_range_element_spelling(const char * type, char * out, int cap) {
+    snprintf(out, (size_t)(cap), "%s", frontend_parse_range_element_spelling_text(type));
+}
+const char * frontend_parse_range_element_spelling_text(const char * type) {
     const char * p = type;
     for (; ; ) {
         if (strncmp(p, "static ", 7) == 0) {
@@ -235,12 +249,18 @@ void frontend_parse_range_element_spelling(const char * type, char * out, int ca
             }
         }
     }
-    snprintf(out, (size_t)(cap), "%s", p);
+    return runtime_text_ct_intern(p);
 }
-int frontend_parse_range_vec_target(const char * type, char * elem, int ecap, char * iname, int icap) {
+int frontend_parse_range_vec_target_text(const char * type, const char * * elem, const char * * iname) {
     const char * base;
     int ii;
     struct frontend_sym_StructInst * ins;
+    if (elem) {
+        (*elem) = "";
+    }
+    if (iname) {
+        (*iname) = "";
+    }
     if (strncmp(type, "struct ", 7) != 0) {
         return 0;
     }
@@ -256,26 +276,43 @@ int frontend_parse_range_vec_target(const char * type, char * elem, int ecap, ch
     if (((strcmp(ins[ii].tmpl, "Vec") != 0) || (ins[ii].nargs != 1))) {
         return 0;
     }
-    snprintf(elem, (size_t)(ecap), "%s", ins[ii].ctype[0]);
-    snprintf(iname, (size_t)(icap), "%s", ins[ii].name);
+    if (elem) {
+        (*elem) = ins[ii].ctype[0];
+    }
+    if (iname) {
+        (*iname) = ins[ii].name;
+    }
+    return 1;
+}
+int frontend_parse_range_vec_target(const char * type, char * elem, int ecap, char * iname, int icap) {
+    const char * e;
+    const char * n;
+    if ((!frontend_parse_range_vec_target_text(type, (&e), (&n)))) {
+        return 0;
+    }
+    if (snprintf(elem, (size_t)(ecap), "%s", e) >= ecap) {
+        return 0;
+    }
+    if (snprintf(iname, (size_t)(icap), "%s", n) >= icap) {
+        return 0;
+    }
     return 1;
 }
 int frontend_parse_vbrace_type_same(const char * a, const char * b) {
-    char x[MAX_TEXT];
-    char y[MAX_TEXT];
-    int i = 0;
-    int j = 0;
-    for (; ((*a) && (i < (MAX_TEXT - 1))); a++) {
-        if ((((*a) != ' ') && ((*a) != '\t'))) {
-            x[i++] = (*a);
+    for (; ; ) {
+        while ((((*a) == ' ') || ((*a) == '\t'))) {
+            a++;
         }
-    }
-    x[i] = 0;
-    for (; ((*b) && (j < (MAX_TEXT - 1))); b++) {
-        if ((((*b) != ' ') && ((*b) != '\t'))) {
-            y[j++] = (*b);
+        while ((((*b) == ' ') || ((*b) == '\t'))) {
+            b++;
         }
+        if ((*a) != (*b)) {
+            return 0;
+        }
+        if ((!(*a))) {
+            return 1;
+        }
+        a++;
+        b++;
     }
-    y[j] = 0;
-    return (strcmp(x, y) == 0);
 }

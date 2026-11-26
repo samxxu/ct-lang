@@ -20,6 +20,7 @@ import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
 import tool::diag::Diag;
+import runtime::text::Intern;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -36,16 +37,29 @@ pub int map_brace_target(const char *type, char *entry, int ecap, char *iname, i
 pub int range_digit(int c, int base);
 pub int range_dim_value(const char *dims, long *out);
 pub void range_element_spelling(const char *type, char *out, int cap);
+pub const char *range_element_spelling_text(const char *type);
 pub int range_vec_target(const char *type, char *elem, int ecap, char *iname, int icap);
+pub int range_vec_target_text(const char *type, const char **elem, const char **iname);
 pub int vbrace_type_same(const char *a, const char *b);
 
 /* Classify the static type of a `loop` count: 1 = an integer type, 0 = a type
    that is confidently not one (L22-5), -1 = unknown, which is never diagnosed
    (a false positive is worse than a miss). Pointers, arrays and function types
    are not integers; `enum` and `_Bool` are. */
+/* S1a-0 C2p-9: one spelling word compared in place. The classifier only
+   answers for the fixed keyword set, so a 2000-byte alias word never needs a
+   160-byte copy (the old row cut it, which still answered "unknown"). */
+static int range_word_is(const char *w, int n, const char *kw)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+        if (!kw[i] || w[i] != kw[i]) return 0;
+    return kw[n] == 0;
+}
+
 int loop_count_class(const char *t)
 {
-    char w[MAX_TEXT];
     int n, words;
 
     if (strchr(t, '*') || strchr(t, '[') || strchr(t, '(')) return 0;
@@ -53,21 +67,21 @@ int loop_count_class(const char *t)
     if (strncmp(t, "enum ", 5) == 0) return 1;
     words = 0;
     while (*t) {
+        const char *w;
         while (*t == ' ' || *t == '\t') t++;
         if (!*t) break;
+        w = t;
         n = 0;
-        while (*t && *t != ' ' && *t != '\t') {
-            if (n < MAX_TEXT - 1) w[n++] = *t;
-            t++;
-        }
-        w[n] = 0;
-        if (strcmp(w, "const") == 0 || strcmp(w, "volatile") == 0) continue;
+        while (*t && *t != ' ' && *t != '\t') { t++; n++; }
+        if (range_word_is(w, n, "const") || range_word_is(w, n, "volatile")) continue;
         words = 1;
-        if (strcmp(w, "char") == 0 || strcmp(w, "short") == 0 || strcmp(w, "int") == 0
-            || strcmp(w, "long") == 0 || strcmp(w, "signed") == 0
-            || strcmp(w, "unsigned") == 0 || strcmp(w, "_Bool") == 0)
+        if (range_word_is(w, n, "char") || range_word_is(w, n, "short")
+            || range_word_is(w, n, "int") || range_word_is(w, n, "long")
+            || range_word_is(w, n, "signed") || range_word_is(w, n, "unsigned")
+            || range_word_is(w, n, "_Bool"))
             continue;
-        if (strcmp(w, "float") == 0 || strcmp(w, "double") == 0 || strcmp(w, "void") == 0)
+        if (range_word_is(w, n, "float") || range_word_is(w, n, "double")
+            || range_word_is(w, n, "void"))
             return 0;
         /* an unresolved alias or a spelling this layer cannot classify */
         return -1;
@@ -130,6 +144,13 @@ int range_dim_value(const char *dims, long *out)
 /* The element spelling used in the L24-6 message, without the storage class. */
 void range_element_spelling(const char *type, char *out, int cap)
 {
+    snprintf(out, (size_t)cap, "%s", range_element_spelling_text(type));
+}
+
+/* S1a-0 C2p-9: the same stripped spelling as a pool text, so the L24-6
+   message can quote a 2000-byte element type whole. */
+const char *range_element_spelling_text(const char *type)
+{
     const char *p = type;
     for (;;) {
         if (strncmp(p, "static ", 7) == 0) p += 7;
@@ -139,7 +160,7 @@ void range_element_spelling(const char *type, char *out, int cap)
         else if (strncmp(p, "register ", 9) == 0) p += 9;
         else break;
     }
-    snprintf(out, (size_t)cap, "%s", p);
+    return runtime::text::ct_intern(p);
 }
 
 /* Phase 29 P29-1: `Vec<T>` as a declaration type. `type` is the C spelling the
@@ -148,13 +169,14 @@ void range_element_spelling(const char *type, char *out, int cap)
    `Vec` instance: a pointer (`struct Vec_int *`) or a `Map` stays on the array
    path, and the caller keeps the frozen L24-5 text. The compiler reads the
    row's *type arguments*, never the container's layout (B29-3). */
-int range_vec_target(const char *type, char *elem, int ecap,
-                            char *iname, int icap)
+int range_vec_target_text(const char *type, const char **elem, const char **iname)
 {
     const char *base;
     int ii;
     struct StructInst *ins;
 
+    if (elem) *elem = "";
+    if (iname) *iname = "";
     if (strncmp(type, "struct ", 7) != 0) return 0;
     base = type + 7;
     if (strpbrk(base, " *[(")) return 0;
@@ -162,8 +184,18 @@ int range_vec_target(const char *type, char *elem, int ecap,
     ii = frontend::sym::ct_inst_find(base);
     if (!ins || ii < 0) return 0;
     if (strcmp(ins[ii].tmpl, "Vec") != 0 || ins[ii].nargs != 1) return 0;
-    snprintf(elem, (size_t)ecap, "%s", ins[ii].ctype[0]);
-    snprintf(iname, (size_t)icap, "%s", ins[ii].name);
+    if (elem) *elem = ins[ii].ctype[0];
+    if (iname) *iname = ins[ii].name;
+    return 1;
+}
+
+int range_vec_target(const char *type, char *elem, int ecap,
+                            char *iname, int icap)
+{
+    const char *e, *n;
+    if (!range_vec_target_text(type, &e, &n)) return 0;
+    if (snprintf(elem, (size_t)ecap, "%s", e) >= ecap) return 0;
+    if (snprintf(iname, (size_t)icap, "%s", n) >= icap) return 0;
     return 1;
 }
 
@@ -173,15 +205,14 @@ int range_vec_target(const char *type, char *elem, int ecap,
    whitespace instead of requiring one spelling. */
 int vbrace_type_same(const char *a, const char *b)
 {
-    char x[MAX_TEXT];
-    char y[MAX_TEXT];
-    int i = 0, j = 0;
-
-    for (; *a && i < MAX_TEXT - 1; a++)
-        if (*a != ' ' && *a != '\t') x[i++] = *a;
-    x[i] = 0;
-    for (; *b && j < MAX_TEXT - 1; b++)
-        if (*b != ' ' && *b != '\t') y[j++] = *b;
-    y[j] = 0;
-    return strcmp(x, y) == 0;
+    /* S1a-0 C2p-9: compare the two spellings in place, skipping blanks; a
+       2000-byte type is no longer cut before the comparison. */
+    for (;;) {
+        while (*a == ' ' || *a == '\t') a++;
+        while (*b == ' ' || *b == '\t') b++;
+        if (*a != *b) return 0;
+        if (!*a) return 1;
+        a++;
+        b++;
+    }
 }

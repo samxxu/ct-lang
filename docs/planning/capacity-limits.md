@@ -518,3 +518,51 @@ vptr 名、map 主机类型的 `sizeof`、长 ADT 变体的生命周期成员、
 仍按单元簇（Emitter / Expr / Parser / Stmt）推进；`Expr` 的 `rty`/`ret`/
 `msg` 一次性 scratch、`ExprTypes` 的 `fbase`/`actual`、`Emitter` 的 `pbuf`/
 `base`/`msg` 是主要剩余。
+
+**S1a-0 C2p-9（表达式/语句/解析器的 recipe 与诊断 scratch，已落）**：本批 7 个
+单元、44 行 `char[MAX_TEXT]` 退场，全部是“用户文本被 160 行截断”或
+“一次性格式化 scratch”两类，没有改语义。
+
+- `ExprBinding`（6）：新增 `bind_conv_ibase_text` / `bind_conv_inherent_text` /
+  `bind_conv_maps_text`。接收者类型、内置 `as` 的返回类型、映射 trait 的返回
+  类型都以 pool 文本流转；旧的 `char*+cap` 形式保留为薄包装。2000 字节 struct
+  的内置 `as` 不再报 “no conversion from”。
+- `MapBuild`（15）：recipe 捕获改 `mapb_capture`（run-scoped，`TEXT_LIMIT` 为
+  唯一上限），`MapBind.params` 由 `char**`（每行 160）改 `const char**` pool
+  文本行，调用 `var_cname_text` 拼接 wrapper 体；token / `prev` / `sizeof(...)`
+  参数名 / 诊断都改 pool 或 `ct_scratch_fmt`。2000 字节 recipe 被调函数名、
+  2000 字节绑定参数名可用。
+- `StmtLoop`（8）：range bound、foreach / loop / range initializer 的诊断改
+  `ct_scratch_fmt`；`range_element_bad_text`、`elemtype`/`iname` 走 pool 文本。
+  诊断里的 2000 字节变量名/元素类型不再截断。
+- `StmtRangeText`（3）：`loop_count_class` 改为按词 span 比较（只认固定 C
+  关键字，长别名不再需要 160 行），`range_element_spelling_text` /
+  `range_vec_target_text` 新增 pool 形式，`vbrace_type_same` 原地跳过空白比较。
+- `StmtRangeScan`（1）：`range_spelling_text` 直接 `ct_intern_len` 源区间，
+  `range_bound_value_text` 返回 pool 文本；数字/标识符/溢出诊断都保留整词。
+- `ExprCallCheck`（7）：`argtype_mismatch_text` 以 pool 文本返回期望/实际类型，
+  `arity_check` / `argtype_check(_static)` 的消息改 `ct_scratch_fmt`。
+- `ExprTypeText`（4）：新增 `tnorm_text` / `tbase_text` / `arg_class_text`；
+  `arg_class` 保留原签名但内部走文本形式，`subst_tparam` 与 `tnumeric` 不再
+  落 160 行。
+
+配套的小改动：`Symbols` 新增 `var_cname_text`（`Var.cname` 本来就是 pool
+文本），`MapTable.MapBind.params` 的类型改为 `const char **`。
+
+证据：`test/ast/c2p_limits.sh` 42/42（baseline `4b8345dd` 为 39/42：2000 字节
+map recipe 被拒、2000 字节 `as` 接收者报 “no conversion from”、foreach 诊断
+把 2000 字节变量名截成 159 字节）；`check-seed` 两轮逐字节（60 .c + 59 .h）。
+源码 `[MAX_TEXT]`（行数）：`frontend/parse` 271 → 227，全树 371 → 327。
+未改语义、版本号与 issue。
+
+**C2p-9 后剩余（`grep -c '\[MAX_TEXT\]'`，行数）**：`frontend/parse` 227 处
+（`Expr.h.ct` 58、`Parser.h.ct` 39、`Stmt.h.ct` 32、`ExprTypes.h.ct` 32、
+`ExprStaticType.h.ct` 22、`ExprInstantiate.h.ct` 14、`ExprOptional.h.ct` 9、
+`ExprClosure.h.ct` 5、`ExprSubscript.h.ct` 3、`ExprAdtCtor.h.ct` 3、
+`StmtMatch.h.ct` 2、`ParseSupport.h.ct` 2、`ExprPure.h.ct` 2、
+`StmtControl.h.ct` / `ExprTypeParse.h.ct` / `ExprTry.h.ct` /
+`ExprTraitInst.h.ct` 各 1）、`backend/emit` 5、`tool/pkg` 39、
+`frontend/type` 21、`frontend/module` 20、`frontend/sym` 8、`backend/mem` 7，
+全树 327 处。下一批仍按单元簇推进：`Expr` 的 58 行一次性 scratch 与类型行、
+`Parser` 的 39 行（含 15 处诊断）、`Stmt` 的 32 行、`ExprTypes` /
+`ExprStaticType` 的 `static_ctype` 链（需 `static_ctype_text` 家族）。

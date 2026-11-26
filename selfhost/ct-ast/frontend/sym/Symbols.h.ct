@@ -416,6 +416,7 @@ pub trait SymbolOps {
     int  declare_const(const char *name, const char *cname, const char *ns, int imported);
     int  is_const_name(const char *name);
     int  var_cname(const char *name, char *out, int cap);
+    const char *var_cname_text(const char *name);
     int  var_ambiguous(const char *name);
     const char *find_qualified_global(const char *qual, const char *name);
     int  find_var(const char *name);
@@ -1278,6 +1279,18 @@ impl SymbolOps for Symbols {
         i = self->find_var(name);
         if (i < 0) return -1;
         return (snprintf(out, (size_t)cap, "%s", self->vars[i].cname) >= cap) ? -1 : 0;
+    }
+
+    /* S1a-0 C2p-9: the pool-text form. A global's C spelling is already an
+       interned text; a caller joining it into a wrapper body no longer needs a
+       160-byte copy (a 2000-byte namespaced global would not fit). */
+    const char *var_cname_text(const char *name)
+    {
+        int i;
+        (void)self;
+        i = self->find_var(name);
+        if (i < 0) return (const char *)0;
+        return self->vars[i].cname;
     }
 
     int var_ambiguous(const char *name)

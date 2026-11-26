@@ -25,6 +25,7 @@ import backend::mem::Memory;
 import frontend::parse::ParseSupport;
 import frontend::parse::Expr;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::StmtRangeText;
 import frontend::parse::StmtRangeScan;
 import frontend::parse::StmtScope;
@@ -138,8 +139,7 @@ pub void jump_pop(struct Stmt *self, int with_cont)
 
 pub int range_bound(struct Stmt *self, long *out)
 {
-    char spell[MAX_TEXT];
-    char msg[256];
+    const char *spell;
     int neg = 0, rc, line, col;
     long v = 0;
 
@@ -154,46 +154,57 @@ pub int range_bound(struct Stmt *self, long *out)
     /* `..` followed straight by `(` is a missing bound, not a bad one */
     if (!neg && self->lex->tok == T_PUNCT && self->lex->tok_is("("))
         return tool::diag::ct_sem_error(line, col, "a range initializer needs both bounds", self->mem->path);
-    rc = range_bound_value(self->lex, &v, spell, (int)sizeof spell);
+    rc = range_bound_value_text(self->lex, &v, &spell);
     if (rc == 2)
         return tool::diag::ct_sem_error(line, col, "a range bound is out of range", self->mem->path);
     if (rc == 1) {
-        snprintf(msg, sizeof msg, "a range bound must be an integer literal (got '%s')", spell);
-        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        return tool::diag::ct_sem_error(line, col,
+            tool::sh::ct_scratch_fmt(
+                "a range bound must be an integer literal (got '%s')", spell),
+            self->mem->path);
     }
     self->sup->lex_next();
     *out = neg ? -v : v;
     return 0;
 }
 
-pub int range_element_bad(struct Stmt *self, const char *type, const char *dims, char *why, int cap)
+/* S1a-0 C2p-9: the element reason as a pool text. The old form formatted the
+   element spelling into the caller's 160-byte row, so the L24-6 diagnostic
+   named a cut type for a 2000-byte element. */
+pub int range_element_bad_text(struct Stmt *self, const char *type, const char *dims, const char **why)
 {
-    char tr[MAX_TEXT];
-    char tmp[MAX_TEXT];
+    const char *tr;
     const char *first;
     int ip = 0;
     size_t n;
 
+    if (why) *why = "";
     first = strchr(dims, '[');
     if (first && strchr(first + 1, '[')) {
-        range_element_spelling(type, why, cap);
-        n = strlen(why);
-        snprintf(why + n, (size_t)cap - n, "%s", first + 1);
+        if (why) *why = tool::sh::ct_scratch_fmt("%s%s",
+                           range_element_spelling_text(type), first + 1);
         return 1;
     }
-    if (self->sup->iface_ref_type(type, tr, (int)sizeof tr, &ip) && !ip) {
-        range_element_spelling(type, why, cap);
+    if (self->sup->iface_ref_type_text(type, &tr, &ip) && !ip) {
+        if (why) *why = range_element_spelling_text(type);
         return 1;
     }
-    snprintf(tmp, sizeof tmp, "%s", type);
-    n = strlen(tmp);
-    while (n > 0 && (tmp[n - 1] == ' ' || tmp[n - 1] == '\t')) n--;
-    if (n > 0 && tmp[n - 1] == '*') return 0;
+    n = strlen(type);
+    while (n > 0 && (type[n - 1] == ' ' || type[n - 1] == '\t')) n--;
+    if (n > 0 && type[n - 1] == '*') return 0;
     if (strstr(type, "struct ") || strstr(type, "union ")) {
-        range_element_spelling(type, why, cap);
+        if (why) *why = range_element_spelling_text(type);
         return 1;
     }
     return 0;
+}
+
+pub int range_element_bad(struct Stmt *self, const char *type, const char *dims, char *why, int cap)
+{
+    const char *w = "";
+    int r = range_element_bad_text(self, type, dims, &w);
+    snprintf(why, (size_t)cap, "%s", w);
+    return r;
 }
 
 pub int kw_paren_ahead(struct Stmt *self, const char *kw)
@@ -245,7 +256,6 @@ impl StmtLoop for Stmt {
     {
         int s, cnt, hi, body, line, col, cls, bi, nb, vi;
         int bounds[2];
-        char msg[MAX_TEXT];
         const char *t = "";
         const char *ct = "";
         const char *p;
@@ -317,10 +327,10 @@ impl StmtLoop for Stmt {
             if (self->arena->nodes[e].kind == N_VAR)
                 vi = self->sym->find_var(self->arena->nodes[e].text2);
             if (vi >= 0 && self->sym->vars[vi].is_array) {
-                snprintf(msg, sizeof msg,
+                return tool::diag::ct_sem_error(line, col,
+                    tool::sh::ct_scratch_fmt(
                          "a loop bound must be an integer (got the array '%s')",
-                         self->sym->vars[vi].name);
-                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                         self->sym->vars[vi].name), self->mem->path);
             }
             /* An array that is not a plain variable -- `m.cells`, a field
                declared with dimensions -- only shows its `[]` in the
@@ -330,9 +340,10 @@ impl StmtLoop for Stmt {
                single element type and `expr_type` gives up, which used to leave
                `loop(m.cells)` completely silent. */
             if (self->sup->expr_ctype_text(e, &ct) == 0 && strchr(ct, '[')) {
-                snprintf(msg, sizeof msg,
-                         "a loop bound must be an integer (got '%s')", ct);
-                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                return tool::diag::ct_sem_error(line, col,
+                    tool::sh::ct_scratch_fmt(
+                         "a loop bound must be an integer (got '%s')", ct),
+                    self->mem->path);
             }
             if (self->sup->expr_type_text(e, &t) != 0) continue;
             bare = 1;
@@ -352,15 +363,17 @@ impl StmtLoop for Stmt {
                arrays, but an alias could still expand to a dimensioned type. */
             if (strchr(t, '*') || strchr(t, '[') || strchr(t, '(')
                 || strncmp(t, "struct ", 7) == 0 || strncmp(t, "union ", 6) == 0) {
-                snprintf(msg, sizeof msg,
-                         "a loop bound must be an integer (got '%s')", t);
-                return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                return tool::diag::ct_sem_error(line, col,
+                    tool::sh::ct_scratch_fmt(
+                         "a loop bound must be an integer (got '%s')", t),
+                    self->mem->path);
             }
             cls = loop_count_class(t);
             if (cls == 0) {
-                snprintf(msg, sizeof msg,
-                         "count must be an integer (got '%s'); the value is converted to int", t);
-                if (tool::diag::ct_type_warn(line, col, "loop", msg, self->mem->path) != 0)
+                if (tool::diag::ct_type_warn(line, col, "loop",
+                        tool::sh::ct_scratch_fmt(
+                         "count must be an integer (got '%s'); the value is converted to int", t),
+                        self->mem->path) != 0)
                     return -1;
             }
         }
@@ -404,7 +417,7 @@ impl StmtLoop for Stmt {
     {
         int s, c, body, line, col, vi, nd, ip, bare;
         int aux, inst, nargs;
-        char msg[MAX_TEXT];
+        const char *msg;
         const char *elem;
         const char *ex;
         const char *tr;
@@ -496,10 +509,10 @@ impl StmtLoop for Stmt {
                     }
                     if (mt >= 0
                         && strcmp(frontend::sym::ct_insts(&nd)[mt].tmpl, "MapEntry") == 0) {
-                        snprintf(msg, sizeof msg,
+                        return tool::diag::ct_sem_error(line, col,
+                            tool::sh::ct_scratch_fmt(
                                  "foreach cannot iterate a container of '%s' (interface, vptr-bearing or container element)",
-                                 ins[inst].ctype[kk]);
-                        return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                                 ins[inst].ctype[kk]), self->mem->path);
                     }
                 }
                 if (aux == 2) {
@@ -519,42 +532,42 @@ impl StmtLoop for Stmt {
         /* `int a[]` as a parameter is `int *a` in C; `sizeof` would answer the
            pointer's size and silently iterate the wrong count. */
         if (self->sym->vars[vi].is_param || self->sym->vars[vi].is_fnparam) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "foreach cannot iterate the array parameter '%s' (its length is lost)",
-                     self->sym->vars[vi].name);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     self->sym->vars[vi].name), self->mem->path);
         }
         if (!self->sym->vars[vi].dims[0]) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "foreach needs an array or a Vec/Map; '%s' is not iterable",
-                     self->sym->vars[vi].name);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     self->sym->vars[vi].name), self->mem->path);
         }
         elem = self->sym->vars[vi].type;
         /* A function-pointer array stores its declarator in `text3` instead of
            plain `[N]`; `int item = handlers[i];` would be illegal C. */
         if (self->sym->vars[vi].dims[0] != '[' || strchr(elem, '(')) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "foreach cannot iterate '%s'; its declarator is not a plain array",
-                     self->sym->vars[vi].name);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     self->sym->vars[vi].name), self->mem->path);
         }
         nd = 0;
         for (p = self->sym->vars[vi].dims; *p; p++)
             if (*p == '[') nd++;
         if (nd > 1) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "foreach does not support multidimensional arrays ('%s')",
-                     self->sym->vars[vi].name);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     self->sym->vars[vi].name), self->mem->path);
         }
         /* A file-scope `int a[];` stays incomplete; the local `int a[] = {…}`
            is completed by its initialiser, which only C sees. */
         if (self->sym->vars[vi].is_global && strstr(self->sym->vars[vi].dims, "[]")) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "foreach needs an array with a known length ('%s')",
-                     self->sym->vars[vi].name);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     self->sym->vars[vi].name), self->mem->path);
         }
         /* A typedef can hide an array element (`typedef int Row[4]; Row a[2];`);
            `Row item = a[i];` is not C, so refuse it like a second dimension. */
@@ -564,18 +577,18 @@ impl StmtLoop for Stmt {
                   || (*q >= '0' && *q <= '9') || *q == '_')) bare = 0;
         if (bare && self->sym->expand_type_alias_text(elem, &ex) == 0
             && strchr(ex, '[')) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "foreach does not support multidimensional arrays ('%s')",
-                     self->sym->vars[vi].name);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     self->sym->vars[vi].name), self->mem->path);
         }
         /* An interface value is a (vptr, data) pair; a by-value copy would
            bypass the vptr discipline, and the element type gives no owner. */
         if (self->sup->iface_ref_type_text(elem, &tr, &ip) && !ip) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "foreach cannot copy interface values ('%s')",
-                     self->sym->vars[vi].name);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     self->sym->vars[vi].name), self->mem->path);
         }
         }   /* aux == 0: the Phase 27 array path ends here */
         if (self->sup->push_scope() != 0) return -1;
@@ -632,12 +645,12 @@ impl StmtLoop for Stmt {
             if (k0 == N_DECL
                 && (strcmp(self->arena->nodes[nd].text2, "item") == 0
                     || strcmp(self->arena->nodes[nd].text2, "i") == 0)) {
-                snprintf(msg, sizeof msg, "cannot redeclare the foreach binding '%s'",
-                         self->arena->nodes[nd].text2);
+                msg = tool::sh::ct_scratch_fmt(
+                    "cannot redeclare the foreach binding '%s'",
+                    self->arena->nodes[nd].text2);
             } else if (aux == 2 && k0 == N_VAR
                        && strcmp(self->arena->nodes[nd].text2, "i") == 0) {
-                snprintf(msg, sizeof msg,
-                         "'i' has no meaning in a Map foreach; use item.key / item.value");
+                msg = "'i' has no meaning in a Map foreach; use item.key / item.value";
             } else if (aux != 2
                        && (k0 == N_ASSIGN || k0 == N_POST || k0 == N_PRE
                            || k0 == N_ADDR)
@@ -645,7 +658,7 @@ impl StmtLoop for Stmt {
                        && self->arena->nodes[self->arena->nodes[nd].a].kind == N_VAR
                        && strcmp(self->arena->nodes[self->arena->nodes[nd].a].text2,
                                  "i") == 0) {
-                snprintf(msg, sizeof msg, "the foreach index 'i' is read-only");
+                msg = "the foreach index 'i' is read-only";
             } else {
                 continue;
             }
@@ -732,21 +745,17 @@ impl StmtLoop for Stmt {
         unsigned long cnt;
         int e, elem, line, col, save_dollar;
         int is_vec;
-        char elemtype[MAX_TEXT];
-        char iname[MAX_TEXT];
-        char why[MAX_TEXT];
-        char msg[256];
+        const char *elemtype = "";
+        const char *iname = "";
+        const char *why = "";
         const char *close;
 
         line = self->lex->tokline;
         col = self->lex->tokstart - self->lex->lstart + 1;
-        elemtype[0] = 0;
-        iname[0] = 0;
         is_vec = 0;
         /* L24-5: an array declarator, or (P29-1) a by-value `Vec<T>` */
         if (!self->arena->nodes[n].text3[0]) {
-            is_vec = range_vec_target(type, elemtype, (int)sizeof elemtype,
-                                      iname, (int)sizeof iname);
+            is_vec = range_vec_target_text(type, &elemtype, &iname);
             if (!is_vec)
                 return tool::diag::ct_sem_error(line, col,
                                                 "a range initializer declares an array", self->mem->path);
@@ -769,18 +778,20 @@ impl StmtLoop for Stmt {
            no dimension, so the count is the only size. */
         if (!is_vec
             && range_dim_value(self->arena->nodes[n].text3, &dim) && dim != (long)cnt) {
-            snprintf(msg, sizeof msg,
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
                      "the array size '%ld' does not match the range (%ld elements)",
-                     dim, (long)cnt);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                     dim, (long)cnt), self->mem->path);
         }
         /* L24-6: scalar elements only -- for a `Vec` the element type is the
            instance's type argument, not the container struct */
-        if (range_element_bad(self, is_vec ? elemtype : type,
+        if (range_element_bad_text(self, is_vec ? elemtype : type,
                               is_vec ? "" : self->arena->nodes[n].text3,
-                              why, (int)sizeof why)) {
-            snprintf(msg, sizeof msg, "a range initializer cannot initialize '%s' elements", why);
-            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+                              &why)) {
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt(
+                    "a range initializer cannot initialize '%s' elements", why),
+                self->mem->path);
         }
         /* P29-1: the element list accepts the parenthesised form Phase 24
            froze (`0..3($)`) and the brace form the request writes

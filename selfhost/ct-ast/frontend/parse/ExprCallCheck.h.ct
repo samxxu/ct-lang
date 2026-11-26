@@ -31,6 +31,7 @@ import runtime::text::Intern;
 import runtime::arena::Arena::NodeKind as NodeKind;
 import runtime::arena::Arena::Node as Node;
 import tool::diag::Diag;
+import tool::sh::Sh;
 import frontend::parse::ExprTypeText;
 import frontend::parse::ExprPure;
 import frontend::parse::ExprCore;
@@ -130,13 +131,92 @@ pub struct ExprCallCheck {
 }
 
 
+/* S1a-0 C2p-9: the mismatch message as a pool/run-scoped text. The old form
+   formatted into the caller's 160-byte row and compared `arg_class`'s bases
+   from 160-byte copies, so a 2000-byte argument type was cut before the
+   class test. 0 compatible / 1 warning / 2 hard error, as before. */
+pub int argtype_mismatch_text(struct Expr *self, int args, int fi, int ti, int mi, const char **out)
+{
+    const char *at = "";
+    const char *fb, *ab;
+    const char *ft;
+    int cur, k, np, skip, r;
+
+    if (out) *out = "";
+    if (fi >= 0) np = self->sym->funcs[fi].nparams;
+    else np = self->sym->traits[ti].m[mi].nparams;
+    cur = args;
+    k = 0;
+    while (cur > 0 && k < np) {
+        skip = 0;
+        if (fi >= 0) ft = self->sym->funcs[fi].ptype[k];
+        else ft = self->sym->traits[ti].m[mi].ptype[k];
+        /* an array parameter is a pointer in disguise: the dims sit in
+           `pdim` (a function) or ride in the spelling (a trait method) */
+        if (fi >= 0 && (self->sym->funcs[fi].pdim[k])[0]) skip = 1;
+        if (!skip && strchr(ft, '[')) skip = 1;
+        if (!skip) {
+            const char *itr = "";
+            int iip = 0;
+            if (self->sup->iface_ref_type_text(ft, &itr, &iip)) skip = 1;
+        }
+        if (!skip && self->arena->nodes[cur].kind == N_CAST) skip = 1;
+        /* a closure actual fills `(fn, env)`: its own type is not a value
+           type, and it consumes two formals (see the tail of the loop) */
+        if (!skip && self->arg_is_closure(cur)) skip = 1;
+        /* `0` is a null pointer constant: C accepts it wherever a pointer
+           is expected, so a derived `int` is not a mismatch. */
+        if (!skip && self->arena->nodes[cur].kind == N_NUM
+            && self->arena->nodes[cur].num == 0
+            && strchr(ft, '*')) skip = 1;
+        if (!skip && self->sup->expr_ctype_text(cur, &at) != 0) skip = 1;
+        if (!skip && strchr(at, '[')) skip = 1;   /* a decayed array */
+        if (!skip) {
+            int fdp = 0, adp = 0;
+            const char *q;
+            /* LANG-14: a pointer mismatch between structs is still
+               convertible in C (with a diagnostic), only a by-value
+               struct against anything else is not. */
+            for (q = ft; *q; q++) if (*q == '*') fdp++;
+            for (q = at; *q; q++) if (*q == '*') adp++;
+            r = arg_class_text(ft, at, &fb, &ab);
+            if (r == 2) {
+                int fs = self->sym->find_struct(fb + 6);
+                int as = self->sym->find_struct(ab + 6);
+                r = (fs < 0 || as < 0) ? -1 : ((fs != as) ? 2 : 0);
+            }
+            if (r == 2) {
+                const char *m = tool::sh::ct_scratch_fmt(
+                    "argument %d: expected '%s', got '%s'", k + 1, ft, at);
+                if (out) *out = m;
+                if (fdp == 0 || adp == 0) return 2;
+                return 1;
+            }
+            if (r == 1) {
+                const char *m = tool::sh::ct_scratch_fmt(
+                    "argument %d: expected '%s', got '%s'", k + 1, ft, at);
+                if (out) *out = m;
+                /* LANG-14: C rejects a by-value struct actual / formal
+                   against anything but the same struct, so the ct stage
+                   stops here instead of leaving the error to `cc`. */
+                if ((fdp == 0 || adp == 0)
+                    && (tclass(ft, fb) == 1 || tclass(at, ab) == 1)) return 2;
+                return 1;
+            }
+        }
+        if (self->arg_is_closure(cur)) k += 2;
+        else k++;
+        cur = self->arena->nodes[cur].next;
+    }
+    return 0;
+}
+
 impl ExprCallCheck for Expr {
     int arity_check(int line, int col, const char *callee, int got, int want)
     {
-        char msg[MAX_TEXT];
         if (got == want) return 0;
-        snprintf(msg, sizeof msg, "takes %d argument(s), %d given", want, got);
-        if (self->sup->arity_warn(line, col, callee, msg) != 0)
+        if (self->sup->arity_warn(line, col, callee,
+                tool::sh::ct_scratch_fmt("takes %d argument(s), %d given", want, got)) != 0)
             return self->sup->fail("too many warnings");
         return 0;
     }
@@ -156,96 +236,27 @@ impl ExprCallCheck for Expr {
 
     int argtype_mismatch(int args, int fi, int ti, int mi, char *msg, int cap)
     {
-        const char *at = "";
-        char fb[MAX_TEXT], ab[MAX_TEXT];
-        const char *ft;
-        int cur, k, np, skip, r;
-
-        if (fi >= 0) np = self->sym->funcs[fi].nparams;
-        else np = self->sym->traits[ti].m[mi].nparams;
-        cur = args;
-        k = 0;
-        while (cur > 0 && k < np) {
-            skip = 0;
-            if (fi >= 0) ft = self->sym->funcs[fi].ptype[k];
-            else ft = self->sym->traits[ti].m[mi].ptype[k];
-            /* an array parameter is a pointer in disguise: the dims sit in
-               `pdim` (a function) or ride in the spelling (a trait method) */
-            if (fi >= 0 && (self->sym->funcs[fi].pdim[k])[0]) skip = 1;
-            if (!skip && strchr(ft, '[')) skip = 1;
-            if (!skip) {
-                char itr[MAX_TEXT];
-                int iip = 0;
-                if (self->sup->iface_ref_type(ft, itr, sizeof itr, &iip)) skip = 1;
-            }
-            if (!skip && self->arena->nodes[cur].kind == N_CAST) skip = 1;
-            /* a closure actual fills `(fn, env)`: its own type is not a value
-               type, and it consumes two formals (see the tail of the loop) */
-            if (!skip && self->arg_is_closure(cur)) skip = 1;
-            /* `0` is a null pointer constant: C accepts it wherever a pointer
-               is expected, so a derived `int` is not a mismatch. */
-            if (!skip && self->arena->nodes[cur].kind == N_NUM
-                && self->arena->nodes[cur].num == 0
-                && strchr(ft, '*')) skip = 1;
-            if (!skip && self->sup->expr_ctype_text(cur, &at) != 0) skip = 1;
-            if (!skip && strchr(at, '[')) skip = 1;   /* a decayed array */
-            if (!skip) {
-                int fdp = 0, adp = 0;
-                const char *q;
-                /* LANG-14: a pointer mismatch between structs is still
-                   convertible in C (with a diagnostic), only a by-value
-                   struct against anything else is not. */
-                for (q = ft; *q; q++) if (*q == '*') fdp++;
-                for (q = at; *q; q++) if (*q == '*') adp++;
-                r = arg_class(ft, at, fb, sizeof fb, ab, sizeof ab);
-                if (r == 2) {
-                    int fs = self->sym->find_struct(fb + 6);
-                    int as = self->sym->find_struct(ab + 6);
-                    r = (fs < 0 || as < 0) ? -1 : ((fs != as) ? 2 : 0);
-                }
-                if (r == 2) {
-                    snprintf(msg, cap, "argument %d: expected '%s', got '%s'",
-                             k + 1, ft, at);
-                    if (fdp == 0 || adp == 0) return 2;
-                    return 1;
-                }
-                if (r == 1) {
-                    snprintf(msg, cap, "argument %d: expected '%s', got '%s'",
-                             k + 1, ft, at);
-                    /* LANG-14: C rejects a by-value struct actual / formal
-                       against anything but the same struct, so the ct stage
-                       stops here instead of leaving the error to `cc`. The
-                       arithmetic and pointer spellings keep the warning level:
-                       C accepts those with a diagnostic and converts. `tclass`
-                       reads the tag from the source spelling (`fb` is
-                       whitespace-free, so `struct S` is `structS` there). */
-                    if ((fdp == 0 || adp == 0)
-                        && (tclass(ft, fb) == 1 || tclass(at, ab) == 1)) return 2;
-                    return 1;
-                }
-            }
-            if (self->arg_is_closure(cur)) k += 2;
-            else k++;
-            cur = self->arena->nodes[cur].next;
-        }
-        return 0;
+        const char *m = "";
+        int r = argtype_mismatch_text(self, args, fi, ti, mi, &m);
+        if (msg) snprintf(msg, (size_t)cap, "%s", m);
+        return r;
     }
 
     int argtype_check(int line, int col, const char *callee, int args, int fi, int ti, int mi)
     {
-        char msg[MAX_TEXT];
-        char full[MAX_TEXT];
+        const char *msg = "";
         int r;
 
-        r = self->argtype_mismatch(args, fi, ti, mi, msg, sizeof msg);
+        r = argtype_mismatch_text(self, args, fi, ti, mi, &msg);
         if (r == 2) {
             /* LANG-14: a struct on either side cannot be converted by C, so
                this is a hard error with the same wording the static-recipe
                path uses (`argtype_check_static`). SH-115: it stays hard at
                every `--check-level`; a `warn` downgrade would let the C
                compiler (which is not run with -Werror) build a bad call. */
-            snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
-            return tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
+            return tool::diag::ct_sem_error(line, col,
+                tool::sh::ct_scratch_fmt("type mismatch: '%s' %s", callee, msg),
+                self->sup->mem->path);
         }
         if (r == 1) {
             if (self->sup->type_warn(line, col, callee, msg) != 0)
@@ -256,15 +267,15 @@ impl ExprCallCheck for Expr {
 
     int argtype_check_static(int line, int col, const char *callee, int args, int ti, int mi)
     {
-        char msg[MAX_TEXT];
-        char full[MAX_TEXT];
+        const char *msg = "";
 
-        if (!self->argtype_mismatch(args, -1, ti, mi, msg, sizeof msg))
+        if (!argtype_mismatch_text(self, args, -1, ti, mi, &msg))
             return 0;
-        snprintf(full, sizeof full, "type mismatch: '%s' %s", callee, msg);
         /* SH-115: hard at every level -- the recipe may splice the actual into
            the generated call and cc will not necessarily reject it. */
-        return tool::diag::ct_sem_error(line, col, full, self->sup->mem->path);
+        return tool::diag::ct_sem_error(line, col,
+            tool::sh::ct_scratch_fmt("type mismatch: '%s' %s", callee, msg),
+            self->sup->mem->path);
     }
 
     int record_call(const char *callee, int line)

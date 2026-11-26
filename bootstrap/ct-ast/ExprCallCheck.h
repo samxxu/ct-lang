@@ -19,6 +19,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Diag.h"
+#include "Sh.h"
 #include "ExprTypeText.h"
 #include "ExprPure.h"
 #include "ExprCore.h"
@@ -113,5 +114,6 @@ extern const struct frontend_parse_ExprCallCheck_vtbl frontend_parse_Expr_fronte
 struct frontend_parse_ExprCallCheck {
     int unused;
 };
+int frontend_parse_argtype_mismatch_text(struct frontend_parse_Expr *, int, int, int, int, const char * *);
 
 #endif

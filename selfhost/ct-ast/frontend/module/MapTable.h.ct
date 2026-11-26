@@ -22,7 +22,7 @@ pub struct Call {
 /* One `method(params) -> call` inside a `map` block (Phase 11.1). */
 pub struct MapBind {
     const char *method;             /* trait method name */
-    char **params;                  /* CT-side parameter names, from the map's (); row stride MAX_TEXT */
+    const char **params;            /* CT-side parameter names, from the map's (); pool texts */
     int  pcap;                      /* rows allocated for params/uses/sizeofs */
     int  nparams;
     int  ti;                        /* index into the trait table */

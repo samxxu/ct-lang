@@ -23,7 +23,9 @@ import frontend::sym::Symbols::StructImpl as StructImpl;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
+import runtime::text::Intern;
 import tool::diag::Diag;
+import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -36,6 +38,9 @@ pub struct ExprTypeText {
 }
 
 pub int arg_class(const char *formal, const char *actual, char *fb, int fcap, char *ab, int acap);
+pub int arg_class_text(const char *formal, const char *actual, const char **fb, const char **ab);
+pub const char *tbase_text(const char *k);
+pub const char *tnorm_text(const char *in);
 pub int id_char(int c);
 pub int inst_impl_score(int ii);
 pub int plist_next(const char *p, int *pos, char *out, int cap);
@@ -54,28 +59,86 @@ pub int tstars(const char *k);
    mismatch, -1 undecidable, 2 a struct-against-struct pair the caller must
    resolve through its own struct table (the normalised bases are handed back
    in `fb` / `ab`, tag included). */
-int arg_class(const char *formal, const char *actual,
-                     char *fb, int fcap, char *ab, int acap)
+/* S1a-0 C2p-9: the comparison keys and the returned bases are pool texts.
+   The old `tnorm` / `tbase` calls cut a 2000-byte spelling at 160 bytes
+   before the class test, so a long type could take the wrong branch. */
+const char *tnorm_text(const char *in)
 {
-    char fk[MAX_TEXT], ak[MAX_TEXT];
+    char *buf = 0;
+    int cap = 0, prev, q;
+    const char *pooled;
+    char one[2];
+
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    prev = 0;
+    while (*in) {
+        q = qual_at(in, prev);
+        if (q) {
+            in += q;
+            continue;                       /* the boundary stands */
+        }
+        if (*in != ' ' && *in != '\t' && *in != '\n' && *in != '\r') {
+            one[0] = *in;
+            one[1] = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto fail;
+        }
+        prev = id_char((unsigned char)*in);
+        in++;
+    }
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+const char *tbase_text(const char *k)
+{
+    char *buf = 0;
+    int cap = 0;
+    const char *pooled;
+    char one[2];
+
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    while (*k) {
+        if (*k != '*') {
+            one[0] = *k;
+            one[1] = 0;
+            if (tool::sh::ct_text_cat(&buf, &cap, one) != 0) goto fail;
+        }
+        k++;
+    }
+    pooled = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return pooled;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+pub int arg_class_text(const char *formal, const char *actual, const char **fb, const char **ab)
+{
+    const char *fk, *ak;
     int fd, ad, cf, ca;
 
-    tnorm(formal, fk, sizeof fk);
-    tnorm(actual, ak, sizeof ak);
-    if (!fk[0] || !ak[0]) return -1;
+    if (fb) *fb = "";
+    if (ab) *ab = "";
+    fk = tnorm_text(formal);
+    ak = tnorm_text(actual);
+    if (!fk || !ak || !fk[0] || !ak[0]) return -1;
     if (strcmp(fk, ak) == 0) return 0;
     if (strchr(fk, '(') || strchr(ak, '(')) return -1;    /* a function pointer */
-    tbase(fk, fb, fcap);
-    tbase(ak, ab, acap);
-    if (!fb[0] || !ab[0]) return -1;
-    cf = tclass(formal, fb);
-    ca = tclass(actual, ab);
+    if (fb) *fb = tbase_text(fk);
+    if (ab) *ab = tbase_text(ak);
+    if (!fb || !ab || !*fb || !*ab || !(*fb)[0] || !(*ab)[0]) return -1;
+    cf = tclass(formal, *fb);
+    ca = tclass(actual, *ab);
     if (cf < 0 || ca < 0) return -1;
     if (cf == 2 || ca == 2) return -1;                    /* unions: no table */
     fd = tstars(fk);
     ad = tstars(ak);
     if (fd != ad) {
-        /* `void *` converts to and from any object pointer */
         if (cf == 3 && fd > 0 && ad > 0) return 0;
         if (ca == 3 && ad > 0 && fd > 0) return 0;
         return 1;
@@ -84,6 +147,19 @@ int arg_class(const char *formal, const char *actual,
     if (cf == 0 && ca == 0) return 0;
     if (cf != ca) return 1;
     return 2;
+}
+
+int arg_class(const char *formal, const char *actual,
+                     char *fb, int fcap, char *ab, int acap)
+{
+    const char *f, *a;
+    int r = arg_class_text(formal, actual, &f, &a);
+    if (fb) fb[0] = 0;
+    if (ab) ab[0] = 0;
+    if (r < 0) return r;
+    if (snprintf(fb, (size_t)fcap, "%s", f) >= fcap) return -1;
+    if (snprintf(ab, (size_t)acap, "%s", a) >= acap) return -1;
+    return r;
 }
 
 int id_char(int c)
@@ -184,19 +260,34 @@ int slice_array_len(const char *dims)
 int subst_tparam(const char *spell, char **names, char **vals, int n,
                  char *out, int cap)
 {
-    char k[MAX_TEXT];
-    char p[MAX_TEXT];
-    int i, j = 0;
+    const char *k;
+    char *kbuf = 0;
+    int kcap = 0, i;
+    char one[2];
 
-    for (i = 0; spell[i] && j + 1 < (int)sizeof k; i++)
-        if (spell[i] != ' ' && spell[i] != '\t') k[j++] = spell[i];
-    k[j] = 0;
+    /* only blanks are removed here (the original rule); qualifiers stay, so
+       `const T` is still an "undecidable" spelling rather than a match */
+    if (tool::sh::ct_text_init(&kbuf, &kcap, 64) != 0) return -1;
+    for (i = 0; spell[i]; i++) {
+        if (spell[i] == ' ' || spell[i] == '\t') continue;
+        one[0] = spell[i];
+        one[1] = 0;
+        if (tool::sh::ct_text_cat(&kbuf, &kcap, one) != 0) {
+            tool::sh::ct_text_free(&kbuf, &kcap);
+            return -1;
+        }
+    }
+    k = runtime::text::ct_intern(kbuf);
+    tool::sh::ct_text_free(&kbuf, &kcap);
+    if (!k) return -1;
     for (i = 0; i < n; i++) {
         const char *nv = names && names[i] ? names[i] : "";
         const char *vv = vals && vals[i] ? vals[i] : "";
+        const char *p;
         if (!nv[0]) continue;
         if (strcmp(k, nv) == 0) { snprintf(out, (size_t)cap, "%s", vv); return 0; }
-        snprintf(p, sizeof p, "%s*", nv);
+        p = runtime::text::ct_internf("%s*", nv);
+        if (!p) return -1;
         if (strcmp(k, p) == 0) { snprintf(out, (size_t)cap, "%s *", vv); return 0; }
     }
     for (i = 0; i < n; i++) {
@@ -272,21 +363,15 @@ void tnorm(const char *in, char *out, int cap)
    keyword (`unsigned long`, `const char *`). */
 int tnumeric(const char *in)
 {
-    char tok[MAX_TEXT];
-    int n, any;
-    n = 0;
-    any = 0;
+    int any = 0;
     for (;;) {
+        const char *start;
+        char *tok;
         while (*in == ' ' || *in == '\t' || *in == '*') in++;
         if (!*in) break;
-        n = 0;
-        while (*in && *in != ' ' && *in != '\t' && *in != '*') {
-            if (n + 2 >= MAX_TEXT) return 0;
-            tok[n] = *in;
-            n++;
-            in++;
-        }
-        tok[n] = 0;
+        start = in;
+        while (*in && *in != ' ' && *in != '\t' && *in != '*') in++;
+        tok = tool::sh::ct_scratch_fmt("%.*s", (int)(in - start), start);
         if (!tscalar(tok)) return 0;
         any = 1;
     }

@@ -11,6 +11,7 @@
 
 #include "Lexer.h"
 #include "StmtRangeText.h"
+#include "Intern.h"
 
 
 struct ct_buf;
@@ -92,6 +93,8 @@ struct frontend_parse_StmtRangeScan {
     int unused;
 };
 void frontend_parse_range_spelling(struct frontend_lex_Lexer *, char *, int);
+const char * frontend_parse_range_spelling_text(struct frontend_lex_Lexer *);
 int frontend_parse_range_bound_value(struct frontend_lex_Lexer *, long *, char *, int);
+int frontend_parse_range_bound_value_text(struct frontend_lex_Lexer *, long *, const char * *);
 
 #endif

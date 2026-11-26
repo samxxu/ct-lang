@@ -9,11 +9,13 @@
 #include "Intern.h"
 #include "Symbols.h"
 #include "Diag.h"
+#include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/MapBuild.h.ct"
 #include <stdio.h>
 #include <string.h>
 #define MAX_TEXT   160
+#define TEXT_LIMIT 65536
 #define MAX_PARAMS 16
 #define MAX_PARAMS_MAX 65536
 #define MAX_METHODS 64
@@ -111,14 +113,15 @@ static int mapb_type_word(const char *);
 static int mapb_all_caps(const char *);
 static int mapb_param_index(struct frontend_module_MapBind *, const char *);
 static int check_static_call(struct frontend_parse_MapBuild *, struct frontend_module_MapTable *, struct frontend_module_MapBind *);
+static char * mapb_capture(struct frontend_parse_MapBuild *, int *);
 void frontend_parse_ct_mapbuild_bind(void *, void *, void *, void *, int *, int *, int *);
 struct frontend_parse_MapBuild * frontend_parse_mapbuild_get(void);
 static struct frontend_parse_MapBuild frontend_parse_g_mapbuild = { .__frontend_parse_mapbuildops_vptr = &frontend_parse_MapBuild_frontend_parse_MapBuildOps_vtable };
 static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *self, char * b, const char * inst) {
     struct frontend_parse_MapBuild *_self = (struct frontend_parse_MapBuild *)self;
-    char msg[MAX_TEXT];
-    char arg[MAX_TEXT];
-    char root[MAX_TEXT];
+    char * arg;
+    char * root;
+    int argcap;
     const char * p;
     const char * w;
     const char * b4;
@@ -134,6 +137,12 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
     int ci;
     (void)(_self);
     bb = (struct frontend_module_MapBind *)(b);
+    argcap = ((int)(strlen(bb->call)) + 2);
+    if (argcap < 2) {
+        argcap = 2;
+    }
+    arg = tool_sh_ct_scratch_alloc(argcap);
+    root = tool_sh_ct_scratch_alloc(argcap);
     p = bb->call;
     for (; ; ) {
         if ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
@@ -174,7 +183,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
             }
             if ((((*p) == '"') || ((*p) == '\''))) {
                 q = (*p);
-                if ((n + 1) >= MAX_TEXT) {
+                if ((n + 1) >= argcap) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a map argument is too long");
                 }
                 arg[n] = (char)(q);
@@ -182,7 +191,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
                 p++;
                 while (((*p) && ((*p) != (char)(q)))) {
                     if ((((*p) == '\\') && (*(p + 1)))) {
-                        if ((n + 2) >= MAX_TEXT) {
+                        if ((n + 2) >= argcap) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a map argument is too long");
                         }
                         arg[n] = (*p);
@@ -193,7 +202,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
                         p++;
                         continue;
                     }
-                    if ((n + 1) >= MAX_TEXT) {
+                    if ((n + 1) >= argcap) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a map argument is too long");
                     }
                     arg[n] = (*p);
@@ -203,7 +212,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
                 if ((*p) != (char)(q)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated literal in a map call");
                 }
-                if ((n + 1) >= MAX_TEXT) {
+                if ((n + 1) >= argcap) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a map argument is too long");
                 }
                 arg[n] = (*p);
@@ -219,7 +228,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
                     depth--;
                 }
             }
-            if ((n + 1) >= MAX_TEXT) {
+            if ((n + 1) >= argcap) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a map argument is too long");
             }
             arg[n] = (*p);
@@ -275,7 +284,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
             }
             rl = 0;
             while (((((((*w) >= 'a') && ((*w) <= 'z')) || (((*w) >= 'A') && ((*w) <= 'Z'))) || (((*w) >= '0') && ((*w) <= '9'))) || ((*w) == '_'))) {
-                if ((rl + 1) < MAX_TEXT) {
+                if ((rl + 1) < argcap) {
                     root[rl] = (*w);
                     rl++;
                 }
@@ -315,8 +324,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
             }
         }
         if ((!ok)) {
-            snprintf(msg, sizeof(msg), "map argument '%s' is not allowed", (arg + ai));
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("map argument '%s' is not allowed", (arg + ai)));
         }
         if ((*p) == ',') {
             p++;
@@ -336,39 +344,34 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_check_call(void *s
     return 0;
 }
 
-static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_rewrite_globals(void *self, char * s) {
+static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_rewrite_globals(void *self, const char * s, const char * * out) {
     struct frontend_parse_MapBuild *_self = (struct frontend_parse_MapBuild *)self;
-    char out[MAX_TEXT];
-    char cn[MAX_TEXT];
-    char tok[MAX_TEXT];
-    int i;
-    int o;
-    int k;
+    char * o = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+    int i = 0;
+    int n = 0;
     int prev;
     int member;
     int q;
     (void)(_self);
-    i = 0;
-    o = 0;
-    out[0] = 0;
+    (*out) = "";
     while (s[i]) {
         if (((s[i] == '"') || (s[i] == '\''))) {
             q = (unsigned char)(s[i]);
-            if ((o + 2) >= MAX_TEXT) {
+            if ((n + 2) >= TEXT_LIMIT) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the bound call is too long");
             }
-            out[o] = s[i];
-            o++;
+            o[n] = s[i];
+            n++;
             i++;
             while (s[i]) {
-                if ((o + 2) >= MAX_TEXT) {
+                if ((n + 2) >= TEXT_LIMIT) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the bound call is too long");
                 }
-                out[o] = s[i];
-                o++;
+                o[n] = s[i];
+                n++;
                 if (((s[i] == '\\') && s[(i + 1)])) {
-                    out[o] = s[(i + 1)];
-                    o++;
+                    o[n] = s[(i + 1)];
+                    n++;
                     i += 2;
                     continue;
                 }
@@ -378,55 +381,63 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_rewrite_globals(vo
                 }
                 i++;
             }
-            out[o] = 0;
+            o[n] = 0;
             continue;
         }
         if ((!((((s[i] >= 'a') && (s[i] <= 'z')) || ((s[i] >= 'A') && (s[i] <= 'Z'))) || (s[i] == '_')))) {
-            if ((o + 2) >= MAX_TEXT) {
+            if ((n + 2) >= TEXT_LIMIT) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the bound call is too long");
             }
-            out[o] = s[i];
-            o++;
-            out[o] = 0;
+            o[n] = s[i];
+            n++;
+            o[n] = 0;
             i++;
             continue;
         }
-        prev = (o - 1);
-        while (((prev >= 0) && ((out[prev] == ' ') || (out[prev] == '\t')))) {
+        prev = (n - 1);
+        while (((prev >= 0) && ((o[prev] == ' ') || (o[prev] == '\t')))) {
             prev--;
         }
         member = 0;
-        if (((prev >= 0) && (out[prev] == '.'))) {
+        if (((prev >= 0) && (o[prev] == '.'))) {
             member = 1;
         }
-        if ((((prev > 0) && (out[prev] == '>')) && (out[(prev - 1)] == '-'))) {
+        if ((((prev > 0) && (o[prev] == '>')) && (o[(prev - 1)] == '-'))) {
             member = 1;
         }
-        k = 0;
-        while ((((((s[i] >= 'a') && (s[i] <= 'z')) || ((s[i] >= 'A') && (s[i] <= 'Z'))) || ((s[i] >= '0') && (s[i] <= '9'))) || (s[i] == '_'))) {
-            if ((k + 1) < MAX_TEXT) {
-                tok[k] = s[i];
-                k++;
+{
+            const char * start = (s + i);
+            const char * cn;
+            char * tok;
+            size_t l;
+            while ((((((s[i] >= 'a') && (s[i] <= 'z')) || ((s[i] >= 'A') && (s[i] <= 'Z'))) || ((s[i] >= '0') && (s[i] <= '9'))) || (s[i] == '_'))) {
+                i++;
             }
-            i++;
-        }
-        tok[k] = 0;
-        if (((!member) && (_self->sym->__frontend_sym_symbolops_vptr->var_cname(_self->sym, tok, cn, sizeof(cn)) == 0))) {
-            if (((o + (int)(strlen(cn))) + 1) >= MAX_TEXT) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the bound call is too long");
+            tok = tool_sh_ct_scratch_fmt("%.*s", (int)(((s + i) - start)), start);
+            cn = (member ? (const char *)(0) : _self->sym->__frontend_sym_symbolops_vptr->var_cname_text(_self->sym, tok));
+            if (cn) {
+                l = strlen(cn);
+                if ((((size_t)(n) + l) + 1) >= (size_t)(TEXT_LIMIT)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the bound call is too long");
+                }
+                memcpy((o + n), cn, l);
+                n += (int)(l);
             }
-            snprintf((out + o), (size_t)((MAX_TEXT - o)), "%s", cn);
-            o += (int)(strlen(cn));
-        }
-        else {
-            if (((o + k) + 1) >= MAX_TEXT) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the bound call is too long");
+            else {
+                l = (size_t)(((s + i) - start));
+                if ((((size_t)(n) + l) + 1) >= (size_t)(TEXT_LIMIT)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the bound call is too long");
+                }
+                memcpy((o + n), start, l);
+                n += (int)(l);
             }
-            snprintf((out + o), (size_t)((MAX_TEXT - o)), "%s", tok);
-            o += k;
+            o[n] = 0;
         }
     }
-    snprintf(s, MAX_TEXT, "%s", out);
+    (*out) = runtime_text_ct_intern(o);
+    if ((!(*out))) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     return 0;
 }
 
@@ -434,18 +445,11 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     struct frontend_parse_MapBuild *_self = (struct frontend_parse_MapBuild *)self;
     const char * src;
     const char * dst;
-    char param[MAX_TEXT];
-    char callbuf[MAX_TEXT];
-    char msg[MAX_TEXT * 2];
+    const char * param;
+    char * callbuf;
     struct frontend_module_MapTable * m;
     struct frontend_module_MapBind * b;
     int i;
-    int n;
-    int c;
-    int q;
-    int depth;
-    int eof;
-    int long_call;
     int k;
     (void)(line);
     (void)(col);
@@ -485,7 +489,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if (_self->lex->tok != T_ID) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a binding parameter name");
     }
-    _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, param, sizeof(param));
+    param = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+    if ((!param)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ")") != 0) {
         return (-1);
@@ -541,7 +548,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
     if ((!b->method)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    snprintf(b->params[0], MAX_TEXT, "%s", param);
+    b->params[0] = param;
     b->nparams = 1;
     b->ti = (-1);
     b->mi = (-1);
@@ -553,68 +560,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
     b->line = line;
-    i = _self->lex->pos;
-    n = 0;
-    q = 0;
-    depth = 0;
-    eof = 0;
-    long_call = 0;
-    while (((((_self->lex->src[i] == ' ') || (_self->lex->src[i] == '\t')) || (_self->lex->src[i] == '\n')) || (_self->lex->src[i] == '\r'))) {
-        i++;
-    }
-    for (; ; ) {
-        c = (unsigned char)(_self->lex->src[i]);
-        if (c == 0) {
-            eof = 1;
-            break;
-        }
-        if ((((q == 0) && (depth == 0)) && (c == ';'))) {
-            break;
-        }
-        if ((n + 1) >= MAX_TEXT) {
-            long_call = 1;
-            break;
-        }
-        if (((q == 0) && ((c == '"') || (c == '\'')))) {
-            q = c;
-        }
-        else {
-            if (((q != 0) && (c == q))) {
-                q = 0;
-            }
-            else {
-                if ((((q != 0) && (c == '\\')) && _self->lex->src[(i + 1)])) {
-                    callbuf[n] = (char)(c);
-                    n++;
-                    i++;
-                    c = (unsigned char)(_self->lex->src[i]);
-                }
-                else {
-                    if (((q == 0) && (c == '('))) {
-                        depth++;
-                    }
-                    else {
-                        if (((q == 0) && (c == ')'))) {
-                            depth--;
-                        }
-                    }
-                }
-            }
-        }
-        callbuf[n] = (char)(c);
-        n++;
-        i++;
-    }
-    if (eof) {
+    callbuf = mapb_capture(_self, (&i));
+    if ((!callbuf)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated map binding recipe");
     }
-    if (long_call) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map binding recipe is too long");
-    }
-    while (((n > 0) && ((((callbuf[(n - 1)] == ' ') || (callbuf[(n - 1)] == '\t')) || (callbuf[(n - 1)] == '\n')) || (callbuf[(n - 1)] == '\r')))) {
-        n--;
-    }
-    callbuf[n] = 0;
     _self->lex->pos = i;
     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
@@ -644,8 +593,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse_binding(void
         if (strcmp((*_self->maps)[k].bind_dst, dst) != 0) {
             continue;
         }
-        snprintf(msg, sizeof(msg), "duplicate map binding for '%s' -> '%s' (first at %s:%d)", src, dst, (*_self->maps)[k].path, (*_self->maps)[k].line);
-        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+        return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("duplicate map binding for '%s' -> '%s' (first at %s:%d)", src, dst, (*_self->maps)[k].path, (*_self->maps)[k].line), _self->sup->mem->path);
     }
     (*_self->nmaps)++;
     return NO_NODE;
@@ -662,9 +610,8 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     const char * hostpath;
     const char * hostcn;
     const char * host_type;
-    char wname[MAX_TEXT];
-    char callbuf[MAX_TEXT];
-    char msg[MAX_TEXT];
+    char * wname;
+    char * callbuf;
     struct frontend_module_MapTable * m;
     struct frontend_module_MapBind * b;
     int line;
@@ -674,12 +621,6 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     int k;
     int i;
     int j;
-    int n;
-    int q;
-    int depth;
-    int eof;
-    int long_call;
-    int c;
     int bound;
     int col;
     int k2;
@@ -759,8 +700,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         }
         k = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, inst);
         if (k < 0) {
-            snprintf(msg, sizeof(msg), "map instance '%s' is not declared (use 'void *%s;' as its host)", inst, inst);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("map instance '%s' is not declared (use 'void *%s;' as its host)", inst, inst));
         }
         icn = _self->sym->vars[k].cname;
     }
@@ -859,9 +799,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     }
     for (k2 = 0; ((!is_static) && (k2 < (*_self->nmaps))); k2++) {
         if (strcmp((*_self->maps)[k2].prefix, prefix) == 0) {
-            char dmsg[512];
-            snprintf(dmsg, sizeof(dmsg), "duplicate map of trait '%s' for instance '%s' (first at %s:%d)", tname, inst, (*_self->maps)[k2].path, (*_self->maps)[k2].line);
-            tool_diag_ct_sem_error(line, col, dmsg, _self->sup->mem->path);
+            tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("duplicate map of trait '%s' for instance '%s' (first at %s:%d)", tname, inst, (*_self->maps)[k2].path, (*_self->maps)[k2].line), _self->sup->mem->path);
             if (_self->sup->__frontend_parse_supportops_vptr->skip_body(_self->sup) != 0) {
                 return (-1);
             }
@@ -930,8 +868,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
             }
         }
         if (mi < 0) {
-            snprintf(msg, sizeof(msg), "'%s' is not a method of trait '%s'", b->method, rtrait);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("'%s' is not a method of trait '%s'", b->method, rtrait));
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "(") != 0) {
@@ -955,7 +892,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
                 if (mapb_ensure_params(_self, b, (np + 1)) != 0) {
                     return (-1);
                 }
-                _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, b->params[np], MAX_TEXT);
+                b->params[np] = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+                if ((!b->params[np])) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
                 np++;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
@@ -976,12 +916,9 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         want = (_self->sym->traits[ti].m[mi].nparams + (type_host ? 1 : 0));
         if (np != want) {
             if (type_host) {
-                snprintf(msg, sizeof(msg), "a type host binding has %d parameters but method '%s' takes %d", np, b->method, _self->sym->traits[ti].m[mi].nparams);
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("a type host binding has %d parameters but method '%s' takes %d", np, b->method, _self->sym->traits[ti].m[mi].nparams));
             }
-            else {
-                snprintf(msg, sizeof(msg), "map binding for '%s' takes %d parameter(s), the trait declares %d", b->method, np, _self->sym->traits[ti].m[mi].nparams);
-            }
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("map binding for '%s' takes %d parameter(s), the trait declares %d", b->method, np, _self->sym->traits[ti].m[mi].nparams));
         }
         if ((b->variadic && (!_self->sym->traits[ti].m[mi].variadic))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "this binding forwards '...' but the trait method is not variadic");
@@ -992,68 +929,10 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "->")))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected '->'");
         }
-        i = _self->lex->pos;
-        n = 0;
-        q = 0;
-        depth = 0;
-        eof = 0;
-        long_call = 0;
-        while (((((_self->lex->src[i] == ' ') || (_self->lex->src[i] == '\t')) || (_self->lex->src[i] == '\n')) || (_self->lex->src[i] == '\r'))) {
-            i++;
-        }
-        for (; ; ) {
-            c = (unsigned char)(_self->lex->src[i]);
-            if (c == 0) {
-                eof = 1;
-                break;
-            }
-            if ((((q == 0) && (depth == 0)) && (c == ';'))) {
-                break;
-            }
-            if ((n + 1) >= MAX_TEXT) {
-                long_call = 1;
-                break;
-            }
-            if (((q == 0) && ((c == '"') || (c == '\'')))) {
-                q = c;
-            }
-            else {
-                if (((q != 0) && (c == q))) {
-                    q = 0;
-                }
-                else {
-                    if ((((q != 0) && (c == '\\')) && _self->lex->src[(i + 1)])) {
-                        callbuf[n] = (char)(c);
-                        n++;
-                        i++;
-                        c = (unsigned char)(_self->lex->src[i]);
-                    }
-                    else {
-                        if (((q == 0) && (c == '('))) {
-                            depth++;
-                        }
-                        else {
-                            if (((q == 0) && (c == ')'))) {
-                                depth--;
-                            }
-                        }
-                    }
-                }
-            }
-            callbuf[n] = (char)(c);
-            n++;
-            i++;
-        }
-        if (eof) {
+        callbuf = mapb_capture(_self, (&i));
+        if ((!callbuf)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unterminated map call");
         }
-        if (long_call) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "map call is too long");
-        }
-        while (((n > 0) && ((((callbuf[(n - 1)] == ' ') || (callbuf[(n - 1)] == '\t')) || (callbuf[(n - 1)] == '\n')) || (callbuf[(n - 1)] == '\r')))) {
-            n--;
-        }
-        callbuf[n] = 0;
         _self->lex->pos = i;
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
         b->direct = 0;
@@ -1080,13 +959,17 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
             if (((!b->direct) && (_self->__frontend_parse_mapbuildops_vptr->check_call(_self, (char *)(b), inst) != 0))) {
                 return (-1);
             }
-            if (((!b->direct) && (_self->__frontend_parse_mapbuildops_vptr->rewrite_globals(_self, callbuf) != 0))) {
-                return (-1);
+            if ((!b->direct)) {
+                if (_self->__frontend_parse_mapbuildops_vptr->rewrite_globals(_self, callbuf, (&b->call)) != 0) {
+                    return (-1);
+                }
             }
         }
-        b->call = runtime_text_ct_intern(callbuf);
-        if ((!b->call)) {
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        if ((is_static || b->direct)) {
+            b->call = runtime_text_ct_intern(callbuf);
+            if ((!b->call)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
         }
         if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, ";") != 0) {
             return (-1);
@@ -1098,7 +981,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
             }
         }
         else {
-            snprintf(wname, sizeof(wname), "%s_%s", m->prefix, b->method);
+            wname = tool_sh_ct_scratch_fmt("%s_%s", m->prefix, b->method);
             b->wrapper = runtime_text_ct_intern(wname);
             if ((!b->wrapper)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -1114,8 +997,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
     for (i = 0; i < m->nb; i++) {
         for (j = (i + 1); j < m->nb; j++) {
             if (strcmp(m->b[i].method, m->b[j].method) == 0) {
-                snprintf(msg, sizeof(msg), "duplicate binding for method '%s'", m->b[i].method);
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("duplicate binding for method '%s'", m->b[i].method));
             }
         }
     }
@@ -1128,8 +1010,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
             }
         }
         if ((!bound)) {
-            snprintf(msg, sizeof(msg), "trait method '%s' is not bound by the map", _self->sym->traits[ti].m[k].name);
-            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, msg);
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("trait method '%s' is not bound by the map", _self->sym->traits[ti].m[k].name));
         }
     }
     (*_self->nmaps)++;
@@ -1196,7 +1077,7 @@ static int mapb_ensure_binds(struct frontend_parse_MapBuild * self, struct front
 static int mapb_ensure_params(struct frontend_parse_MapBuild * self, struct frontend_module_MapBind * b, int need) {
     int cap;
     int i;
-    char * * params;
+    const char * * params;
     int * uses;
     int * sizes;
     if (need <= b->pcap) {
@@ -1212,15 +1093,12 @@ static int mapb_ensure_params(struct frontend_parse_MapBuild * self, struct fron
     if (need > cap) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
     }
-    params = (char * *)(realloc(b->params, ((size_t)(cap) * sizeof((*params)))));
+    params = (const char * *)(realloc((void *)(b->params), ((size_t)(cap) * sizeof((*params)))));
     if ((!params)) {
         return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
     }
     for (i = b->pcap; i < cap; i++) {
-        params[i] = (char *)(calloc(MAX_TEXT, 1));
-        if ((!params[i])) {
-            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
-        }
+        params[i] = "";
     }
     uses = (int *)(realloc(b->uses, ((size_t)(cap) * sizeof((*uses)))));
     if ((!uses)) {
@@ -1277,10 +1155,10 @@ static int mapb_param_index(struct frontend_module_MapBind * b, const char * nam
     return (-1);
 }
 static int check_static_call(struct frontend_parse_MapBuild * self, struct frontend_module_MapTable * m, struct frontend_module_MapBind * b) {
-    char tok[MAX_TEXT];
-    char prev[MAX_TEXT];
-    char pn[MAX_TEXT];
-    char msg[MAX_TEXT];
+    char * tok;
+    char prevbuf[2];
+    const char * prev;
+    const char * pn;
     const char * p;
     int depth;
     int n;
@@ -1353,7 +1231,9 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
         b->uses[i] = 0;
         b->sizeofs[i] = 0;
     }
-    prev[0] = 0;
+    prevbuf[0] = 0;
+    prevbuf[1] = 0;
+    prev = "";
     seen_callee = 0;
     seen_ellipsis = 0;
     p = b->call;
@@ -1370,8 +1250,9 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
             if ((*p)) {
                 p++;
             }
-            prev[0] = '?';
-            prev[1] = 0;
+            prevbuf[0] = '?';
+            prevbuf[1] = 0;
+            prev = prevbuf;
             continue;
         }
         if (((((*p) == '.') && ((*(p + 1)) == '.')) && ((*(p + 2)) == '.'))) {
@@ -1389,28 +1270,26 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
                 return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "'...' must be the last recipe argument");
             }
             seen_ellipsis = 1;
-            snprintf(prev, sizeof(prev), "...");
+            prev = "...";
             p += 3;
             continue;
         }
         if ((((*p) == '+') && ((*(p + 1)) == '+'))) {
-            snprintf(prev, sizeof(prev), "++");
+            prev = "++";
             p += 2;
             continue;
         }
         if ((((*p) == '-') && ((*(p + 1)) == '-'))) {
-            snprintf(prev, sizeof(prev), "--");
+            prev = "--";
             p += 2;
             continue;
         }
         if ((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || ((*p) == '_'))) {
-            n = 0;
-            while ((mapb_ident((unsigned char)((*p))) && ((n + 1) < MAX_TEXT))) {
-                tok[n] = (*p);
-                n++;
+            const char * tstart = p;
+            while (mapb_ident((unsigned char)((*p)))) {
                 p++;
             }
-            tok[n] = 0;
+            tok = tool_sh_ct_scratch_fmt("%.*s", (int)((p - tstart)), tstart);
             member = ((strcmp(prev, ".") == 0) || (strcmp(prev, "->") == 0));
             after_type = mapb_type_word(prev);
             after_sizeof = (strcmp(prev, "sizeof") == 0);
@@ -1419,8 +1298,7 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
             if (i >= 0) {
                 if ((after_inc || after_sizeof)) {
                     if (after_inc) {
-                        snprintf(msg, sizeof(msg), "map recipe modifies binding parameter '%s'", tok);
-                        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, msg);
+                        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, tool_sh_ct_scratch_fmt("map recipe modifies binding parameter '%s'", tok));
                     }
                     b->sizeofs[i]++;
                 }
@@ -1446,8 +1324,7 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
                         inc = 1;
                     }
                     if (inc) {
-                        snprintf(msg, sizeof(msg), "map recipe modifies binding parameter '%s'", tok);
-                        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, msg);
+                        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, tool_sh_ct_scratch_fmt("map recipe modifies binding parameter '%s'", tok));
                     }
                     b->uses[i]++;
                 }
@@ -1465,14 +1342,14 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
                                 r++;
                             }
                             n = 0;
-                            while ((mapb_ident((unsigned char)(r[n])) && ((n + 1) < MAX_TEXT))) {
-                                pn[n] = r[n];
+                            while (mapb_ident((unsigned char)(r[n]))) {
                                 n++;
                             }
-                            pn[n] = 0;
-                            if (((n > 0) && (mapb_param_index(b, pn) >= 0))) {
-                                snprintf(msg, sizeof(msg), "map recipe takes 'sizeof %s', not 'sizeof(%s)'", pn, pn);
-                                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, msg);
+                            if (n > 0) {
+                                pn = tool_sh_ct_scratch_fmt("%.*s", n, r);
+                                if (mapb_param_index(b, pn) >= 0) {
+                                    return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, tool_sh_ct_scratch_fmt("map recipe takes 'sizeof %s', not 'sizeof(%s)'", pn, pn));
+                                }
                             }
                         }
                     }
@@ -1481,13 +1358,12 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
                     if (((((!seen_callee) || member) || after_type) || mapb_all_caps(tok))) {
                     }
                     else {
-                        snprintf(msg, sizeof(msg), "map recipe names '%s' but it is not a binding parameter", tok);
-                        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, msg);
+                        return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, tool_sh_ct_scratch_fmt("map recipe names '%s' but it is not a binding parameter", tok));
                     }
                 }
             }
             seen_callee = 1;
-            snprintf(prev, sizeof(prev), "%s", tok);
+            prev = tok;
             continue;
         }
         if ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
@@ -1495,15 +1371,74 @@ static int check_static_call(struct frontend_parse_MapBuild * self, struct front
             continue;
         }
         if ((((*p) == '-') && ((*(p + 1)) == '>'))) {
-            snprintf(prev, sizeof(prev), "->");
+            prev = "->";
             p += 2;
             continue;
         }
-        prev[0] = (*p);
-        prev[1] = 0;
+        prevbuf[0] = (*p);
+        prevbuf[1] = 0;
+        prev = prevbuf;
         p++;
     }
     return 0;
+}
+static char * mapb_capture(struct frontend_parse_MapBuild * self, int * endpos) {
+    const char * src = self->lex->src;
+    int i = self->lex->pos;
+    int start;
+    int end;
+    int q = 0;
+    int depth = 0;
+    int c;
+    char * buf;
+    while (((((src[i] == ' ') || (src[i] == '\t')) || (src[i] == '\n')) || (src[i] == '\r'))) {
+        i++;
+    }
+    start = i;
+    for (; ; ) {
+        c = (unsigned char)(src[i]);
+        if (c == 0) {
+            return (char *)(0);
+        }
+        if ((((q == 0) && (depth == 0)) && (c == ';'))) {
+            break;
+        }
+        if (((q == 0) && ((c == '"') || (c == '\'')))) {
+            q = c;
+        }
+        else {
+            if (((q != 0) && (c == q))) {
+                q = 0;
+            }
+            else {
+                if ((((q != 0) && (c == '\\')) && src[(i + 1)])) {
+                    i++;
+                }
+                else {
+                    if (((q == 0) && (c == '('))) {
+                        depth++;
+                    }
+                    else {
+                        if (((q == 0) && (c == ')'))) {
+                            depth--;
+                        }
+                    }
+                }
+            }
+        }
+        i++;
+    }
+    end = i;
+    while (((end > start) && ((((src[(end - 1)] == ' ') || (src[(end - 1)] == '\t')) || (src[(end - 1)] == '\n')) || (src[(end - 1)] == '\r')))) {
+        end--;
+    }
+    buf = tool_sh_ct_scratch_alloc(((end - start) + 1));
+    if (end > start) {
+        memcpy(buf, (src + start), (size_t)((end - start)));
+    }
+    buf[(end - start)] = 0;
+    (*endpos) = i;
+    return buf;
 }
 void frontend_parse_ct_mapbuild_bind(void * lex, void * sup, void * sym, void * maps, int * nmaps, int * mapcap, int * unit_is_map) {
     frontend_parse_g_mapbuild.lex = (struct frontend_lex_Lexer *)(lex);
