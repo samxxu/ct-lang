@@ -98,6 +98,7 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `22_foreach_map` | `foreach` 容器协议（Phase 29）：`Vec<int>` / `Vec<Point>` 绑定只读 `i` 与值拷贝 `item`，`Map<char *, int>` 按插入序给出 `item.key` / `item.value` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `23_generic_stack` | 用户泛型 struct（Phase 29）：`struct Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段，`Stack<int>` 与 `Stack<char *>` 两份布局，`impl<T> Stack<T>` 静态派发 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `65_generic_trait_instances` | 泛型 trait 的单态化：`Next<int>` 与 `Next<char *>` 是两个独立 trait，各有 vtable；`T: Next<int>` 只覆盖 int 实例 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `66_functor` | 函子签名糖 `(A,B) => R`：typedef / struct 字段 / 参数 / 表四类位置，与裸函数指针双向同型；闭包字面量不是函数指针，会被拒 | ct-ast | 同上 |
 | `24_vec_ops` | 内置 `Vec` 全 API（Phase 29）：`push` / `pop` / `get` / `set` / `len` / `clear` 的边界语义，`retain` / `release` 的引用计数与归零释放 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `25_wordcount` | 真实程序（Phase 29）：`Map<char *, int>` 词频统计，先按插入序输出，再复制条目按计数排序出报告 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `26_range_vec` | range 初值构造 `Vec<T>`（Phase 29 P29）：`Vec<int> sq = 4..8 { $ * $ }` 经复合字面量 + `Vec<T>::from` 纯降级，`foreach` 绑定 `i` / `item`，并直接调用 `Vec<char *>::from(arr, n)` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |

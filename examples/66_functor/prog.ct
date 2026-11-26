@@ -1,0 +1,38 @@
+// 66_functor - `(A, B) => R` is another spelling of the C function pointer
+// type `R (*)(A, B)`: same ABI, same call, zero runtime cost.
+//
+// Normal path: a typedef, a struct field, a table and a parameter all use the
+// sugar; calls go straight through the pointer.
+// Counterintuitive point: the sugar is a *type*, not a closure value -- a plain
+// `int (*)(int, int)` and the sugar are the same type in both directions, while
+// a closure literal is not a function pointer and is rejected here.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+typedef (int, int) => int Bin;
+
+struct Calc {
+    Bin op;
+    int seed;
+}
+
+static int add(int a, int b) { return a + b; }
+static int mul(int a, int b) { return a * b; }
+
+static int apply(Bin f, int a, int b)
+{
+    return f(a, b);
+}
+
+int main(void)
+{
+    Calc c = { add, 0 };
+    int (*plain)(int, int) = c.op;
+    Bin back = plain;
+    Bin tbl[2] = { add, mul };
+
+    printf("%d %d %d\n", apply(c.op, 2, 3), back(4, 5), tbl[1](6, 7));
+    return 0;
+}

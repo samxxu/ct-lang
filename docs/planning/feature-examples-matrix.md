@@ -57,7 +57,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 20 | `errdefer` | 4 / `examples/43_errdefer`、`45_error_return_contract`、`61_errdefer_vs_return`、`62_try_cleanup` | 22 | spec §4.58 | 有 |
 | 21 | 后缀 `?` | 2 / `examples/46_result_try`、`62_try_cleanup` | 10 | spec §4.62 | 薄 |
 | 22 | 自定义下标（§4.64） | 1 / `examples/59_custom_subscript`（2026-11-26 补；`28_subscript_forms` 是 C 数组 / 容器下标形态，不算） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64 | 薄 |
-| 23 | 函子 `(A,B) => R` | 0（S8c B-6 补样例） | 2 夹具 + 13 断言（`test/ast/p3_functor*`） | spec §4.77 | 薄（S3 已实现，样例待 S8c） |
+| 23 | 函子 `(A,B) => R` | 1 / `examples/66_functor`（2026-11-27 补） | 2 夹具 + 13 断言（`test/ast/p3_functor*`） | spec §4.77 | 薄 |
 
 ## 2 缺口清单（按 S8c 分片顺序）
 
@@ -69,7 +69,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 已改（去 `cstr`+`free`，改 `as_str()`）；`48_string_steps` 判定为 C 类型宿主例外并注明理由；其余见 B-4 | 无 |
 | B-4 | 非 C 互操作用例的指针 | **判定已完成**（2026-11-27）：101 个文件分五类，见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写，E3 的 26 个文件阻塞于缺 print API | B-3 |
 | B-5 | 文档可执行片段偏少 | **已补 0.7 泛型 / 0.8 可选链+自定义下标**（2026-11-27），README 现有 7 个 `// source:` 片段（0.3 / 0.5 / 0.6 / 0.7 / 0.8 + 两处 example 链接）；tutorial / guide / idioms 的片段改写留 S8c | 无 |
-| B-6 | S2 下标协议、S3 函子、S4–S6 模式 | 实现落地时同批补样例（先负例后正例） | S2–S6 |
+| B-6 | S2 下标协议、S3 函子、S4–S6 模式 | S3 函子已有 `examples/66_functor`（2026-11-27）；S2 按键分派已进 `examples/59_custom_subscript`；S4–S6 模式在实现落地时同批补样例（先负例后正例） | S4–S6 |
 
 ## 3 保留的 C 互操作例外（不要求去指针）
 
