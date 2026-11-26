@@ -310,8 +310,8 @@ static void sb_lpush(struct Emitter *self, const char *name, const char *type)
 
 /* S1a-0 C2p-8: the C base tag of a type spelling as one interned text --
    the `struct` / `union` / `enum` keyword, leading blanks and trailing blanks
-   are dropped. This is the pointer form of the old `char base[MAX_TEXT]`
-   copy: a 2000-byte tag reaches the struct / ADT lookup whole. */
+   are dropped. This is the pointer form of the old 160-byte `base` copy: a
+   2000-byte tag reaches the struct / ADT lookup whole. */
 static const char *base_type_text(const char *type)
 {
     const char *b;

@@ -183,8 +183,7 @@ pub int bind_conv_ibase(struct Expr *self, const char *stype, char *out, int cap
 pub int bind_conv_inherent_text(struct Expr *self, const char *stype, const char *method, const char **ret, int *is_ptr)
 {
     const char *ibase;
-    char *buf = 0;
-    int cap = 0, m, np;
+    int m, np;
     const char *pooled;
 
     if (ret) *ret = "";
@@ -199,15 +198,8 @@ pub int bind_conv_inherent_text(struct Expr *self, const char *stype, const char
         for (pi = self->arena->nodes[m].a; pi > 0; pi = self->arena->nodes[pi].next) np++;
     }
     if (np != 0) return -3;
-    if (tool::sh::ct_text_init(&buf, &cap, TEXT_LIMIT) != 0) return -1;
-    if (!self->sup->ty->inst_method_ret(ibase, method, buf, cap)) {
-        if (tool::sh::ct_text_printf(&buf, &cap, "%s", self->arena->nodes[m].text) != 0) {
-            tool::sh::ct_text_free(&buf, &cap);
-            return -1;
-        }
-    }
-    pooled = runtime::text::ct_intern(buf);
-    tool::sh::ct_text_free(&buf, &cap);
+    pooled = self->sup->ty->inst_method_ret_text(ibase, method);
+    if (!pooled) pooled = self->arena->nodes[m].text;
     if (!pooled) return -1;
     if (ret) *ret = pooled;
     return m;

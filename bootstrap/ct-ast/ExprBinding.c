@@ -259,8 +259,6 @@ int frontend_parse_bind_conv_ibase(struct frontend_parse_Expr * self, const char
 }
 int frontend_parse_bind_conv_inherent_text(struct frontend_parse_Expr * self, const char * stype, const char * method, const char * * ret, int * is_ptr) {
     const char * ibase;
-    char * buf = 0;
-    int cap = 0;
     int m;
     int np;
     const char * pooled;
@@ -288,17 +286,10 @@ int frontend_parse_bind_conv_inherent_text(struct frontend_parse_Expr * self, co
     if (np != 0) {
         return (-3);
     }
-    if (tool_sh_ct_text_init((&buf), (&cap), TEXT_LIMIT) != 0) {
-        return (-1);
+    pooled = self->sup->ty->__frontend_type_typeops_vptr->inst_method_ret_text(self->sup->ty, ibase, method);
+    if ((!pooled)) {
+        pooled = self->arena->nodes[m].text;
     }
-    if ((!self->sup->ty->__frontend_type_typeops_vptr->inst_method_ret(self->sup->ty, ibase, method, buf, cap))) {
-        if (tool_sh_ct_text_printf((&buf), (&cap), "%s", self->arena->nodes[m].text) != 0) {
-            tool_sh_ct_text_free((&buf), (&cap));
-            return (-1);
-        }
-    }
-    pooled = runtime_text_ct_intern(buf);
-    tool_sh_ct_text_free((&buf), (&cap));
     if ((!pooled)) {
         return (-1);
     }

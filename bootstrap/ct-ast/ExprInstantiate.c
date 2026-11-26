@@ -597,8 +597,8 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
 
 static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nested(void *self, const char * spell, int depth) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
-    char * name = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
-    char * tail = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
+    const char * name;
+    const char * tail;
     const char * enc;
     char * * args = 0;
     char * * cargs = 0;
@@ -621,10 +621,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nest
     if (((((!args) || (acap < need)) || (!cargs)) || (ccap < need))) {
         return 0;
     }
-    if (((!name) || (!tail))) {
-        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-    }
-    if (frontend_sym_ct_inst_split(spell, name, (&nargs), args, acap, tail, TEXT_LIMIT) != 0) {
+    if (frontend_sym_ct_inst_split(spell, (&name), (&nargs), args, acap, (&tail)) != 0) {
         return 0;
     }
     if (((nargs <= 0) || (!args[0][0]))) {
@@ -645,7 +642,8 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_register_nest
         }
     }
     for (k = 0; k < nargs; k++) {
-        if (frontend_sym_ct_type_canon(args[k], cargs[k], MAX_TEXT) != 0) {
+        const char * canon = frontend_sym_ct_type_canon_text(args[k]);
+        if (((!canon) || (frontend_sym_ct_row_set(cargs, k, canon) != 0))) {
             return 0;
         }
     }

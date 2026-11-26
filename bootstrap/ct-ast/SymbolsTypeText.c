@@ -98,7 +98,7 @@ const char * * frontend_sym_ct_text_rows_reserve(const char * *, int, int, int *
 int frontend_sym_ct_inst_arg_count(const char *);
 int frontend_sym_ct_inst_encode(const char *, int, char * *, char *, int);
 const char * frontend_sym_ct_inst_encode_text(const char *, int, char * *);
-int frontend_sym_ct_inst_split(const char *, char *, int *, char * *, int, char *, int);
+int frontend_sym_ct_inst_split(const char *, const char * *, int *, char * *, int, const char * *);
 int frontend_sym_ct_is_container_type(const char *);
 int frontend_sym_ct_is_string_value_type(const char *);
 int frontend_sym_ct_type_canon(const char *, char *, int);
@@ -107,8 +107,8 @@ const char * frontend_sym_ct_generic_subst_text(const char *, const char *, cons
 int frontend_sym_ct_row_set(char * *, int, const char *);
 int frontend_sym_generic_tag_prefix(const char *, const char *);
 int frontend_sym_generic_word_char(int);
-void frontend_sym_impl_arg_canon(const char *, char *, int);
-int frontend_sym_impl_pat_split(const char *, char *, char * *, int, int *);
+const char * frontend_sym_impl_arg_canon_text(const char *);
+int frontend_sym_impl_pat_split(const char *, const char * *, char * *, int, int *);
 int frontend_sym_inst_enc_one(const char *, char *, int);
 void frontend_sym_meth_host_key(const char *, char *, int);
 static const char * inst_enc_one_text(const char *);
@@ -520,16 +520,16 @@ int frontend_sym_ct_inst_encode(const char * tmpl, int nargs, char * * args, cha
     memcpy(out, enc, (n + 1));
     return 0;
 }
-int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char * * args, int argcap, char * tail, int cap) {
+int frontend_sym_ct_inst_split(const char * in, const char * * name, int * nargs, char * * args, int argcap, const char * * tail) {
     const char * p;
     const char * lt;
     const char * gt;
     const char * base;
     int r;
     int depth;
-    int i;
     (*nargs) = 0;
-    tail[0] = 0;
+    (*name) = "";
+    (*tail) = "";
     p = in;
     while ((*p) == ' ') {
         p++;
@@ -546,11 +546,13 @@ int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char *
     while (((r > 0) && (base[(r - 1)] == ' '))) {
         r--;
     }
-    if (((r <= 0) || (r >= cap))) {
+    if (r <= 0) {
         return (-1);
     }
-    memcpy(name, base, (size_t)(r));
-    name[r] = 0;
+    (*name) = runtime_text_ct_intern_len(base, r);
+    if ((!(*name))) {
+        return (-1);
+    }
     gt = lt;
     depth = 0;
     for (; (*gt); gt++) {
@@ -576,20 +578,25 @@ int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char *
         for (; ; ) {
             if (((((*b) == 0) || (((*b) == ',') && (depth == 0))) || (b == gt))) {
                 int len = (int)((b - a));
-                char raw[MAX_TEXT];
-                char canon[MAX_TEXT];
-                if ((((((*nargs) >= argcap) || ((*nargs) >= MAX_STRUCT_TPARAMS_MAX)) || (len <= 0)) || (len >= MAX_TEXT))) {
+                const char * raw;
+                const char * canon;
+                if (((((*nargs) >= argcap) || ((*nargs) >= MAX_STRUCT_TPARAMS_MAX)) || (len <= 0))) {
                     return (-1);
                 }
-                memcpy(raw, a, (size_t)(len));
-                raw[len] = 0;
-                if (frontend_sym_ct_type_canon(raw, canon, sizeof(canon)) != 0) {
+                raw = runtime_text_ct_intern_len(a, len);
+                if ((!raw)) {
+                    return (-1);
+                }
+                canon = frontend_sym_ct_type_canon_text(raw);
+                if ((!canon)) {
                     return (-1);
                 }
                 if (((!args) || (!args[(*nargs)]))) {
                     return (-1);
                 }
-                snprintf(args[(*nargs)], MAX_TEXT, "%s", canon);
+                if (frontend_sym_ct_row_set(args, (*nargs), canon) != 0) {
+                    return (-1);
+                }
                 (*nargs) = ((*nargs) + 1);
                 if (b == gt) {
                     break;
@@ -609,8 +616,8 @@ int frontend_sym_ct_inst_split(const char * in, char * name, int * nargs, char *
             b++;
         }
     }
-    i = snprintf(tail, (size_t)(cap), "%s", (gt + 1));
-    if (((i < 0) || (i >= cap))) {
+    (*tail) = runtime_text_ct_intern((gt + 1));
+    if ((!(*tail))) {
         return (-1);
     }
     return 0;
@@ -830,21 +837,24 @@ int frontend_sym_generic_tag_prefix(const char * in, const char * p) {
 int frontend_sym_generic_word_char(int c) {
     return (((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_'));
 }
-void frontend_sym_impl_arg_canon(const char * arg, char * out, int cap) {
+const char * frontend_sym_impl_arg_canon_text(const char * arg) {
     const char * s = arg;
+    char * out;
     int n = 0;
     if (strncmp(s, "struct ", 7) == 0) {
         s += 7;
     }
-    while (((*s) && (n < (cap - 1)))) {
+    out = tool_sh_ct_scratch_alloc(((int)(strlen(s)) + 1));
+    while ((*s)) {
         if ((((*s) != ' ') && ((*s) != '\t'))) {
             out[n++] = (*s);
         }
         s++;
     }
     out[n] = 0;
+    return runtime_text_ct_intern(out);
 }
-int frontend_sym_impl_pat_split(const char * pat, char * name, char * * args, int argcap, int * na) {
+int frontend_sym_impl_pat_split(const char * pat, const char * * name, char * * args, int argcap, int * na) {
     const char * lt = strchr(pat, '<');
     const char * end;
     const char * p;
@@ -852,7 +862,9 @@ int frontend_sym_impl_pat_split(const char * pat, char * name, char * * args, in
     int depth = 0;
     int n = 0;
     int len;
+    int sl;
     (*na) = 0;
+    (*name) = "";
     if ((!lt)) {
         return 0;
     }
@@ -860,25 +872,19 @@ int frontend_sym_impl_pat_split(const char * pat, char * name, char * * args, in
     if (((len == 0) || (pat[(len - 1)] != '>'))) {
         return 0;
     }
-    if ((int)((lt - pat)) >= MAX_TEXT) {
+    (*name) = runtime_text_ct_intern_len(pat, (int)((lt - pat)));
+    if ((!(*name))) {
         return 0;
     }
-    memcpy(name, pat, (size_t)((lt - pat)));
-    name[(size_t)((lt - pat))] = 0;
     end = ((pat + len) - 1);
     seg = (lt + 1);
     for (p = (lt + 1); p <= end; p++) {
         if (((p == end) || (((*p) == ',') && (depth == 0)))) {
-            char * dst;
-            int sl = (int)((p - seg));
-            int i = 0;
+            const char * arg;
             if (((n >= argcap) || (n >= MAX_STRUCT_TPARAMS_MAX))) {
                 return 0;
             }
-            dst = (args ? args[n] : 0);
-            if ((!dst)) {
-                return 0;
-            }
+            sl = (int)((p - seg));
             while (((sl > 0) && (((*seg) == ' ') || ((*seg) == '\t')))) {
                 seg++;
                 sl--;
@@ -886,13 +892,13 @@ int frontend_sym_impl_pat_split(const char * pat, char * name, char * * args, in
             while (((sl > 0) && ((seg[(sl - 1)] == ' ') || (seg[(sl - 1)] == '\t')))) {
                 sl--;
             }
-            if (sl >= MAX_TEXT) {
-                sl = (MAX_TEXT - 1);
+            arg = runtime_text_ct_intern_len(seg, sl);
+            if ((!arg)) {
+                return 0;
             }
-            for (i = 0; i < sl; i++) {
-                dst[i] = seg[i];
+            if (frontend_sym_ct_row_set(args, n, arg) != 0) {
+                return 0;
             }
-            dst[sl] = 0;
             n++;
             seg = (p + 1);
             continue;

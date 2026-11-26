@@ -95,7 +95,6 @@ struct tool_driver_Driver;
 struct frontend_type_TypeOps_vtbl {
     int (*is_iface_type)(void *, const char *, char *, int);
     int (*iface_ref_type)(void *, const char *, char *, int, int *);
-    int (*concrete_struct)(void *, const char *, char *, int, int *);
     int (*is_iface_type_text)(void *, const char *, const char * *);
     int (*iface_ref_type_text)(void *, const char *, const char * *, int *);
     int (*concrete_struct_text)(void *, const char *, const char * *, int *);
@@ -104,7 +103,6 @@ struct frontend_type_TypeOps_vtbl {
     int (*expr_type_text)(void *, int, const char * *);
     int (*expr_ctype_text)(void *, int, const char * *);
     int (*maybe_box)(void *, int, const char *, int);
-    int (*inst_method_ret)(void *, const char *, const char *, char *, int);
     const char * (*inst_method_ret_text)(void *, const char *, const char *);
     int (*type_has_array_init)(void *, const char *);
     int (*init_item_text)(void *, const char *, const char *, char *, int);
@@ -131,7 +129,6 @@ struct frontend_type_TypeCheck {
     const char * errmsg;
     const struct frontend_type_TypeOps_vtbl *__frontend_type_typeops_vptr;
 };
-void frontend_type_type_key(const char *, char *, int);
 const char * frontend_type_type_key_text(const char *);
 struct frontend_type_TypeCheck * frontend_type_type_get(void);
 

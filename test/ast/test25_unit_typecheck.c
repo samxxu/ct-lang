@@ -9,8 +9,8 @@
  *
  * The three helpers below are the pilot named by TEST-25 (`tc_expr_*` and the
  * shared type key): each is a pure function of one arena node, except
- * `type_key`, which is already `pub` and is here as the spelling oracle the
- * whole type layer compares with.
+ * `type_key_text`, which is already `pub` and is here as the spelling oracle
+ * the whole type layer compares with.
  *
  * Run directly (from the repo root, after a ct-ast build):
  *   cc -Wall -Wextra -std=c99 -I <generated-src> test/ast/test25_unit_typecheck.c \
@@ -106,17 +106,12 @@ int main(void)
     tc_expr_fnum(&tc, 2, out, sizeof out);
     eq_str("tc_expr_fnum L", out, "long double");
 
-    /* ---- type_key: one canonical spelling for the type-host lookup ---- */
-    frontend_type_type_key("const char *", out, sizeof out);
-    eq_str("type_key const char *", out, "char*");
-    frontend_type_type_key("unsigned int", out, sizeof out);
-    eq_str("type_key unsigned int", out, "unsigned");
-    frontend_type_type_key("long int", out, sizeof out);
-    eq_str("type_key long int", out, "long");
-    frontend_type_type_key("const volatile int", out, sizeof out);
-    eq_str("type_key const volatile", out, "int");
-    frontend_type_type_key("struct  Foo *", out, sizeof out);
-    eq_str("type_key collapses whitespace", out, "structFoo*");
+    /* ---- type_key_text: one canonical spelling for the type-host lookup ---- */
+    eq_str("type_key const char *", frontend_type_type_key_text("const char *"), "char*");
+    eq_str("type_key unsigned int", frontend_type_type_key_text("unsigned int"), "unsigned");
+    eq_str("type_key long int", frontend_type_type_key_text("long int"), "long");
+    eq_str("type_key const volatile", frontend_type_type_key_text("const volatile int"), "int");
+    eq_str("type_key collapses whitespace", frontend_type_type_key_text("struct  Foo *"), "structFoo*");
 
     printf("unit-typecheck: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

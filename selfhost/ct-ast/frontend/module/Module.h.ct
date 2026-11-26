@@ -452,7 +452,7 @@ static int cycle_is_builtin_Box(struct Module *m, const char *name)
 static int cycle_Box_target(struct Module *m, int si, int fi)
 {
     const char *t;
-    char ptype[MAX_TEXT];
+    const char *ptype;
     int bx, pi, n, ti;
 
     t = m->sym->structs[si].fields[fi].type;
@@ -464,12 +464,16 @@ static int cycle_Box_target(struct Module *m, int si, int fi)
     for (pi = 0; pi < m->sym->structs[bx].nfields; pi++)
         if (strcmp(m->sym->structs[bx].fields[pi].name, "ptr") == 0) break;
     if (pi >= m->sym->structs[bx].nfields) return -1;
-    snprintf(ptype, sizeof ptype, "%s", m->sym->structs[bx].fields[pi].type);
-    n = (int)strlen(ptype);
-    while (n > 0 && (ptype[n - 1] == ' ' || ptype[n - 1] == '\t')) ptype[--n] = 0;
-    if (n == 0 || ptype[n - 1] != '*') return -1;
-    ptype[--n] = 0;
-    while (n > 0 && (ptype[n - 1] == ' ' || ptype[n - 1] == '\t')) ptype[--n] = 0;
+    /* S1a-0 C2p-11: the payload type is already a pool text; trim it as a
+       view instead of cutting it into a 160-byte row. */
+    t = m->sym->structs[bx].fields[pi].type;
+    n = (int)strlen(t);
+    while (n > 0 && (t[n - 1] == ' ' || t[n - 1] == '\t')) n--;
+    if (n == 0 || t[n - 1] != '*') return -1;
+    n--;
+    while (n > 0 && (t[n - 1] == ' ' || t[n - 1] == '\t')) n--;
+    ptype = runtime::text::ct_intern_len(t, n);
+    if (!ptype) return -1;
     t = ptype;
     if (strncmp(t, "struct ", 7) == 0) t += 7;
     else if (strncmp(t, "union ", 6) == 0) t += 6;
@@ -487,42 +491,35 @@ static int cycle_Box_target(struct Module *m, int si, int fi)
    suppression point so the exemption is auditable. */
 static int cycle_emit(struct Module *m, int a, int b, int c)
 {
-    char chain[MAX_TEXT];
-    char msg[MAX_TEXT];
+    const char *chain;
+    const char *msg;
     const char *file;
-    int nodes[3], n, i, w, k, mark;
+    int nodes[3], n, i, mark;
 
     nodes[0] = a;
     n = 1;
     if (b >= 0) nodes[n++] = b;
     if (c >= 0) nodes[n++] = c;
-    chain[0] = 0;
-    w = 0;
-    for (i = 0; i < n; i++) {
-        k = snprintf(chain + w, sizeof chain - (size_t)w, "%s%s",
-                     w ? " -> " : "", m->sym->structs[nodes[i]].name);
-        if (k < 0 || w + k >= (int)sizeof chain) { w = (int)sizeof chain - 1; break; }
-        w += k;
-    }
-    if (w < (int)sizeof chain - 1) {
-        k = snprintf(chain + w, sizeof chain - (size_t)w, " -> %s",
-                     m->sym->structs[a].name);
-        if (k > 0 && w + k < (int)sizeof chain) w += k;
-    }
+    chain = "";
+    for (i = 0; i < n; i++)
+        chain = tool::sh::ct_scratch_fmt("%s%s%s", chain, i ? " -> " : "",
+                                          m->sym->structs[nodes[i]].name);
+    chain = tool::sh::ct_scratch_fmt("%s -> %s", chain,
+                                     m->sym->structs[a].name);
     mark = -1;
     for (i = 0; i < n; i++)
         if (m->sym->structs[nodes[i]].allow_cycle) { mark = nodes[i]; break; }
     if (mark >= 0) {
         if (!m->check_mode) return 0;
-        snprintf(msg, sizeof msg,
-                 "reference cycle suppressed by 'ct: allow-cycle': %s", chain);
+        msg = tool::sh::ct_scratch_fmt(
+            "reference cycle suppressed by 'ct: allow-cycle': %s", chain);
         return tool::diag::ct_sem_note(m->sym->structs[mark].line,
                                        m->sym->structs[mark].col, msg,
                                        cycle_file(m, mark));
     }
-    snprintf(msg, sizeof msg,
-             "potential reference cycle: %s; instances may leak unless the cycle is broken by hand",
-             chain);
+    msg = tool::sh::ct_scratch_fmt(
+        "potential reference cycle: %s; instances may leak unless the cycle is broken by hand",
+        chain);
     file = cycle_file(m, a);
     return tool::diag::ct_cycle_warn(m->sym->structs[a].line,
                                      m->sym->structs[a].col, msg, file);
@@ -909,11 +906,11 @@ impl ModuleOps for Module {
             return 0;
         }
         for (r = -1; r < self->ninc; r++) {
-            char flat[MAX_TEXT];
-            char doubled[MAX_TEXT];
+            char *flat;
+            char *doubled;
             int nc, ci;
             root = (r < 0) ? dir : self->incdirs[r];
-            nc = ct_rel_cands(root, rel, flat, doubled);
+            nc = ct_rel_cands(root, rel, &flat, &doubled);
             for (ci = 0; ci < nc; ci++) {
                 const char *c;
                 if (ci == 0) c = flat;
@@ -1091,8 +1088,10 @@ impl ModuleOps for Module {
         self->units[u].nsprefix = runtime::text::ct_intern("");
         if (!self->units[u].nsprefix) return self->fail("out of memory");
         {
-            char basebuf[MAX_TEXT];
-            if (self->base_name(path, basebuf, sizeof basebuf, &is_hdr, &is_map) != 0)
+            /* S1a-0 C2p-11: the base is a file-name component, but a deep path
+               still reaches this row; give the extractor the formal bound. */
+            char *basebuf = tool::sh::ct_scratch_alloc(1024);
+            if (self->base_name(path, basebuf, 1024, &is_hdr, &is_map) != 0)
                 return -1;
             self->units[u].base = runtime::text::ct_intern(basebuf);
             if (!self->units[u].base) return self->fail("out of memory");
@@ -1108,15 +1107,13 @@ impl ModuleOps for Module {
                    diagnostic (they publish a header, not a `.c` collision). */
                 if (self->units[k].is_hdr && is_hdr) continue;
                 if (strcmp(self->units[k].base, self->units[u].base) == 0) {
-                    char cmsg[MAX_TEXT];
                     const char *p1 = strrchr(self->units[k].path, '/');
                     const char *p2 = strrchr(path, '/');
                     if (p1) p1++; else p1 = self->units[k].path;
                     if (p2) p2++; else p2 = path;
-                    snprintf(cmsg, sizeof cmsg,
-                             "units '%s' and '%s' both emit '%s.c'; rename one",
-                             p1, p2, self->units[u].base);
-                    self->fail(cmsg);
+                    self->fail(tool::sh::ct_scratch_fmt(
+                        "units '%s' and '%s' both emit '%s.c'; rename one",
+                        p1, p2, self->units[u].base));
                     return -1;
                 }
             }
@@ -1257,7 +1254,7 @@ impl ModuleOps for Module {
            the library's own name and has no namespace to qualify with. */
         for (i = 0; i < self->units[u].ndep; i++) {
             const char *gcn;
-            char gns[MAX_TEXT];
+            const char *gns;
             const char *gname;
             size_t gl;
             dn = self->units[u].depu[i];
@@ -1268,13 +1265,14 @@ impl ModuleOps for Module {
                 if (self->arena->nodes[gn].aux == 2 || !self->units[dn].nsprefix[0]) {
                     gcn = runtime::text::ct_intern(gname);
                     if (!gcn) return self->fail("out of memory");
-                    gns[0] = 0;
+                    gns = "";
                 } else {
                     gcn = runtime::text::ct_intern_join(self->units[dn].nsprefix, gname);
                     if (!gcn) return self->fail("out of memory");
-                    snprintf(gns, sizeof gns, "%s", self->units[dn].nsprefix);
-                    gl = strlen(gns);
-                    if (gl > 0) gns[gl - 1] = 0;
+                    gl = strlen(self->units[dn].nsprefix);
+                    gns = runtime::text::ct_intern_len(self->units[dn].nsprefix,
+                                                       (int)(gl > 0 ? gl - 1 : 0));
+                    if (!gns) return self->fail("out of memory");
                 }
                 if (!gcn) return self->fail("out of memory");
                 if (self->sym->declare_global(gname, self->arena->nodes[gn].text,
@@ -1299,7 +1297,7 @@ impl ModuleOps for Module {
             for (gn = self->arena->nodes[self->units[dn].prog].a; gn >= 0;
                  gn = self->arena->nodes[gn].next) {
                 const char *ccn;
-                char cns[MAX_TEXT];
+                const char *cns;
                 const char *cmn;
                 size_t cl;
                 int mv;
@@ -1312,12 +1310,13 @@ impl ModuleOps for Module {
                     cmn = self->arena->nodes[mv].text2;
                     if (!self->units[dn].nsprefix[0]) {
                         ccn = runtime::text::ct_intern(cmn);
-                        cns[0] = 0;
+                        cns = "";
                     } else {
                         ccn = runtime::text::ct_intern_join(self->units[dn].nsprefix, cmn);
-                        snprintf(cns, sizeof cns, "%s", self->units[dn].nsprefix);
-                        cl = strlen(cns);
-                        if (cl > 0) cns[cl - 1] = 0;
+                        cl = strlen(self->units[dn].nsprefix);
+                        cns = runtime::text::ct_intern_len(self->units[dn].nsprefix,
+                                                           (int)(cl > 0 ? cl - 1 : 0));
+                        if (!cns) return self->fail("out of memory");
                     }
                     if (!ccn) return self->fail("out of memory");
                     if (self->sym->declare_const(cmn, ccn, cns, 1) < 0)
@@ -1489,8 +1488,8 @@ impl ModuleOps for Module {
         long num;
         const char *text_ptr; int text_len;
         const char *suffix_ptr; int suffix_len;
-        char prev[MAX_TEXT];
-        char prev2[MAX_TEXT];
+        const char *prev;
+        const char *prev2;
         int prev_line, prev2_line, depth;
         (void)self;
 
@@ -1517,8 +1516,8 @@ impl ModuleOps for Module {
         self->lex->tok = T_ID;
         self->lex->tokstr.ptr = self->lex->src;
         self->lex->tokstr.len = 0;
-        prev[0] = 0;
-        prev2[0] = 0;
+        prev = "";
+        prev2 = "";
         prev_line = 0;
         prev2_line = 0;
         depth = 0;
@@ -1563,9 +1562,11 @@ impl ModuleOps for Module {
                 if (self->sym->add_forward_type_alias(prev, path, prev2_line, owner) != 0)
                     return self->fail(self->sym->last_error());
             }
-            snprintf(prev2, sizeof prev2, "%s", prev);
+            prev2 = prev;
             prev2_line = prev_line;
-            self->lex->tok_copy(prev, sizeof prev);
+            prev = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                self->lex->tokstr.len);
+            if (!prev) return self->fail("out of memory");
             prev_line = self->lex->tokline;
             self->lex->next();
         }
@@ -1625,18 +1626,16 @@ impl ModuleOps for Module {
                     break;
                 }
             {
-                char bare[MAX_TEXT];
-                char msg[MAX_TEXT * 2];
                 const char *shown = name;
                 size_t pl = strlen(self->units[u].nsprefix);
                 if (pl > 0 && strncmp(name, self->units[u].nsprefix, pl) == 0)
                     shown = name + pl;
-                snprintf(bare, sizeof bare, "%s", shown);
-                snprintf(msg, sizeof msg,
-                         "Drop body for 'struct %s' is not visible through its header;"
-                         " move 'impl Drop for %s' into the unit that declares the struct",
-                         bare, bare);
-                return tool::diag::ct_sem_error(line, 1, msg, self->units[u].path);
+                return tool::diag::ct_sem_error(line, 1,
+                         tool::sh::ct_scratch_fmt(
+                             "Drop body for 'struct %s' is not visible through its header;"
+                             " move 'impl Drop for %s' into the unit that declares the struct",
+                             shown, shown),
+                         self->units[u].path);
             }
         }
         return 0;
@@ -1648,10 +1647,9 @@ impl ModuleOps for Module {
     {
         char *dir;
         char *msg;
-        char want[MAX_TEXT];
         const char *p;
         const char *rest;
-        size_t rn, k, m;
+        size_t rn, k, ni, wi;
 
         (void)self;
         if (!self->units[u].ns[0]) return 0;
@@ -1669,20 +1667,21 @@ impl ModuleOps for Module {
         if (k > 0) k--;                    /* drop the slash before the basename */
         dir = tool::sh::ct_scratch_fmt("%.*s", (int)k, rest);
 
-        m = 0;
-        for (k = 0; self->units[u].ns[k]; k++) {
-            if (m + 1 >= sizeof want) return self->fail("namespace is too long");
-            if (self->units[u].ns[k] == ':' && self->units[u].ns[k + 1] == ':') {
-                want[m] = '/';
-                m++;
-                k++;
+        /* S1a-0 C2p-11: compare the namespace with the directory in place
+           (`::` counts as `/`), so a long namespace needs no fixed row. */
+        ni = 0;
+        wi = 0;
+        while (self->units[u].ns[ni]) {
+            if (self->units[u].ns[ni] == ':' && self->units[u].ns[ni + 1] == ':') {
+                if (dir[wi] != '/') break;
+                ni += 2;
             } else {
-                want[m] = self->units[u].ns[k];
-                m++;
+                if (dir[wi] != self->units[u].ns[ni]) break;
+                ni++;
             }
+            wi++;
         }
-        want[m] = 0;
-        if (strcmp(dir, want) != 0) {
+        if (self->units[u].ns[ni] || dir[wi] != 0) {
             msg = tool::sh::ct_scratch_fmt(
                 "namespace '%s' does not match the directory '%s'",
                 self->units[u].ns, dir);
@@ -1788,7 +1787,7 @@ impl ModuleOps for Module {
     {
         int u, fi, gi, count, nonroot, bad;
         const char *root_path;
-        char msg[MAX_TEXT];
+        const char *msg;
 
         if (root_u < 0 || root_u >= self->nunits) {
             fprintf(stderr, "%s: no exported functions in '<input>'\n", self->prog);
@@ -1804,9 +1803,9 @@ impl ModuleOps for Module {
         /* L39-3 / L39-5 / L39-4: things that make the archive uncontrollable. */
         for (u = 0; u < self->nunits; u++) {
             if (self->units[u].is_map && self->units[u].has_shim) {
-                snprintf(msg, sizeof msg,
-                         "a --lib build cannot include the C shim of '%s'",
-                         self->units[u].path);
+                msg = tool::sh::ct_scratch_fmt(
+                    "a --lib build cannot include the C shim of '%s'",
+                    self->units[u].path);
                 return tool::diag::ct_sem_error(1, 1, msg, root_path);
             }
             for (fi = self->units[u].fn_start; fi < self->units[u].fn_end; fi++) {
@@ -1820,9 +1819,9 @@ impl ModuleOps for Module {
                  gi = self->arena->nodes[gi].next) {
                 if (self->arena->nodes[gi].kind != N_GLOBAL
                     || self->arena->nodes[gi].d != 1) continue;
-                snprintf(msg, sizeof msg,
-                         "'%s' cannot be exported: pub globals are not supported",
-                         self->arena->nodes[gi].text2);
+                msg = tool::sh::ct_scratch_fmt(
+                    "'%s' cannot be exported: pub globals are not supported",
+                    self->arena->nodes[gi].text2);
                 return tool::diag::ct_sem_error(self->arena->nodes[gi].line, 1,
                                                 msg, self->units[u].path);
             }
@@ -1841,15 +1840,16 @@ impl ModuleOps for Module {
                 }
                 count++;
                 if (self->sym->funcs[fi].ntparams > 0) {
-                    snprintf(msg, sizeof msg,
-                             "'%s' not exported: generic template has no external symbol",
-                             self->sym->funcs[fi].name);
+                    msg = tool::sh::ct_scratch_fmt(
+                        "'%s' not exported: generic template has no external symbol",
+                        self->sym->funcs[fi].name);
                     if (tool::diag::ct_type_warn(self->sym->funcs[fi].line, 1, "", msg, root_path) != 0)
                         return 1;
                     continue;
                 }
                 bad = 0;
-                snprintf(msg, sizeof msg, "'%s' cannot be exported: ", self->sym->funcs[fi].name);
+                msg = tool::sh::ct_scratch_fmt("'%s' cannot be exported: ",
+                                               self->sym->funcs[fi].name);
                 {
                     /* S1a-0 C1: a function may carry more than 16 parameters,
                        so walk the return type and every parameter directly
@@ -1861,12 +1861,12 @@ impl ModuleOps for Module {
                         if (strncmp(base, "struct ", 7) == 0) base += 7;
                         else if (strncmp(base, "union ", 6) == 0) base += 6;
                         if (strstr(tp, "own ")) {
-                            strncat(msg, "own", sizeof msg - strlen(msg) - 1);
+                            msg = tool::sh::ct_scratch_fmt("%sown", msg);
                             bad = 1;
                             break;
                         }
                         if (strstr(tp, "_iface") || self->sym->find_trait(base) >= 0) {
-                            strncat(msg, "trait value", sizeof msg - strlen(msg) - 1);
+                            msg = tool::sh::ct_scratch_fmt("%strait value", msg);
                             bad = 1;
                             break;
                         }
@@ -1876,14 +1876,14 @@ impl ModuleOps for Module {
                             || (strncmp(base, "Str", 3) == 0
                                 && (base[3] == 0 || base[3] == ' '
                                     || base[3] == '*' || base[3] == '['))) {
-                            strncat(msg, "std type", sizeof msg - strlen(msg) - 1);
+                            msg = tool::sh::ct_scratch_fmt("%sstd type", msg);
                             bad = 1;
                             break;
                         }
                         if ((strncmp(tp, "struct ", 7) == 0
                              || strncmp(tp, "union ", 6) == 0)
                             && strchr(tp, '*') == 0) {
-                            strncat(msg, "by-value struct", sizeof msg - strlen(msg) - 1);
+                            msg = tool::sh::ct_scratch_fmt("%sby-value struct", msg);
                             bad = 1;
                             break;
                         }
@@ -1895,13 +1895,13 @@ impl ModuleOps for Module {
             }
         }
         if (count == 0) {
-            snprintf(msg, sizeof msg, "no exported functions in '%s'", root_path);
+            msg = tool::sh::ct_scratch_fmt("no exported functions in '%s'", root_path);
             return tool::diag::ct_sem_error(1, 1, msg, root_path);
         }
         if (nonroot > 0) {
-            snprintf(msg, sizeof msg,
-                     "%d pub function(s) are not part of the ABI surface (imported or extern)",
-                     nonroot);
+            msg = tool::sh::ct_scratch_fmt(
+                "%d pub function(s) are not part of the ABI surface (imported or extern)",
+                nonroot);
             if (tool::diag::ct_type_warn(1, 1, "", msg, root_path) != 0) return 1;
         }
         if (tool::diag::ct_diag_nwarn() > 0
@@ -3076,7 +3076,7 @@ cmd_too_long:
        pre-PH-82 `warn` behaviour, so old packages do not change. */
     int leaks_for(const char *path)
     {
-        char v[MAX_TEXT];
+        const char *v;
         char *dir;
         int i, n;
         size_t l;
@@ -3085,14 +3085,14 @@ cmd_too_long:
             for (i = 0; i < self->ninc; i++) {
                 l = strlen(self->incdirs[i]);
                 if (l == 0 || strncmp(path, self->incdirs[i], l) != 0) continue;
-                if (ct_pkg_key(self->incdirs[i], "leaks", v, sizeof v))
+                if (ct_pkg_key(self->incdirs[i], "leaks", &v))
                     return strcmp(v, "error") == 0 ? 1 : 0;
                 return 0;
             }
         if (path == 0 || path[0] == 0) return 0;
         n = self->path_dir(path, &dir);
         if (n != 0) return 0;
-        if (ct_pkg_key(dir, "leaks", v, sizeof v) && strcmp(v, "error") == 0) return 1;
+        if (ct_pkg_key(dir, "leaks", &v) && strcmp(v, "error") == 0) return 1;
         return 0;
     }
 
@@ -3318,7 +3318,7 @@ cmd_too_long:
    `file` names the later manifest, which is the one to change. */
 static int ct_pkg_ns_clash(struct Module *m, char **msg, char **file)
 {
-    char ns[MAX_TEXT];
+    const char *ns;
     char *nroot;
     char *nother;
     int i, j;
@@ -3326,11 +3326,11 @@ static int ct_pkg_ns_clash(struct Module *m, char **msg, char **file)
     *msg = (char *)0;
     *file = (char *)0;
     for (i = 0; i < m->ninc; i++) {
-        if (!ct_pkg_key(m->incdirs[i], "namespace", ns, sizeof ns)) continue;
+        if (!ct_pkg_key(m->incdirs[i], "namespace", &ns)) continue;
         ct_norm_path(m->incdirs[i], &nroot);
         for (j = 0; j < i; j++) {
-            char other[MAX_TEXT];
-            if (!ct_pkg_key(m->incdirs[j], "namespace", other, sizeof other)) continue;
+            const char *other;
+            if (!ct_pkg_key(m->incdirs[j], "namespace", &other)) continue;
             if (strcmp(ns, other) != 0) continue;
             /* One directory spelled twice (`-I a -I ./a`) is one package, not a
                clash with itself. */

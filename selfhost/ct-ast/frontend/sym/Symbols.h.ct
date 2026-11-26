@@ -2282,9 +2282,9 @@ impl TypeAliasOps for Symbols {
            (`lib_Thing`), so a trait or typedef declared above is a conflict even
            though the alias keeps its bare name. */
         if (self->ns && self->ns[0]) {
-            char qn[MAX_TEXT];
-            int w = snprintf(qn, sizeof qn, "%s%s", self->ns, name);
-            if (w >= 0 && w < (int)sizeof qn && self->find_type(qn) >= 0) {
+            const char *qn = runtime::text::ct_intern_join(self->ns, name);
+            if (!qn) return self->fail("out of memory");
+            if (self->find_type(qn) >= 0) {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
@@ -2982,7 +2982,7 @@ static int impl_tparam(struct StructImpl *t, const char *pat)
 static int impl_match(int ii, const char *pat, const char *arg,
                       const char *cspell, char **vals, int *set, int depth)
 {
-    char name[MAX_TEXT], base[MAX_TEXT], cbase[MAX_TEXT];
+    const char *name, *base, *cbase;
     char **pargs = 0;
     int pcap = 0, need, na, pi, k, n, ai;
     struct StructImpl *t = ct_impls(&n);
@@ -2997,14 +2997,16 @@ static int impl_match(int ii, const char *pat, const char *arg,
     }
     need = ct_inst_arg_count(pat);
     if (need <= 0) {
-        impl_arg_canon(pat, base, sizeof base);
-        impl_arg_canon(arg, cbase, sizeof cbase);
+        base = impl_arg_canon_text(pat);
+        cbase = impl_arg_canon_text(arg);
+        if (!base || !cbase) return 0;
         return strcmp(base, cbase) == 0;
     }
     pargs = ct_rows_reserve(0, 0, need, &pcap);
     if (!pargs || pcap < need) return 0;
-    if (!impl_pat_split(pat, name, pargs, pcap, &na)) return 0;
-    impl_arg_canon(arg, cbase, sizeof cbase);
+    if (!impl_pat_split(pat, &name, pargs, pcap, &na)) return 0;
+    cbase = impl_arg_canon_text(arg);
+    if (!cbase) return 0;
     ai = ct_inst_find(cbase);
     if (ai < 0) return 0;
     {
@@ -3090,10 +3092,10 @@ int ct_method_bind(int ii, int inst, char **names, char **values, int cap)
    original spelling and reports its own diagnostic. */
 int ct_inst_resolve(const char *in, char *out, int cap)
 {
-    char name[MAX_TEXT];
-    char tail[MAX_TEXT];
-    char enc[MAX_TEXT];
-    char cc[MAX_TEXT];
+    const char *name;
+    const char *tail;
+    const char *enc;
+    const char *cc;
     char **args = 0;
     int acap = 0;
     int need, nargs, found, k, j, nins, ok;
@@ -3103,9 +3105,10 @@ int ct_inst_resolve(const char *in, char *out, int cap)
     if (need <= 0) return -1;
     args = ct_rows_reserve(0, 0, need, &acap);
     if (!args || acap < need) return -1;
-    if (ct_inst_split(in, name, &nargs, args, acap, tail, sizeof tail) != 0) return -1;
+    if (ct_inst_split(in, &name, &nargs, args, acap, &tail) != 0) return -1;
     if (nargs <= 0) return -1;
-    if (ct_inst_encode(name, nargs, args, enc, sizeof enc) != 0) return -1;
+    enc = ct_inst_encode_text(name, nargs, args);
+    if (!enc) return -1;
     found = ct_inst_find(enc);
     if (found < 0) {
         /* Phase 31 O2: a nested spelling arrives with C arguments
@@ -3118,8 +3121,8 @@ int ct_inst_resolve(const char *in, char *out, int cap)
             if (strcmp(ins[k].tmpl, name) != 0 || ins[k].nargs != nargs) continue;
             ok = 1;
             for (j = 0; j < nargs; j++) {
-                if (!ins[k].ctype[j] || !args[j]
-                    || ct_type_canon(ins[k].ctype[j], cc, sizeof cc) != 0
+                cc = ins[k].ctype[j] ? ct_type_canon_text(ins[k].ctype[j]) : 0;
+                if (!ins[k].ctype[j] || !args[j] || !cc
                     || strcmp(cc, args[j]) != 0) {
                     ok = 0;
                     break;

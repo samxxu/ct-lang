@@ -468,12 +468,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_resolve_import(void 
         return 0;
     }
     for (r = (-1); r < _self->ninc; r++) {
-        char flat[MAX_TEXT];
-        char doubled[MAX_TEXT];
+        char * flat;
+        char * doubled;
         int nc;
         int ci;
         root = ((r < 0) ? dir : _self->incdirs[r]);
-        nc = frontend_module_ct_rel_cands(root, rel, flat, doubled);
+        nc = frontend_module_ct_rel_cands(root, rel, (&flat), (&doubled));
         for (ci = 0; ci < nc; ci++) {
             const char * c;
             if (ci == 0) {
@@ -665,8 +665,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
         return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
     }
 {
-        char basebuf[MAX_TEXT];
-        if (_self->__frontend_module_moduleops_vptr->base_name(_self, path, basebuf, sizeof(basebuf), (&is_hdr), (&is_map)) != 0) {
+        char * basebuf = tool_sh_ct_scratch_alloc(1024);
+        if (_self->__frontend_module_moduleops_vptr->base_name(_self, path, basebuf, 1024, (&is_hdr), (&is_map)) != 0) {
             return (-1);
         }
         _self->units[u].base = runtime_text_ct_intern(basebuf);
@@ -685,7 +685,6 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
                 continue;
             }
             if (strcmp(_self->units[k].base, _self->units[u].base) == 0) {
-                char cmsg[MAX_TEXT];
                 const char * p1 = strrchr(_self->units[k].path, '/');
                 const char * p2 = strrchr(path, '/');
                 if (p1) {
@@ -700,8 +699,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
                 else {
                     p2 = path;
                 }
-                snprintf(cmsg, sizeof(cmsg), "units '%s' and '%s' both emit '%s.c'; rename one", p1, p2, _self->units[u].base);
-                _self->__frontend_module_moduleops_vptr->fail(_self, cmsg);
+                _self->__frontend_module_moduleops_vptr->fail(_self, tool_sh_ct_scratch_fmt("units '%s' and '%s' both emit '%s.c'; rename one", p1, p2, _self->units[u].base));
                 return (-1);
             }
         }
@@ -814,7 +812,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->p->nparams = 0;
     for (i = 0; i < _self->units[u].ndep; i++) {
         const char * gcn;
-        char gns[MAX_TEXT];
+        const char * gns;
         const char * gname;
         size_t gl;
         dn = _self->units[u].depu[i];
@@ -828,17 +826,17 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
                 if ((!gcn)) {
                     return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
                 }
-                gns[0] = 0;
+                gns = "";
             }
             else {
                 gcn = runtime_text_ct_intern_join(_self->units[dn].nsprefix, gname);
                 if ((!gcn)) {
                     return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
                 }
-                snprintf(gns, sizeof(gns), "%s", _self->units[dn].nsprefix);
-                gl = strlen(gns);
-                if (gl > 0) {
-                    gns[(gl - 1)] = 0;
+                gl = strlen(_self->units[dn].nsprefix);
+                gns = runtime_text_ct_intern_len(_self->units[dn].nsprefix, (int)(((gl > 0) ? (gl - 1) : 0)));
+                if ((!gns)) {
+                    return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
                 }
             }
             if ((!gcn)) {
@@ -860,7 +858,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
         }
         for (gn = _self->arena->nodes[_self->units[dn].prog].a; gn >= 0; gn = _self->arena->nodes[gn].next) {
             const char * ccn;
-            char cns[MAX_TEXT];
+            const char * cns;
             const char * cmn;
             size_t cl;
             int mv;
@@ -874,14 +872,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
                 cmn = _self->arena->nodes[mv].text2;
                 if ((!_self->units[dn].nsprefix[0])) {
                     ccn = runtime_text_ct_intern(cmn);
-                    cns[0] = 0;
+                    cns = "";
                 }
                 else {
                     ccn = runtime_text_ct_intern_join(_self->units[dn].nsprefix, cmn);
-                    snprintf(cns, sizeof(cns), "%s", _self->units[dn].nsprefix);
-                    cl = strlen(cns);
-                    if (cl > 0) {
-                        cns[(cl - 1)] = 0;
+                    cl = strlen(_self->units[dn].nsprefix);
+                    cns = runtime_text_ct_intern_len(_self->units[dn].nsprefix, (int)(((cl > 0) ? (cl - 1) : 0)));
+                    if ((!cns)) {
+                        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
                     }
                 }
                 if ((!ccn)) {
@@ -1063,8 +1061,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_scan_forward_type_al
     int text_len;
     const char * suffix_ptr;
     int suffix_len;
-    char prev[MAX_TEXT];
-    char prev2[MAX_TEXT];
+    const char * prev;
+    const char * prev2;
     int prev_line;
     int prev2_line;
     int depth;
@@ -1093,8 +1091,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_scan_forward_type_al
     _self->lex->tok = T_ID;
     _self->lex->tokstr.ptr = _self->lex->src;
     _self->lex->tokstr.len = 0;
-    prev[0] = 0;
-    prev2[0] = 0;
+    prev = "";
+    prev2 = "";
     prev_line = 0;
     prev2_line = 0;
     depth = 0;
@@ -1133,9 +1131,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_scan_forward_type_al
                 return _self->__frontend_module_moduleops_vptr->fail(_self, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
             }
         }
-        snprintf(prev2, sizeof(prev2), "%s", prev);
+        prev2 = prev;
         prev2_line = prev_line;
-        _self->lex->__frontend_lex_lexops_vptr->tok_copy(_self->lex, prev, sizeof(prev));
+        prev = runtime_text_ct_intern_len(_self->lex->tokstr.ptr, _self->lex->tokstr.len);
+        if ((!prev)) {
+            return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+        }
         prev_line = _self->lex->tokline;
         _self->lex->__frontend_lex_lexops_vptr->next(_self->lex);
     }
@@ -1203,16 +1204,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_check_drop_visibilit
             }
         }
 {
-            char bare[MAX_TEXT];
-            char msg[MAX_TEXT * 2];
             const char * shown = name;
             size_t pl = strlen(_self->units[u].nsprefix);
             if (((pl > 0) && (strncmp(name, _self->units[u].nsprefix, pl) == 0))) {
                 shown = (name + pl);
             }
-            snprintf(bare, sizeof(bare), "%s", shown);
-            snprintf(msg, sizeof(msg), "Drop body for 'struct %s' is not visible through its header;"" move 'impl Drop for %s' into the unit that declares the struct", bare, bare);
-            return tool_diag_ct_sem_error(line, 1, msg, _self->units[u].path);
+            return tool_diag_ct_sem_error(line, 1, tool_sh_ct_scratch_fmt("Drop body for 'struct %s' is not visible through its header;"" move 'impl Drop for %s' into the unit that declares the struct", shown, shown), _self->units[u].path);
         }
     }
     return 0;
@@ -1222,12 +1219,12 @@ static int frontend_module_Module_frontend_module_ModuleOps_check_ns_dir(void *s
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
     char * dir;
     char * msg;
-    char want[MAX_TEXT];
     const char * p;
     const char * rest;
     size_t rn;
     size_t k;
-    size_t m;
+    size_t ni;
+    size_t wi;
     (void)(_self);
     if ((!_self->units[u].ns[0])) {
         return 0;
@@ -1255,23 +1252,24 @@ static int frontend_module_Module_frontend_module_ModuleOps_check_ns_dir(void *s
         k--;
     }
     dir = tool_sh_ct_scratch_fmt("%.*s", (int)(k), rest);
-    m = 0;
-    for (k = 0; _self->units[u].ns[k]; k++) {
-        if ((m + 1) >= sizeof(want)) {
-            return _self->__frontend_module_moduleops_vptr->fail(_self, "namespace is too long");
-        }
-        if (((_self->units[u].ns[k] == ':') && (_self->units[u].ns[(k + 1)] == ':'))) {
-            want[m] = '/';
-            m++;
-            k++;
+    ni = 0;
+    wi = 0;
+    while (_self->units[u].ns[ni]) {
+        if (((_self->units[u].ns[ni] == ':') && (_self->units[u].ns[(ni + 1)] == ':'))) {
+            if (dir[wi] != '/') {
+                break;
+            }
+            ni += 2;
         }
         else {
-            want[m] = _self->units[u].ns[k];
-            m++;
+            if (dir[wi] != _self->units[u].ns[ni]) {
+                break;
+            }
+            ni++;
         }
+        wi++;
     }
-    want[m] = 0;
-    if (strcmp(dir, want) != 0) {
+    if ((_self->units[u].ns[ni] || (dir[wi] != 0))) {
         msg = tool_sh_ct_scratch_fmt("namespace '%s' does not match the directory '%s'", _self->units[u].ns, dir);
         return _self->__frontend_module_moduleops_vptr->fail(_self, msg);
     }
@@ -1377,7 +1375,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
     int nonroot;
     int bad;
     const char * root_path;
-    char msg[MAX_TEXT];
+    const char * msg;
     if (((root_u < 0) || (root_u >= _self->nunits))) {
         fprintf(stderr, "%s: no exported functions in '<input>'\n", _self->prog);
         return 1;
@@ -1391,7 +1389,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
     }
     for (u = 0; u < _self->nunits; u++) {
         if ((_self->units[u].is_map && _self->units[u].has_shim)) {
-            snprintf(msg, sizeof(msg), "a --lib build cannot include the C shim of '%s'", _self->units[u].path);
+            msg = tool_sh_ct_scratch_fmt("a --lib build cannot include the C shim of '%s'", _self->units[u].path);
             return tool_diag_ct_sem_error(1, 1, msg, root_path);
         }
         for (fi = _self->units[u].fn_start; fi < _self->units[u].fn_end; fi++) {
@@ -1403,7 +1401,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
             if (((_self->arena->nodes[gi].kind != N_GLOBAL) || (_self->arena->nodes[gi].d != 1))) {
                 continue;
             }
-            snprintf(msg, sizeof(msg), "'%s' cannot be exported: pub globals are not supported", _self->arena->nodes[gi].text2);
+            msg = tool_sh_ct_scratch_fmt("'%s' cannot be exported: pub globals are not supported", _self->arena->nodes[gi].text2);
             return tool_diag_ct_sem_error(_self->arena->nodes[gi].line, 1, msg, _self->units[u].path);
         }
     }
@@ -1426,14 +1424,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
             }
             count++;
             if (_self->sym->funcs[fi].ntparams > 0) {
-                snprintf(msg, sizeof(msg), "'%s' not exported: generic template has no external symbol", _self->sym->funcs[fi].name);
+                msg = tool_sh_ct_scratch_fmt("'%s' not exported: generic template has no external symbol", _self->sym->funcs[fi].name);
                 if (tool_diag_ct_type_warn(_self->sym->funcs[fi].line, 1, "", msg, root_path) != 0) {
                     return 1;
                 }
                 continue;
             }
             bad = 0;
-            snprintf(msg, sizeof(msg), "'%s' cannot be exported: ", _self->sym->funcs[fi].name);
+            msg = tool_sh_ct_scratch_fmt("'%s' cannot be exported: ", _self->sym->funcs[fi].name);
 {
                 for (k = (-1); k < _self->sym->funcs[fi].nparams; k++) {
                     const char * tp = ((k < 0) ? _self->sym->funcs[fi].ret : _self->sym->funcs[fi].ptype[k]);
@@ -1447,22 +1445,22 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
                         }
                     }
                     if (strstr(tp, "own ")) {
-                        strncat(msg, "own", ((sizeof(msg) - strlen(msg)) - 1));
+                        msg = tool_sh_ct_scratch_fmt("%sown", msg);
                         bad = 1;
                         break;
                     }
                     if ((strstr(tp, "_iface") || (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, base) >= 0))) {
-                        strncat(msg, "trait value", ((sizeof(msg) - strlen(msg)) - 1));
+                        msg = tool_sh_ct_scratch_fmt("%strait value", msg);
                         bad = 1;
                         break;
                     }
                     if ((((((strncmp(base, "Vec_", 4) == 0) || (strncmp(base, "Map_", 4) == 0)) || (strncmp(base, "Option_", 7) == 0)) || (strncmp(base, "Result_", 7) == 0)) || ((strncmp(base, "Str", 3) == 0) && ((((base[3] == 0) || (base[3] == ' ')) || (base[3] == '*')) || (base[3] == '['))))) {
-                        strncat(msg, "std type", ((sizeof(msg) - strlen(msg)) - 1));
+                        msg = tool_sh_ct_scratch_fmt("%sstd type", msg);
                         bad = 1;
                         break;
                     }
                     if ((((strncmp(tp, "struct ", 7) == 0) || (strncmp(tp, "union ", 6) == 0)) && (strchr(tp, '*') == 0))) {
-                        strncat(msg, "by-value struct", ((sizeof(msg) - strlen(msg)) - 1));
+                        msg = tool_sh_ct_scratch_fmt("%sby-value struct", msg);
                         bad = 1;
                         break;
                     }
@@ -1477,11 +1475,11 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
         }
     }
     if (count == 0) {
-        snprintf(msg, sizeof(msg), "no exported functions in '%s'", root_path);
+        msg = tool_sh_ct_scratch_fmt("no exported functions in '%s'", root_path);
         return tool_diag_ct_sem_error(1, 1, msg, root_path);
     }
     if (nonroot > 0) {
-        snprintf(msg, sizeof(msg), "%d pub function(s) are not part of the ABI surface (imported or extern)", nonroot);
+        msg = tool_sh_ct_scratch_fmt("%d pub function(s) are not part of the ABI surface (imported or extern)", nonroot);
         if (tool_diag_ct_type_warn(1, 1, "", msg, root_path) != 0) {
             return 1;
         }
@@ -2662,7 +2660,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_c_boundary_for(void 
 
 static int frontend_module_Module_frontend_module_ModuleOps_leaks_for(void *self, const char * path) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    char v[MAX_TEXT];
+    const char * v;
     char * dir;
     int i;
     int n;
@@ -2673,7 +2671,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_leaks_for(void *self
             if (((l == 0) || (strncmp(path, _self->incdirs[i], l) != 0))) {
                 continue;
             }
-            if (frontend_module_ct_pkg_key(_self->incdirs[i], "leaks", v, sizeof(v))) {
+            if (frontend_module_ct_pkg_key(_self->incdirs[i], "leaks", (&v))) {
                 return ((strcmp(v, "error") == 0) ? 1 : 0);
             }
             return 0;
@@ -2686,7 +2684,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_leaks_for(void *self
     if (n != 0) {
         return 0;
     }
-    if ((frontend_module_ct_pkg_key(dir, "leaks", v, sizeof(v)) && (strcmp(v, "error") == 0))) {
+    if ((frontend_module_ct_pkg_key(dir, "leaks", (&v)) && (strcmp(v, "error") == 0))) {
         return 1;
     }
     return 0;
@@ -3220,7 +3218,7 @@ static int cycle_is_builtin_Box(struct frontend_module_Module * m, const char * 
 }
 static int cycle_Box_target(struct frontend_module_Module * m, int si, int fi) {
     const char * t;
-    char ptype[MAX_TEXT];
+    const char * ptype;
     int bx;
     int pi;
     int n;
@@ -3249,17 +3247,21 @@ static int cycle_Box_target(struct frontend_module_Module * m, int si, int fi) {
     if (pi >= m->sym->structs[bx].nfields) {
         return (-1);
     }
-    snprintf(ptype, sizeof(ptype), "%s", m->sym->structs[bx].fields[pi].type);
-    n = (int)(strlen(ptype));
-    while (((n > 0) && ((ptype[(n - 1)] == ' ') || (ptype[(n - 1)] == '\t')))) {
-        ptype[--n] = 0;
+    t = m->sym->structs[bx].fields[pi].type;
+    n = (int)(strlen(t));
+    while (((n > 0) && ((t[(n - 1)] == ' ') || (t[(n - 1)] == '\t')))) {
+        n--;
     }
-    if (((n == 0) || (ptype[(n - 1)] != '*'))) {
+    if (((n == 0) || (t[(n - 1)] != '*'))) {
         return (-1);
     }
-    ptype[--n] = 0;
-    while (((n > 0) && ((ptype[(n - 1)] == ' ') || (ptype[(n - 1)] == '\t')))) {
-        ptype[--n] = 0;
+    n--;
+    while (((n > 0) && ((t[(n - 1)] == ' ') || (t[(n - 1)] == '\t')))) {
+        n--;
+    }
+    ptype = runtime_text_ct_intern_len(t, n);
+    if ((!ptype)) {
+        return (-1);
     }
     t = ptype;
     if (strncmp(t, "struct ", 7) == 0) {
@@ -3283,14 +3285,12 @@ static int cycle_Box_target(struct frontend_module_Module * m, int si, int fi) {
     return ti;
 }
 static int cycle_emit(struct frontend_module_Module * m, int a, int b, int c) {
-    char chain[MAX_TEXT];
-    char msg[MAX_TEXT];
+    const char * chain;
+    const char * msg;
     const char * file;
     int nodes[3];
     int n;
     int i;
-    int w;
-    int k;
     int mark;
     nodes[0] = a;
     n = 1;
@@ -3300,22 +3300,11 @@ static int cycle_emit(struct frontend_module_Module * m, int a, int b, int c) {
     if (c >= 0) {
         nodes[n++] = c;
     }
-    chain[0] = 0;
-    w = 0;
+    chain = "";
     for (i = 0; i < n; i++) {
-        k = snprintf((chain + w), (sizeof(chain) - (size_t)(w)), "%s%s", (w ? " -> " : ""), m->sym->structs[nodes[i]].name);
-        if (((k < 0) || ((w + k) >= (int)(sizeof(chain))))) {
-            w = ((int)(sizeof(chain)) - 1);
-            break;
-        }
-        w += k;
+        chain = tool_sh_ct_scratch_fmt("%s%s%s", chain, (i ? " -> " : ""), m->sym->structs[nodes[i]].name);
     }
-    if (w < ((int)(sizeof(chain)) - 1)) {
-        k = snprintf((chain + w), (sizeof(chain) - (size_t)(w)), " -> %s", m->sym->structs[a].name);
-        if (((k > 0) && ((w + k) < (int)(sizeof(chain))))) {
-            w += k;
-        }
-    }
+    chain = tool_sh_ct_scratch_fmt("%s -> %s", chain, m->sym->structs[a].name);
     mark = (-1);
     for (i = 0; i < n; i++) {
         if (m->sym->structs[nodes[i]].allow_cycle) {
@@ -3327,10 +3316,10 @@ static int cycle_emit(struct frontend_module_Module * m, int a, int b, int c) {
         if ((!m->check_mode)) {
             return 0;
         }
-        snprintf(msg, sizeof(msg), "reference cycle suppressed by 'ct: allow-cycle': %s", chain);
+        msg = tool_sh_ct_scratch_fmt("reference cycle suppressed by 'ct: allow-cycle': %s", chain);
         return tool_diag_ct_sem_note(m->sym->structs[mark].line, m->sym->structs[mark].col, msg, cycle_file(m, mark));
     }
-    snprintf(msg, sizeof(msg), "potential reference cycle: %s; instances may leak unless the cycle is broken by hand", chain);
+    msg = tool_sh_ct_scratch_fmt("potential reference cycle: %s; instances may leak unless the cycle is broken by hand", chain);
     file = cycle_file(m, a);
     return tool_diag_ct_cycle_warn(m->sym->structs[a].line, m->sym->structs[a].col, msg, file);
 }
@@ -3418,7 +3407,7 @@ static int module_src_declares_Box(const char * path) {
     return 0;
 }
 static int ct_pkg_ns_clash(struct frontend_module_Module * m, char * * msg, char * * file) {
-    char ns[MAX_TEXT];
+    const char * ns;
     char * nroot;
     char * nother;
     int i;
@@ -3426,13 +3415,13 @@ static int ct_pkg_ns_clash(struct frontend_module_Module * m, char * * msg, char
     (*msg) = (char *)(0);
     (*file) = (char *)(0);
     for (i = 0; i < m->ninc; i++) {
-        if ((!frontend_module_ct_pkg_key(m->incdirs[i], "namespace", ns, sizeof(ns)))) {
+        if ((!frontend_module_ct_pkg_key(m->incdirs[i], "namespace", (&ns)))) {
             continue;
         }
         frontend_module_ct_norm_path(m->incdirs[i], (&nroot));
         for (j = 0; j < i; j++) {
-            char other[MAX_TEXT];
-            if ((!frontend_module_ct_pkg_key(m->incdirs[j], "namespace", other, sizeof(other)))) {
+            const char * other;
+            if ((!frontend_module_ct_pkg_key(m->incdirs[j], "namespace", (&other)))) {
                 continue;
             }
             if (strcmp(ns, other) != 0) {

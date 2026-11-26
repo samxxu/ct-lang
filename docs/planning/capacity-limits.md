@@ -531,6 +531,54 @@ vptr 名、map 主机类型的 `sizeof`、长 ADT 变体的生命周期成员、
 下一批（C2p-11）按单元簇继续：`tool/pkg` 的命令/缓存行、`frontend/type` 与
 `frontend/module` 的路径/键行、`backend/mem` 的池行。
 
+**S1a-0 C2p-11（全树收尾，已落）**：本批把最后 101 行 `[MAX_TEXT]` 清到 5 行，
+分两个实现批次，红证提交 `b1c14ea5`（baseline `b2f18cb6`）：
+
+- **批次一**（`feat(ct-ast): C2p-11 批次一`）：`frontend/type` 的
+  `type_key` / `concrete_struct` / `inst_method_ret` 三个无调用方的 buffer
+  形式删除，`maybe_box` / `needs_init` / `init_item_text` /
+  `rewrite_init_names` 改 pool 文本 / 裁剪视图，初始化项输出行改形式上限
+  （2000 字节装箱输出不再被 `len + 1024` 拒绝）；`frontend/module` 的
+  `ct_pkg_key`（整份 manifest 读入并 intern 值）、`ct_rel_cands` /
+  `ct_root_find`（run-scoped 候选路径）、`cycle_emit` / `cycle_Box_target` /
+  `unit_exists` / `add_unit` 的 base 与冲突诊断 / 导入常量的 `gns`/`cns` /
+  `scan_forward_type_aliases` / Drop 可见性 / `check_ns_dir` / `lib_scan` /
+  `leaks_for` / namespace clash；`backend/mem` 的 `mark_owned` /
+  `own_factory_ok` / `ret_same_struct` / `leak_decl` / `warn_leak`。
+- **批次二**：`frontend/sym` 的 `add_type_alias` 限定名、`impl_match` 的
+  模式/实参、`ct_inst_resolve`、`SymbolsTypeText.ct_inst_split` /
+  `impl_arg_canon` / `impl_pat_split` / `ct_row_set` 的行宽；`tool/pkg` 的
+  manifest（name/version）、publisher/ns-root、`IndexRow` / `PkgRec` /
+  `LockRow` / `LockParsedRow` 字段、`seen` 身份行、range 解析、git tag 选择、
+  install/update/migrate/index 的路径与诊断行全部改 pool 文本或
+  run-scoped 行；`Emitter.h.ct` 只改注释里的旧行宽描述（无代码变化）。
+
+**保留的确定短 scratch（逐类记录，全树 5 行）**：
+
+1. `ExprTypeParse.type_resolve_name` 的 `buf[MAX_TEXT]`（C2p-10 keeper；只用
+   于 `strlen(name) < MAX_TEXT`，长名本来走 `resolve_type_text`）；
+2. `Emitter.fail_unknown_statement` 的 `msg[MAX_TEXT]`（唯一变量是 kind 数字）；
+3. `em_expr_try` 的 `qt[MAX_TEXT]`（`__ct_q<N>` 临时量名）；
+4. `em_expr_newobj` 的 `tmp[MAX_TEXT]`（`__ct_new<N>` 临时量名）；
+5. `EmitInit.sb_rewrite_init` 的 `expr[MAX_TEXT]`（只在 `e0 - fs < MAX_TEXT`
+   的短区间走，长区间已走 run-scoped 块）。
+
+它们不承载用户文本，长度只由整数位数或受保护的短区间决定。
+
+**证据**：`test/ast/c2p_limits.sh` 58/58（baseline `b2f18cb6` 54/58：2000 字节
+包名、接口初始化器装箱、长模块路径、`own` 诊断四处红）；71 语料生成 C 与
+baseline 逐字节（71/71）；`test/ast/errors` 307 个夹具的 stdout/stderr 逐字
+（502 行，含 333 行 error/warning/note）与 baseline 相同；`check-ast`
+1665 passed / 0 failed / 7 skipped；`check-goldens-ast` 25/25；
+`check-warnings` 559/559；
+`check-seed` 两轮逐字节（60 .c + 59 .h）；`test/pkg/run.sh` 164/164；
+`check-semantics` 24/24；`check-docs`、`g0`/`g1`/`g6`/`g8` 绿；`check-sanitizers`
+612 checks、无 sanitizer 报告。发射 C 68903 -> 68745 行（仅 .c）；切片清单仍为 76，判别式仍各
+读 1 次。
+
+**C2p-11 后剩余（`grep -c '\[MAX_TEXT\]'`，行数）**：全树 5 行，全部是上述
+确定短 scratch，无用户文本截断。`S1a-0` 的 C2 文本容量项到此清零。
+
 ## 6 关联
 
 - [SH-109](../../issues/selfhost/sh109-max-funcs-capacity.md)（已落地的动态容量样板）

@@ -100,7 +100,7 @@ const char * * frontend_sym_ct_text_rows_reserve(const char * *, int, int, int *
 int frontend_sym_ct_inst_arg_count(const char *);
 int frontend_sym_ct_inst_encode(const char *, int, char * *, char *, int);
 const char * frontend_sym_ct_inst_encode_text(const char *, int, char * *);
-int frontend_sym_ct_inst_split(const char *, char *, int *, char * *, int, char *, int);
+int frontend_sym_ct_inst_split(const char *, const char * *, int *, char * *, int, const char * *);
 int frontend_sym_ct_is_container_type(const char *);
 int frontend_sym_ct_is_string_value_type(const char *);
 int frontend_sym_ct_type_canon(const char *, char *, int);
@@ -109,8 +109,8 @@ const char * frontend_sym_ct_generic_subst_text(const char *, const char *, cons
 int frontend_sym_ct_row_set(char * *, int, const char *);
 int frontend_sym_generic_tag_prefix(const char *, const char *);
 int frontend_sym_generic_word_char(int);
-void frontend_sym_impl_arg_canon(const char *, char *, int);
-int frontend_sym_impl_pat_split(const char *, char *, char * *, int, int *);
+const char * frontend_sym_impl_arg_canon_text(const char *);
+int frontend_sym_impl_pat_split(const char *, const char * *, char * *, int, int *);
 int frontend_sym_inst_enc_one(const char *, char *, int);
 void frontend_sym_meth_host_key(const char *, char *, int);
 

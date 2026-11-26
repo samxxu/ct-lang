@@ -120,7 +120,6 @@ const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_Ty
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-void frontend_type_type_key(const char *, char *, int);
 const char * frontend_type_type_key_text(const char *);
 struct frontend_type_TypeCheck * frontend_type_type_get(void);
 static int tc_expr_adtctor(struct frontend_type_TypeCheck *, int, char *, int);
@@ -242,126 +241,6 @@ static const char * frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_re
         return (const char *)(0);
     }
     return ret;
-}
-
-static int frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret(void *self, const char * ibase, const char * fname, char * out, int cap) {
-    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
-    char base[MAX_TEXT];
-    char ret[MAX_TEXT];
-    char tmp[MAX_TEXT];
-    int m;
-    int inst;
-    int ti;
-    int tn;
-    int ii;
-    int nimpls;
-    int k;
-    int ni;
-    int j;
-    int hit;
-    struct frontend_sym_StructImpl * im;
-    struct frontend_sym_StructInst * ins;
-    struct frontend_sym_StructTmpl * tp;
-    if (strncmp(ibase, "struct ", 7) != 0) {
-        return 0;
-    }
-    snprintf(base, sizeof(base), "%s", (ibase + 7));
-    inst = frontend_sym_ct_inst_find(base);
-    if (inst < 0) {
-        int ni2;
-        int mi2;
-        for (ni2 = 0; ni2 < _self->arena->nnode; ni2++) {
-            if (_self->arena->nodes[ni2].kind != N_IMPL) {
-                continue;
-            }
-            if (_self->arena->nodes[ni2].text2[0]) {
-                continue;
-            }
-            if (_self->arena->nodes[ni2].aux == (-1)) {
-                continue;
-            }
-            if (strcmp(_self->arena->nodes[ni2].text, ibase) != 0) {
-                continue;
-            }
-            for (mi2 = _self->arena->nodes[ni2].a; mi2 >= 0; mi2 = _self->arena->nodes[mi2].next) {
-                if (strcmp(_self->arena->nodes[mi2].text2, fname) == 0) {
-                    break;
-                }
-            }
-            if (mi2 < 0) {
-                continue;
-            }
-            if ((!_self->arena->nodes[mi2].text[0])) {
-                return 0;
-            }
-            snprintf(ret, sizeof(ret), "%s", _self->arena->nodes[mi2].text);
-            if (strcmp(ret, "void") == 0) {
-                return 0;
-            }
-            if ((((!strchr(ret, ' ')) && (!strchr(ret, '*'))) && (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, ret) >= 0))) {
-                snprintf(tmp, sizeof(tmp), "struct %s", ret);
-                snprintf(ret, sizeof(ret), "%s", tmp);
-            }
-            if (snprintf(out, (size_t)(cap), "%s", ret) >= cap) {
-                return 0;
-            }
-            return 1;
-        }
-        return 0;
-    }
-    m = (-1);
-    im = frontend_sym_ct_impls((&nimpls));
-    for (ii = 0; ((im && (ii < nimpls)) && (m < 0)); ii++) {
-        if (im[ii].use[0]) {
-            continue;
-        }
-        if ((!frontend_sym_ct_impl_matches(ii, inst))) {
-            continue;
-        }
-        for (ni = _self->arena->nodes[im[ii].node].a; ni >= 0; ni = _self->arena->nodes[ni].next) {
-            if (strcmp(_self->arena->nodes[ni].text2, fname) == 0) {
-                m = ni;
-                break;
-            }
-        }
-    }
-    if (m < 0) {
-        return 0;
-    }
-    if ((!_self->arena->nodes[m].text[0])) {
-        return 0;
-    }
-    snprintf(ret, sizeof(ret), "%s", _self->arena->nodes[m].text);
-    ins = frontend_sym_ct_insts((&k));
-    ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
-    tp = frontend_sym_ct_tmpls((&tn));
-    hit = 1;
-    if (((ti >= 0) && tp)) {
-        for (j = 0; (hit && (j < tp[ti].ntparams)); j++) {
-            if (j >= ins[inst].nargs) {
-                break;
-            }
-            if (((!tp[ti].tparam[j]) || (!ins[inst].ctype[j]))) {
-                continue;
-            }
-            if (frontend_sym_ct_generic_subst(ret, tp[ti].tparam[j], ins[inst].ctype[j], tmp, MAX_TEXT) != 0) {
-                hit = 0;
-            }
-            else {
-                snprintf(ret, sizeof(ret), "%s", tmp);
-            }
-        }
-    }
-    if ((!hit)) {
-        return 0;
-    }
-    if (strcmp(ret, "void") == 0) {
-        return 0;
-    }
-    if (snprintf(out, (size_t)(cap), "%s", ret) >= cap) {
-        return 0;
-    }
-    return 1;
 }
 
 static int frontend_type_TypeCheck_frontend_type_TypeOps_new_node(void *self, int kind) {
@@ -498,18 +377,6 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct_text(vo
         return 0;
     }
     (*sout) = base;
-    return 1;
-}
-
-static int frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct(void *self, const char * type, char * sout, int scap, int * is_ptr) {
-    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
-    const char * s;
-    if ((!_self->__frontend_type_typeops_vptr->concrete_struct_text(_self, type, (&s), is_ptr))) {
-        return 0;
-    }
-    if (snprintf(sout, (size_t)(scap), "%s", s) >= scap) {
-        return 0;
-    }
     return 1;
 }
 
@@ -925,9 +792,9 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, 
 static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, int n, const char * trait, int addr) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     const char * t;
-    char tname[MAX_TEXT];
+    const char * tname;
     const char * sname;
-    char iname[MAX_TEXT];
+    const char * iname;
     int is_ptr;
     int si;
     int u;
@@ -946,7 +813,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
     }
     nk = _self->arena->nodes[n].kind;
     mptr = 0;
-    iname[0] = 0;
+    iname = "";
     struct runtime_arena_NodeKind __ct_match1 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
     if (__ct_match1.tag == 34) {
         if (strcmp(_self->arena->nodes[n].text, trait) != 0) {
@@ -964,11 +831,11 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
         return bnode;
     }
     else if (__ct_match1.tag == 10) {
-        snprintf(iname, sizeof(iname), "%s", _self->arena->nodes[n].text2);
+        iname = _self->arena->nodes[n].text2;
     }
     else if (__ct_match1.tag == 27) {
         if (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_VAR) {
-            snprintf(iname, sizeof(iname), "%s", _self->arena->nodes[_self->arena->nodes[n].a].text2);
+            iname = _self->arena->nodes[_self->arena->nodes[n].a].text2;
             mptr = 1;
         }
     }
@@ -1159,7 +1026,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
         return _self->__frontend_type_typeops_vptr->fail(_self, "cannot infer the type to box");
     }
     ip = 0;
-    if (_self->__frontend_type_typeops_vptr->iface_ref_type(_self, t, tname, sizeof(tname), (&ip))) {
+    if (_self->__frontend_type_typeops_vptr->iface_ref_type_text(_self, t, (&tname), (&ip))) {
         if (strcmp(tname, trait) == 0) {
             if (ip == addr) {
                 return n;
@@ -1662,11 +1529,10 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_type_has_array_init(voi
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
     for (fi = 0; ((si >= 0) && (fi < _self->sym->structs[si].nfields)); fi++) {
-        char ft[MAX_TEXT];
+        const char * ft = _self->sym->structs[si].fields[fi].type;
         if ((!_self->sym->structs[si].fields[fi].dims[0])) {
             continue;
         }
-        snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -1680,7 +1546,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_type_has_array_init(voi
 static int frontend_type_TypeCheck_frontend_type_TypeOps_needs_init(void *self, const char * type) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     const char * base;
-    char tb[MAX_TEXT];
+    const char * tb;
     size_t tl;
     int si;
     int fi;
@@ -1692,11 +1558,13 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_needs_init(void *self, 
     while ((*base) == ' ') {
         base++;
     }
-    snprintf(tb, sizeof(tb), "%s", base);
-    tl = strlen(tb);
-    while (((tl > 0) && (tb[(tl - 1)] == ' '))) {
+    tl = strlen(base);
+    while (((tl > 0) && (base[(tl - 1)] == ' '))) {
         tl--;
-        tb[tl] = 0;
+    }
+    tb = runtime_text_ct_intern_len(base, (int)(tl));
+    if ((!tb)) {
+        return 0;
     }
     if (strchr(tb, '*') != 0) {
         return 0;
@@ -1709,8 +1577,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_needs_init(void *self, 
         return 1;
     }
     for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        char ft[MAX_TEXT];
-        snprintf(ft, sizeof(ft), "%s", _self->sym->structs[si].fields[fi].type);
+        const char * ft = _self->sym->structs[si].fields[fi].type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -1726,12 +1593,13 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     const char * p;
     const char * rhs;
     const char * base;
-    char fname[MAX_TEXT];
-    char ftype[MAX_TEXT];
-    char sname[MAX_TEXT];
-    char tname[MAX_TEXT];
-    char vname[MAX_TEXT];
-    char vtype[MAX_TEXT];
+    const char * idstart;
+    const char * fname;
+    const char * ftype;
+    const char * sname;
+    const char * tname;
+    const char * vname;
+    const char * vtype;
     int si;
     int fi;
     int is_ptr;
@@ -1741,12 +1609,12 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     int found;
     int ok;
     size_t k;
-    fname[0] = 0;
-    ftype[0] = 0;
-    sname[0] = 0;
-    tname[0] = 0;
-    vname[0] = 0;
-    vtype[0] = 0;
+    fname = "";
+    ftype = "";
+    sname = "";
+    tname = "";
+    vname = "";
+    vtype = "";
     rhs = item;
     base = stype;
     p = item;
@@ -1757,18 +1625,15 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     if (ok) {
         p++;
     }
+    idstart = p;
     k = 0;
     while ((ok && ((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_')))) {
-        if ((k + 1) >= sizeof(fname)) {
-            ok = 0;
-        }
-        else {
-            fname[k] = (*p);
-            k++;
-            p++;
-        }
+        k++;
+        p++;
     }
-    fname[k] = 0;
+    if (ok) {
+        fname = tool_sh_ct_scratch_fmt("%.*s", (int)(k), idstart);
+    }
     if ((!k)) {
         ok = 0;
     }
@@ -1803,8 +1668,8 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     }
     is_ptr = 0;
     if (ok) {
-        snprintf(ftype, sizeof(ftype), "%s", _self->sym->structs[si].fields[fi].type);
-        if ((!_self->__frontend_type_typeops_vptr->iface_ref_type(_self, ftype, tname, sizeof(tname), (&is_ptr)))) {
+        ftype = _self->sym->structs[si].fields[fi].type;
+        if ((!_self->__frontend_type_typeops_vptr->iface_ref_type_text(_self, ftype, (&tname), (&is_ptr)))) {
             ok = 0;
         }
     }
@@ -1821,18 +1686,15 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
                 p++;
             }
         }
+        idstart = p;
         k = 0;
         while ((ok && ((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_')))) {
-            if ((k + 1) >= sizeof(vname)) {
-                ok = 0;
-            }
-            else {
-                vname[k] = (*p);
-                k++;
-                p++;
-            }
+            k++;
+            p++;
         }
-        vname[k] = 0;
+        if (ok) {
+            vname = tool_sh_ct_scratch_fmt("%.*s", (int)(k), idstart);
+        }
         if ((!k)) {
             ok = 0;
         }
@@ -1846,11 +1708,12 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     vptr = 0;
     if (ok) {
         _self->sym->errmsg = "";
-        if (_self->sym->__frontend_sym_symbolops_vptr->var_type(_self->sym, vname, vtype, (int)(sizeof(vtype))) != 0) {
+        vtype = _self->sym->__frontend_sym_symbolops_vptr->var_type_text(_self->sym, vname);
+        if ((!vtype)) {
             ok = 0;
         }
     }
-    if ((ok && (!_self->__frontend_type_typeops_vptr->concrete_struct(_self, vtype, sname, sizeof(sname), (&vptr))))) {
+    if ((ok && (!_self->__frontend_type_typeops_vptr->concrete_struct_text(_self, vtype, (&sname), (&vptr))))) {
         ok = 0;
     }
     if (((ok && srcptr) && vptr)) {
@@ -1918,7 +1781,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
     if ((!item)) {
         return _self->__frontend_type_typeops_vptr->fail(_self, "out of memory");
     }
-    fixedcap = (len + 1024);
+    fixedcap = MAX_INIT_TEXT_MAX;
     fixed = (char *)(malloc((size_t)(fixedcap)));
     if ((!fixed)) {
         free(item);
@@ -2063,9 +1926,9 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text(void 
 static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void *self, const char * in, char * out, int cap) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     const char * id;
-    char last[MAX_TEXT];
-    char fn_cn[MAX_TEXT];
-    char msg[MAX_TEXT];
+    const char * last;
+    const char * fn_cn;
+    const char * msg;
     int i;
     int i0;
     int n;
@@ -2078,7 +1941,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
     (void)(_self);
     i = 0;
     w = 0;
-    last[0] = 0;
+    last = "";
     while (in[i]) {
         c = in[i];
         if (((c == '"') || (c == '\''))) {
@@ -2112,7 +1975,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
                 }
                 i++;
             }
-            last[0] = 0;
+            last = "";
             continue;
         }
         if ((!(((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_')))) {
@@ -2123,12 +1986,11 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
             w++;
             i++;
             if (((c == '.') || (c == '>'))) {
-                last[0] = c;
-                last[1] = 0;
+                last = ((c == '.') ? "." : ">");
             }
             else {
                 if (((((c != ' ') && (c != '\t')) && (c != '\n')) && (c != '\r'))) {
-                    last[0] = 0;
+                    last = "";
                 }
             }
             continue;
@@ -2148,29 +2010,29 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
             }
             snprintf((out + w), (size_t)((cap - w)), "%s", id);
             w += n;
-            snprintf(last, sizeof(last), "%s", id);
+            last = id;
             continue;
         }
         vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, id);
         if (((vi >= 0) && _self->sym->vars[vi].ambiguous)) {
-            snprintf(msg, sizeof(msg), "global '%s' is declared by more than one import and"" cannot be named in a static initializer", id);
+            msg = tool_sh_ct_scratch_fmt("global '%s' is declared by more than one import and"" cannot be named in a static initializer", id);
             return _self->__frontend_type_typeops_vptr->fail(_self, msg);
         }
         if (((vi >= 0) && (strcmp(_self->sym->vars[vi].cname, id) != 0))) {
             snprintf((out + w), (size_t)((cap - w)), "%s", _self->sym->vars[vi].cname);
             w += (int)(strlen(_self->sym->vars[vi].cname));
-            snprintf(last, sizeof(last), "%s", id);
+            last = id;
             continue;
         }
         fn_hits = 0;
         fn_bad = 0;
-        fn_cn[0] = 0;
+        fn_cn = "";
         for (fi = 0; fi < _self->sym->nfunc; fi++) {
             if (strcmp(_self->sym->funcs[fi].name, id) != 0) {
                 continue;
             }
             if (fn_hits == 0) {
-                snprintf(fn_cn, sizeof(fn_cn), "%s", _self->sym->funcs[fi].cname);
+                fn_cn = _self->sym->funcs[fi].cname;
             }
             else {
                 if (strcmp(fn_cn, _self->sym->funcs[fi].cname) != 0) {
@@ -2180,7 +2042,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
             fn_hits++;
         }
         if (fn_bad) {
-            snprintf(msg, sizeof(msg), "function '%s' is declared by more than one namespace and"" cannot be named in a static initializer", id);
+            msg = tool_sh_ct_scratch_fmt("function '%s' is declared by more than one namespace and"" cannot be named in a static initializer", id);
             return _self->__frontend_type_typeops_vptr->fail(_self, msg);
         }
         if (((fn_hits > 0) && (strcmp(fn_cn, id) != 0))) {
@@ -2194,7 +2056,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
             snprintf((out + w), (size_t)((cap - w)), "%s", id);
             w += n;
         }
-        snprintf(last, sizeof(last), "%s", id);
+        last = id;
     }
     if (w >= cap) {
         return (-1);
@@ -2205,7 +2067,6 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
 
 const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_TypeOps_vtable = {
     .inst_method_ret_text = frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret_text,
-    .inst_method_ret = frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret,
     .new_node = frontend_type_TypeCheck_frontend_type_TypeOps_new_node,
     .fail = frontend_type_TypeCheck_frontend_type_TypeOps_fail,
     .last_error = frontend_type_TypeCheck_frontend_type_TypeOps_last_error,
@@ -2214,7 +2075,6 @@ const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_Ty
     .iface_ref_type_text = frontend_type_TypeCheck_frontend_type_TypeOps_iface_ref_type_text,
     .iface_ref_type = frontend_type_TypeCheck_frontend_type_TypeOps_iface_ref_type,
     .concrete_struct_text = frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct_text,
-    .concrete_struct = frontend_type_TypeCheck_frontend_type_TypeOps_concrete_struct,
     .expr_type = frontend_type_TypeCheck_frontend_type_TypeOps_expr_type,
     .expr_type_text = frontend_type_TypeCheck_frontend_type_TypeOps_expr_type_text,
     .expr_ctype_text = frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype_text,
@@ -2321,79 +2181,6 @@ const char * frontend_type_type_key_text(const char * in) {
         tool_sh_ct_text_free((&w), (&wcap));
         tool_sh_ct_text_free((&raw), (&rawcap));
         return (const char *)(0);
-}
-void frontend_type_type_key(const char * in, char * out, int cap) {
-    char raw[MAX_TEXT];
-    char w[MAX_TEXT];
-    int rn = 0;
-    int wn = 0;
-    int i;
-    while ((*in)) {
-        if ((((((*in) == ' ') || ((*in) == '\t')) || ((*in) == '\n')) || ((*in) == '\r'))) {
-            in++;
-            continue;
-        }
-        if ((((((*in) >= 'a') && ((*in) <= 'z')) || (((*in) >= 'A') && ((*in) <= 'Z'))) || ((*in) == '_'))) {
-            wn = 0;
-            while ((((((((*in) >= 'a') && ((*in) <= 'z')) || (((*in) >= 'A') && ((*in) <= 'Z'))) || (((*in) >= '0') && ((*in) <= '9'))) || ((*in) == '_')) && (wn < (MAX_TEXT - 1)))) {
-                w[wn++] = (*in++);
-            }
-            w[wn] = 0;
-            if (((strcmp(w, "const") == 0) || (strcmp(w, "volatile") == 0))) {
-                continue;
-            }
-            for (i = 0; ((i < wn) && (rn < (MAX_TEXT - 1))); i++) {
-                raw[rn++] = w[i];
-            }
-            continue;
-        }
-        if (rn < (MAX_TEXT - 1)) {
-            raw[rn++] = (*in);
-        }
-        in++;
-    }
-    raw[rn] = 0;
-    if ((((strchr(raw, '*') == 0) && (strchr(raw, '[') == 0)) && (strchr(raw, '(') == 0))) {
-        if (((strcmp(raw, "signed") == 0) || (strcmp(raw, "signedint") == 0))) {
-            snprintf(raw, sizeof(raw), "%s", "int");
-        }
-        else {
-            if (strcmp(raw, "unsignedint") == 0) {
-                snprintf(raw, sizeof(raw), "%s", "unsigned");
-            }
-            else {
-                if ((((strcmp(raw, "longint") == 0) || (strcmp(raw, "signedlong") == 0)) || (strcmp(raw, "signedlongint") == 0))) {
-                    snprintf(raw, sizeof(raw), "%s", "long");
-                }
-                else {
-                    if (strcmp(raw, "unsignedlongint") == 0) {
-                        snprintf(raw, sizeof(raw), "%s", "unsignedlong");
-                    }
-                    else {
-                        if ((((strcmp(raw, "longlongint") == 0) || (strcmp(raw, "signedlonglong") == 0)) || (strcmp(raw, "signedlonglongint") == 0))) {
-                            snprintf(raw, sizeof(raw), "%s", "longlong");
-                        }
-                        else {
-                            if (strcmp(raw, "unsignedlonglongint") == 0) {
-                                snprintf(raw, sizeof(raw), "%s", "unsignedlonglong");
-                            }
-                            else {
-                                if ((((strcmp(raw, "shortint") == 0) || (strcmp(raw, "signedshort") == 0)) || (strcmp(raw, "signedshortint") == 0))) {
-                                    snprintf(raw, sizeof(raw), "%s", "short");
-                                }
-                                else {
-                                    if (strcmp(raw, "unsignedshortint") == 0) {
-                                        snprintf(raw, sizeof(raw), "%s", "unsignedshort");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    snprintf(out, (size_t)(cap), "%s", raw);
 }
 static int tc_expr_adtctor(struct frontend_type_TypeCheck * self, int n, char * out, int cap) {
     if (snprintf(out, (size_t)(cap), "struct %s", self->arena->nodes[n].text) >= cap) {
@@ -2534,10 +2321,16 @@ static int tc_expr_mcall(struct frontend_type_TypeCheck * self, int n, char * ou
         return (-1);
     }
     if (((self->arena->nodes[n].aux == 9) || (self->arena->nodes[n].aux == 10))) {
-        if (self->__frontend_type_typeops_vptr->inst_method_ret(self, self->arena->nodes[n].text, self->arena->nodes[n].text2, out, cap)) {
+{
+            const char * mret = self->__frontend_type_typeops_vptr->inst_method_ret_text(self, self->arena->nodes[n].text, self->arena->nodes[n].text2);
+            if ((!mret)) {
+                return (-1);
+            }
+            if (snprintf(out, (size_t)(cap), "%s", mret) >= cap) {
+                return (-1);
+            }
             return 0;
         }
-        return (-1);
     }
     return (-1);
 }
@@ -2554,7 +2347,7 @@ static int tc_expr_call(struct frontend_type_TypeCheck * self, int n, char * out
 }
 static int tc_expr_member_or_arrow(struct frontend_type_TypeCheck * self, int n, char * out, int cap) {
     const char * rt = "";
-    char sname[MAX_TEXT];
+    const char * sname;
     int is_ptr;
     int si;
     int fi;
@@ -2562,7 +2355,7 @@ static int tc_expr_member_or_arrow(struct frontend_type_TypeCheck * self, int n,
         return (-1);
     }
     is_ptr = (self->arena->nodes[n].kind == N_ARROW);
-    if ((!self->__frontend_type_typeops_vptr->concrete_struct(self, rt, sname, sizeof(sname), (&is_ptr)))) {
+    if ((!self->__frontend_type_typeops_vptr->concrete_struct_text(self, rt, (&sname), (&is_ptr)))) {
         return (-1);
     }
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, sname);
@@ -2692,14 +2485,14 @@ static int tc_expr_into(struct frontend_type_TypeCheck * self, int n, char * out
 }
 static int ctype_member(struct frontend_type_TypeCheck * self, int n, char * out, int cap, int is_ptr) {
     const char * rt = "";
-    char sname[MAX_TEXT];
+    const char * sname;
     int si;
     int fi;
     int w;
     if (self->__frontend_type_typeops_vptr->expr_type_text(self, self->arena->nodes[n].a, (&rt)) != 0) {
         return (-1);
     }
-    if ((!self->__frontend_type_typeops_vptr->concrete_struct(self, rt, sname, sizeof(sname), (&is_ptr)))) {
+    if ((!self->__frontend_type_typeops_vptr->concrete_struct_text(self, rt, (&sname), (&is_ptr)))) {
         return (-1);
     }
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, sname);

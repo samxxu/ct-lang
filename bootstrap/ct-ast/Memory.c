@@ -108,8 +108,8 @@ static int backend_mem_Memory_backend_mem_MemoryOps_mark_owned(void *self, int n
         d = _self->arena->nodes[n].a;
     }
     while (d >= 0) {
-        char base[MAX_TEXT];
-        char msg[MAX_TEXT];
+        const char * base;
+        const char * msg;
         const char * tp = _self->arena->nodes[d].text;
         const char * name = _self->arena->nodes[d].text2;
         size_t bl;
@@ -126,25 +126,33 @@ static int backend_mem_Memory_backend_mem_MemoryOps_mark_owned(void *self, int n
         if (strncmp(tp, "struct ", 7) == 0) {
             tp += 7;
         }
-        snprintf(base, sizeof(base), "%s", tp);
-        bl = strlen(base);
-        while (((bl > 0) && ((base[(bl - 1)] == '*') || (base[(bl - 1)] == ' ')))) {
-            bl = (bl - 1);
-            base[bl] = 0;
+        bl = strlen(tp);
+        while (((bl > 0) && ((tp[(bl - 1)] == '*') || (tp[(bl - 1)] == ' ')))) {
+            bl--;
+        }
+        base = runtime_text_ct_intern_len(tp, (int)(bl));
+        if ((!base)) {
+            return _self->__backend_mem_memoryops_vptr->fail(_self, "out of memory");
         }
         si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
         zero = (((_self->arena->nodes[d].a >= 0) && (_self->arena->nodes[_self->arena->nodes[d].a].kind == N_NUM)) && (_self->arena->nodes[_self->arena->nodes[d].a].num == 0));
         if ((((!_self->__backend_mem_memoryops_vptr->expr_alloc(_self, _self->arena->nodes[d].a)) && (!((si >= 0) && _self->__backend_mem_memoryops_vptr->own_factory_ok(_self, _self->arena->nodes[d].a, si)))) && (!zero))) {
             if (si >= 0) {
-                snprintf(msg, sizeof(msg), "'own' requires a malloc, calloc or factory call returning 'struct %s *'", base);
+                msg = runtime_text_ct_internf("'own' requires a malloc, calloc or factory call returning 'struct %s *'", base);
             }
             else {
-                snprintf(msg, sizeof(msg), "'own' requires a malloc or calloc initialiser");
+                msg = runtime_text_ct_internf("'own' requires a malloc or calloc initialiser");
+            }
+            if ((!msg)) {
+                return _self->__backend_mem_memoryops_vptr->fail(_self, "out of memory");
             }
             return tool_diag_ct_sem_error(line, 1, msg, _self->path);
         }
         if (((si < 0) || (!_self->sym->structs[si].uses_drop))) {
-            snprintf(msg, sizeof(msg), "struct '%s' does not use trait 'Drop'", base);
+            msg = runtime_text_ct_internf("struct '%s' does not use trait 'Drop'", base);
+            if ((!msg)) {
+                return _self->__backend_mem_memoryops_vptr->fail(_self, "out of memory");
+            }
             return tool_diag_ct_sem_error(line, 1, msg, _self->path);
         }
         if (zero) {
@@ -158,7 +166,10 @@ static int backend_mem_Memory_backend_mem_MemoryOps_mark_owned(void *self, int n
                 if (((i == vi) || (strcmp(_self->sym->vars[i].name, name) != 0))) {
                     continue;
                 }
-                snprintf(msg, sizeof(msg), "duplicate 'own' binding for '%s'", name);
+                msg = runtime_text_ct_internf("duplicate 'own' binding for '%s'", name);
+                if ((!msg)) {
+                    return _self->__backend_mem_memoryops_vptr->fail(_self, "out of memory");
+                }
                 return tool_diag_ct_sem_error(line, 1, msg, _self->path);
             }
         }
@@ -200,7 +211,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_own_factory_ok(void *self, i
     int fi;
     int i;
     const char * ret;
-    char rt[MAX_TEXT];
+    const char * rt;
     size_t bl;
     if (((si < 0) || (si >= _self->sym->nstructs))) {
         return 0;
@@ -224,19 +235,20 @@ static int backend_mem_Memory_backend_mem_MemoryOps_own_factory_ok(void *self, i
     if (strncmp(ret, "struct ", 7) != 0) {
         return 0;
     }
-    snprintf(rt, sizeof(rt), "%s", ret);
-    bl = strlen(rt);
-    while (((bl > 0) && (rt[(bl - 1)] == ' '))) {
+    bl = strlen(ret);
+    while (((bl > 0) && (ret[(bl - 1)] == ' '))) {
         bl--;
     }
-    if (((bl == 0) || (rt[(bl - 1)] != '*'))) {
+    if (((bl == 0) || (ret[(bl - 1)] != '*'))) {
         return 0;
     }
-    rt[(bl - 1)] = 0;
     bl--;
-    while (((bl > 0) && (rt[(bl - 1)] == ' '))) {
+    while (((bl > 0) && (ret[(bl - 1)] == ' '))) {
         bl--;
-        rt[bl] = 0;
+    }
+    rt = runtime_text_ct_intern_len(ret, (int)(bl));
+    if ((!rt)) {
+        return 0;
     }
     if (strchr(rt, '*')) {
         return 0;
@@ -330,18 +342,19 @@ static int backend_mem_Memory_backend_mem_MemoryOps_expr_returns(void *self, int
 
 static int backend_mem_Memory_backend_mem_MemoryOps_ret_same_struct(void *self, const char * ret, int si) {
     struct backend_mem_Memory *_self = (struct backend_mem_Memory *)self;
-    char rt[MAX_TEXT];
+    const char * rt;
     size_t bl;
     (void)(_self);
     bl = strlen(ret);
     if (((bl == 0) || (ret[(bl - 1)] != '*'))) {
         return 0;
     }
-    snprintf(rt, sizeof(rt), "%s", ret);
-    bl = strlen(rt);
-    while (((bl > 0) && ((rt[(bl - 1)] == '*') || (rt[(bl - 1)] == ' ')))) {
-        bl = (bl - 1);
-        rt[bl] = 0;
+    while (((bl > 0) && ((ret[(bl - 1)] == '*') || (ret[(bl - 1)] == ' ')))) {
+        bl--;
+    }
+    rt = runtime_text_ct_intern_len(ret, (int)(bl));
+    if ((!rt)) {
+        return 0;
     }
     if (strncmp(rt, "struct ", 7) == 0) {
         return (strcmp((rt + 7), _self->sym->structs[si].name) == 0);
@@ -366,22 +379,23 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_decl(void *self, int n)
     call_owned = 0;
     si = (-1);
 {
-        char base[MAX_TEXT];
-        char sname[MAX_TEXT];
+        const char * base;
+        const char * sname;
         const char * tp = _self->arena->nodes[n].text;
         size_t bl = strlen(tp);
         if ((((bl > 0) && (tp[(bl - 1)] == '*')) && (_self->arena->nodes[n].text3[0] == 0))) {
-            snprintf(base, sizeof(base), "%s", tp);
-            bl = strlen(base);
-            while (((bl > 0) && ((base[(bl - 1)] == '*') || (base[(bl - 1)] == ' ')))) {
-                bl = (bl - 1);
-                base[bl] = 0;
+            while (((bl > 0) && ((tp[(bl - 1)] == '*') || (tp[(bl - 1)] == ' ')))) {
+                bl--;
+            }
+            base = runtime_text_ct_intern_len(tp, (int)(bl));
+            if ((!base)) {
+                return (-1);
             }
             if (strncmp(base, "struct ", 7) == 0) {
-                snprintf(sname, sizeof(sname), "%s", (base + 7));
+                sname = (base + 7);
             }
             else {
-                snprintf(sname, sizeof(sname), "%s", base);
+                sname = base;
             }
             si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sname);
             if ((((!heap) && (si >= 0)) && (_self->arena->nodes[e].kind == N_CALL))) {
@@ -539,14 +553,14 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_delete(void *self, int 
 static int backend_mem_Memory_backend_mem_MemoryOps_warn_leak(void *self, int vi, int path_line) {
     struct backend_mem_Memory *_self = (struct backend_mem_Memory *)self;
     int kind;
-    char tname[MAX_TEXT];
+    const char * tname;
     (void)(_self);
     kind = ((path_line > 0) ? 2 : 0);
     if (_self->sym->vars[vi].st >= 0) {
-        snprintf(tname, sizeof(tname), "%s", _self->sym->structs[_self->sym->vars[vi].st].name);
+        tname = _self->sym->structs[_self->sym->vars[vi].st].name;
     }
     else {
-        tname[0] = 0;
+        tname = "";
     }
     if (tool_diag_ct_leak_warn(kind, _self->sym->vars[vi].own_line, path_line, _self->path, _self->sym->vars[vi].name, tname) != 0) {
         return _self->__backend_mem_memoryops_vptr->fail(_self, "too many warnings");

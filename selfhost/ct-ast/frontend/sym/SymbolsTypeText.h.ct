@@ -52,7 +52,7 @@ pub int ct_inst_encode(const char *tmpl, int nargs, char **args, char *out, int 
    The whole spelling is built and then, past 63 characters, hashed exactly as
    before; the result is one interned text. NULL is OOM / over TEXT_LIMIT. */
 pub const char *ct_inst_encode_text(const char *tmpl, int nargs, char **args);
-pub int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argcap, char *tail, int cap);
+pub int ct_inst_split(const char *in, const char **name, int *nargs, char **args, int argcap, const char **tail);
 pub int ct_is_container_type(const char *type);
 pub int ct_is_string_value_type(const char *type);
 pub int ct_type_canon(const char *in, char *out, int cap);
@@ -66,8 +66,8 @@ pub const char *ct_generic_subst_text(const char *in, const char *word,
 pub int ct_row_set(char **rows, int i, const char *s);
 pub int generic_tag_prefix(const char *in, const char *p);
 pub int generic_word_char(int c);
-pub void impl_arg_canon(const char *arg, char *out, int cap);
-pub int impl_pat_split(const char *pat, char *name, char **args, int argcap, int *na);
+pub const char *impl_arg_canon_text(const char *arg);
+pub int impl_pat_split(const char *pat, const char **name, char **args, int argcap, int *na);
 pub int inst_enc_one(const char *arg, char *out, int cap);
 pub void meth_host_key(const char *host, char *out, int cap);
 
@@ -354,14 +354,15 @@ int ct_inst_encode(const char *tmpl, int nargs, char **args, char *out, int cap)
    nesting (`Vec<Vec<int> >` has one argument) and either arity of the frozen
    cap. Both the emitter (resolve) and the parser (register a nested instance)
    read the same shape through this one scanner. */
-int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argcap,
-                  char *tail, int cap)
+int ct_inst_split(const char *in, const char **name, int *nargs, char **args, int argcap,
+                  const char **tail)
 {
     const char *p, *lt, *gt, *base;
-    int r, depth, i;
+    int r, depth;
 
     *nargs = 0;
-    tail[0] = 0;
+    *name = "";
+    *tail = "";
     p = in;
     while (*p == ' ') p++;
     if (strncmp(p, "struct ", 7) == 0) p += 7;
@@ -370,9 +371,9 @@ int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argca
     base = p;
     r = (int)(lt - base);
     while (r > 0 && base[r - 1] == ' ') r--;
-    if (r <= 0 || r >= cap) return -1;
-    memcpy(name, base, (size_t)r);
-    name[r] = 0;
+    if (r <= 0) return -1;
+    *name = runtime::text::ct_intern_len(base, r);
+    if (!*name) return -1;
     gt = lt;
     depth = 0;
     for (; *gt; gt++) {
@@ -390,15 +391,16 @@ int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argca
         for (;;) {
             if (*b == 0 || (*b == ',' && depth == 0) || (b == gt)) {
                 int len = (int)(b - a);
-                char raw[MAX_TEXT];
-                char canon[MAX_TEXT];
+                const char *raw;
+                const char *canon;
                 if (*nargs >= argcap || *nargs >= MAX_STRUCT_TPARAMS_MAX
-                    || len <= 0 || len >= MAX_TEXT) return -1;
-                memcpy(raw, a, (size_t)len);
-                raw[len] = 0;
-                if (ct_type_canon(raw, canon, sizeof canon) != 0) return -1;
+                    || len <= 0) return -1;
+                raw = runtime::text::ct_intern_len(a, len);
+                if (!raw) return -1;
+                canon = ct_type_canon_text(raw);
+                if (!canon) return -1;
                 if (!args || !args[*nargs]) return -1;
-                snprintf(args[*nargs], MAX_TEXT, "%s", canon);
+                if (ct_row_set(args, *nargs, canon) != 0) return -1;
                 *nargs = *nargs + 1;
                 if (b == gt) break;
                 a = b + 1;
@@ -410,8 +412,8 @@ int ct_inst_split(const char *in, char *name, int *nargs, char **args, int argca
             b++;
         }
     }
-    i = snprintf(tail, (size_t)cap, "%s", gt + 1);
-    if (i < 0 || i >= cap) return -1;
+    *tail = runtime::text::ct_intern(gt + 1);
+    if (!*tail) return -1;
     return 0;
 }
 
@@ -605,51 +607,52 @@ int generic_word_char(int c)
 
 /* Strip the C `struct ` prefix and every blank, so `struct Box_int`, `Box_int`
    and the pattern's `Box_int` compare equal. */
-void impl_arg_canon(const char *arg, char *out, int cap)
+const char *impl_arg_canon_text(const char *arg)
 {
     const char *s = arg;
+    char *out;
     int n = 0;
 
     if (strncmp(s, "struct ", 7) == 0) s += 7;
-    while (*s && n < cap - 1) {
+    out = tool::sh::ct_scratch_alloc((int)strlen(s) + 1);
+    while (*s) {
         if (*s != ' ' && *s != '\t') out[n++] = *s;
         s++;
     }
     out[n] = 0;
+    return runtime::text::ct_intern(out);
 }
 
 /* `Name<a, b>` -> name plus the two top-level argument spellings. 0 when the
    spelling is not a template application. */
-int impl_pat_split(const char *pat, char *name, char **args, int argcap, int *na)
+int impl_pat_split(const char *pat, const char **name, char **args, int argcap, int *na)
 {
     const char *lt = strchr(pat, '<');
     const char *end, *p, *seg;
-    int depth = 0, n = 0, len;
+    int depth = 0, n = 0, len, sl;
 
     *na = 0;
+    *name = "";
     if (!lt) return 0;
     len = (int)strlen(pat);
     if (len == 0 || pat[len - 1] != '>') return 0;
-    if ((int)(lt - pat) >= MAX_TEXT) return 0;
-    memcpy(name, pat, (size_t)(lt - pat));
-    name[(size_t)(lt - pat)] = 0;
+    *name = runtime::text::ct_intern_len(pat, (int)(lt - pat));
+    if (!*name) return 0;
     end = pat + len - 1;
     seg = lt + 1;
     for (p = lt + 1; p <= end; p++) {
         if (p == end || (*p == ',' && depth == 0)) {
-            char *dst;
-            int sl = (int)(p - seg), i = 0;
+            const char *arg;
             if (n >= argcap || n >= MAX_STRUCT_TPARAMS_MAX) return 0;
-            dst = args ? args[n] : 0;
-            if (!dst) return 0;
+            sl = (int)(p - seg);
             while (sl > 0 && (*seg == ' ' || *seg == '\t')) {
                 seg++;
                 sl--;
             }
             while (sl > 0 && (seg[sl - 1] == ' ' || seg[sl - 1] == '\t')) sl--;
-            if (sl >= MAX_TEXT) sl = MAX_TEXT - 1;
-            for (i = 0; i < sl; i++) dst[i] = seg[i];
-            dst[sl] = 0;
+            arg = runtime::text::ct_intern_len(seg, sl);
+            if (!arg) return 0;
+            if (ct_row_set(args, n, arg) != 0) return 0;
             n++;
             seg = p + 1;
             continue;

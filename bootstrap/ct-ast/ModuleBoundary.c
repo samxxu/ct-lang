@@ -107,8 +107,8 @@ int frontend_module_ct_cmd_raw(char * *, int *, const char *);
 int frontend_module_ct_cmd_token(char * *, int *, const char *);
 int frontend_module_ct_ensure_dir(const char *);
 int frontend_module_ct_norm_path(const char *, char * *);
-int frontend_module_ct_pkg_key(const char *, const char *, char *, int);
-int frontend_module_ct_rel_cands(const char *, const char *, char *, char *);
+int frontend_module_ct_pkg_key(const char *, const char *, const char * *);
+int frontend_module_ct_rel_cands(const char *, const char *, char * *, char * *);
 int frontend_module_ct_root_find(const char *, const char *, char * *, int *, int *, char * *);
 int frontend_module_has_word(const char *, const char *);
 const char * frontend_module_io_header_for(const char *);
@@ -251,73 +251,93 @@ int frontend_module_ct_norm_path(const char * in, char * * out) {
     }
     return 0;
 }
-int frontend_module_ct_pkg_key(const char * root, const char * key, char * out, int cap) {
+int frontend_module_ct_pkg_key(const char * root, const char * key, const char * * out) {
     char * path;
-    char line[320];
+    char * buf;
     FILE * f;
+    long sz;
     size_t kl;
+    size_t got;
     int found;
-    out[0] = 0;
+    (*out) = "";
     path = tool_sh_ct_scratch_fmt("%s/ct.pkg", root);
     f = fopen(path, "rb");
     if ((!f)) {
         return 0;
     }
+    if ((((fseek(f, 0, SEEK_END) != 0) || ((sz = ftell(f)) < 0)) || (sz >= 65536))) {
+        fclose(f);
+        return 0;
+    }
+    rewind(f);
+    buf = tool_sh_ct_scratch_alloc(((int)(sz) + 1));
+    got = fread(buf, 1, (size_t)(sz), f);
+    buf[got] = 0;
+    fclose(f);
     kl = strlen(key);
     found = 0;
-    while (fgets(line, sizeof(line), f) != NULL) {
-        char * p;
-        char * v;
-        p = line;
-        while ((((*p) == ' ') || ((*p) == '\t'))) {
-            p++;
+{
+        char * line = buf;
+        while ((*line)) {
+            char * end = strchr(line, '\n');
+            char * p;
+            char * v;
+            if (end) {
+                (*end) = 0;
+            }
+            p = line;
+            while ((((*p) == ' ') || ((*p) == '\t'))) {
+                p++;
+            }
+            if (strncmp(p, key, kl) == 0) {
+                p += kl;
+                while ((((*p) == ' ') || ((*p) == '\t'))) {
+                    p++;
+                }
+                if ((*p) == '=') {
+                    p++;
+                    while ((((*p) == ' ') || ((*p) == '\t'))) {
+                        p++;
+                    }
+                    v = p;
+                    while ((((((*p) && ((*p) != '\r')) && ((*p) != ' ')) && ((*p) != '\t')) && ((*p) != '#'))) {
+                        p++;
+                    }
+                    (*p) = 0;
+                    if (v[0]) {
+                        (*out) = runtime_text_ct_intern(v);
+                        found = 1;
+                    }
+                    break;
+                }
+            }
+            if ((!end)) {
+                break;
+            }
+            line = (end + 1);
         }
-        if (strncmp(p, key, kl) != 0) {
-            continue;
-        }
-        p += kl;
-        while ((((*p) == ' ') || ((*p) == '\t'))) {
-            p++;
-        }
-        if ((*p) != '=') {
-            continue;
-        }
-        p++;
-        while ((((*p) == ' ') || ((*p) == '\t'))) {
-            p++;
-        }
-        v = p;
-        while (((((((*p) && ((*p) != '\n')) && ((*p) != '\r')) && ((*p) != ' ')) && ((*p) != '\t')) && ((*p) != '#'))) {
-            p++;
-        }
-        (*p) = 0;
-        if (v[0]) {
-            snprintf(out, (size_t)(cap), "%s", v);
-            found = 1;
-        }
-        break;
     }
-    fclose(f);
     return found;
 }
-int frontend_module_ct_rel_cands(const char * root, const char * rel, char * first, char * fallback) {
-    char ns[MAX_TEXT];
+int frontend_module_ct_rel_cands(const char * root, const char * rel, char * * first, char * * fallback) {
+    const char * ns;
     size_t nl;
-    snprintf(first, MAX_TEXT, "%s", rel);
-    if ((!frontend_module_ct_pkg_key(root, "namespace", ns, sizeof(ns)))) {
+    (*first) = tool_sh_ct_scratch_dup(rel);
+    (*fallback) = (char *)(0);
+    if ((!frontend_module_ct_pkg_key(root, "namespace", (&ns)))) {
         return 1;
     }
     nl = strlen(ns);
     if (((((nl == 0) || (strncmp(rel, ns, nl) != 0)) || (rel[nl] != '/')) || (rel[(nl + 1)] == 0))) {
         return 1;
     }
-    snprintf(first, MAX_TEXT, "%s", ((rel + nl) + 1));
-    snprintf(fallback, MAX_TEXT, "%s", rel);
+    (*first) = tool_sh_ct_scratch_dup(((rel + nl) + 1));
+    (*fallback) = tool_sh_ct_scratch_dup(rel);
     return 2;
 }
 int frontend_module_ct_root_find(const char * root, const char * rel, char * * out, int * is_hdr, int * is_map, char * * err) {
-    char flat[MAX_TEXT];
-    char doubled[MAX_TEXT];
+    char * flat;
+    char * doubled;
     char * hdr;
     char * map;
     char * first_hit = (char *)(0);
@@ -336,7 +356,7 @@ int frontend_module_ct_root_find(const char * root, const char * rel, char * * o
     first_hdr = 0;
     first_map = 0;
     nhit = 0;
-    nc = frontend_module_ct_rel_cands(root, rel, flat, doubled);
+    nc = frontend_module_ct_rel_cands(root, rel, (&flat), (&doubled));
     for (ci = 0; ci < nc; ci++) {
         const char * c;
         if (ci == 0) {

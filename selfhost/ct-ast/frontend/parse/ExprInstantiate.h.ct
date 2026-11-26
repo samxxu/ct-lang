@@ -509,8 +509,8 @@ impl ExprInstantiate for Expr {
 
     int inst_register_nested(const char *spell, int depth)
     {
-        char *name = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
-        char *tail = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
+        const char *name;
+        const char *tail;
         const char *enc;
         char **args = 0;
         char **cargs = 0;
@@ -522,9 +522,8 @@ impl ExprInstantiate for Expr {
         args = frontend::sym::ct_rows_reserve(args, acap, need, &acap);
         cargs = frontend::sym::ct_rows_reserve(cargs, ccap, need, &ccap);
         if (!args || acap < need || !cargs || ccap < need) return 0;
-        if (!name || !tail) return self->sup->fail("out of memory");
-        if (frontend::sym::ct_inst_split(spell, name, &nargs, args, acap, tail,
-                                         TEXT_LIMIT) != 0)
+        if (frontend::sym::ct_inst_split(spell, &name, &nargs, args, acap,
+                                         &tail) != 0)
             return 0;
         if (nargs <= 0 || !args[0][0]) return 0;
         /* A parameter of the surrounding template stays symbolic; the emitter
@@ -535,9 +534,12 @@ impl ExprInstantiate for Expr {
         if (bad) return 0;
         for (k = 0; k < nargs; k++)
             if (self->inst_register_nested(args[k], depth + 1) != 0) return -1;
-        for (k = 0; k < nargs; k++)
-            if (frontend::sym::ct_type_canon(args[k], cargs[k], MAX_TEXT) != 0)
+        for (k = 0; k < nargs; k++) {
+            const char *canon = frontend::sym::ct_type_canon_text(args[k]);
+            if (!canon
+                || frontend::sym::ct_row_set(cargs, k, canon) != 0)
                 return 0;
+        }
         ti2 = frontend::sym::ct_tmpl_find(name);
         if (ti2 < 0) return 0;
         enc = frontend::sym::ct_inst_encode_text(name, nargs, cargs);

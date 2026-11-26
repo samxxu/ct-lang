@@ -1967,9 +1967,11 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
         return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
     }
     if ((_self->ns && _self->ns[0])) {
-        char qn[MAX_TEXT];
-        int w = snprintf(qn, sizeof(qn), "%s%s", _self->ns, name);
-        if ((((w >= 0) && (w < (int)(sizeof(qn)))) && (_self->__frontend_sym_symbolops_vptr->find_type(_self, qn) >= 0))) {
+        const char * qn = runtime_text_ct_intern_join(_self->ns, name);
+        if ((!qn)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
+        if (_self->__frontend_sym_symbolops_vptr->find_type(_self, qn) >= 0) {
             snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
             return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
         }
@@ -2821,9 +2823,9 @@ static int impl_tparam(struct frontend_sym_StructImpl * t, const char * pat) {
     return (-1);
 }
 static int impl_match(int ii, const char * pat, const char * arg, const char * cspell, char * * vals, int * set, int depth) {
-    char name[MAX_TEXT];
-    char base[MAX_TEXT];
-    char cbase[MAX_TEXT];
+    const char * name;
+    const char * base;
+    const char * cbase;
     char * * pargs = 0;
     int pcap = 0;
     int need;
@@ -2847,18 +2849,24 @@ static int impl_match(int ii, const char * pat, const char * arg, const char * c
     }
     need = frontend_sym_ct_inst_arg_count(pat);
     if (need <= 0) {
-        frontend_sym_impl_arg_canon(pat, base, sizeof(base));
-        frontend_sym_impl_arg_canon(arg, cbase, sizeof(cbase));
+        base = frontend_sym_impl_arg_canon_text(pat);
+        cbase = frontend_sym_impl_arg_canon_text(arg);
+        if (((!base) || (!cbase))) {
+            return 0;
+        }
         return (strcmp(base, cbase) == 0);
     }
     pargs = frontend_sym_ct_rows_reserve(0, 0, need, (&pcap));
     if (((!pargs) || (pcap < need))) {
         return 0;
     }
-    if ((!frontend_sym_impl_pat_split(pat, name, pargs, pcap, (&na)))) {
+    if ((!frontend_sym_impl_pat_split(pat, (&name), pargs, pcap, (&na)))) {
         return 0;
     }
-    frontend_sym_impl_arg_canon(arg, cbase, sizeof(cbase));
+    cbase = frontend_sym_impl_arg_canon_text(arg);
+    if ((!cbase)) {
+        return 0;
+    }
     ai = frontend_sym_ct_inst_find(cbase);
     if (ai < 0) {
         return 0;
@@ -2968,10 +2976,10 @@ int frontend_sym_ct_method_bind(int ii, int inst, char * * names, char * * value
     return bound;
 }
 int frontend_sym_ct_inst_resolve(const char * in, char * out, int cap) {
-    char name[MAX_TEXT];
-    char tail[MAX_TEXT];
-    char enc[MAX_TEXT];
-    char cc[MAX_TEXT];
+    const char * name;
+    const char * tail;
+    const char * enc;
+    const char * cc;
     char * * args = 0;
     int acap = 0;
     int need;
@@ -2990,13 +2998,14 @@ int frontend_sym_ct_inst_resolve(const char * in, char * out, int cap) {
     if (((!args) || (acap < need))) {
         return (-1);
     }
-    if (frontend_sym_ct_inst_split(in, name, (&nargs), args, acap, tail, sizeof(tail)) != 0) {
+    if (frontend_sym_ct_inst_split(in, (&name), (&nargs), args, acap, (&tail)) != 0) {
         return (-1);
     }
     if (nargs <= 0) {
         return (-1);
     }
-    if (frontend_sym_ct_inst_encode(name, nargs, args, enc, sizeof(enc)) != 0) {
+    enc = frontend_sym_ct_inst_encode_text(name, nargs, args);
+    if ((!enc)) {
         return (-1);
     }
     found = frontend_sym_ct_inst_find(enc);
@@ -3008,7 +3017,8 @@ int frontend_sym_ct_inst_resolve(const char * in, char * out, int cap) {
             }
             ok = 1;
             for (j = 0; j < nargs; j++) {
-                if (((((!ins[k].ctype[j]) || (!args[j])) || (frontend_sym_ct_type_canon(ins[k].ctype[j], cc, sizeof(cc)) != 0)) || (strcmp(cc, args[j]) != 0))) {
+                cc = (ins[k].ctype[j] ? frontend_sym_ct_type_canon_text(ins[k].ctype[j]) : 0);
+                if (((((!ins[k].ctype[j]) || (!args[j])) || (!cc)) || (strcmp(cc, args[j]) != 0))) {
                     ok = 0;
                     break;
                 }
