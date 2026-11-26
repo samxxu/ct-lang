@@ -72,6 +72,23 @@ version-minor: 2
 > N-6：C3 语言上限（ADT 形态、泛型元数）与 C1/C2 同批收到形式上限；spec §8 / stable-subset 的改写必须与实现同一提交，不允许实现先行。
 > N-7：S1a-1 内 **Expr（A/B 组）与 Stmt（C 组）文件集不重叠，可并行**；Emitter D 组可与其并行；但都必须等 S1a-0 收口（C2n 驻留池是单写者阶段）。
 
+## 1.5 并行轨道（2026-11-26）
+
+> 原则：**同一时刻只有一个 `selfhost/**` 写入者**；`bootstrap/**`、`gen-seed.sh`、golden 只归 A 轨道。
+> B/C/D 轨道不改编译器源码，不触发 seed，可与 A 并行。
+
+| 轨道 | 负责 | 文件集 | 当前内容 | 依赖 | 冲突 |
+| --- | --- | --- | --- | --- | --- |
+| **A 编译器代码** | DEV | `selfhost/**`、`bootstrap/**` | S1a-0 剩余 `MAX_TEXT` 数组 → C4；之后 S1b | 无 | **独占 seed/golden**；不得与其它 A 类写入者并行 |
+| **B 样例与文档** | TEST / REVIEW（[TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)） | `examples/**`、`README.md`、`docs/tutorial.md`、guide、idioms、snippets | 先补已有特性样例、去指针、改写文档；S2–S6 新特性落地后再补对应样例 | 新特性部分等 S2–S6 | 不碰 `selfhost` |
+| **C 设计包** | REQ / REVIEW（[DESIGN-1](../../../issues/selfhost/design-1-v12-design-pack.md)） | `docs/design/**`、`docs/decisions/**`、`docs/diagnostics/**`、`issues/**` | TIR/LIR 契约、清理 CFG、`E-IR-1xx`、S2/S3 ADR、S4–S6 模式规范、夹具清单 | 无 | 不写代码 |
+| **D 证据与审计** | TEST | `docs/reviews/**`、`issues/**`、只读脚本 | S7 的 FP=0 基线与 MEM-2 用例矩阵；S9 的 798 处 `#include` 分类；C4 的 TEST-9 契约草稿 | 无 | 只读，不改 `selfhost`；报告入库，暂不单开卡 |
+
+- B 的“已有特性”部分现在就能做；下标/函子/ADT 模式样例必须等 S2–S6 语法落地，不得提前写错语法；
+- C 的结论必须经 REVIEW 复核，未复核不作为 S1b 输入；
+- D 的产出是报告与清单，供 S7/S9 直接引用；
+- 合入顺序：B/C/D 可在 A 收口前后独立合入，但**不得修改 A 的文件集**；A 收口后释放单写者，S1b 才开工。
+
 ## 2 任务（stage）
 
 | stage | 交付 | 对应条目 | 验收 | effort |
@@ -148,4 +165,6 @@ version-minor: 2
 - [SH-112](../../../issues/selfhost/sh112-typed-ir-architecture.md)、[SH-111](../../../issues/selfhost/sh111-lowering-invariants.md)、[SH-113](../../../issues/selfhost/sh113-builtin-live-boundary.md)
 - [requirements-pool](../../planning/requirements-pool.md)、[pointer-free-v2](../../proposals/pointer-free-v2.md)、[pointer-free-phase-plan](../../planning/pointer-free-phase-plan.md)
 - [LANG-25](../../../issues/lang/lang-25-diagnostic-code-registry.md)、[LANG-29](../../../issues/lang/lang-29-adt-match-complete.md)
+- [DESIGN-1](../../../issues/selfhost/design-1-v12-design-pack.md)（C 轨道设计包）、[TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)（B 轨道样例/文档）
+- [dogfooding](../../planning/dogfooding.md)（S8b）、[capacity-limits](../../planning/capacity-limits.md)（S1a-0）
 - [J-6 证据台账](../../planning/j6-evidence/ledger.md)（P-1.3）
