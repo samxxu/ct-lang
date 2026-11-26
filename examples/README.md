@@ -3,7 +3,7 @@
 每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力；唯一例外是 `49_socket`（文档型样例，
 std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**impl / vtable**、
 **类型宿主（type host）**、**闭包**、**loop 语义**、**数组初值与泛型**、
-**新句柄层（ref/out、切片、Box/new、ADT/match）**。
+**新句柄层（ref/out、切片、Box/new、ADT/match、可选链 `?.`）**。
 
 ## impl / vtable
 
@@ -113,6 +113,8 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `51_slice` | `T[]` 切片、数组自动补长度、子切片 `s[1..3]`（半开）与 `xs.len` | ct-ast | 同上 |
 | `52_box_new` | `Box<T>` / `new T { … }`、`at()` 借出 `T *`、`release()` 释放；SH-116 已修复 build 模式的 Box 内置单元，`ct build` 可用 | ct-ast | 同上（compile + build） |
 | `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | 同上 |
+| `58_optional_chain` | `?.` 穿过可空指针：接收者只求值一次（`__ct_optN` 临时）、空接收者读作 `0`；无 `T?` / `Maybe<T>` 结果类型 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `59_custom_subscript` | `x["k"]` → `get(k)`、`x["k"] = v` → `set(k, v)`；方案 A 只按名字 + 参数个数匹配，按键分派属 REQ-JSACCESS-1 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
 
 ## 近相能力（TEST-23）
 

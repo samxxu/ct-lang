@@ -41,22 +41,22 @@ grep -rl 'char \*' examples --include='*.ct' | wc -l
 | 12 | `ref` | 1 / `examples/50_ref_out` | 7 | spec §4.68 | 薄 |
 | 13 | `out` | 5 / `examples/50_ref_out` | 16 | spec §4.68 | 有 |
 | 14 | `Box<T>` / `new` | 4 / `examples/52_box_new` | 53 | spec §4.71 | 有 |
-| 15 | 可选链 `?.` | **0** | 10（`test/ast/p53_eval_once`） | spec §4.65 | **缺** |
+| 15 | 可选链 `?.` | 1 / `examples/58_optional_chain`（2026-11-26 补） | 10（`test/ast/p53_eval_once`） | spec §4.65 | 薄 |
 | 16 | `Map` / map 构造 | 7 / `examples/34_map_literal` | 49 | spec §4.51.1 | 有 |
 | 17 | `map` 绑定 | 20（含 `.m.ct`）/ `examples/08_map_binding` | 52 | spec §4.10 | 有 |
 | 18 | `foreach` | 7 / `examples/20_foreach_statement` | 29 | spec §4.49 | 有 |
 | 19 | `defer` | 2 / `examples/42_defer` | 23 | spec §4.9.1 | 薄 |
 | 20 | `errdefer` | 2 / `examples/45_error_return_contract` | 22 | spec §4.58 | 薄 |
 | 21 | 后缀 `?` | 1 / `examples/46_result_try` | 10 | spec §4.62 | 薄 |
-| 22 | 自定义下标（§4.64） | **0**（`examples/28_subscript_forms` 是 C 数组 / 容器下标形态，不是自定义下标） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64 | **缺**（S2 落地时补样例） |
+| 22 | 自定义下标（§4.64） | 1 / `examples/59_custom_subscript`（2026-11-26 补；`28_subscript_forms` 是 C 数组 / 容器下标形态，不算） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64 | 薄 |
 | 23 | 函子 `(A,B) => R` | 0 | 0 | 无 | 待实现（S3） |
 
 ## 2 缺口清单（按 S8c 分片顺序）
 
 | 片 | 缺口 | 动作 | 依赖 |
 | --- | --- | --- | --- |
-| B-1 | 可选链 `?.` 无样例 | 新增 `examples/58_optional_chain`：`make()?.field`、`?.` 只求值一次、空结果分支 | 无（语言已实现） |
-| B-1b | 自定义下标（§4.64）无样例 | 新增 `examples/59_custom_subscript`：`get` / `set` 一对、只读报错、`+=` 与 `&x[k]` 的拒绝 | 无（语言已实现；S2 再补按键类型分派） |
+| B-1 | ~~可选链 `?.` 无样例~~ | **已补** `examples/58_optional_chain`（2026-11-26，compile + 运行）；S8c 复核是否需要补 `?[` 与 `m?["k"]` 形态 | 无（语言已实现） |
+| B-1b | ~~自定义下标（§4.64）无样例~~ | **已补** `examples/59_custom_subscript`（2026-11-26，读 + 写一对）；S8c 待补「只读报错、`+=` / `&x[k]` 拒绝」的说明段与 S2 的按键分派样例 | 无（语言已实现） |
 | B-2 | `match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 各只有 1–2 个样例 | 每个特性补一份「正常路径 + 一个反直觉点」的样例 | 无 |
 | B-3 | `String` / `Str` 样例仍以 `char *` 混写 | 改写 `40_str_ownership`、`48_string_steps`，只保留 C 互操作处的指针 | 无 |
 | B-4 | 非 C 互操作用例的指针 | 59 个 `char *` / 83 个 `->` / 14 个 `malloc` 逐条判定：迁 `String`/`Vec`/`Box` 或写例外理由 | B-3 |

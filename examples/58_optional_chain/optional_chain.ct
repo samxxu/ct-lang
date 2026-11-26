@@ -1,0 +1,37 @@
+// 58_optional_chain - `?.` reads through a nullable pointer, evaluating the
+// receiver exactly once and yielding 0 when it is null.
+//
+// Why a pointer here: `?.` is defined for pointer receivers only (spec §4.65);
+// `Box<T>` / `Str` value receivers are out of scope, and there is no
+// `T?` / `Maybe<T>` result type -- a null receiver simply reads as 0. The
+// receiver is evaluated once: `pick(n)` runs exactly once per statement even
+// though the expansion tests the pointer and then reads the field.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+#include <stdio.h>
+
+struct Sample { int value; }
+
+static struct Sample g_sample = { 42 };
+static int g_calls = 0;
+
+static struct Sample *pick(int want)
+{
+    g_calls = g_calls + 1;
+    if (want != 0) {
+        return &g_sample;
+    }
+    return 0;
+}
+
+int main(void)
+{
+    int hit;
+    int miss;
+
+    hit = pick(1)?.value;
+    miss = pick(0)?.value;
+    printf("hit=%d miss=%d calls=%d\n", hit, miss, g_calls);
+    return 0;
+}
