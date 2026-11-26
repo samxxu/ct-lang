@@ -2391,12 +2391,9 @@ ct-ast 不再有“语言上限”表。计数表从初始容量开始、按需�
 
 另有三类已知边界，写代码时按此规避：
 
-- **自定义下标只做单层、只按名字 + 参数个数匹配**（§4.64）。多级连写 `v["a"]["b"]` 会被当作
-  C 指针算术，可能静默得错值；数字下标 `v[0]` 在 `get(char *)` 类型上会展开成 `get(0)`（C 里是
-  空指针常量）：`ct compile` / `ct build` 只给 warning（rc=0，产物仍是错调用），`ct check` 给
-  error（rc=1，L32-6 / v0-PH-72）。**按键类型分派仍待 `REQ-JSACCESS-1`**（同类型并存 `get(char *)` /
-  `get(int)` 各选其版）；JSON 数字下标请继续用包层 `get_idx`，或等 `REQ-JSACCESS-1` 与
-  `REQ-INDEX-1`（[设计草案](proposals/user-index-operator.md)）落地。
+- **自定义下标按「名字 + 参数个数 + 实参类型」匹配**（§4.64，v1.2 / D-028）。同类型可并存
+  `get(char *)` 与 `get(int)`，`v["k"]` / `v[0]` 各选其版；无匹配、歧义、推不出下标类型都是
+  编译期硬错并列出候选签名，不再有静默 `get(0)`。多级连写 `v["a"]["b"]` 仍由包层承担。
 - **表达式位置的超长字符串**（超过形式上限 65536 字节）是编译期硬错，拆成相邻字面量或写入初始化器；
   不再静默截断。
 - **`?.` / `?[` 只接受指针接收者**，结果必须有 `0` 表示（struct 值 / 含 Drop 的值拒绝，L53-3/4）；
@@ -2557,10 +2554,9 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   `m["k"] = x` 发射为 `m.put("k", x)`；`Map<K,V> m = { "a": 1, "b": 2 };` 发射为
   `Map_<enc>_from((struct MapEntry_<enc>[2]){ … }, 2)`。三者都受上面的容器语义约束；
   不再有「Vec/Map 不可下标」的硬错。
-- **自定义类型的 `[]`**：见 §4.64（v0-PH-52，单层字符串键）；按键类型分派（同一类型并存
-  `get(char *)` / `get(int)`）**尚未实现**，登记为 REQ-JSACCESS-1，不属于本节的容器下标糖。
-  实参类型与唯一 `get` 不匹配时，`ct check` 已是硬错（v0-PH-72 / LANG-4），`ct build` 仍只告警并
-  发射 `get(0)`，因此不要把 `v[0]` 用在 `char *get(char *)` 上。
+- **自定义类型的 `[]`**：见 §4.64（v1.2 起按实参类型分派，D-028）。同一类型可并存
+  `get(char *)` / `get(int)`，实参类型与所有候选都不匹配时是编译期硬错并列出候选签名；
+  `Vec` / `Map` 的内建下标糖不受影响。
 - **内置层**：`Vec<T>`、`Map<K,V>`、`MapEntry<K,V>` 写在 `lib/core/Vec.h.ct`，编译模式在输入前
   自动预解析，`ct build` 也把它作为一个单元自动加载，**两种模式都不需要 `import`、不需要 `-I`**。
   三个拼写是保留名，用户不能再声明同名 struct；旧项目里 `import std::vec` 带来的 `Vec` 定义会与
@@ -2918,11 +2914,21 @@ Result<long, char *> twice(int n)
 
 ### 4.64 自定义类型下标（Phase 52，仅 ct-ast）
 
-- **读形态**：非指针的 `struct` 值接收者（含 enum ADT，B2）、且类型在 `impl` 里有固有
-  `get` 时，`obj[k]` 展开为 `obj.get(k)`（复用 `N_MCALL` / `aux = 9`，与容器下标同形）。
-  **方案 A**：只匹配名字 + 参数个数（1）+ 非 `static`，**不看参数类型**（D52-2）。
-- **写形态**：语句 `obj[k] = v;` 展开为 `obj.set(k, v)`；`set` 同样只按名字 + 参数个数（2）
-  + 非 `static` 匹配。只支持普通 `=`、且接收者必须是可回溯到变量的左值（D52-4）。
+- **匹配**（D-028）：非指针的 `struct` 值接收者（含 enum ADT，B2）、且类型在固有 `impl` 里声明了
+  `get` / `set` 时，按**名字 + 参数个数 + 非 `static` + 实参静态类型**选版本。类型比较用
+  `type_key`（去空白、去 `const` / `volatile`、折叠整数别名）逐字相等，**不做隐式转换、不做数值
+  提升**；字面量按其静态类型算（`"k"` 是 `char *`，`0` 是 `int`）。同类型可并存不同参数类型的
+  `get` / `set`，C 符号去歧义见下。推不出下标类型是硬错，不回退 C 下标（D52-5）。
+- **读形态**：`obj[k]` 展开为匹配的 `obj.get(k)`（复用 `N_MCALL` / `aux = 9`，与容器下标同形）。
+  返回值形态由签名决定：`V get(K)` 是值，`V *get(K)` 是指针（借用视图）。
+- **写形态**：语句 `obj[k] = v;` 优先展开为匹配的 `obj.set(k, v)`；没有匹配的 `set`、但匹配的
+  `get` 返回 `V *` 时，展开为 `*obj.get(k) = v`（借写形态；接收者与下标各求值一次）。
+  `*obj[k] = v` 也写成通用解引用赋值。只支持普通 `=`、且接收者必须是可回溯到变量的左值（D52-4）。
+- **C 符号去歧义**：同一 `impl` 块内第一个同名方法保持 `<Type>_<name>`（旧语料逐字节不变）；
+  第 2 个起追加 `$<enc(参数类型键)>`（`enc` 把非字母数字字节写成 `_hh`，`$` 不是 Ct 标识符字符），
+  例：`int get(int)` 与 `char *get(char *)` 并存时发射 `X_get` 与 `X_get$char_2a`。
+- **拒绝清单（二值化，D028-5）**：`obj[k] += v` / `obj[k]++` / `&obj[k]` 在值形态与借用形态下
+  **统一硬错**（L52-6 / L52-7 原文），不引入“只求值一次”的临时；包层写法是读回再 `set`。
 - **诊断**（位置一律指向 `[`；一次只报一条）：
   - L52-1 缺 `get`：`type 'X' has no subscript: declare 'V get(K)' in impl X`
   - L52-2 缺 `set`（只读）：`type 'X' has a read-only subscript: declare 'void set(K, V)' in impl X`
@@ -2933,14 +2939,17 @@ Result<long, char *> twice(int n)
   - L52-8 写形态不是语句或接收者非左值
   - L52-9 右值是 `own` / `borrow` 变量
   - L52-10 `get` / `set` 在定义单元私有、消费单元不可见
+  - D028-1 实参类型无匹配：`type 'X' has no subscript matching 'get(int)': candidates are 'char *get(char *)'`
+    （写形态为 `type 'X' has no writable subscript matching 'set(int, V)': candidates are 'void set(char *, int)'`）
+  - D028-2 歧义：`type 'X' has an ambiguous subscript: candidates are 'int get(int)', 'int get(int)'`
+  - D028-3 推不出下标类型：`type 'X' has no subscript: cannot infer the subscript type; bind it to a local first`
+  - 有 `set` 但键类型不匹配、且无指针 `get` 可借写，报 D028-1 的写形态；`set` 完全缺失仍报 L52-2
 - **不进入协议**：`struct X *p` 的 `p[k]` 保持 C 指针算术；C 数组 / `int *` / 指针到 struct 的
   `[]` 逐字节不变；`Vec` / `Map` 的下标糖与 L31-3 / L31-4 写保护不变；trait 提供的 `get` 不算
   （只认固有 `impl`）。
-- **已知洞（D52-6）**：数字下标 `v[0]` 会按方案 A 展开成 `get(0)`；若 `get` 只接受
-  `char *`，实参类型不匹配会由 `custom_index_method` 的键类型判定报出——`ct check` 是
-  `error:`（rc=1），`ct compile` / `ct build` 是 `warning:`（rc=0，产物仍发射 `get(0)`）。
-  完整的按键类型分派（同类型并存 `get(char *)` / `get(int)` 各选其版）**尚未实现**，由
-  `REQ-JSACCESS-1` 承接；在此之前 JSON 数字下标请用 `get_idx`，不要写 `v[0]`。
+- **D52-6 已收口（v1.2 / D-028）**：`v[0]` 在只声明 `get(char *)` 的类型上是编译期硬错并列出
+  候选签名，不再展开成 `get(0)`；同类型并存 `get(char *)` / `get(int)` 时按键类型各选其版。
+  命名调用 `.get(k)` 的重载决议不在 D-028 范围内（仍取第一个同名方法）。
 - **多级链（LANG-29 S3 / B2，仅 ct-ast）**：`x[k].field`、`x[k].field.field` 与
   `x[k].m()` 可用。链根的下标表达式与 `get` 调用各只出现一次；`get` 的返回值按值落到
   临时量，再取该临时量地址调用方法（不取调用结果的地址、不落 C 指针算术）。调用结果

@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=10414 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10467 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=82754 io_cap=1024
+     emitted_before=48223 emitted_after=83529 io_cap=1024
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -245,6 +245,11 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   54712 → 54792（+80：内建层拆分后的四个字符串单元、单元归属与前置声明）。上面 PH-88
   的历史数字保持不变；本文件头部的 `emitter_after` / `emitted_after` 是 p88_metrics 的
   live pin，随每次 emitter 变更同步。
+- **v1-PH-2 S2（D-028 下标协议）后的 live 校准**：`Emitter.h.ct` 10414 → 10467 行
+  （+53：重载方法的 `$<enc(key)>` 符号后缀与 body seam 键，解析/类型匹配在
+  `frontend/parse/ExprSubscript.h.ct`、`ExprTypeText.h.ct`），发射 C 82754 → 83529
+  （+775：新增匹配/候选/诊断代码与 `Node.suffix` 行，生成物只对新语法变化；旧语料
+  由 66 文件逐字节与 p52 夹具复核）。切片清单仍为 76。
 - **v1-PH-1 S1（SH-94，纯搬移）后的 live 校准**：`Emitter.h.ct` 11257 → 11062 行
   （-195：`EmitterQuery` 11 个只读查询函数与 `EmitterMapText` 6 个 map recipe
   文本/可重复性函数整段搬出；函数体逐字节不变），发射 C 56610 → 57158（+548：
