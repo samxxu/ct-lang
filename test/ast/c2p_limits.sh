@@ -1121,5 +1121,111 @@ else
     bad "the foreach diagnostic cut the 2000-byte variable name"
 fi
 
+
+# ===========================================================================
+# C2p-10: the static-type chain (S1a-0 C2p-10)
+#
+# `static_ctype` wrote its answer into a caller `char[MAX_TEXT]` row. Every
+# 2000-byte struct spelling was therefore cut at 159 bytes before the lookup
+# or comparison that follows: `?.` / `?[` reported "cannot resolve the
+# receiver type", and a user subscript on a long struct fell back to a C
+# subscript the host cc rejects. The family now answers interned pool texts
+# (`static_ctype_text` / `ctype_expand_text` / `fnptr_ret_text` /
+# `peel_ptr_text`) and every caller reads that form.
+# ===========================================================================
+lt10=$(printf '%*s' 2000 '' | tr ' ' x)
+
+# ---- C2p-10.1) `?.field` on a 2000-byte struct pointer --------------------
+# `opt_field` resolved the receiver through the 160-byte row, so the pointer
+# to the long struct never matched its symbol row.
+cat >"$work/c2p10_opt_field.ct" <<CT
+struct $lt10 { int n; };
+int main(void)
+{
+    struct $lt10 obj;
+    struct $lt10 *p = &obj;
+    obj.n = 7;
+    return p?.n - 7;
+}
+CT
+if run_product c2p10_opt_field "$work/c2p10_opt_field.ct"; then
+    if grep -qF "$lt10" "$work/c2p10_opt_field.c"; then
+        ok; printf '  2000-byte optional field receiver: resolved and emitted whole\n'
+    else
+        bad "the generated C cut the 2000-byte optional field receiver"
+    fi
+fi
+
+# ---- C2p-10.2) `?[0]` on a 2000-byte pointer-to-pointer -------------------
+cat >"$work/c2p10_opt_sub.ct" <<CT
+struct $lt10 { int n; };
+int main(void)
+{
+    struct $lt10 a;
+    struct $lt10 *pa = &a;
+    struct $lt10 **pp = &pa;
+    a.n = 1;
+    return pp?[0]->n - 1;
+}
+CT
+if run_product c2p10_opt_sub "$work/c2p10_opt_sub.ct"; then
+    if grep -qF "$lt10" "$work/c2p10_opt_sub.c"; then
+        ok; printf '  2000-byte optional subscript receiver: resolved whole\n'
+    else
+        bad "the generated C cut the 2000-byte optional subscript receiver"
+    fi
+fi
+
+# ---- C2p-10.3) user subscript on a 2000-byte struct value ----------------
+# The sugar is recognised from the base's static type; a cut spelling made the
+# base "unresolved" and emitted `x[0]` on a C struct, which the host cc rejects.
+cat >"$work/c2p10_user_sub.ct" <<CT
+struct $lt10 { int v; }
+impl $lt10 {
+    int get(int k) { return self->v + k; }
+    void set(int k, int n) { self->v = n; }
+}
+int main(void)
+{
+    struct $lt10 x;
+    x.v = 1;
+    x[0] = 9;
+    return x[0] - 9;
+}
+CT
+if run_product c2p10_user_sub "$work/c2p10_user_sub.ct"; then
+    if grep -qF "${lt10}_get" "$work/c2p10_user_sub.c" \
+       && grep -qF "${lt10}_set" "$work/c2p10_user_sub.c"; then
+        ok; printf '  2000-byte user subscript: get/set sugar emitted whole\n'
+    else
+        bad "the generated C did not spell the 2000-byte subscript methods"
+    fi
+fi
+
+# ---- C2p-10.4) user subscript through a 2000-byte field type -------------
+# The base is a member expression, so `ctype_member_or_arrow` has to expand the
+# long field type to find the inherent `get`.
+cat >"$work/c2p10_member_sub.ct" <<CT
+struct $lt10 { int v; }
+impl $lt10 {
+    int get(int k) { return self->v + k; }
+}
+struct Outer10 { struct $lt10 inner; }
+int main(void)
+{
+    struct Outer10 o;
+    o.inner.v = 4;
+    return o.inner[0] - 4;
+}
+CT
+if run_product c2p10_member_sub "$work/c2p10_member_sub.ct"; then
+    if grep -qF "${lt10}_get" "$work/c2p10_member_sub.c"; then
+        ok; printf '  2000-byte field-type subscript: get sugar emitted whole\n'
+    else
+        bad "the generated C did not spell the 2000-byte field-type subscript method"
+    fi
+fi
+
 printf 'c2p: %d passed, %d failed\n' "$pass" "$fail"
+
 [ "$fail" -eq 0 ]
