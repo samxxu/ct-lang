@@ -99,6 +99,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -110,7 +111,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -139,6 +139,7 @@ struct backend_lir_ct_lexpr {
     int nkids;
     int kcap;
     const char * text;
+    const char * member;
     long num;
     int op;
     struct backend_lir_ct_lspan span;
@@ -152,6 +153,10 @@ struct backend_lir_ct_lstmt {
     int aux;
     int type;
     const char * name;
+    const char * dims;
+    const char * spelling;
+    const char * count;
+    const char * vptr;
     int expr;
     int rhs;
     int cond;
@@ -161,6 +166,9 @@ struct backend_lir_ct_lstmt {
     int init_stmt;
     int step;
     int target;
+    int loop_k;
+    const char * item_type;
+    const char * fname;
     int * cleanups;
     int ncleanups;
     int ccap;
@@ -215,6 +223,9 @@ struct backend_lir_ct_lparam {
 struct backend_lir_ct_lfunc {
     int id;
     const char * name;
+    const char * cname;
+    int temp_start;
+    int temp_end;
     int ret;
     struct backend_lir_ct_lparam * params;
     int nparams;
@@ -284,6 +295,7 @@ struct backend_lir_LModule {
     int emitting;
     const char * free_sym;
     int stat_funcs;
+    int stat_funcs_ok;
     int stat_blocks;
     int stat_stmts;
     int stat_temps;

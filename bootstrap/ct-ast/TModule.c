@@ -44,6 +44,9 @@
 #define TK_MATSEQ           31
 #define TK_INTO_SELF        32
 #define TK_OTHER            33
+#define TK_INIT_RANGE       34
+#define TK_INIT_BRACE       35
+#define TK_INIT_MBRACE      36
 #define VC_NONE             0
 #define VC_PLACE            1
 #define VC_VALUE            2
@@ -240,6 +243,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -251,7 +255,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;

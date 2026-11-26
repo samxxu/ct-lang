@@ -44,6 +44,19 @@
 #define CL_HANDBACK          5
 #define SC_FUNC              1
 #define LB_DEFER_BODY        8
+#define LB_WHILE_BODY        5
+#define LB_FOR_BODY          6
+#define LB_DO_BODY           7
+#define LT_NONE              0
+#define LT_RETURN            1
+#define LT_JUMP              2
+#define LT_CONDJUMP          3
+#define LT_SWITCH            4
+#define LT_GOTO              5
+#define LS_GOTO             13
+#define LR_INCLUDE           1
+#define LR_RECIPE            2
+#define LR_INTRINSIC         3
 #define LX_MAX_CHAIN 256
 #define LEXP_MAX 64
 struct ct_buf;
@@ -132,6 +145,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -143,7 +157,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -178,6 +191,9 @@ static int lver_declared(struct backend_lir_LModule *, struct backend_lir_ct_lfu
 static int lver_v8_set(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, int *, int, int, int, int);
 static int lver_tmp_prefix_ok(const char *);
 static int lver_v5(struct backend_lir_LModule *);
+static int lver_loop_kind(int);
+static int lver_v9(struct backend_lir_LModule *);
+static int lver_v10(struct backend_lir_LModule *);
 static void lver_fault(struct backend_lir_LModule *, const char *);
 static void lver_block(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, int);
 int backend_verify_ct_lir_verify(struct backend_lir_LModule *);
@@ -694,6 +710,78 @@ static int lver_v5(struct backend_lir_LModule * l) {
     }
     return 0;
 }
+static int lver_loop_kind(int kind) {
+    return (((kind == LB_WHILE_BODY) || (kind == LB_FOR_BODY)) || (kind == LB_DO_BODY));
+}
+static int lver_v9(struct backend_lir_LModule * l) {
+    int i;
+    int j;
+    int k;
+    for (i = 0; i < l->nblocks; i++) {
+        struct backend_lir_ct_lblock * b = (&l->blocks[i]);
+        int legal = ((((((b->term == LT_NONE) || (b->term == LT_RETURN)) || (b->term == LT_JUMP)) || (b->term == LT_CONDJUMP)) || (b->term == LT_SWITCH)) || (b->term == LT_GOTO));
+        if ((!legal)) {
+            lfail(l, b->span.file, b->span.line, b->span.col, "E-IR-109", "block has an illegal terminator");
+            continue;
+        }
+        if (((((b->term == LT_JUMP) || (b->term == LT_GOTO)) || (b->term == LT_SWITCH)) && ((b->term_target <= 0) || (b->term_target > l->nblocks)))) {
+            lfail(l, b->span.file, b->span.line, b->span.col, "E-IR-109", "terminator jumps to a block that does not exist");
+        }
+    }
+    for (i = 0; i < l->nfuncs; i++) {
+        struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
+        if ((!f->ok)) {
+            continue;
+        }
+        for (j = 0; j < f->nblocks; j++) {
+            struct backend_lir_ct_lblock * b;
+            if (((f->blocks[j] <= 0) || (f->blocks[j] > l->nblocks))) {
+                continue;
+            }
+            b = (&l->blocks[(f->blocks[j] - 1)]);
+            if ((((((b->term == LT_RETURN) && (b->ret_expr > 0)) && (f->ret > 0)) && (!b->term_err)) && (strcmp(backend_lir_lmod_cspell(l, f->ret), "void") == 0))) {
+                lfail(l, b->span.file, b->span.line, b->span.col, "E-IR-109", "a void function returns a value");
+            }
+            for (k = 0; k < b->nstmts; k++) {
+                struct backend_lir_ct_lstmt * s;
+                if (((b->stmts[k] <= 0) || (b->stmts[k] > l->nstmts))) {
+                    continue;
+                }
+                s = (&l->stmts[(b->stmts[k] - 1)]);
+                if (s->kind != LS_JUMP) {
+                    continue;
+                }
+                if (((s->target <= 0) || (s->target > l->nblocks))) {
+                    lfail(l, s->span.file, s->span.line, s->span.col, "E-IR-109", "jump target block does not exist");
+                }
+                else {
+                    if ((!lver_loop_kind(l->blocks[(s->target - 1)].kind))) {
+                        lfail(l, s->span.file, s->span.line, s->span.col, "E-IR-109", "break/continue targets a non-loop block");
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+static int lver_v10(struct backend_lir_LModule * l) {
+    int i;
+    for (i = 0; i < l->nrawcs; i++) {
+        struct backend_lir_ct_lrawc * r = (&l->rawcs[i]);
+        if (((!r->text) || (!r->text[0]))) {
+            lfail(l, r->span.file, r->span.line, r->span.col, "E-IR-110", "raw C row is empty");
+            continue;
+        }
+        if ((((r->origin != LR_INCLUDE) && (r->origin != LR_RECIPE)) && (r->origin != LR_INTRINSIC))) {
+            lfail(l, r->span.file, r->span.line, r->span.col, "E-IR-110", "raw C row has an unknown origin");
+            continue;
+        }
+        if (((!r->trusted) && strstr(r->text, "__ct_"))) {
+            lfail(l, r->span.file, r->span.line, r->span.col, "E-IR-110", "untrusted raw C names a compiler-local helper");
+        }
+    }
+    return 0;
+}
 static void lver_fault(struct backend_lir_LModule * l, const char * key) {
     int i;
     int j;
@@ -750,6 +838,52 @@ static void lver_fault(struct backend_lir_LModule * l, const char * key) {
             }
             return;
         }
+        return;
+    }
+    if (strcmp(key, "ir-v9-dangling-jump") == 0) {
+        for (i = 0; i < l->nfuncs; i++) {
+            struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
+            int j;
+            int k;
+            if ((!f->ok)) {
+                continue;
+            }
+            for (j = 0; j < f->nblocks; j++) {
+                struct backend_lir_ct_lblock * b;
+                int k2;
+                if (((f->blocks[j] <= 0) || (f->blocks[j] > l->nblocks))) {
+                    continue;
+                }
+                b = (&l->blocks[(f->blocks[j] - 1)]);
+                for (k2 = 0; k2 < b->nstmts; k2++) {
+                    struct backend_lir_ct_lstmt * s2;
+                    if (((b->stmts[k2] <= 0) || (b->stmts[k2] > l->nstmts))) {
+                        continue;
+                    }
+                    s2 = (&l->stmts[(b->stmts[k2] - 1)]);
+                    if (s2->kind != LS_JUMP) {
+                        continue;
+                    }
+                    s2->target = (l->nblocks + 4096);
+                    return;
+                }
+            }
+            for (k = 0; k < f->nblocks; k++) {
+                struct backend_lir_ct_lblock * b;
+                if (((f->blocks[k] <= 0) || (f->blocks[k] > l->nblocks))) {
+                    continue;
+                }
+                b = (&l->blocks[(f->blocks[k] - 1)]);
+                b->term = LT_JUMP;
+                b->term_target = (l->nblocks + 4096);
+                return;
+            }
+        }
+        return;
+    }
+    if (strcmp(key, "ir-v10-raw-local") == 0) {
+        int rid = backend_lir_lmod_new_rawc(l, LR_INTRINSIC, 0, "__ct_secret_helper()");
+        (void)(rid);
         return;
     }
     if (strcmp(key, "ir-v8-double-drop") == 0) {
@@ -870,6 +1004,8 @@ int backend_verify_ct_lir_verify(struct backend_lir_LModule * l) {
         lver_fault(l, fault);
     }
     lver_v5(l);
+    lver_v9(l);
+    lver_v10(l);
     for (i = 0; i < l->nfuncs; i++) {
         struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
         if ((!f->ok)) {

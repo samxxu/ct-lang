@@ -218,6 +218,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -229,7 +230,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -439,7 +439,10 @@ void backend_emit_ct_emit_bind_builtin_live(int *);
 void backend_emit_ct_emit_bind_io_mask(int);
 static void sync_alloc(struct backend_emit_Emitter *);
 void backend_emit_ct_emit_bind_parse(int *, void *, int *);
+int backend_emit_ct_emit_ntmp(void);
 void backend_emit_ct_emit_set_out(void *);
+void backend_emit_ct_emit_set_body_hook(int (*)(const char *, void *, int, int, int *));
+int backend_emit_ct_emit_body_hook(const char *, void *, int, int, int *);
 void backend_emit_ct_emit_clear_builtins(void);
 void backend_emit_ct_emit_add_builtin(int);
 void backend_emit_ct_emit_set_path(const char *);
@@ -455,6 +458,7 @@ void backend_emit_ct_emit_set_no_write(int);
 int backend_emit_ct_emit_no_write(void);
 static struct backend_emit_StrRetain backend_emit_g_sb;
 static int backend_emit_g_oc_bypass_node = (-1);
+static int (*backend_emit_g_body_hook)(const char *, void *, int, int, int *);
 static int backend_emit_g_shell_u = (-1);
 static int backend_emit_g_shell_header;
 static int * backend_emit_g_slice_used;
@@ -9809,6 +9813,20 @@ static int em_node_func(struct backend_emit_Emitter * self, int n, int ind, int 
     if (self->arena->nodes[n].attr >= 0) {
         fprintf(self->out, "%s ", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
     }
+{
+        int (*body_hook)(const char *, void *, int, int, int *) = backend_emit_g_body_hook;
+        if ((body_hook && (!self->gtname[0]))) {
+            int new_ntmp = self->ntmp;
+            int hr = (*body_hook)(self->arena->nodes[n].text2, self->out, ind, self->ntmp, (&new_ntmp));
+            if (hr > 0) {
+                self->ntmp = new_ntmp;
+                return 0;
+            }
+            if (hr < 0) {
+                return (-1);
+            }
+        }
+    }
     self->cur_ret = runtime_text_ct_intern(rname);
     if ((!self->cur_ret)) {
         return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
@@ -11514,8 +11532,23 @@ void backend_emit_ct_emit_bind_parse(int * nparams, void * pend_fields, int * np
     backend_emit_g_emit.pend_fields = (struct frontend_sym_Field *)(pend_fields);
     backend_emit_g_emit.npend = npend;
 }
+int backend_emit_ct_emit_ntmp(void) {
+    return backend_emit_g_emit.ntmp;
+}
 void backend_emit_ct_emit_set_out(void * out) {
     backend_emit_g_emit.out = (FILE *)(out);
+}
+void backend_emit_ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *)) {
+    backend_emit_g_body_hook = fn;
+}
+int backend_emit_ct_emit_body_hook(const char * name, void * out, int ind, int ntmp, int * new_ntmp) {
+{
+        int (*body_hook)(const char *, void *, int, int, int *) = backend_emit_g_body_hook;
+        if ((!body_hook)) {
+            return 0;
+        }
+        return (*body_hook)(name, out, ind, ntmp, new_ntmp);
+    }
 }
 void backend_emit_ct_emit_clear_builtins(void) {
     backend_emit_g_emit.nbuiltin = 0;

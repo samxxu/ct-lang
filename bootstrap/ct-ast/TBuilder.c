@@ -150,6 +150,9 @@
 #define TK_MATSEQ           31
 #define TK_INTO_SELF        32
 #define TK_OTHER            33
+#define TK_INIT_RANGE       34
+#define TK_INIT_BRACE       35
+#define TK_INIT_MBRACE      36
 #define VC_NONE             0
 #define VC_PLACE            1
 #define VC_VALUE            2
@@ -336,6 +339,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -347,7 +351,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -420,6 +423,7 @@ static int tb_add_inst(struct backend_tir_TBuilder *, int, int *, int);
 static int tb_instances(struct backend_tir_TBuilder *);
 static int tb_fault(struct backend_tir_TBuilder *);
 static int tb_build(int, const char *, const char *, const char *, int, int, int, int, const char *);
+int backend_tir_ct_tir_build_unit(void *, int);
 static struct backend_tir_TBuilder backend_tir_g_tb;
 static int tb_reserve(void * * slot, int * cap, int need, int row) {
     int ncap;
@@ -1048,6 +1052,12 @@ static int tb_expr_kind(int k) {
             return TK_SLICE;
         case N_MATSEQ:
             return TK_MATSEQ;
+        case N_INIT_RANGE:
+            return TK_INIT_RANGE;
+        case N_INIT_BRACE:
+            return TK_INIT_BRACE;
+        case N_INIT_MBRACE:
+            return TK_INIT_MBRACE;
         default:
             return TK_OTHER;
     }
@@ -1309,6 +1319,44 @@ static int tb_expr_kid(struct backend_tir_TBuilder * tb, int parent, int kid) {
     return backend_tir_tmod_expr_add_kid(tb->m, parent, kid);
 }
 static int tb_expr_children(struct backend_tir_TBuilder * tb, int eid, int n) {
+    struct runtime_arena_Arena * ar0 = tb_arena();
+    if (ar0->nodes[n].kind == N_SIZEOF) {
+        if ((((ar0->nodes[n].aux != 0) && ar0->nodes[n].text) && ar0->nodes[n].text[0])) {
+            return 0;
+        }
+        tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[n].a, 0));
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_OFFSETOF) {
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_INIT_RANGE) {
+        tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[n].a, 0));
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_INIT_BRACE) {
+        int c1;
+        for (c1 = ar0->nodes[n].a; c1 >= 0; c1 = ar0->nodes[c1].next) {
+            tb_expr_kid(tb, eid, tb_expr(tb, c1, 0));
+        }
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_INIT_MBRACE) {
+        int c1;
+        for (c1 = ar0->nodes[n].a; c1 >= 0; c1 = ar0->nodes[c1].next) {
+            tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[c1].a, 0));
+            tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[c1].b, 0));
+        }
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_MCALL) {
+        int c0;
+        tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[n].a, 0));
+        for (c0 = ar0->nodes[n].b; c0 >= 0; c0 = ar0->nodes[c0].next) {
+            tb_expr_kid(tb, eid, tb_expr(tb, c0, 0));
+        }
+        return 0;
+    }
     struct runtime_arena_Arena * ar;
     int k;
     int c;
@@ -1400,6 +1448,9 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
     ar = tb_arena();
     m = tb->m;
     k = ar->nodes[n].kind;
+    if ((getenv("CT_TIR_DEBUG") && (k == 36))) {
+        fprintf(stderr, "tir: raw sizeof node=%d a=%d aux=%d text='%s' text2='%s'\n", n, ar->nodes[n].a, ar->nodes[n].aux, (ar->nodes[n].text ? ar->nodes[n].text : ""), (ar->nodes[n].text2 ? ar->nodes[n].text2 : ""));
+    }
     tk = tb_expr_kind(k);
     if (k == N_VAR) {
         struct frontend_sym_Symbols * sym;
@@ -1419,6 +1470,9 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
     if (eid < 0) {
         tb->failed = 1;
         return (-1);
+    }
+    if (tk == TK_OTHER) {
+        m->exprs[(eid - 1)].num = k;
     }
     t = tb_type_of(tb, n, hint);
     if (t <= 0) {
@@ -1453,13 +1507,22 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
             m->exprs[(eid - 1)].op = 2;
             break;
         case N_CAST:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            break;
         case N_SIZEOF:
         case N_VAARG:
         case N_COMPOUND:
-        case N_OFFSETOF:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].op = ar->nodes[n].aux;
+            break;
         case N_RAW:
         case N_RAW_TEXT:
+            m->exprs[(eid - 1)].text = (ar->nodes[n].aux ? runtime_text_ct_intern(ar->__runtime_arena_arenaops_vptr->str_at(ar, (int)(ar->nodes[n].num))) : runtime_text_ct_intern(ar->nodes[n].text));
+            break;
+        case N_OFFSETOF:
             m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].target_key = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].op = 5;
             break;
         case N_CALL:
             m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
@@ -1468,9 +1531,27 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
         case N_MCALL:
             m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
             m->exprs[(eid - 1)].op = 2;
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
             break;
         case N_ADTCTOR:
             m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            break;
+        case N_INIT_RANGE:
+        case N_INIT_BRACE:
+        case N_INIT_MBRACE:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].target_key = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].num = ar->nodes[n].num;
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
+            break;
+        case N_BOX:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].member = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
+            break;
+        case N_NEWOBJ:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].member = runtime_text_ct_intern(ar->nodes[n].text);
             break;
         case N_BIN:
         case N_UNARY:
@@ -1517,6 +1598,10 @@ static int tb_declare(struct backend_tir_TBuilder * tb, int n, int is_param, int
         return (-1);
     }
     m->vars[(vid - 1)].is_ref = (((ar->nodes[n].aux == 2) || (ar->nodes[n].aux == 3)) ? 1 : 0);
+    m->vars[(vid - 1)].dims = runtime_text_ct_intern(ar->nodes[n].text3);
+    m->vars[(vid - 1)].spelling = runtime_text_ct_intern(spelling);
+    m->vars[(vid - 1)].is_static = ((ar->nodes[n].aux == 1) ? 1 : 0);
+    m->vars[(vid - 1)].is_unused = ((ar->nodes[n].aux == 3) ? 1 : 0);
     if (((tb->func_decl > 0) && (tb->scope > 0))) {
         m->vars[(vid - 1)].decl_stmt = 0;
     }
@@ -1844,6 +1929,8 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
                     return (-1);
                 }
                 m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
+                m->stmts[(sid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+                m->stmts[(sid - 1)].text2 = runtime_text_ct_intern(ar->nodes[n].text2);
                 backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
                 saved = tb->scope;
                 if (tb_push_scope(tb, SC_BLOCK) < 0) {
@@ -2130,6 +2217,8 @@ static int tb_func_decl(struct backend_tir_TBuilder * tb, int n, const char * na
             return (-1);
         }
     }
+    m->decls[(decl - 1)].cname = (((fi >= 0) && sym->funcs[fi].cname[0]) ? runtime_text_ct_intern(sym->funcs[fi].cname) : runtime_text_ct_intern(name));
+    m->decls[(decl - 1)].is_template = (tmpl || ((fi >= 0) && (sym->funcs[fi].ntparams > 0)));
     m->decls[(decl - 1)].is_static = (ar->nodes[n].aux ? 1 : 0);
     m->decls[(decl - 1)].is_inline = (ar->nodes[n].num ? 1 : 0);
     m->decls[(decl - 1)].is_vararg = (ar->nodes[n].c ? 1 : 0);
@@ -2691,6 +2780,14 @@ int backend_tir_ct_tir_shadow_program(int prog, const char * path, const char * 
         return 0;
     }
     return backend_tir_ct_tir_build_program(prog, path, base, ns, is_hdr, is_map);
+}
+int backend_tir_ct_tir_build_unit(void * up, int mod_unit) {
+    struct frontend_module_Unit * u;
+    u = (struct frontend_module_Unit *)(up);
+    if ((!u)) {
+        return 0;
+    }
+    return tb_build(u->prog, u->path, u->base, u->ns, u->is_hdr, u->is_map, mod_unit, u->ndep, u->dep);
 }
 int backend_tir_ct_tir_shadow_unit(void * up, int mod_unit) {
     struct frontend_module_Unit * u;

@@ -68,6 +68,8 @@ $ ct-ast --diagnostics=json prog.ct -o /tmp/x.c
 | E-IR-106 | error | LIR V6：出口清理集与按 §4.3 重算的 exit() 不一致 | v1.2.0+（未发版） | `error: the cleanup set does not match the recomputed exit order` | test/ir/run.sh |
 | E-IR-107 | error | LIR V7：正常边出现 errdefer，或同一出口重复清理条目 | v1.2.0+（未发版） | `error: an errdefer runs on a normal exit` | test/ir/run.sh |
 | E-IR-108 | error | LIR V8：同一出口双重 drop/release，或 drop 未声明对象 | v1.2.0+（未发版） | `error: the exit drops the same object twice` | test/ir/run.sh |
+| E-IR-109 | error | LIR V9：终结符非法、跳转目标不存在、break/continue 指向非循环块，或 void 函数返回值 | v1.2.0+（未发版） | `error: terminator jumps to a block that does not exist` | test/ir/run.sh |
+| E-IR-110 | error | LIR V10：raw C 行为空、origin 非法，或未受信 raw 引用编译器局部名 | v1.2.0+（未发版） | `error: untrusted raw C names a compiler-local helper` | test/ir/run.sh |
 | W-TYPE-001 | warning | 实参个数与签名不符；`ct check` 升为 error | v0.88.3+（未发版） | `warning: arity mismatch: 'f' takes 2 argument(s), 1 given` | test/ast/p_lang25.sh |
 | W-TYPE-002 | warning | 实参类型与签名不符；`ct check` 升为 error | v0.88.3+（未发版） | `warning: type mismatch: 'f' argument 1: ...` | test/ast/p_lang25.sh |
 | W-TRAIT-001 | warning | 两个 trait 同名方法，取 `use` 顺序首个 | v0.88.3+（未发版） | `warning: ambiguous method: 'f' declared by 'A' and 'B'` | test/ast/p_lang25.sh |

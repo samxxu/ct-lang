@@ -64,6 +64,20 @@ namespace backend::lir;
 #define LE_PRE             17
 #define LE_TERN            18
 #define LE_TEMP            19
+#define LE_RAW             20
+#define LE_SIZEOF          21
+#define LE_OFFSETOF        22
+#define LE_REF             23
+#define LE_FNCALL          24
+#define LE_CALLEXPR        25
+#define LE_VMCALL          26
+#define LE_BOX             27
+#define LE_NEWOBJ          28
+#define LE_INIT_RANGE      29
+#define LE_INIT_BRACE      30
+#define LE_INIT_MBRACE     31
+#define LE_RANGEK          32
+#define LE_MCALL           33
 
 /* Binary / unary / assignment operator codes: the AST's, copied so the
    printing tables stay one table (Arena.h.ct is authoritative). */
@@ -111,6 +125,9 @@ namespace backend::lir;
 #define LS_SWITCH          15
 #define LS_CASE            16
 #define LS_EMPTY           17
+#define LS_DECLS           18
+#define LS_LOOP            19
+#define LS_FOREACH         20
 
 /* Jump kinds. */
 #define LJ_BREAK            1
@@ -192,6 +209,7 @@ pub struct ct_lexpr {
     int nkids;
     int kcap;
     const char *text;   /* literal spelling / name / field / callee / cast type */
+    const char *member; /* second spelling: offsetof member, raw origin */
     long num;           /* integer literal value */
     int op;             /* operator code */
     struct ct_lspan span;
@@ -206,6 +224,10 @@ pub struct ct_lstmt {
     int aux;            /* assignment op / jump kind / drop kind */
     int type;           /* declared type for LS_DECL, pointee for LS_DROP */
     const char *name;   /* declared name (LS_DECL), label (LS_GOTO/LS_LABEL) */
+    const char *dims;   /* LS_DECL array dimensions as spelled, else "" */
+    const char *spelling; /* LS_DECL: the source type spelling, verbatim */
+    const char *count;  /* LS_DECL: the array's element count for a vptr loop */
+    const char *vptr;   /* LS_DECL: generated vptr statements, one per line */
     int expr;           /* init / lhs / value / condition / subject */
     int rhs;            /* assignment rhs */
     int cond;
@@ -214,7 +236,10 @@ pub struct ct_lstmt {
     int body_blk;
     int init_stmt;
     int step;
-    int target;         /* jump target block id */
+    int target;         /* jump target block id / foreach container kind */
+    int loop_k;         /* LS_LOOP / LS_FOREACH: the `__ct_*_<k>` counter */
+    const char *item_type; /* LS_FOREACH: the bound item's C spelling */
+    const char *fname;  /* LS_FOREACH: container unit (Vec_<T> / Map_…) */
     int *cleanups;      /* explicit cleanup set at an exit */
     int ncleanups;
     int ccap;
@@ -273,7 +298,10 @@ pub struct ct_lparam {
 
 pub struct ct_lfunc {
     int id;
-    const char *name;
+    const char *name;       /* TIR source key (the emitter's find_func key) */
+    const char *cname;      /* the emitted C symbol (differs for impl methods) */
+    int temp_start;         /* module-wide `__ct_*N` counter at entry */
+    int temp_end;           /* ... after this body; the seam keeps them in sync */
     int ret;
     struct ct_lparam *params;
     int nparams;
@@ -349,7 +377,8 @@ pub struct LModule {
     int emitting;       /* printing in progress */
     const char *free_sym;
     /* coverage counters for the report */
-    int stat_funcs;
+    int stat_funcs;      /* emitted functions the lowerer tried */
+    int stat_funcs_ok;   /* ... of those, lowered end to end */
     int stat_blocks;
     int stat_stmts;
     int stat_temps;
@@ -614,6 +643,7 @@ pub int lmod_new_func(struct LModule *self, const char *name, int ret, int decl)
     id = slot + 1;
     self->funcs[slot].id = id;
     self->funcs[slot].name = runtime::text::ct_intern(name ? name : "");
+    self->funcs[slot].cname = self->funcs[slot].name;
     self->funcs[slot].ret = ret;
     self->funcs[slot].decl = decl;
     self->nfuncs++;
@@ -784,9 +814,10 @@ pub void lmod_report(struct LModule *self, const char *unit)
     self->stat_temps = self->ntemps;
     self->stat_cleanups = self->ncleanups;
     fprintf(stderr,
-            "lir: unit=%s ready=%d funcs=%d blocks=%d stmts=%d exprs=%d"
+            "lir: unit=%s ready=%d funcs=%d/%d blocks=%d stmts=%d exprs=%d"
             " temps=%d cleanups=%d types=%d fallback=%d\n",
-            unit ? unit : "", self->ready, self->nfuncs, self->nblocks,
+            unit ? unit : "", self->ready, self->stat_funcs_ok,
+            self->stat_funcs, self->nblocks,
             self->nstmts, self->nexprs, self->ntemps, self->ncleanups,
             self->ntypes, self->stat_fallback);
 }

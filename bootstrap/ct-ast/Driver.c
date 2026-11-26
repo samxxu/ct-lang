@@ -106,6 +106,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -117,7 +118,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -154,6 +154,7 @@ struct tool_driver_Driver {
     const char * version;
     const struct tool_driver_DriverOps_vtbl *__tool_driver_driverops_vptr;
 };
+static int drv_lir_body(const char *, void *, int, int, int *);
 static int file_has_import(const char *);
 static int src_has_word(const char *, const char *);
 static int src_has_prefix(const char *, const char *);
@@ -901,19 +902,13 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     if (_self->m->line_mode) {
         fprintf(_self->out, "#line 1 \"%s\"\n", _self->m->path);
     }
-    if (((((((((backend_lir_ct_lir_on() && backend_lir_ct_lir_emit_on()) && backend_lir_ct_lir_ready()) && (!_self->m->line_mode)) && (!_self->m->have_map)) && (!_self->m->have_model)) && (!_self->m->abi_mode)) && (!_self->p->unit_is_hdr)) && (!_self->p->unit_is_map))) {
-        if (backend_lir_ct_lir_emit(_self->out) != 0) {
-            fclose(f);
-            remove(out);
-            return frontend_parse_ct_parse_report();
-        }
+    if ((((((((backend_lir_ct_lir_on() && backend_lir_ct_lir_emit_on()) && (!_self->m->line_mode)) && (!_self->m->have_map)) && (!_self->m->have_model)) && (!_self->m->abi_mode)) && (!_self->p->unit_is_hdr)) && (!_self->p->unit_is_map))) {
+        backend_emit_ct_emit_set_body_hook(drv_lir_body);
     }
-    else {
-        if (_self->m->__frontend_module_moduleops_vptr->emit_program(_self->m, prog) != 0) {
-            fclose(f);
-            remove(out);
-            return frontend_parse_ct_parse_report();
-        }
+    if (_self->m->__frontend_module_moduleops_vptr->emit_program(_self->m, prog) != 0) {
+        fclose(f);
+        remove(out);
+        return frontend_parse_ct_parse_report();
     }
     if (fclose(f) != 0) {
         fprintf(stderr, "ctc: cannot write '%s'%s\n", out, (_self->m->diag_codes ? " [E-DRIVER-004]" : ""));
@@ -941,6 +936,9 @@ static const struct tool_driver_DriverOps_vtbl tool_driver_Driver_tool_driver_Dr
     .run = tool_driver_Driver_tool_driver_DriverOps_run
 };
 
+static int drv_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp) {
+    return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+}
 static int file_has_import(const char * path) {
     FILE * f = fopen(path, "r");
     char line[1024];

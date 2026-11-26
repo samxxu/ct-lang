@@ -79,6 +79,9 @@ namespace backend::tir;
 #define TK_MATSEQ           31
 #define TK_INTO_SELF        32
 #define TK_OTHER            33
+#define TK_INIT_RANGE       34
+#define TK_INIT_BRACE       35
+#define TK_INIT_MBRACE      36
 
 /* ValueClass (contract §3.2). */
 #define VC_NONE             0
@@ -244,6 +247,7 @@ pub struct ct_tdecl {
     int id;
     int kind;
     const char *name;
+    const char *cname;  /* the emitted C symbol (differs for impl methods) */
     struct ct_tspan span;
     int type;
     int *params;
@@ -259,6 +263,7 @@ pub struct ct_tdecl {
     int is_static;      /* the source spelled `static` on the definition */
     int is_inline;      /* the source spelled `inline` */
     int is_vararg;      /* the parameter list ends in `...` */
+    int is_template;    /* the symbol row has type parameters (no C body) */
 }
 
 pub struct ct_ttype {
@@ -287,7 +292,9 @@ pub struct ct_texpr {
     int target_kind;
     int target_a;
     int target_b;
+    int aux;            /* the AST's dispatch form (method calls, S1b-S2b) */
     const char *target_key;
+    const char *member;  /* a second spelling: box struct / new payload type */
     /* S1b-S2: the C-shaped facts a lowering needs. `text` is a literal's
        spelling, a field/member name, a cast/sizeof type or a callee name;
        `num` is an integer literal's value; `op` is the operator code of a
@@ -309,6 +316,7 @@ pub struct ct_tstmt {
     int err_edge;       /* `return err:` / `break err:` / `continue err:` */
     int flags;          /* per-kind child-shape bitmask (S1b-S2, see TBuilder) */
     const char *text;   /* goto / label name (S1b-S2) */
+    const char *text2;  /* foreach: the container's C unit name */
 }
 
 pub struct ct_tscope {
@@ -333,6 +341,10 @@ pub struct ct_tvar {
     int decl_stmt;      /* TStmt id of the declaration, for retro-attribution */
     int is_param;
     int is_ref;         /* `ref` / `out`: the C spelling is a pointer */
+    const char *dims;   /* array dimensions as spelled (`[2]`, `[]`), else "" */
+    const char *spelling; /* the declaration's own type spelling */
+    int is_static;      /* a function-local with static storage duration */
+    int is_unused;      /* a match binding: `__attribute__((unused))` */
 }
 
 pub struct ct_tcleanup {

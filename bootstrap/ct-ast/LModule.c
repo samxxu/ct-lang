@@ -29,6 +29,20 @@
 #define LE_PRE             17
 #define LE_TERN            18
 #define LE_TEMP            19
+#define LE_RAW             20
+#define LE_SIZEOF          21
+#define LE_OFFSETOF        22
+#define LE_REF             23
+#define LE_FNCALL          24
+#define LE_CALLEXPR        25
+#define LE_VMCALL          26
+#define LE_BOX             27
+#define LE_NEWOBJ          28
+#define LE_INIT_RANGE      29
+#define LE_INIT_BRACE      30
+#define LE_INIT_MBRACE     31
+#define LE_RANGEK          32
+#define LE_MCALL           33
 #define LB_ADD              0
 #define LB_SUB              2
 #define LB_MUL              3
@@ -69,6 +83,9 @@
 #define LS_SWITCH          15
 #define LS_CASE            16
 #define LS_EMPTY           17
+#define LS_DECLS           18
+#define LS_LOOP            19
+#define LS_FOREACH         20
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -197,6 +214,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -208,7 +226,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -492,6 +509,7 @@ int backend_lir_lmod_new_func(struct backend_lir_LModule * self, const char * na
     id = (slot + 1);
     self->funcs[slot].id = id;
     self->funcs[slot].name = runtime_text_ct_intern((name ? name : ""));
+    self->funcs[slot].cname = self->funcs[slot].name;
     self->funcs[slot].ret = ret;
     self->funcs[slot].decl = decl;
     self->nfuncs++;
@@ -663,5 +681,5 @@ void backend_lir_lmod_report(struct backend_lir_LModule * self, const char * uni
     self->stat_stmts = self->nstmts;
     self->stat_temps = self->ntemps;
     self->stat_cleanups = self->ncleanups;
-    fprintf(stderr, "lir: unit=%s ready=%d funcs=%d blocks=%d stmts=%d exprs=%d"" temps=%d cleanups=%d types=%d fallback=%d\n", (unit ? unit : ""), self->ready, self->nfuncs, self->nblocks, self->nstmts, self->nexprs, self->ntemps, self->ncleanups, self->ntypes, self->stat_fallback);
+    fprintf(stderr, "lir: unit=%s ready=%d funcs=%d/%d blocks=%d stmts=%d exprs=%d"" temps=%d cleanups=%d types=%d fallback=%d\n", (unit ? unit : ""), self->ready, self->stat_funcs_ok, self->stat_funcs, self->nblocks, self->nstmts, self->nexprs, self->ntemps, self->ncleanups, self->ntypes, self->stat_fallback);
 }

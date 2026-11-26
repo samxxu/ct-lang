@@ -102,6 +102,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -113,7 +114,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -133,6 +133,7 @@ struct backend_lir_Lower {
     int ret_type;
     int root;
     int aborted;
+    int drop_seen;
     int hard;
     int * loops;
     int nloops;
@@ -144,8 +145,10 @@ int backend_lir_ct_lir_on(void);
 int backend_lir_ct_lir_emit_on(void);
 void backend_lir_ct_lir_set_switch(int);
 int backend_lir_ct_lir_build_program(int, const char *, const char *, const char *, int, int);
+int backend_lir_ct_lir_build_unit(void *, int, int);
 int backend_lir_ct_lir_ready(void);
 int backend_lir_ct_lir_emit(FILE *);
+int backend_lir_ct_lir_try_body(const char *, void *, int, int, int *);
 void backend_lir_ct_lir_free(void);
 
 #endif

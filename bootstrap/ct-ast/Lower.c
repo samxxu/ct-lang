@@ -25,6 +25,14 @@
 #define TK_CALL             11
 #define TK_INTRINSIC        12
 #define TK_STRING_LIT       13
+#define TK_RAW              20
+#define TK_BOX              21
+#define TK_NEWOBJ           22
+#define TK_SIZEOF           24
+#define TK_OTHER            33
+#define TK_INIT_RANGE       34
+#define TK_INIT_BRACE       35
+#define TK_INIT_MBRACE      36
 #define TK_ASSIGN           26
 #define TK_POSTFIX          27
 #define TK_PREFIX           28
@@ -37,14 +45,19 @@
 #define TS_IF                6
 #define TS_WHILE             7
 #define TS_FOR               8
+#define TS_LOOP              9
+#define TS_FOREACH          10
 #define TS_BREAK            13
 #define TS_CONT             14
 #define TS_GOTO             15
 #define TS_LABEL            16
 #define TS_EMPTY            22
 #define RT_DIRECT            1
+#define RT_INDIRECT          2
+#define RT_VIRTUAL           3
 #define RT_INTRINSIC         4
 #define RT_BUILTIN           7
+#define RT_VAR               8
 #define SC_FUNC              1
 #define SC_BLOCK             2
 #define SC_FOR               3
@@ -57,6 +70,9 @@
 #define CL_HANDBACK          5
 #define TD_FUNC              1
 #define TD_STRUCT            3
+#define TD_UNION             4
+#define TD_IMPL              8
+#define TD_ADT               9
 #define LE_NUM              1
 #define LE_FNUM             2
 #define LE_STR              3
@@ -76,6 +92,20 @@
 #define LE_PRE             17
 #define LE_TERN            18
 #define LE_TEMP            19
+#define LE_RAW             20
+#define LE_SIZEOF          21
+#define LE_OFFSETOF        22
+#define LE_REF             23
+#define LE_FNCALL          24
+#define LE_CALLEXPR        25
+#define LE_VMCALL          26
+#define LE_BOX             27
+#define LE_NEWOBJ          28
+#define LE_INIT_RANGE      29
+#define LE_INIT_BRACE      30
+#define LE_INIT_MBRACE     31
+#define LE_RANGEK          32
+#define LE_MCALL           33
 #define LB_SUB              2
 #define LB_MUL              3
 #define LB_DIV              4
@@ -113,6 +143,9 @@
 #define LS_GOTO            13
 #define LS_LABEL           14
 #define LS_EMPTY           17
+#define LS_DECLS           18
+#define LS_LOOP            19
+#define LS_FOREACH         20
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -225,6 +258,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -236,7 +270,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -254,17 +287,30 @@ int backend_lir_ct_lir_on(void);
 int backend_lir_ct_lir_emit_on(void);
 void backend_lir_ct_lir_set_switch(int);
 int backend_lir_ct_lir_build_program(int, const char *, const char *, const char *, int, int);
+int backend_lir_ct_lir_build_unit(void *, int, int);
 int backend_lir_ct_lir_ready(void);
 int backend_lir_ct_lir_emit(FILE *);
+int backend_lir_ct_lir_try_body(const char *, void *, int, int, int *);
 void backend_lir_ct_lir_free(void);
 static int lw_env_switch(void);
 static int lw_scope_kind(struct backend_lir_Lower *, int);
 static int lw_scope_parent(struct backend_lir_Lower *, int);
 static void lw_abort(struct backend_lir_Lower *, const char *);
 static int lw_type(struct backend_lir_Lower *, int);
+static void lw_low_text(const char *, char *, int);
+static struct backend_tir_ct_tdecl * lw_struct_decl(struct backend_lir_Lower *, const char *);
+static int lw_vptr_items(struct backend_lir_Lower *, const char *, const char *, char *, int, int *, int);
+static int lw_vptr_stmts(struct backend_lir_Lower *, const char *, const char *, char *, int, int *, int);
+static int lw_impl_has_trait(const char *);
+static int lw_instance_vptr_needed(struct backend_lir_Lower *, const char *);
+static int lw_struct_needs_init(struct backend_lir_Lower *, const char *, int);
+static int lw_type_needs_init(struct backend_lir_Lower *, int);
 static int lw_type_text(struct backend_lir_Lower *, const char *);
+static int lw_decl_is_template(struct backend_lir_Lower *, struct backend_tir_ct_tdecl *);
 static int lw_owning_spelling(const char *);
 static int lw_active(struct backend_lir_Lower *, struct backend_lir_ct_lcleanup *, int, int, int);
+static int lw_decl_param_ref(struct backend_lir_Lower *, int, int);
+static int lw_name_is_ref(struct backend_lir_Lower *, const char *);
 static int lw_expr(struct backend_lir_Lower *, int);
 static int lw_expr_kid(struct backend_lir_Lower *, int, int);
 static int lw_call_name(struct backend_lir_Lower *, struct backend_tir_ct_texpr *);
@@ -286,6 +332,7 @@ static int lw_active_for_return(struct backend_lir_Lower *, int, int, int);
 static int lw_fill_block(struct backend_lir_Lower *, int, int);
 static int lw_lower_func(struct backend_lir_Lower *, int);
 static int lw_copy_scopes(struct backend_lir_Lower *);
+static int lw_lower_slice(struct backend_lir_Lower *, int, int);
 static void lw_ind(int);
 static const char * lw_bin_op(int);
 static const char * lw_assign_op(int);
@@ -299,6 +346,7 @@ static int lw_pw_return(struct backend_lir_Lower *, struct backend_lir_ct_lblock
 static int lw_pw_params(struct backend_lir_Lower *, struct backend_lir_ct_lfunc *, int);
 static struct backend_lir_Lower backend_lir_g_lower;
 static FILE * backend_lir_g_lir_out;
+static int backend_lir_g_lir_range_k;
 void backend_lir_ct_lir_set_switch(int mode) {
     if (mode < 0) {
         mode = 0;
@@ -362,8 +410,439 @@ static void lw_abort(struct backend_lir_Lower * w, const char * why) {
 static int lw_type(struct backend_lir_Lower * w, int tir_type) {
     return backend_lir_lmod_type(w->l, backend_tir_tmod_cspell(w->m, tir_type));
 }
+static void lw_low_text(const char * src, char * dst, int cap) {
+    int i;
+    int n = 0;
+    if ((!src)) {
+        dst[0] = 0;
+        return;
+    }
+    for (i = 0; (src[i] && (n < (cap - 1))); i++) {
+        char c = src[i];
+        if (((c >= 'A') && (c <= 'Z'))) {
+            c = (char)(((c - 'A') + 'a'));
+        }
+        dst[n] = c;
+        n++;
+    }
+    dst[n] = 0;
+}
+static struct backend_tir_ct_tdecl * lw_struct_decl(struct backend_lir_Lower * w, const char * tag) {
+    int i;
+    if (((!tag) || (!tag[0]))) {
+        return 0;
+    }
+    for (i = 0; i < w->m->ndecls; i++) {
+        struct backend_tir_ct_tdecl * d = (&w->m->decls[i]);
+        if ((((d->kind != TD_STRUCT) && (d->kind != TD_UNION)) && (d->kind != TD_ADT))) {
+            continue;
+        }
+        if ((d->name && (strcmp(d->name, tag) == 0))) {
+            return d;
+        }
+    }
+    return 0;
+}
+static int lw_vptr_items(struct backend_lir_Lower * w, const char * tag, const char * prefix, char * buf, int cap, int * used, int depth) {
+    struct backend_tir_ct_tdecl * d;
+    int i;
+    int u = (*used);
+    if (depth > 6) {
+        return (-1);
+    }
+    d = lw_struct_decl(w, tag);
+    if ((!d)) {
+        return (-1);
+    }
+    for (i = 0; i < d->ntraits; i++) {
+        struct backend_tir_ct_tdecl * td;
+        char low[256];
+        int n;
+        if (((d->traits[i] <= 0) || (d->traits[i] > w->m->ndecls))) {
+            return (-1);
+        }
+        td = (&w->m->decls[(d->traits[i] - 1)]);
+        lw_low_text(td->name, low, (int)(sizeof(low)));
+{
+            char lead[512];
+            snprintf(lead, sizeof(lead), ".%s", prefix);
+            n = snprintf((buf + u), (size_t)((cap - u)), "%s%s__%s_vptr = &%s_%s_vtable", ((u > 0) ? ", " : ""), lead, low, tag, td->name);
+        }
+        if (((n < 0) || ((u + n) >= cap))) {
+            return (-1);
+        }
+        u += n;
+    }
+    for (i = 0; i < w->m->nmembers; i++) {
+        struct backend_tir_ct_tmember * mb = (&w->m->members[i]);
+        const char * fs;
+        const char * ftag;
+        char fbuf[512];
+        int fl;
+        if (mb->owner != d->id) {
+            continue;
+        }
+        fs = backend_tir_tmod_cspell(w->m, mb->type);
+        if ((!fs)) {
+            continue;
+        }
+        if (strncmp(fs, "struct ", 7) == 0) {
+            ftag = (fs + 7);
+        }
+        else {
+            if (strncmp(fs, "union ", 6) == 0) {
+                ftag = (fs + 6);
+            }
+            else {
+                continue;
+            }
+        }
+        if (strchr(ftag, '*')) {
+            continue;
+        }
+        fl = (int)(strlen(ftag));
+        while (((fl > 0) && ((ftag[(fl - 1)] == '*') || (ftag[(fl - 1)] == ' ')))) {
+            fl--;
+        }
+        if (((fl <= 0) || (fl >= ((int)(sizeof(fbuf)) - 1)))) {
+            continue;
+        }
+        memcpy(fbuf, ftag, (size_t)(fl));
+        fbuf[fl] = 0;
+        if ((!lw_struct_decl(w, fbuf))) {
+            continue;
+        }
+{
+            char p2[512];
+            snprintf(p2, sizeof(p2), "%s%s.", prefix, (mb->name ? mb->name : ""));
+            if (lw_vptr_items(w, fbuf, p2, buf, cap, (&u), (depth + 1)) != 0) {
+                return (-1);
+            }
+        }
+    }
+    (*used) = u;
+    return 0;
+}
+static int lw_vptr_stmts(struct backend_lir_Lower * w, const char * tag, const char * recv, char * buf, int cap, int * used, int depth) {
+    struct backend_tir_ct_tdecl * d;
+    int i;
+    int u = (*used);
+    if (depth > 6) {
+        return (-1);
+    }
+    d = lw_struct_decl(w, tag);
+    if ((!d)) {
+        return (-1);
+    }
+    for (i = 0; i < d->ntraits; i++) {
+        struct backend_tir_ct_tdecl * td;
+        char low[256];
+        int n;
+        if (((d->traits[i] <= 0) || (d->traits[i] > w->m->ndecls))) {
+            return (-1);
+        }
+        td = (&w->m->decls[(d->traits[i] - 1)]);
+        lw_low_text(td->name, low, (int)(sizeof(low)));
+        n = snprintf((buf + u), (size_t)((cap - u)), "%s%s.__%s_vptr = &%s_%s_vtable;\n", ((u > 0) ? "\n" : ""), recv, low, tag, td->name);
+        if (((n < 0) || ((u + n) >= cap))) {
+            return (-1);
+        }
+        u += n;
+    }
+    for (i = 0; i < w->m->nmembers; i++) {
+        struct backend_tir_ct_tmember * mb = (&w->m->members[i]);
+        const char * fs;
+        const char * ftag;
+        char fbuf[512];
+        char r2[512];
+        int fl;
+        if (mb->owner != d->id) {
+            continue;
+        }
+        fs = backend_tir_tmod_cspell(w->m, mb->type);
+        if (((!fs) || strchr(fs, '*'))) {
+            continue;
+        }
+        if (strncmp(fs, "struct ", 7) == 0) {
+            ftag = (fs + 7);
+        }
+        else {
+            if (strncmp(fs, "union ", 6) == 0) {
+                ftag = (fs + 6);
+            }
+            else {
+                continue;
+            }
+        }
+        fl = (int)(strlen(ftag));
+        while (((fl > 0) && ((ftag[(fl - 1)] == '*') || (ftag[(fl - 1)] == ' ')))) {
+            fl--;
+        }
+        if (((fl <= 0) || (fl >= ((int)(sizeof(fbuf)) - 1)))) {
+            continue;
+        }
+        memcpy(fbuf, ftag, (size_t)(fl));
+        fbuf[fl] = 0;
+        if ((!lw_struct_decl(w, fbuf))) {
+            continue;
+        }
+        snprintf(r2, sizeof(r2), "%s.%s", recv, (mb->name ? mb->name : ""));
+        if (lw_vptr_stmts(w, fbuf, r2, buf, cap, (&u), (depth + 1)) != 0) {
+            return (-1);
+        }
+    }
+    (*used) = u;
+    return 0;
+}
+static int lw_impl_has_trait(const char * name) {
+    const char * p;
+    if ((!name)) {
+        return 0;
+    }
+    p = name;
+    if (strncmp(p, "impl", 4) != 0) {
+        return 1;
+    }
+    p += 4;
+    while ((*p) == ' ') {
+        p++;
+    }
+    if ((*p) == '<') {
+        int depth = 0;
+        while ((*p)) {
+            if ((*p) == '<') {
+                depth++;
+            }
+            else {
+                if ((*p) == '>') {
+                    depth--;
+                    p++;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+                else {
+                    p++;
+                }
+            }
+        }
+        while ((*p) == ' ') {
+            p++;
+        }
+    }
+    if (strncmp(p, "for", 3) == 0) {
+        return 0;
+    }
+    return 1;
+}
+static int lw_instance_vptr_needed(struct backend_lir_Lower * w, const char * tag) {
+    int i;
+    int best = (-1);
+    size_t bestlen = 0;
+    size_t tl;
+    if (((!tag) || (!tag[0]))) {
+        return 1;
+    }
+    tl = strlen(tag);
+    if (((tl > 6) && (strcmp(((tag + tl) - 6), "_iface") == 0))) {
+        return 0;
+    }
+    for (i = 0; i < w->m->ndecls; i++) {
+        struct backend_tir_ct_tdecl * d = (&w->m->decls[i]);
+        size_t nl;
+        if (((d->kind != TD_STRUCT) && (d->kind != TD_UNION))) {
+            continue;
+        }
+        if (((!d->name) || (!d->name[0]))) {
+            continue;
+        }
+        nl = strlen(d->name);
+        if (((nl >= tl) || (strncmp(tag, d->name, nl) != 0))) {
+            continue;
+        }
+        if (tag[nl] != '_') {
+            continue;
+        }
+        if (nl > bestlen) {
+            bestlen = nl;
+            best = i;
+        }
+    }
+    if (best < 0) {
+        for (i = 0; i < w->m->ndecls; i++) {
+            struct backend_tir_ct_tdecl * d = (&w->m->decls[i]);
+            if (((d->kind != TD_IMPL) || (!d->name))) {
+                continue;
+            }
+            if ((!strstr(d->name, tag))) {
+                continue;
+            }
+            if ((strstr(d->name, "Drop") || strstr(d->name, "Handback"))) {
+                continue;
+            }
+            if ((!lw_impl_has_trait(d->name))) {
+                continue;
+            }
+            return 1;
+        }
+        return 1;
+    }
+    for (i = 0; i < w->m->decls[best].ntraits; i++) {
+        int ti = w->m->decls[best].traits[i];
+        struct backend_tir_ct_tdecl * td;
+        if (((ti <= 0) || (ti > w->m->ndecls))) {
+            continue;
+        }
+        td = (&w->m->decls[(ti - 1)]);
+        if ((td->name && ((strcmp(td->name, "Drop") == 0) || (strcmp(td->name, "Handback") == 0)))) {
+            continue;
+        }
+        return 1;
+    }
+{
+        const char * tname = w->m->decls[best].name;
+        for (i = 0; i < w->m->ndecls; i++) {
+            struct backend_tir_ct_tdecl * d = (&w->m->decls[i]);
+            if (((d->kind != TD_IMPL) || (!d->name))) {
+                continue;
+            }
+            if ((((strstr(d->name, tname) && (!strstr(d->name, "Drop"))) && (!strstr(d->name, "Handback"))) && lw_impl_has_trait(d->name))) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int lw_struct_needs_init(struct backend_lir_Lower * w, const char * tag, int depth) {
+    int i;
+    int k;
+    if ((((!tag) || (!tag[0])) || (depth > 8))) {
+        return 0;
+    }
+    for (i = 0; i < w->m->ndecls; i++) {
+        struct backend_tir_ct_tdecl * d = (&w->m->decls[i]);
+        size_t tl;
+        if ((((d->kind != TD_STRUCT) && (d->kind != TD_UNION)) && (d->kind != TD_ADT))) {
+            continue;
+        }
+        if ((!d->name)) {
+            continue;
+        }
+        tl = strlen(tag);
+        if ((((tl == 0) || (strlen(d->name) != tl)) || (strncmp(d->name, tag, tl) != 0))) {
+            continue;
+        }
+        if (d->ntraits > 0) {
+            return 1;
+        }
+        for (k = 0; k < w->m->nmembers; k++) {
+            struct backend_tir_ct_tmember * mb = (&w->m->members[k]);
+            const char * fs;
+            const char * ftag;
+            int fl;
+            if (mb->owner != d->id) {
+                continue;
+            }
+            fs = backend_tir_tmod_cspell(w->m, mb->type);
+            if ((!fs)) {
+                continue;
+            }
+            if (strchr(fs, '*')) {
+                continue;
+            }
+            if (strncmp(fs, "struct ", 7) == 0) {
+                ftag = (fs + 7);
+            }
+            else {
+                if (strncmp(fs, "union ", 6) == 0) {
+                    ftag = (fs + 6);
+                }
+                else {
+                    continue;
+                }
+            }
+            fl = (int)(strlen(ftag));
+            while (((fl > 0) && ((ftag[(fl - 1)] == '*') || (ftag[(fl - 1)] == ' ')))) {
+                fl--;
+            }
+            if (((fl > 0) && (fl < (int)(strlen(ftag))))) {
+            }
+{
+                char buf[256];
+                int n = ((fl < ((int)(sizeof(buf)) - 1)) ? fl : ((int)(sizeof(buf)) - 1));
+                memcpy(buf, ftag, (size_t)(n));
+                buf[n] = 0;
+                if (lw_struct_needs_init(w, buf, (depth + 1))) {
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+static int lw_type_needs_init(struct backend_lir_Lower * w, int tir_type) {
+    const char * sp;
+    const char * tag;
+    int n;
+    char buf[256];
+    sp = backend_tir_tmod_cspell(w->m, tir_type);
+    if ((!sp)) {
+        return 0;
+    }
+    if (strncmp(sp, "struct ", 7) == 0) {
+        tag = (sp + 7);
+    }
+    else {
+        if (strncmp(sp, "union ", 6) == 0) {
+            tag = (sp + 6);
+        }
+        else {
+            return 0;
+        }
+    }
+    n = (int)(strlen(tag));
+    while (((n > 0) && (tag[(n - 1)] == ' '))) {
+        n--;
+    }
+    if (((n > 0) && (tag[(n - 1)] == '*'))) {
+        return 0;
+    }
+    if (((n <= 0) || (n >= (int)(sizeof(buf))))) {
+        return 0;
+    }
+    memcpy(buf, tag, (size_t)(n));
+    buf[n] = 0;
+    return lw_struct_needs_init(w, buf, 0);
+}
 static int lw_type_text(struct backend_lir_Lower * w, const char * spelling) {
     return backend_lir_lmod_type(w->l, (spelling ? spelling : "void"));
+}
+static int lw_decl_is_template(struct backend_lir_Lower * w, struct backend_tir_ct_tdecl * d) {
+    int i;
+    if (d->is_template) {
+        return 1;
+    }
+    if (d->name) {
+        static const char * const builtin[] = {
+            "Vec.", "Map.", "Box.", "Option.", "Result.", "String.",
+            "Str.", "U16Str.", "U16String."
+        };
+        int bi;
+        for (bi = 0; bi < (int)((sizeof(builtin) / sizeof(builtin[0]))); bi++) {
+            if (strncmp(d->name, builtin[bi], strlen(builtin[bi])) == 0) {
+                return 1;
+            }
+        }
+    }
+    if (backend_tir_tmod_has_free_param(w->m, d->type)) {
+        return 1;
+    }
+    for (i = 0; i < d->nparams; i++) {
+        if (backend_tir_tmod_has_free_param(w->m, d->params[i])) {
+            return 1;
+        }
+    }
+    return 0;
 }
 static int lw_owning_spelling(const char * s) {
     if (((!s) || (!s[0]))) {
@@ -402,6 +881,50 @@ static int lw_active(struct backend_lir_Lower * w, struct backend_lir_ct_lcleanu
     }
     if (((c->span.line == line) && (c->span.col <= col))) {
         return 1;
+    }
+    return 0;
+}
+static int lw_decl_param_ref(struct backend_lir_Lower * w, int decl, int idx) {
+    struct backend_tir_ct_tdecl * d;
+    struct backend_tir_ct_tscope * sc;
+    int i;
+    int n = 0;
+    if (((decl <= 0) || (decl > w->m->ndecls))) {
+        return 0;
+    }
+    d = (&w->m->decls[(decl - 1)]);
+    if (((d->scope <= 0) || (d->scope > w->m->nscopes))) {
+        return 0;
+    }
+    sc = (&w->m->scopes[(d->scope - 1)]);
+    for (i = 0; i < sc->nvars; i++) {
+        struct backend_tir_ct_tvar * v;
+        int vi = sc->vars[i];
+        if (((vi <= 0) || (vi > w->m->nvars))) {
+            continue;
+        }
+        v = (&w->m->vars[(vi - 1)]);
+        if ((!v->is_param)) {
+            continue;
+        }
+        if (n == idx) {
+            return v->is_ref;
+        }
+        n++;
+    }
+    return 0;
+}
+static int lw_name_is_ref(struct backend_lir_Lower * w, const char * name) {
+    int i;
+    if (((!name) || (!name[0]))) {
+        return 0;
+    }
+    for (i = (w->m->nvars - 1); i >= 0; i--) {
+        struct backend_tir_ct_tvar * v = (&w->m->vars[i]);
+        if (((!v->name) || (strcmp(v->name, name) != 0))) {
+            continue;
+        }
+        return v->is_ref;
     }
     return 0;
 }
@@ -471,6 +994,23 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
             }
             w->l->exprs[(e - 1)].text = t->text;
             w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+            if ((t->text && (strcmp(t->text, "$") == 0))) {
+                w->l->exprs[(e - 1)].kind = LE_RANGEK;
+                return e;
+            }
+            if (((t->kind == TK_NAME_LOCAL) && (((((t->target_kind == RT_VAR) && (t->target_a > 0)) && (t->target_a <= w->m->nvars)) && w->m->vars[(t->target_a - 1)].is_ref) || lw_name_is_ref(w, t->text)))) {
+                int d = backend_lir_lmod_new_expr(w->l, LE_DEREF, t->span.file, t->span.line, t->span.col);
+                if (d <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->exprs[(d - 1)].type = w->l->exprs[(e - 1)].type;
+                if (backend_lir_lmod_expr_add_kid(w->l, d, e) != 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                return d;
+            }
             return e;
         case TK_FIELD:
             if ((((!t->text) || (!t->text[0])) || (t->nkids < 1))) {
@@ -582,6 +1122,90 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
             return e;
         case TK_CALL:
         case TK_INTRINSIC:
+            if (((t->target_kind == RT_VIRTUAL) && (t->nkids >= 1))) {
+                int rk = w->m->exprs[(t->kids[0] - 1)].kind;
+                int trait_len = 0;
+                if (((((rk != TK_NAME_LOCAL) && (rk != TK_NAME_GLOBAL)) && (rk != TK_FIELD)) && (rk != TK_INDEX))) {
+                    lw_abort(w, "L4530");
+                    return 0;
+                }
+                if ((!t->target_key)) {
+                    lw_abort(w, "L4531");
+                    return 0;
+                }
+                while ((t->target_key[trait_len] && (t->target_key[trait_len] != '.'))) {
+                    trait_len++;
+                }
+                if (trait_len == 0) {
+                    lw_abort(w, "L4532");
+                    return 0;
+                }
+                e = backend_lir_lmod_new_expr(w->l, LE_VMCALL, t->span.file, t->span.line, t->span.col);
+                if (e <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->exprs[(e - 1)].text = t->text;
+                w->l->exprs[(e - 1)].member = runtime_text_ct_intern_len(t->target_key, trait_len);
+                w->l->exprs[(e - 1)].op = t->aux;
+                w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+                for (i = 0; i < t->nkids; i++) {
+                    if (lw_expr_kid(w, e, t->kids[i]) != 0) {
+                        return 0;
+                    }
+                }
+                return e;
+            }
+            if (((t->target_kind == RT_INDIRECT) && ((t->op == 2) || (t->op == 3)))) {
+                e = backend_lir_lmod_new_expr(w->l, ((t->op == 2) ? LE_FNCALL : LE_CALLEXPR), t->span.file, t->span.line, t->span.col);
+                if (e <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->exprs[(e - 1)].text = t->text;
+                w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+                for (i = 0; i < t->nkids; i++) {
+                    if (lw_expr_kid(w, e, t->kids[i]) != 0) {
+                        return 0;
+                    }
+                }
+                return e;
+            }
+            if ((((t->target_kind == RT_BUILTIN) && (t->op == 2)) && (((t->aux == 9) || (t->aux == 10)) || (t->aux == 11)))) {
+                char nm[512];
+                int j = 0;
+                const char * k = t->target_key;
+                if (((!k) || (!k[0]))) {
+                    lw_abort(w, "L4533");
+                    return 0;
+                }
+                if (((t->aux != 11) && (t->nkids > 0))) {
+                    int rk = w->m->exprs[(t->kids[0] - 1)].kind;
+                    if (((((rk != TK_NAME_LOCAL) && (rk != TK_NAME_GLOBAL)) && (rk != TK_FIELD)) && (rk != TK_INDEX))) {
+                        lw_abort(w, "L4534");
+                        return 0;
+                    }
+                }
+                while (((*k) && (j < ((int)(sizeof(nm)) - 1)))) {
+                    nm[j++] = (((*k) == '.') ? '_' : (*k));
+                    k++;
+                }
+                nm[j] = 0;
+                e = backend_lir_lmod_new_expr(w->l, LE_MCALL, t->span.file, t->span.line, t->span.col);
+                if (e <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->exprs[(e - 1)].text = runtime_text_ct_intern(nm);
+                w->l->exprs[(e - 1)].op = t->aux;
+                w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+                for (i = 0; i < t->nkids; i++) {
+                    if (lw_expr_kid(w, e, t->kids[i]) != 0) {
+                        return 0;
+                    }
+                }
+                return e;
+            }
             if (t->op != 1) {
                 lw_abort(w, "L453");
                 return 0;
@@ -597,7 +1221,10 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                     lw_abort(w, "L459");
                     return 0;
                 }
-                w->l->exprs[(e - 1)].text = runtime_text_ct_intern(w->m->decls[(d - 1)].name);
+{
+                    struct backend_tir_ct_tdecl * cd = (&w->m->decls[(d - 1)]);
+                    w->l->exprs[(e - 1)].text = runtime_text_ct_intern(((cd->cname && cd->cname[0]) ? cd->cname : cd->name));
+                }
             }
             else {
                 if (((t->target_kind == RT_INTRINSIC) || (t->target_kind == RT_BUILTIN))) {
@@ -622,12 +1249,141 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
             }
             w->l->exprs[(e - 1)].type = lw_type(w, t->type);
             for (i = 0; i < t->nkids; i++) {
-                if (lw_expr_kid(w, e, t->kids[i]) != 0) {
+                int kid = lw_expr(w, t->kids[i]);
+                if (kid <= 0) {
+                    return 0;
+                }
+                if (((t->target_kind == RT_DIRECT) && lw_decl_param_ref(w, lw_call_name(w, t), i))) {
+                    int aref = backend_lir_lmod_new_expr(w->l, LE_REF, t->span.file, t->span.line, t->span.col);
+                    if (aref <= 0) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                    w->l->exprs[(aref - 1)].type = w->l->exprs[(kid - 1)].type;
+                    if (backend_lir_lmod_expr_add_kid(w->l, aref, kid) != 0) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                    kid = aref;
+                }
+                if (backend_lir_lmod_expr_add_kid(w->l, e, kid) != 0) {
+                    w->hard = 1;
                     return 0;
                 }
             }
             return e;
+        case TK_INIT_RANGE:
+        case TK_INIT_BRACE:
+        case TK_INIT_MBRACE:
+{
+                int kind = ((t->kind == TK_INIT_RANGE) ? LE_INIT_RANGE : ((t->kind == TK_INIT_BRACE) ? LE_INIT_BRACE : LE_INIT_MBRACE));
+                e = backend_lir_lmod_new_expr(w->l, kind, t->span.file, t->span.line, t->span.col);
+                if (e <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->exprs[(e - 1)].text = t->text;
+                w->l->exprs[(e - 1)].member = t->target_key;
+                w->l->exprs[(e - 1)].num = t->num;
+                w->l->exprs[(e - 1)].op = t->aux;
+                w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+                for (i = 0; i < t->nkids; i++) {
+                    if (lw_expr_kid(w, e, t->kids[i]) != 0) {
+                        return 0;
+                    }
+                }
+                return e;
+            }
+        case TK_BOX:
+            e = backend_lir_lmod_new_expr(w->l, LE_BOX, t->span.file, t->span.line, t->span.col);
+            if (e <= 0) {
+                w->hard = 1;
+                return 0;
+            }
+            w->l->exprs[(e - 1)].text = t->text;
+            w->l->exprs[(e - 1)].member = t->member;
+            w->l->exprs[(e - 1)].op = t->aux;
+            w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+            if (t->nkids >= 1) {
+                int kid = lw_expr(w, t->kids[0]);
+                if (kid <= 0) {
+                    return 0;
+                }
+                if (backend_lir_lmod_expr_add_kid(w->l, e, kid) != 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+            }
+            return e;
+        case TK_NEWOBJ:
+{
+                char buf[512];
+                int k = w->l->tmp_next;
+                int kid;
+                w->l->tmp_next++;
+                e = backend_lir_lmod_new_expr(w->l, LE_NEWOBJ, t->span.file, t->span.line, t->span.col);
+                if (e <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->exprs[(e - 1)].text = t->text;
+                w->l->exprs[(e - 1)].member = t->member;
+                w->l->exprs[(e - 1)].op = k;
+                w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+                if (t->nkids >= 1) {
+                    kid = lw_expr(w, t->kids[0]);
+                    if (kid <= 0) {
+                        return 0;
+                    }
+                    if (backend_lir_lmod_expr_add_kid(w->l, e, kid) != 0) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                }
+                (void)(buf);
+                return e;
+            }
+        case TK_RAW:
+            if (((!t->text) || (!t->text[0]))) {
+                lw_abort(w, "L485");
+                return 0;
+            }
+            e = backend_lir_lmod_new_expr(w->l, LE_RAW, t->span.file, t->span.line, t->span.col);
+            if (e <= 0) {
+                w->hard = 1;
+                return 0;
+            }
+            w->l->exprs[(e - 1)].text = t->text;
+            w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+            return e;
+        case TK_SIZEOF:
+            if ((t->target_key && t->target_key[0])) {
+                e = backend_lir_lmod_new_expr(w->l, LE_OFFSETOF, t->span.file, t->span.line, t->span.col);
+                if (e <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->exprs[(e - 1)].text = t->text;
+                w->l->exprs[(e - 1)].member = t->target_key;
+                w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+                return e;
+            }
+            e = backend_lir_lmod_new_expr(w->l, LE_SIZEOF, t->span.file, t->span.line, t->span.col);
+            if (e <= 0) {
+                w->hard = 1;
+                return 0;
+            }
+            w->l->exprs[(e - 1)].text = t->text;
+            w->l->exprs[(e - 1)].op = t->op;
+            w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+            if (((t->nkids == 1) && (lw_expr_kid(w, e, t->kids[0]) != 0))) {
+                return 0;
+            }
+            return e;
         default:
+            if (getenv("CT_LIR_DEBUG")) {
+                fprintf(stderr, "lir: unsupported TExpr kind=%d ast=%ld\n", t->kind, t->num);
+            }
             lw_abort(w, "L485");
             return 0;
     }
@@ -799,7 +1555,7 @@ static int lw_materialise(struct backend_lir_Lower * w, int * chain, int nchain,
             w->l->stmts[(sid - 1)].err_edge = c->on_error;
             out[n] = sid;
             n++;
-            w->l->ready = 0;
+            w->drop_seen = 1;
         }
     }
     (*nout) = n;
@@ -901,6 +1657,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
         case TS_DECL:
 {
                 struct backend_tir_ct_tvar * v;
+                const char * sp;
                 if (((s->aux <= 0) || (s->aux > w->m->nvars))) {
                     lw_abort(w, "L738");
                     return 0;
@@ -917,10 +1674,152 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 }
                 w->l->stmts[(sid - 1)].type = lw_type(w, v->type);
                 w->l->stmts[(sid - 1)].name = v->name;
+                w->l->stmts[(sid - 1)].dims = (v->dims ? v->dims : "");
+                w->l->stmts[(sid - 1)].spelling = v->spelling;
+                w->l->stmts[(sid - 1)].aux = (v->is_static ? 1 : 0);
+                w->l->stmts[(sid - 1)].err_edge = (v->is_unused ? 1 : 0);
                 w->l->stmts[(sid - 1)].scope = s->scope;
                 if (s->nkids > 1) {
                     lw_abort(w, "L746");
                     return 0;
+                }
+                sp = backend_tir_tmod_cspell(w->m, v->type);
+                if ((sp && ((strncmp(sp, "struct ", 7) == 0) || (strncmp(sp, "union ", 6) == 0)))) {
+                    const char * tag = ((strncmp(sp, "struct ", 7) == 0) ? (sp + 7) : (sp + 6));
+                    if (strchr(tag, '*')) {
+                        if (s->nkids == 1) {
+                            struct backend_tir_ct_texpr * it = (&w->m->exprs[(s->kids[0] - 1)]);
+                            if (((((it->kind == TK_CALL) || (it->kind == TK_INTRINSIC)) && it->text) && ((strcmp(it->text, "malloc") == 0) || (strcmp(it->text, "calloc") == 0)))) {
+                                lw_abort(w, "L7552");
+                                return 0;
+                            }
+                        }
+                    }
+                    else {
+                        if ((!lw_struct_decl(w, tag))) {
+                            if (lw_instance_vptr_needed(w, tag)) {
+                                lw_abort(w, "L7550");
+                                return 0;
+                            }
+                        }
+                        else {
+                            if (lw_type_needs_init(w, v->type)) {
+                                char items[4096];
+                                int iused = 0;
+                                int inject = 0;
+                                if ((v->dims && v->dims[0])) {
+                                    char cnt[256];
+                                    char stmts[4096];
+                                    int ci = 0;
+                                    int cn = 0;
+                                    int cs = 0;
+                                    int k;
+                                    if (s->nkids != 0) {
+                                        lw_abort(w, "L7555");
+                                        return 0;
+                                    }
+                                    if ((!lw_struct_decl(w, tag))) {
+                                        lw_abort(w, "L7550");
+                                        return 0;
+                                    }
+                                    k = 0;
+                                    while ((v->dims[k] && (v->dims[k] != '['))) {
+                                        k++;
+                                    }
+                                    if (v->dims[k] == '[') {
+                                        k++;
+                                    }
+                                    while (((v->dims[k] && (v->dims[k] != ']')) && (ci < ((int)(sizeof(cnt)) - 1)))) {
+                                        cnt[ci++] = v->dims[k++];
+                                    }
+                                    cnt[ci] = 0;
+                                    if (ci == 0) {
+                                        lw_abort(w, "L7555");
+                                        return 0;
+                                    }
+{
+                                        char recv[512];
+                                        snprintf(recv, sizeof(recv), "%s[__ct_i]", (v->name ? v->name : ""));
+                                        if (((lw_vptr_stmts(w, tag, recv, stmts, (int)(sizeof(stmts)), (&cs), 0) != 0) || (cs == 0))) {
+                                            lw_abort(w, "L7556");
+                                            return 0;
+                                        }
+                                        if (((cs > 0) && (stmts[(cs - 1)] == '\n'))) {
+                                            cs--;
+                                        }
+                                    }
+                                    (void)(cn);
+                                    w->l->stmts[(sid - 1)].count = runtime_text_ct_intern(cnt);
+                                    w->l->stmts[(sid - 1)].vptr = runtime_text_ct_intern_len(stmts, cs);
+                                    (*out) = sid;
+                                    return 0;
+                                }
+                                if (lw_vptr_items(w, tag, "", items, (int)(sizeof(items)), (&iused), 0) != 0) {
+                                    lw_abort(w, "L7553");
+                                    return 0;
+                                }
+                                if (iused == 0) {
+                                    inject = 0;
+                                }
+                                else {
+                                    if (s->nkids == 0) {
+                                        inject = 1;
+                                    }
+                                    else {
+                                        struct backend_tir_ct_texpr * it = (&w->m->exprs[(s->kids[0] - 1)]);
+                                        if (((((it->kind == TK_RAW) && it->text) && it->text[0]) && (it->text[(strlen(it->text) - 1)] == '}'))) {
+                                            inject = 1;
+                                        }
+                                    }
+                                }
+                                if (inject) {
+                                    char buf[8192];
+                                    int m = 0;
+                                    if (s->nkids == 0) {
+                                        m = snprintf(buf, sizeof(buf), "{ %s }", items);
+                                    }
+                                    else {
+                                        struct backend_tir_ct_texpr * it = (&w->m->exprs[(s->kids[0] - 1)]);
+                                        int n = ((int)(strlen(it->text)) - 1);
+                                        int only_space = 1;
+                                        int q;
+                                        if ((((n < 0) || (n >= ((int)(sizeof(buf)) - 1))) || (((n + iused) + 4) >= (int)(sizeof(buf))))) {
+                                            lw_abort(w, "L7554");
+                                            return 0;
+                                        }
+                                        for (q = 1; q < n; q++) {
+                                            if (((((it->text[q] != ' ') && (it->text[q] != '\t')) && (it->text[q] != '\n')) && (it->text[q] != '\r'))) {
+                                                only_space = 0;
+                                            }
+                                        }
+                                        if (only_space) {
+                                            m = snprintf(buf, sizeof(buf), "{ %s }", items);
+                                        }
+                                        else {
+                                            memcpy(buf, it->text, (size_t)(n));
+                                            m = n;
+                                            buf[m++] = ',';
+                                            buf[m++] = ' ';
+                                            memcpy((buf + m), items, (size_t)(iused));
+                                            m += iused;
+                                            buf[m++] = '}';
+                                            buf[m] = 0;
+                                        }
+                                    }
+                                    e = backend_lir_lmod_new_expr(w->l, LE_RAW, s->span.file, s->span.line, s->span.col);
+                                    if (e <= 0) {
+                                        w->hard = 1;
+                                        return 0;
+                                    }
+                                    w->l->exprs[(e - 1)].text = runtime_text_ct_intern_len(buf, m);
+                                    w->l->exprs[(e - 1)].type = lw_type(w, v->type);
+                                    w->l->stmts[(sid - 1)].expr = e;
+                                    (*out) = sid;
+                                    return 0;
+                                }
+                            }
+                        }
+                    }
                 }
                 if (s->nkids == 1) {
                     e = lw_expr(w, s->kids[0]);
@@ -928,6 +1827,31 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                         return 0;
                     }
                     w->l->stmts[(sid - 1)].expr = e;
+                }
+                (*out) = sid;
+                return 0;
+            }
+        case TS_DECLS:
+{
+                int i;
+                sid = backend_lir_lmod_new_stmt(w->l, LS_DECLS, s->span.file, s->span.line, s->span.col);
+                if (sid <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                for (i = 0; i < s->nkids; i++) {
+                    int sub = 0;
+                    if (w->m->stmts[(s->kids[i] - 1)].kind != TS_DECL) {
+                        lw_abort(w, "L755");
+                        return 0;
+                    }
+                    if (lw_one_stmt(w, s->kids[i], block, (&sub)) != 0) {
+                        return 0;
+                    }
+                    if (((sub > 0) && (backend_lir_lmod_stmt_add_kid(w->l, sid, sub) != 0))) {
+                        w->hard = 1;
+                        return 0;
+                    }
                 }
                 (*out) = sid;
                 return 0;
@@ -1149,6 +2073,96 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 (*out) = sid;
                 return 0;
             }
+        case TS_LOOP:
+{
+                int n = s->nkids;
+                int body = 0;
+                int has_range = 0;
+                int k;
+                if (n < 1) {
+                    lw_abort(w, "L900");
+                    return 0;
+                }
+                if ((((n >= 1) && (s->kids[(n - 1)] > 0)) && (w->m->stmts[(s->kids[(n - 1)] - 1)].kind == TS_BLOCK))) {
+                    body = s->kids[(n - 1)];
+                    n--;
+                }
+                if (n >= 2) {
+                    has_range = 1;
+                }
+                if (((n < 1) || (n > 2))) {
+                    lw_abort(w, "L901");
+                    return 0;
+                }
+                sid = backend_lir_lmod_new_stmt(w->l, LS_LOOP, s->span.file, s->span.line, s->span.col);
+                if (sid <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].aux = has_range;
+                e = lw_expr(w, s->kids[0]);
+                if (e <= 0) {
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].expr = e;
+                if (has_range) {
+                    e = lw_expr(w, s->kids[1]);
+                    if (e <= 0) {
+                        return 0;
+                    }
+                    w->l->stmts[(sid - 1)].rhs = e;
+                }
+                k = w->l->tmp_next;
+                w->l->tmp_next++;
+                w->l->stmts[(sid - 1)].loop_k = k;
+                if (body > 0) {
+                    blk = lw_block_stmt(w, body, LB_FOR_BODY, block);
+                    if (blk <= 0) {
+                        return 0;
+                    }
+                    w->l->stmts[(sid - 1)].body_blk = blk;
+                }
+                (*out) = sid;
+                return 0;
+            }
+        case TS_FOREACH:
+{
+                int n = s->nkids;
+                int body = 0;
+                int k;
+                if (n < 1) {
+                    lw_abort(w, "L910");
+                    return 0;
+                }
+                if ((((n >= 2) && (s->kids[(n - 1)] > 0)) && (w->m->stmts[(s->kids[(n - 1)] - 1)].kind == TS_BLOCK))) {
+                    body = s->kids[(n - 1)];
+                }
+                sid = backend_lir_lmod_new_stmt(w->l, LS_FOREACH, s->span.file, s->span.line, s->span.col);
+                if (sid <= 0) {
+                    w->hard = 1;
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].aux = s->aux;
+                w->l->stmts[(sid - 1)].item_type = s->text;
+                w->l->stmts[(sid - 1)].fname = s->text2;
+                e = lw_expr(w, s->kids[0]);
+                if (e <= 0) {
+                    return 0;
+                }
+                w->l->stmts[(sid - 1)].expr = e;
+                k = w->l->tmp_next;
+                w->l->tmp_next++;
+                w->l->stmts[(sid - 1)].loop_k = k;
+                if (body > 0) {
+                    blk = lw_block_stmt(w, body, LB_FOR_BODY, block);
+                    if (blk <= 0) {
+                        return 0;
+                    }
+                    w->l->stmts[(sid - 1)].body_blk = blk;
+                }
+                (*out) = sid;
+                return 0;
+            }
         case TS_BREAK:
         case TS_CONT:
 {
@@ -1303,19 +2317,18 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
     int i;
     int root;
     const char * rs;
-    if ((((d->body <= 0) || d->is_inline) || d->is_vararg)) {
-        w->l->ready = 0;
+    if (d->body <= 0) {
         return 0;
     }
+    if (lw_decl_is_template(w, d)) {
+        return 0;
+    }
+    w->l->stat_funcs++;
     rs = backend_tir_tmod_cspell(w->m, d->type);
     if ((!rs)) {
         rs = "void";
     }
     if (lw_owning_spelling(rs)) {
-        w->l->ready = 0;
-        return 0;
-    }
-    if (backend_tir_tmod_has_free_param(w->m, d->type)) {
         w->l->ready = 0;
         return 0;
     }
@@ -1325,9 +2338,14 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
         return 0;
     }
     w->l->funcs[(f - 1)].is_static = d->is_static;
+    if ((d->cname && d->cname[0])) {
+        w->l->funcs[(f - 1)].cname = runtime_text_ct_intern(d->cname);
+    }
     w->func = f;
     w->ret_type = w->l->funcs[(f - 1)].ret;
+    w->l->funcs[(f - 1)].temp_start = w->l->tmp_next;
     w->aborted = 0;
+    w->drop_seen = 0;
     w->nloops = 0;
     start_blocks = w->l->nblocks;
     if (((d->scope > 0) && (d->scope <= w->m->nscopes))) {
@@ -1341,10 +2359,6 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
             v = (&w->m->vars[(vi - 1)]);
             if ((!v->is_param)) {
                 continue;
-            }
-            if (v->is_ref) {
-                w->aborted = 1;
-                break;
             }
             if (backend_tir_tmod_has_free_param(w->m, v->type)) {
                 w->aborted = 1;
@@ -1371,7 +2385,8 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
             return 0;
         }
     }
-    if ((w->aborted || w->hard)) {
+    w->l->funcs[(f - 1)].temp_end = w->l->tmp_next;
+    if (((w->aborted || w->hard) || w->drop_seen)) {
         if (getenv("CT_LIR_DEBUG")) {
             fprintf(stderr, "lir: function '%s' not lowered\n", (d->name ? d->name : ""));
         }
@@ -1383,6 +2398,7 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
     }
     else {
         w->l->funcs[(f - 1)].ok = 1;
+        w->l->stat_funcs_ok++;
         if (backend_lir_lmod_add_decl(w->l, f) != 0) {
             w->hard = 1;
             return (-1);
@@ -1416,18 +2432,40 @@ static int lw_copy_scopes(struct backend_lir_Lower * w) {
     }
     return 0;
 }
+static int lw_lower_slice(struct backend_lir_Lower * w, int unit, int start) {
+    struct backend_tir_TModule * m = w->m;
+    int i;
+    for (i = start; i < m->ndecls; i++) {
+        struct backend_tir_ct_tdecl * d = (&m->decls[i]);
+        if (d->unit != unit) {
+            continue;
+        }
+        if (d->kind != TD_FUNC) {
+            if (getenv("CT_LIR_DEBUG")) {
+                fprintf(stderr, "lir: top-level decl kind=%d name=%s\n", d->kind, (d->name ? d->name : ""));
+            }
+            continue;
+        }
+        if (lw_lower_func(w, d->id) != 0) {
+            fprintf(stderr, "lir: a LIR pool refused a row\n");
+            return 1;
+        }
+    }
+    if (w->hard) {
+        fprintf(stderr, "lir: a LIR pool refused a row\n");
+        return 1;
+    }
+    w->l->ready = ((w->l->stat_funcs == 0) || (w->l->stat_funcs_ok == w->l->stat_funcs));
+    return 0;
+}
 int backend_lir_ct_lir_build_program(int prog, const char * path, const char * base, const char * ns, int is_hdr, int is_map) {
     struct backend_lir_Lower * w = (&backend_lir_g_lower);
     struct backend_lir_LModule * l = backend_lir_lmod_get();
     struct backend_tir_TModule * m;
     struct backend_tir_ct_tmark mark;
-    int i;
     int unit;
     int start;
     if ((!backend_lir_ct_lir_on())) {
-        return 0;
-    }
-    if (((l->ready == 1) && (l->nfuncs > 0))) {
         return 0;
     }
     backend_lir_lmod_reset(l);
@@ -1435,6 +2473,7 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
     w->m = backend_tir_tmod_get();
     m = w->m;
     w->hard = 0;
+    w->drop_seen = 0;
     w->unit = 0;
     w->aborted = 0;
     w->func = 0;
@@ -1449,9 +2488,6 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
     unit = m->nunits;
     w->unit = unit;
     l->ready = 1;
-    if (m->ninsts > 0) {
-        l->ready = 0;
-    }
     if (lw_copy_scopes(w) != 0) {
         fprintf(stderr, "lir: cannot copy the scope table\n");
         return 1;
@@ -1462,28 +2498,60 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
             fprintf(stderr, "lir: tir stmt %d kind=%d kids=%d scope=%d\n", (di + 1), m->stmts[di].kind, m->stmts[di].nkids, m->stmts[di].scope);
         }
     }
-    for (i = start; i < m->ndecls; i++) {
-        struct backend_tir_ct_tdecl * d = (&m->decls[i]);
-        if (d->unit != unit) {
-            continue;
-        }
-        if (d->kind != 1) {
-            l->ready = 0;
-            continue;
-        }
-        if (lw_lower_func(w, d->id) != 0) {
-            fprintf(stderr, "lir: a LIR pool refused a row\n");
-            return 1;
-        }
-    }
-    if (w->hard) {
-        fprintf(stderr, "lir: a LIR pool refused a row\n");
+    if (lw_lower_slice(w, unit, start) != 0) {
         return 1;
     }
     if (backend_verify_ct_lir_verify(l) != 0) {
         return 1;
     }
     backend_lir_lmod_report(l, (base ? base : path));
+    free(w->loops);
+    w->loops = 0;
+    w->nloops = 0;
+    w->loopcap = 0;
+    return 0;
+}
+int backend_lir_ct_lir_build_unit(void * up, int mod_unit, int tmp_base) {
+    struct backend_lir_Lower * w = (&backend_lir_g_lower);
+    struct backend_lir_LModule * l = backend_lir_lmod_get();
+    struct backend_tir_TModule * m;
+    struct backend_tir_ct_tmark mark;
+    int unit;
+    int start;
+    if ((!backend_lir_ct_lir_on())) {
+        return 0;
+    }
+    backend_lir_lmod_reset(l);
+    w->l = l;
+    w->m = backend_tir_tmod_get();
+    m = w->m;
+    w->hard = 0;
+    w->drop_seen = 0;
+    w->aborted = 0;
+    w->func = 0;
+    w->loops = 0;
+    w->nloops = 0;
+    w->loopcap = 0;
+    backend_tir_tmod_mark(m, (&mark));
+    start = mark.ndecls;
+    if (backend_tir_ct_tir_build_unit(up, mod_unit) != 0) {
+        return 1;
+    }
+    unit = m->nunits;
+    w->unit = unit;
+    l->tmp_next = ((tmp_base > 0) ? tmp_base : 0);
+    l->ready = 1;
+    if (lw_copy_scopes(w) != 0) {
+        fprintf(stderr, "lir: cannot copy the scope table\n");
+        return 1;
+    }
+    if (lw_lower_slice(w, unit, start) != 0) {
+        return 1;
+    }
+    if (backend_verify_ct_lir_verify(l) != 0) {
+        return 1;
+    }
+    backend_lir_lmod_report(l, "build-unit");
     free(w->loops);
     w->loops = 0;
     w->nloops = 0;
@@ -1696,6 +2764,265 @@ static int lw_pw_expr(struct backend_lir_Lower * w, int eid, int ctx) {
             }
             fputs(")", backend_lir_g_lir_out);
             return 0;
+        case LE_MCALL:
+{
+                int j;
+                fputs((e->text ? e->text : ""), backend_lir_g_lir_out);
+                fputs("(", backend_lir_g_lir_out);
+                if (e->op == 11) {
+                    for (j = 0; j < e->nkids; j++) {
+                        if (j > 0) {
+                            fputs(", ", backend_lir_g_lir_out);
+                        }
+                        if (lw_pw_kid(w, e, j, PW_EXPR) != 0) {
+                            return (-1);
+                        }
+                    }
+                }
+                else {
+                    if (e->op == 9) {
+                        int no_amp = 0;
+                        if (e->nkids > 0) {
+                            struct backend_lir_ct_lexpr * r = (&w->l->exprs[(e->kids[0] - 1)]);
+                            if ((((r->kind == LE_NAME) && r->text) && (strcmp(r->text, "_self") == 0))) {
+                                no_amp = 1;
+                            }
+                        }
+                        if ((!no_amp)) {
+                            fputs("&", backend_lir_g_lir_out);
+                        }
+                    }
+                    if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    for (j = 1; j < e->nkids; j++) {
+                        fputs(", ", backend_lir_g_lir_out);
+                        if (lw_pw_kid(w, e, j, PW_EXPR) != 0) {
+                            return (-1);
+                        }
+                    }
+                }
+                fputs(")", backend_lir_g_lir_out);
+                return 0;
+            }
+        case LE_RANGEK:
+            fprintf(backend_lir_g_lir_out, "((int)%d)", backend_lir_g_lir_range_k);
+            return 0;
+        case LE_INIT_RANGE:
+{
+                int k;
+                int start = (int)(e->num);
+                int cnt = e->op;
+                int has_name = (e->member && e->member[0]);
+                if (cnt <= 0) {
+                    return (-1);
+                }
+                if (has_name) {
+                    fprintf(backend_lir_g_lir_out, " = %s_from((%s[%d]){ ", e->member, (e->text ? e->text : ""), cnt);
+                }
+                else {
+                    fputs(" = { ", backend_lir_g_lir_out);
+                }
+                for (k = start; k < (start + cnt); k++) {
+                    if (k != start) {
+                        fputs(", ", backend_lir_g_lir_out);
+                    }
+                    backend_lir_g_lir_range_k = k;
+                    if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                }
+                if (has_name) {
+                    fprintf(backend_lir_g_lir_out, " }, %d)", cnt);
+                }
+                else {
+                    fputs(" }", backend_lir_g_lir_out);
+                }
+                return 0;
+            }
+        case LE_INIT_BRACE:
+{
+                int cnt = e->op;
+                int j;
+                if (cnt <= 0) {
+                    fprintf(backend_lir_g_lir_out, " = %s_from(0, 0)", (e->member ? e->member : ""));
+                    return 0;
+                }
+                fprintf(backend_lir_g_lir_out, " = %s_from((%s[%d]){ ", (e->member ? e->member : ""), (e->text ? e->text : ""), cnt);
+                for (j = 0; j < e->nkids; j++) {
+                    if (j > 0) {
+                        fputs(", ", backend_lir_g_lir_out);
+                    }
+                    if (lw_pw_kid(w, e, j, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                }
+                fprintf(backend_lir_g_lir_out, " }, %d)", cnt);
+                return 0;
+            }
+        case LE_INIT_MBRACE:
+{
+                int cnt = e->op;
+                int j;
+                if (cnt <= 0) {
+                    fprintf(backend_lir_g_lir_out, " = %s_from(0, 0)", (e->member ? e->member : ""));
+                    return 0;
+                }
+                fprintf(backend_lir_g_lir_out, " = %s_from((%s[%d]){ ", (e->member ? e->member : ""), (e->text ? e->text : ""), cnt);
+                for (j = 0; (j + 1) < e->nkids; j += 2) {
+                    if (j > 0) {
+                        fputs(", ", backend_lir_g_lir_out);
+                    }
+                    fputs("{", backend_lir_g_lir_out);
+                    if (lw_pw_kid(w, e, j, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    fputs(", ", backend_lir_g_lir_out);
+                    if (lw_pw_kid(w, e, (j + 1), PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    fputs("}", backend_lir_g_lir_out);
+                }
+                fprintf(backend_lir_g_lir_out, " }, %d)", cnt);
+                return 0;
+            }
+        case LE_BOX:
+{
+                if ((e->op & 2)) {
+                    fputs("&", backend_lir_g_lir_out);
+                }
+                if ((e->op & 4)) {
+                    fprintf(backend_lir_g_lir_out, "(struct %s_iface){ (void *)0, &%s_vtable }", (e->text ? e->text : ""), (e->member ? e->member : ""));
+                    return 0;
+                }
+                fprintf(backend_lir_g_lir_out, "(struct %s_iface){ (void *)", (e->text ? e->text : ""));
+                if ((e->op & 1)) {
+                    if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                }
+                else {
+                    fputs("&", backend_lir_g_lir_out);
+                    if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                }
+                fprintf(backend_lir_g_lir_out, ", &%s_%s_vtable }", (e->member ? e->member : ""), (e->text ? e->text : ""));
+                return 0;
+            }
+        case LE_NEWOBJ:
+            fprintf(backend_lir_g_lir_out, "({ struct %s __ct_new%d = %s__new(&(%s)", (e->text ? e->text : ""), e->op, (e->text ? e->text : ""), (e->member ? e->member : ""));
+            if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                return (-1);
+            }
+            fprintf(backend_lir_g_lir_out, "); __ct_new%d; })", e->op);
+            return 0;
+        case LE_VMCALL:
+{
+                char low[256];
+                lw_low_text(e->member, low, (int)(sizeof(low)));
+                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                    return (-1);
+                }
+                if (((e->op == 0) || (e->op == 1))) {
+                    fprintf(backend_lir_g_lir_out, ".__%s_vptr->%s(&", low, (e->text ? e->text : ""));
+                    if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                }
+                else {
+                    if (e->op == 2) {
+                        fprintf(backend_lir_g_lir_out, "->__%s_vptr->%s(", low, (e->text ? e->text : ""));
+                        if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                            return (-1);
+                        }
+                    }
+                    else {
+                        if (e->op == 3) {
+                            fprintf(backend_lir_g_lir_out, ".vt->%s(", (e->text ? e->text : ""));
+                            if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                                return (-1);
+                            }
+                            fputs(".self", backend_lir_g_lir_out);
+                        }
+                        else {
+                            if (e->op == 4) {
+                                fprintf(backend_lir_g_lir_out, "->vt->%s(", (e->text ? e->text : ""));
+                                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                                    return (-1);
+                                }
+                                fputs("->self", backend_lir_g_lir_out);
+                            }
+                            else {
+                                return (-1);
+                            }
+                        }
+                    }
+                }
+                for (i = 1; i < e->nkids; i++) {
+                    fputs(", ", backend_lir_g_lir_out);
+                    if (lw_pw_kid(w, e, i, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                }
+                fputs(")", backend_lir_g_lir_out);
+                return 0;
+            }
+        case LE_FNCALL:
+            fprintf(backend_lir_g_lir_out, "(*%s)(", (e->text ? e->text : ""));
+            for (i = 0; i < e->nkids; i++) {
+                if (i > 0) {
+                    fputs(", ", backend_lir_g_lir_out);
+                }
+                if (lw_pw_kid(w, e, i, PW_EXPR) != 0) {
+                    return (-1);
+                }
+            }
+            fputs(")", backend_lir_g_lir_out);
+            return 0;
+        case LE_CALLEXPR:
+            if (e->nkids < 1) {
+                return (-1);
+            }
+            if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                return (-1);
+            }
+            fputs("(", backend_lir_g_lir_out);
+            for (i = 1; i < e->nkids; i++) {
+                if (i > 1) {
+                    fputs(", ", backend_lir_g_lir_out);
+                }
+                if (lw_pw_kid(w, e, i, PW_EXPR) != 0) {
+                    return (-1);
+                }
+            }
+            fputs(")", backend_lir_g_lir_out);
+            return 0;
+        case LE_RAW:
+            fputs((e->text ? e->text : ""), backend_lir_g_lir_out);
+            return 0;
+        case LE_SIZEOF:
+{
+                static const char * const kw[5] = {"sizeof", "sizeof", "_Alignof",
+                                              "alignof", "alignof"};
+                if (e->nkids == 0) {
+                    fprintf(backend_lir_g_lir_out, "%s(%s)", kw[(((e->op < 0) || (e->op > 4)) ? 1 : e->op)], (e->text ? e->text : ""));
+                }
+                else {
+                    fputs(((e->op == 3) ? "alignof(" : "sizeof("), backend_lir_g_lir_out);
+                    if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    fputs(")", backend_lir_g_lir_out);
+                }
+                return 0;
+            }
+        case LE_REF:
+            fputs("&", backend_lir_g_lir_out);
+            return lw_pw_kid(w, e, 0, PW_EXPR);
+        case LE_OFFSETOF:
+            fprintf(backend_lir_g_lir_out, "offsetof(%s, %s)", (e->text ? e->text : ""), (e->member ? e->member : ""));
+            return 0;
         case LE_CALL:
         case LE_INTRINSIC:
             fprintf(backend_lir_g_lir_out, "%s(", (e->text ? e->text : ""));
@@ -1710,6 +3037,9 @@ static int lw_pw_expr(struct backend_lir_Lower * w, int eid, int ctx) {
             fputs(")", backend_lir_g_lir_out);
             return 0;
         default:
+            if (getenv("CT_LIR_DEBUG")) {
+                fprintf(stderr, "lir: cannot print LE kind=%d\n", e->kind);
+            }
             return (-1);
     }
 }
@@ -1726,9 +3056,19 @@ static int lw_pw_decl(struct backend_lir_Lower * w, struct backend_lir_ct_lstmt 
     if ((!inline_form)) {
         lw_ind(ind);
     }
-    fprintf(backend_lir_g_lir_out, "%s %s", backend_lir_lmod_cspell(w->l, s->type), (s->name ? s->name : ""));
+    if (((!inline_form) && (s->aux == 1))) {
+        fputs("static ", backend_lir_g_lir_out);
+    }
+    fprintf(backend_lir_g_lir_out, "%s %s%s", ((s->spelling && s->spelling[0]) ? s->spelling : backend_lir_lmod_cspell(w->l, s->type)), (s->name ? s->name : ""), (s->dims ? s->dims : ""));
+    if (((!inline_form) && s->err_edge)) {
+        fputs(" __attribute__((unused))", backend_lir_g_lir_out);
+    }
     if (s->expr > 0) {
-        fputs(" = ", backend_lir_g_lir_out);
+        struct backend_lir_ct_lexpr * ie = (&w->l->exprs[(s->expr - 1)]);
+        int self_assign = (((ie->kind == LE_INIT_RANGE) || (ie->kind == LE_INIT_BRACE)) || (ie->kind == LE_INIT_MBRACE));
+        if ((!self_assign)) {
+            fputs(" = ", backend_lir_g_lir_out);
+        }
         if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
             return (-1);
         }
@@ -1748,7 +3088,47 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
         case LS_EMPTY:
             return 0;
         case LS_DECL:
-            return lw_pw_decl(w, s, ind, 0);
+            if (lw_pw_decl(w, s, ind, 0) != 0) {
+                return (-1);
+            }
+            if (s->vptr) {
+                const char * p = s->vptr;
+                lw_ind(ind);
+                fprintf(backend_lir_g_lir_out, "for (unsigned long __ct_i = 0; __ct_i < %s; __ct_i++) {\n", (s->count ? s->count : ""));
+                lw_ind((ind + 1));
+                while ((*p)) {
+                    if ((*p) == '\n') {
+                        fputs("\n", backend_lir_g_lir_out);
+                        lw_ind((ind + 1));
+                    }
+                    else {
+                        fputc((*p), backend_lir_g_lir_out);
+                    }
+                    p++;
+                }
+                fputs("\n", backend_lir_g_lir_out);
+                lw_ind(ind);
+                fputs("}\n", backend_lir_g_lir_out);
+            }
+            return 0;
+        case LS_DECLS:
+{
+                int i;
+                for (i = 0; i < s->nkids; i++) {
+                    struct backend_lir_ct_lstmt * sub;
+                    if (((s->kids[i] <= 0) || (s->kids[i] > w->l->nstmts))) {
+                        return (-1);
+                    }
+                    sub = (&w->l->stmts[(s->kids[i] - 1)]);
+                    if (sub->kind != LS_DECL) {
+                        return (-1);
+                    }
+                    if (lw_pw_decl(w, sub, ind, 0) != 0) {
+                        return (-1);
+                    }
+                }
+                return 0;
+            }
         case LS_ASSIGN:
             lw_ind(ind);
             if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
@@ -1809,8 +3189,19 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
                     }
                 }
                 else {
-                    if (lw_pw_expr(w, is->expr, PW_INLINE) != 0) {
-                        return (-1);
+                    if (is->kind == LS_ASSIGN) {
+                        if (lw_pw_expr(w, is->expr, PW_INLINE) != 0) {
+                            return (-1);
+                        }
+                        fputs(lw_assign_op(is->aux), backend_lir_g_lir_out);
+                        if (lw_pw_expr(w, is->rhs, PW_INLINE) != 0) {
+                            return (-1);
+                        }
+                    }
+                    else {
+                        if (lw_pw_expr(w, is->expr, PW_INLINE) != 0) {
+                            return (-1);
+                        }
                     }
                 }
             }
@@ -1824,6 +3215,122 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
             }
             fputs(") ", backend_lir_g_lir_out);
             return lw_pw_block(w, s->body_blk, ind);
+        case LS_FOREACH:
+{
+                int k = s->loop_k;
+                const char * it = (s->item_type ? s->item_type : "int");
+                const char * fn = (s->fname ? s->fname : "");
+                int k2;
+                lw_ind(ind);
+                fputs("{\n", backend_lir_g_lir_out);
+                if (s->aux == 3) {
+                    lw_ind((ind + 1));
+                    fprintf(backend_lir_g_lir_out, "struct __ct_slice *__ct_foreach_c_%d = &(", k);
+                    if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    fputs(");\n", backend_lir_g_lir_out);
+                    lw_ind((ind + 1));
+                    fprintf(backend_lir_g_lir_out, "int __ct_foreach_n_%d = __ct_foreach_c_%d->len;\n", k, k);
+                }
+                else {
+                    if (((s->aux == 1) || (s->aux == 2))) {
+                        lw_ind((ind + 1));
+                        fprintf(backend_lir_g_lir_out, "struct %s *__ct_foreach_c_%d = &(", fn, k);
+                        if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
+                            return (-1);
+                        }
+                        fputs(");\n", backend_lir_g_lir_out);
+                        lw_ind((ind + 1));
+                        fprintf(backend_lir_g_lir_out, "int __ct_foreach_n_%d = %s_len(__ct_foreach_c_%d);\n", k, fn, k);
+                    }
+                    else {
+                        lw_ind((ind + 1));
+                        fprintf(backend_lir_g_lir_out, "int __ct_foreach_n_%d = (int)(sizeof(", k);
+                        if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
+                            return (-1);
+                        }
+                        fputs(") / sizeof((", backend_lir_g_lir_out);
+                        if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
+                            return (-1);
+                        }
+                        fputs(")[0]));\n", backend_lir_g_lir_out);
+                    }
+                }
+                lw_ind((ind + 1));
+                fprintf(backend_lir_g_lir_out, "for (int __ct_foreach_i_%d = 0; __ct_foreach_i_%d < __ct_foreach_n_%d; __ct_foreach_i_%d++) {\n", k, k, k, k);
+                if (s->aux != 2) {
+                    lw_ind((ind + 2));
+                    fprintf(backend_lir_g_lir_out, "int i = __ct_foreach_i_%d;\n", k);
+                }
+                lw_ind((ind + 2));
+                if (s->aux == 1) {
+                    fprintf(backend_lir_g_lir_out, "%s item = %s_get(__ct_foreach_c_%d, __ct_foreach_i_%d);\n", it, fn, k, k);
+                }
+                else {
+                    if (s->aux == 2) {
+                        fprintf(backend_lir_g_lir_out, "%s item = %s_entry(__ct_foreach_c_%d, __ct_foreach_i_%d);\n", it, fn, k, k);
+                    }
+                    else {
+                        if (s->aux == 3) {
+                            fprintf(backend_lir_g_lir_out, "%s item = (*(%s *)__ct_slice_at(__ct_foreach_c_%d, __ct_foreach_i_%d, sizeof(%s)));\n", it, it, k, k, it);
+                        }
+                        else {
+                            fprintf(backend_lir_g_lir_out, "%s item = (", it);
+                            if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
+                                return (-1);
+                            }
+                            fprintf(backend_lir_g_lir_out, ")[__ct_foreach_i_%d];\n", k);
+                        }
+                    }
+                }
+                lw_ind((ind + 2));
+                fputs("(void)item;\n", backend_lir_g_lir_out);
+                if (s->aux != 2) {
+                    lw_ind((ind + 2));
+                    fputs("(void)i;\n", backend_lir_g_lir_out);
+                }
+                if (((s->body_blk > 0) && (s->body_blk <= w->l->nblocks))) {
+                    struct backend_lir_ct_lblock * b = (&w->l->blocks[(s->body_blk - 1)]);
+                    for (k2 = 0; k2 < b->nstmts; k2++) {
+                        if (lw_pw_stmt(w, b->stmts[k2], (ind + 2)) != 0) {
+                            return (-1);
+                        }
+                    }
+                    if (lw_pw_cleanups(w, b->tail_cleanups, b->ntail, (ind + 2)) != 0) {
+                        return (-1);
+                    }
+                }
+                lw_ind((ind + 1));
+                fputs("}\n", backend_lir_g_lir_out);
+                lw_ind(ind);
+                fputs("}\n", backend_lir_g_lir_out);
+                return 0;
+            }
+        case LS_LOOP:
+{
+                int k = s->loop_k;
+                lw_ind(ind);
+                if ((!s->aux)) {
+                    fprintf(backend_lir_g_lir_out, "for (int i = 0, __ct_loop_n_%d = (", k);
+                    if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    fprintf(backend_lir_g_lir_out, "); i < __ct_loop_n_%d; i++) ", k);
+                }
+                else {
+                    fprintf(backend_lir_g_lir_out, "for (int __ct_loop_n_%d, __ct_loop_hi_%d, i = ((__ct_loop_n_%d = (", k, k, k);
+                    if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    fprintf(backend_lir_g_lir_out, ")), (__ct_loop_hi_%d = (", k);
+                    if (lw_pw_expr(w, s->rhs, PW_EXPR) != 0) {
+                        return (-1);
+                    }
+                    fprintf(backend_lir_g_lir_out, ")), __ct_loop_n_%d); i < __ct_loop_hi_%d; i++) ", k, k);
+                }
+                return lw_pw_block(w, s->body_blk, ind);
+            }
         case LS_JUMP:
             if (lw_pw_cleanups(w, s->cleanups, s->ncleanups, ind) != 0) {
                 return (-1);
@@ -1842,8 +3349,14 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
             fputs(";\n", backend_lir_g_lir_out);
             return 0;
         case LS_DROP:
+            if (getenv("CT_LIR_DEBUG")) {
+                fprintf(stderr, "lir: cannot print a drop\n");
+            }
             return (-1);
         default:
+            if (getenv("CT_LIR_DEBUG")) {
+                fprintf(stderr, "lir: cannot print LS kind=%d\n", s->kind);
+            }
             return (-1);
     }
 }
@@ -1922,6 +3435,39 @@ static int lw_pw_block(struct backend_lir_Lower * w, int blk, int ind) {
     }
     lw_ind(ind);
     fputs("}\n", backend_lir_g_lir_out);
+    return 0;
+}
+int backend_lir_ct_lir_try_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp) {
+    struct backend_lir_LModule * l = backend_lir_lmod_get();
+    struct backend_lir_Lower * w = (&backend_lir_g_lower);
+    int i;
+    if (((!l->enabled) || (backend_lir_g_lower.mode == 2))) {
+        return 0;
+    }
+    if (((!name) || (!name[0]))) {
+        return 0;
+    }
+    for (i = 0; i < l->nfuncs; i++) {
+        struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
+        if ((!f->ok)) {
+            continue;
+        }
+        if (((!f->name) || (strcmp(f->name, name) != 0))) {
+            continue;
+        }
+        if (f->temp_start != ntmp) {
+            return 0;
+        }
+        w->l = l;
+        backend_lir_g_lir_out = (FILE *)(out);
+        if (lw_pw_block(w, f->root, ind) != 0) {
+            return (-1);
+        }
+        if (new_ntmp) {
+            (*new_ntmp) = f->temp_end;
+        }
+        return 1;
+    }
     return 0;
 }
 static int lw_pw_params(struct backend_lir_Lower * w, struct backend_lir_ct_lfunc * f, int names) {

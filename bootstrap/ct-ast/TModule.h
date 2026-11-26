@@ -100,6 +100,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -111,7 +112,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -144,6 +144,7 @@ struct backend_tir_ct_tdecl {
     int id;
     int kind;
     const char * name;
+    const char * cname;
     struct backend_tir_ct_tspan span;
     int type;
     int * params;
@@ -159,6 +160,7 @@ struct backend_tir_ct_tdecl {
     int is_static;
     int is_inline;
     int is_vararg;
+    int is_template;
 };
 struct backend_tir_ct_ttype {
     int id;
@@ -185,7 +187,9 @@ struct backend_tir_ct_texpr {
     int target_kind;
     int target_a;
     int target_b;
+    int aux;
     const char * target_key;
+    const char * member;
     const char * text;
     long num;
     int op;
@@ -202,6 +206,7 @@ struct backend_tir_ct_tstmt {
     int err_edge;
     int flags;
     const char * text;
+    const char * text2;
 };
 struct backend_tir_ct_tscope {
     int id;
@@ -224,6 +229,10 @@ struct backend_tir_ct_tvar {
     int decl_stmt;
     int is_param;
     int is_ref;
+    const char * dims;
+    const char * spelling;
+    int is_static;
+    int is_unused;
 };
 struct backend_tir_ct_tcleanup {
     int id;

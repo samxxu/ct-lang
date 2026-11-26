@@ -24,6 +24,7 @@
 
 import backend::emit::Emitter;
 import backend::tir::TBuilder;
+import backend::lir::Lower;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Unit;
@@ -65,6 +66,15 @@ import frontend::module::ModuleBoundary;
 #define N_UNION   48
 
 namespace frontend::module;
+
+/* S1b-S2b: the LIR body seam, bound to the emitter for one unit's `.c`. A
+   body the lowerer covered end to end is printed from LIR; everything else
+   keeps the emitter's own writer, byte for byte. */
+static int mod_lir_body(const char *name, void *out, int ind, int ntmp,
+                        int *new_ntmp)
+{
+    return backend::lir::ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+}
 /* Shell-line helpers for the one-step build (Phase 17.6); defined after the
    impl. They are free functions, not methods: the L2 build path caps impl
    methods per compile, and these need no object state. */
@@ -2053,6 +2063,25 @@ impl ModuleOps for Module {
                 self->emit_c = 1;
                 continue;
             }
+            /* S1b-S2b: the LIR switch is the same in build mode as in compile
+               mode (on / shadow / off). */
+            if (strncmp(argv[i], "--ir=", 5) == 0) {
+                const char *v = argv[i] + 5;
+                if (strcmp(v, "on") == 0) {
+                    backend::lir::ct_lir_set_switch(1);
+                    continue;
+                }
+                if (strcmp(v, "shadow") == 0) {
+                    backend::lir::ct_lir_set_switch(2);
+                    continue;
+                }
+                if (strcmp(v, "off") == 0) {
+                    backend::lir::ct_lir_set_switch(0);
+                    continue;
+                }
+                fprintf(stderr, "ctc: unknown --ir mode '%s' (on|off|shadow)\n", v);
+                return 1;
+            }
             if (strcmp(argv[i], "--lib") == 0) {
                 self->lib_mode = 1;
                 continue;
@@ -2777,6 +2806,19 @@ impl ModuleOps for Module {
             u = corder[o];
             if (self->units[u].is_map) continue;
             if (!dirty[u]) continue;
+            /* S1b-S2b: build and verify this unit's LIR before its `.c` is
+               opened, then let the body seam print what the lowerer covered.
+               A verifier failure removes the (still absent) product. */
+            if (backend::lir::ct_lir_on() && backend::lir::ct_lir_emit_on()) {
+                if (backend::lir::ct_lir_build_unit((void *)&self->units[u], u,
+                        backend::emit::ct_emit_ntmp()) != 0) {
+                    outc = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir,
+                                                    self->units[u].base);
+                    remove(outc);
+                    return frontend::parse::ct_parse_report();
+                }
+                backend::emit::ct_emit_set_body_hook(mod_lir_body);
+            }
             if (self->emit_unit(u) != 0) {
                 /* the `.c` was already opened, so a failure leaves half a file;
                    a failed unit must not leave an artefact behind */

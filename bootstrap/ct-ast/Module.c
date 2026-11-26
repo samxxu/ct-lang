@@ -4,6 +4,7 @@
 #include "Module.h"
 #include "Emitter.h"
 #include "TBuilder.h"
+#include "Lower.h"
 #include "Memory.h"
 #include "Lexer.h"
 #include "Unit.h"
@@ -128,6 +129,7 @@ struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
+struct backend_lir_Lower;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
 struct frontend_parse_StmtRangeScan;
@@ -139,7 +141,6 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
-struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -154,6 +155,7 @@ const struct frontend_module_ModuleOps_vtbl frontend_module_Module_frontend_modu
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+static int mod_lir_body(const char *, void *, int, int, int *);
 static int ct_pkg_ns_clash(struct frontend_module_Module *, char * *, char * *);
 static int is_layer_fn(struct frontend_sym_Symbols *, int, int, const char *);
 static int file_uses_str(struct frontend_sym_Symbols *, const char *, int, int, int);
@@ -1688,6 +1690,23 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             _self->emit_c = 1;
             continue;
         }
+        if (strncmp(argv[i], "--ir=", 5) == 0) {
+            const char * v = (argv[i] + 5);
+            if (strcmp(v, "on") == 0) {
+                backend_lir_ct_lir_set_switch(1);
+                continue;
+            }
+            if (strcmp(v, "shadow") == 0) {
+                backend_lir_ct_lir_set_switch(2);
+                continue;
+            }
+            if (strcmp(v, "off") == 0) {
+                backend_lir_ct_lir_set_switch(0);
+                continue;
+            }
+            fprintf(stderr, "ctc: unknown --ir mode '%s' (on|off|shadow)\n", v);
+            return 1;
+        }
         if (strcmp(argv[i], "--lib") == 0) {
             _self->lib_mode = 1;
             continue;
@@ -2392,6 +2411,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         if ((!dirty[u])) {
             continue;
         }
+        if ((backend_lir_ct_lir_on() && backend_lir_ct_lir_emit_on())) {
+            if (backend_lir_ct_lir_build_unit((void *)((&_self->units[u])), u, backend_emit_ct_emit_ntmp()) != 0) {
+                outc = tool_sh_ct_scratch_fmt("%s/%s.c", _self->outdir, _self->units[u].base);
+                remove(outc);
+                return frontend_parse_ct_parse_report();
+            }
+            backend_emit_ct_emit_set_body_hook(mod_lir_body);
+        }
         if (_self->__frontend_module_moduleops_vptr->emit_unit(_self, u) != 0) {
             outc = tool_sh_ct_scratch_fmt("%s/%s.c", _self->outdir, _self->units[u].base);
             remove(outc);
@@ -3048,6 +3075,9 @@ const struct frontend_module_ModuleOps_vtbl frontend_module_Module_frontend_modu
     .write_model = frontend_module_Module_frontend_module_ModuleOps_write_model
 };
 
+static int mod_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp) {
+    return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+}
 static int is_layer_fn(struct frontend_sym_Symbols * sym, int fn_start, int fn_end, const char * word) {
     int i;
     for (i = fn_start; i < fn_end; i++) {

@@ -70,6 +70,15 @@ struct Driver {
    spliced per unit, so an unused unit must stay out of the product entirely
    (its prologue includes were what put <stdio.h> into an empty program). */
 /* PH-69-R1: `ct check` routes import-bearing units through the build graph. */
+/* S1b-S2b: the LIR body seam. The emitter owns a plain function-pointer field
+   so it never depends on the lowerer; the driver binds it for the duration of
+   one program. */
+static int drv_lir_body(const char *name, void *out, int ind, int ntmp,
+                        int *new_ntmp)
+{
+    return backend::lir::ct_lir_try_body(name, out, ind, ntmp, new_ntmp);
+}
+
 static int file_has_import(const char *path)
 {
     FILE *f = fopen(path, "r");
@@ -1114,19 +1123,18 @@ impl DriverOps for Driver {
             if (adn > 0) fputs("#include <stddef.h>\n", self->out);
         }
         if (self->m->line_mode) fprintf(self->out, "#line 1 \"%s\"\n", self->m->path);
-        /* S1b-S2: a program the lowerer covered end to end is printed from
-           LIR; anything else keeps the AST path byte for byte. */
+        /* S1b-S2b: the body seam. The program shell (banner, declarations,
+           prototypes, generated glue) stays with the emitter; a function body
+           the lowerer covered end to end is printed from LIR inside it. The
+           switch can therefore only change the bytes of a body LIR owns, and
+           `test/ir/run.sh` compares those bytes with the unswitched path. */
         if (backend::lir::ct_lir_on() && backend::lir::ct_lir_emit_on()
-            && backend::lir::ct_lir_ready() && !self->m->line_mode
-            && !self->m->have_map && !self->m->have_model
-            && !self->m->abi_mode && !self->p->unit_is_hdr
-            && !self->p->unit_is_map) {
-            if (backend::lir::ct_lir_emit(self->out) != 0) {
-                fclose(f);
-                remove(out);
-                return frontend::parse::ct_parse_report();
-            }
-        } else if (self->m->emit_program(prog) != 0) {
+            && !self->m->line_mode && !self->m->have_map
+            && !self->m->have_model && !self->m->abi_mode
+            && !self->p->unit_is_hdr && !self->p->unit_is_map) {
+            backend::emit::ct_emit_set_body_hook(drv_lir_body);
+        }
+        if (self->m->emit_program(prog) != 0) {
             fclose(f);
             /* the file was opened before emission, so a failure in the middle of
                it would leave a truncated `.c` that looks like a real artefact */

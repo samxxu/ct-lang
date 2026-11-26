@@ -205,6 +205,9 @@ import backend::verify::Verifier;
 #define TK_MATSEQ           31
 #define TK_INTO_SELF        32
 #define TK_OTHER            33
+#define TK_INIT_RANGE       34
+#define TK_INIT_BRACE       35
+#define TK_INIT_MBRACE      36
 
 #define VC_NONE             0
 #define VC_PLACE            1
@@ -919,6 +922,12 @@ static int tb_expr_kind(int k)
             return TK_SLICE;
         case N_MATSEQ:
             return TK_MATSEQ;
+        case N_INIT_RANGE:
+            return TK_INIT_RANGE;
+        case N_INIT_BRACE:
+            return TK_INIT_BRACE;
+        case N_INIT_MBRACE:
+            return TK_INIT_MBRACE;
         default:
             return TK_OTHER;
     }
@@ -1183,6 +1192,46 @@ static int tb_stmt(struct TBuilder *tb, int n);
 
 static int tb_expr_children(struct TBuilder *tb, int eid, int n)
 {
+    struct Arena *ar0 = tb_arena();
+    /* `sizeof(type)` / `alignof(type)` carries the spelling, not an operand:
+       the node's child slot is not a node index in that form. */
+    if (ar0->nodes[n].kind == N_SIZEOF) {
+        if (ar0->nodes[n].aux != 0 && ar0->nodes[n].text
+            && ar0->nodes[n].text[0])
+            return 0;   /* sizeof(type): the spelling, not an operand */
+        tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[n].a, 0));
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_OFFSETOF)
+        return 0;
+    if (ar0->nodes[n].kind == N_INIT_RANGE) {
+        tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[n].a, 0));
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_INIT_BRACE) {
+        int c1;
+        for (c1 = ar0->nodes[n].a; c1 >= 0; c1 = ar0->nodes[c1].next)
+            tb_expr_kid(tb, eid, tb_expr(tb, c1, 0));
+        return 0;
+    }
+    if (ar0->nodes[n].kind == N_INIT_MBRACE) {
+        int c1;
+        for (c1 = ar0->nodes[n].a; c1 >= 0; c1 = ar0->nodes[c1].next) {
+            tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[c1].a, 0));
+            tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[c1].b, 0));
+        }
+        return 0;
+    }
+    /* A method call's arguments are a sibling chain rooted at `b` (the
+       receiver is `a`); the generic four-slot walk would keep only the first
+       actual. */
+    if (ar0->nodes[n].kind == N_MCALL) {
+        int c0;
+        tb_expr_kid(tb, eid, tb_expr(tb, ar0->nodes[n].a, 0));
+        for (c0 = ar0->nodes[n].b; c0 >= 0; c0 = ar0->nodes[c0].next)
+            tb_expr_kid(tb, eid, tb_expr(tb, c0, 0));
+        return 0;
+    }
     struct Arena *ar;
     int k, c, t;
 
@@ -1268,6 +1317,11 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
     ar = tb_arena();
     m = tb->m;
     k = ar->nodes[n].kind;
+    if (getenv("CT_TIR_DEBUG") && k == 36)
+        fprintf(stderr, "tir: raw sizeof node=%d a=%d aux=%d text='%s' text2='%s'\n",
+                n, ar->nodes[n].a, ar->nodes[n].aux,
+                ar->nodes[n].text ? ar->nodes[n].text : "",
+                ar->nodes[n].text2 ? ar->nodes[n].text2 : "");
     tk = tb_expr_kind(k);
     if (k == N_VAR) {
         struct Symbols *sym;
@@ -1290,6 +1344,7 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
         tb->failed = 1;
         return -1;
     }
+    if (tk == TK_OTHER) m->exprs[eid - 1].num = k;   /* diagnosis only */
     t = tb_type_of(tb, n, hint);
     if (t <= 0) t = hint > 0 ? hint : tmod_type_void(m);
     m->exprs[eid - 1].type = t;
@@ -1324,13 +1379,26 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
             m->exprs[eid - 1].op = 2;   /* `->` */
             break;
         case N_CAST:
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            break;
         case N_SIZEOF:
         case N_VAARG:
         case N_COMPOUND:
-        case N_OFFSETOF:
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].op = ar->nodes[n].aux;
+            break;
         case N_RAW:
         case N_RAW_TEXT:
+            /* a raw spelling is either inline (`text`) or pooled (`aux` names
+               `num`); the lowering copies the C the emitter would print */
+            m->exprs[eid - 1].text = ar->nodes[n].aux
+                ? runtime::text::ct_intern(ar->str_at((int)ar->nodes[n].num))
+                : runtime::text::ct_intern(ar->nodes[n].text);
+            break;
+        case N_OFFSETOF:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].target_key = runtime::text::ct_intern(ar->nodes[n].text2);
+            m->exprs[eid - 1].op = 5;
             break;
         case N_CALL:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
@@ -1341,10 +1409,33 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
             break;
         case N_MCALL:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
-            m->exprs[eid - 1].op = 2;   /* method call (not in the S2 subset) */
+            m->exprs[eid - 1].op = 2;   /* method call */
+            /* the dispatch form: 0 struct value, 2 pointer, 3 iface value,
+               4 iface pointer; recipes use 5/6/12 and are not this path */
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
             break;
         case N_ADTCTOR:
             m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
+            break;
+        case N_INIT_RANGE:
+        case N_INIT_BRACE:
+        case N_INIT_MBRACE:
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].target_key =
+                runtime::text::ct_intern(ar->nodes[n].text2);
+            m->exprs[eid - 1].num = ar->nodes[n].num;
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
+            break;
+        case N_BOX:
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->exprs[eid - 1].member =
+                runtime::text::ct_intern(ar->nodes[n].text2);
+            m->exprs[eid - 1].aux = ar->nodes[n].aux;
+            break;
+        case N_NEWOBJ:
+            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
+            m->exprs[eid - 1].member =
+                runtime::text::ct_intern(ar->nodes[n].text);
             break;
         case N_BIN:
         case N_UNARY:
@@ -1391,6 +1482,10 @@ static int tb_declare(struct TBuilder *tb, int n, int is_param, int is_self)
     if (vid < 0) return -1;
     m->vars[vid - 1].is_ref =
         (ar->nodes[n].aux == 2 || ar->nodes[n].aux == 3) ? 1 : 0;
+    m->vars[vid - 1].dims = runtime::text::ct_intern(ar->nodes[n].text3);
+    m->vars[vid - 1].spelling = runtime::text::ct_intern(spelling);
+    m->vars[vid - 1].is_static = ar->nodes[n].aux == 1 ? 1 : 0;
+    m->vars[vid - 1].is_unused = ar->nodes[n].aux == 3 ? 1 : 0;
     if (tb->func_decl > 0 && tb->scope > 0)
         m->vars[vid - 1].decl_stmt = 0;
     return vid;
@@ -1656,6 +1751,8 @@ static int tb_stmt(struct TBuilder *tb, int n)
             sid = tmod_new_stmt(m, TS_FOREACH, tb->file, tb_line(n), tb_col(n), tb->scope);
             if (sid < 0) return -1;
             m->stmts[sid - 1].aux = ar->nodes[n].aux;
+            m->stmts[sid - 1].text = runtime::text::ct_intern(ar->nodes[n].text);
+            m->stmts[sid - 1].text2 = runtime::text::ct_intern(ar->nodes[n].text2);
             tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
             saved = tb->scope;
             if (tb_push_scope(tb, SC_BLOCK) < 0) return -1;
@@ -1900,6 +1997,11 @@ static int tb_func_decl(struct TBuilder *tb, int n, const char *name, int recv_t
         if (tmod_decl_add_param(m, decl, pt) != 0) return -1;
         if (tb_declare(tb, c, 1, 0) < 0) return -1;
     }
+    m->decls[decl - 1].cname = (fi >= 0 && sym->funcs[fi].cname[0])
+                                ? runtime::text::ct_intern(sym->funcs[fi].cname)
+                                : runtime::text::ct_intern(name);
+    m->decls[decl - 1].is_template = tmpl
+        || (fi >= 0 && sym->funcs[fi].ntparams > 0);
     m->decls[decl - 1].is_static = ar->nodes[n].aux ? 1 : 0;
     m->decls[decl - 1].is_inline = ar->nodes[n].num ? 1 : 0;
     m->decls[decl - 1].is_vararg = ar->nodes[n].c ? 1 : 0;
@@ -2361,6 +2463,17 @@ pub int ct_tir_shadow_program(int prog, const char *path, const char *base,
 /* Build mode: `up` is the module layer's `struct Unit *`. Its dependency rows
    are the explicit import roots; `mod_unit` filters the trait table to the
    rows the unit declared. */
+pub int ct_tir_build_unit(void *up, int mod_unit);
+pub int ct_tir_build_unit(void *up, int mod_unit)
+{
+    struct Unit *u;
+
+    u = (struct Unit *)up;
+    if (!u) return 0;
+    return tb_build(u->prog, u->path, u->base, u->ns, u->is_hdr, u->is_map,
+                    mod_unit, u->ndep, u->dep);
+}
+
 pub int ct_tir_shadow_unit(void *up, int mod_unit)
 {
     struct Unit *u;
