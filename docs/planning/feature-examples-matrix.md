@@ -35,29 +35,29 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 
 | # | 特性 | example（数 / 代表） | test（数） | docs | 档 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `trait` / `impl` | 76 / `examples/01_greeter` | 334 | spec §4.1、§4.8、§4.39；README 快速开始 | 有 |
-| 2 | 泛型函数 | 4 / `examples/16_generic_min` | 28 | spec §4.48 | 有 |
-| 3 | 泛型 struct | 5 / `examples/23_generic_stack` | 48 | spec §4.51 | 有 |
-| 4 | 有界泛型（`T: Trait`） | 3 / `examples/21_generic_bound` | 29 | spec §4.50、§4.54 | 有 |
-| 5 | 泛型 trait | 2 / `examples/39_generic_trait`、`65_generic_trait_instances` | 13 | spec §4.55 | 薄 |
-| 6 | ADT `enum` | 7 / `examples/53_match_adt` | 29 | spec §4.73 | 有 |
-| 7 | `match` | 2 / `examples/53_match_adt`、`64_match_expr` | 12 | spec §4.73 | 薄 |
+| 1 | `trait` / `impl` | 76 / `examples/01_greeter` | 334 | spec §4.1、§4.8、§4.39；README §0.3 | 有 |
+| 2 | 泛型函数 | 4 / `examples/16_generic_min` | 28 | spec §4.48；README §0.7 | 有 |
+| 3 | 泛型 struct | 5 / `examples/23_generic_stack` | 48 | spec §4.51；README §0.10 | 有 |
+| 4 | 有界泛型（`T: Trait`） | 3 / `examples/21_generic_bound` | 29 | spec §4.50、§4.54；README §0.7/§0.10 | 有 |
+| 5 | 泛型 trait | 2 / `examples/39_generic_trait`、`65_generic_trait_instances` | 13 | spec §4.55；README §0.10 | 薄 |
+| 6 | ADT `enum` | 7 / `examples/53_match_adt` | 29 | spec §4.73；README §0.9 | 有 |
+| 7 | `match` | 2 / `examples/53_match_adt`、`64_match_expr` | 12 | spec §4.73；README §0.9 | 薄 |
 | 8 | 模式扩展（字面量 / 嵌套 / 结构体 / or / 守卫 / 泛型 ADT） | 0 | 0 | 无 | 待实现（S4–S6） |
-| 9 | `String`（owning） | 2 / `examples/48_string_steps` | 81 | spec §4.70 | 薄 |
-| 10 | `Str`（借用视图） | 3 / `examples/40_str_ownership` | 72 | spec §4.56、§4.70 | 薄 |
-| 11 | 切片 `T[]` | 9 / `examples/51_slice` | 35 | spec §4.69 | 有 |
-| 12 | `ref` | 2 / `examples/50_ref_out`、`63_ref_out_places` | 7 | spec §4.68 | 薄 |
-| 13 | `out` | 5 / `examples/50_ref_out` | 16 | spec §4.68 | 有 |
-| 14 | `Box<T>` / `new` | 4 / `examples/52_box_new` | 53 | spec §4.71 | 有 |
-| 15 | 可选链 `?.` | 1 / `examples/58_optional_chain`（2026-11-26 补） | 10（`test/ast/p53_eval_once`） | spec §4.65 | 薄 |
-| 16 | `Map` / map 构造 | 7 / `examples/34_map_literal` | 49 | spec §4.51.1 | 有 |
+| 9 | `String`（owning） | 2 / `examples/48_string_steps` | 81 | spec §4.70；README §0.5 | 薄 |
+| 10 | `Str`（借用视图） | 3 / `examples/40_str_ownership` | 72 | spec §4.56、§4.70；README §0.5 | 薄 |
+| 11 | 切片 `T[]` | 9 / `examples/51_slice` | 35 | spec §4.69；README §0.10 | 有 |
+| 12 | `ref` | 2 / `examples/50_ref_out`、`63_ref_out_places` | 7 | spec §4.68；README §0.10 | 薄 |
+| 13 | `out` | 5 / `examples/50_ref_out` | 16 | spec §4.68；README §0.10 | 有 |
+| 14 | `Box<T>` / `new` | 4 / `examples/52_box_new` | 53 | spec §4.71；README §0.10 | 有 |
+| 15 | 可选链 `?.` | 1 / `examples/58_optional_chain`（2026-11-26 补） | 10（`test/ast/p53_eval_once`） | spec §4.65；README §0.8 | 薄 |
+| 16 | `Map` / map 构造 | 7 / `examples/34_map_literal` | 49 | spec §4.51.1；README §0.10 | 有 |
 | 17 | `map` 绑定 | 20（含 `.m.ct`）/ `examples/08_map_binding` | 52 | spec §4.10 | 有 |
-| 18 | `foreach` | 7 / `examples/20_foreach_statement` | 29 | spec §4.49 | 有 |
-| 19 | `defer` | 5 / `examples/42_defer`、`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup` | 23 | spec §4.9.1 | 有 |
-| 20 | `errdefer` | 4 / `examples/43_errdefer`、`45_error_return_contract`、`61_errdefer_vs_return`、`62_try_cleanup` | 22 | spec §4.58 | 有 |
-| 21 | 后缀 `?` | 2 / `examples/46_result_try`、`62_try_cleanup` | 10 | spec §4.62 | 薄 |
-| 22 | 自定义下标（§4.64） | 1 / `examples/59_custom_subscript`（2026-11-26 补；`28_subscript_forms` 是 C 数组 / 容器下标形态，不算） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64 | 薄 |
-| 23 | 函子 `(A,B) => R` | 1 / `examples/66_functor`（2026-11-27 补） | 2 夹具 + 13 断言（`test/ast/p3_functor*`） | spec §4.77 | 薄 |
+| 18 | `foreach` | 7 / `examples/20_foreach_statement` | 29 | spec §4.49；README §0.3 | 有 |
+| 19 | `defer` | 5 / `examples/42_defer`、`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup` | 23 | spec §4.9.1；README §0.6 | 有 |
+| 20 | `errdefer` | 4 / `examples/43_errdefer`、`45_error_return_contract`、`61_errdefer_vs_return`、`62_try_cleanup` | 22 | spec §4.58；README §0.6 | 有 |
+| 21 | 后缀 `?` | 2 / `examples/46_result_try`、`62_try_cleanup` | 10 | spec §4.62；README §0.6 | 薄 |
+| 22 | 自定义下标（§4.64） | 1 / `examples/59_custom_subscript`（2026-11-26 补；`28_subscript_forms` 是 C 数组 / 容器下标形态，不算） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64；README §0.8 | 薄 |
+| 23 | 函子 `(A,B) => R` | 1 / `examples/66_functor`（2026-11-27 补） | 2 夹具 + 13 断言（`test/ast/p3_functor*`） | spec §4.77；README §0.10 | 薄 |
 
 ## 2 缺口清单（按 S8c 分片顺序）
 
