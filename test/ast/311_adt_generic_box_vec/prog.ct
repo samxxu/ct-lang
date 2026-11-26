@@ -1,0 +1,41 @@
+/* v1-PH-2 S6: a generic ADT interoperates with the built-in owning
+   containers. `Vec<Opt<int>>` stores the instance by value; `Box<Opt<int>>`
+   boxes the same instance through its generic `of`. */
+#include <stdio.h>
+
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
+int main(void)
+{
+    Vec<Opt<int>> v;
+    v.h = 0;
+    v.push(Opt<int>.Some(3));
+    v.push(Opt<int>.None());
+    v.push(Opt<int>.Some(4));
+
+    int sum;
+    sum = 0;
+    int i;
+    for (i = 0; i < v.len(); i = i + 1) {
+        match (v.get(i)) {
+            Opt.Some(x) => { sum = sum + x; }
+            Opt.None() => { }
+        }
+    }
+
+    Box<Opt<int>> b = Box<Opt<int>>::of(Opt<int>.Some(5));
+    Opt<int> *bp = b.at();
+    Opt<int> boxedv = *bp;
+    int boxed;
+    match (boxedv) {
+        Opt.Some(x) => { boxed = x; }
+        Opt.None() => { boxed = -1; }
+    }
+    int refs = b.refs();
+    b.release();
+    printf("%d %d %d\n", sum, boxed, refs);
+    return 0;
+}

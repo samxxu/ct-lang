@@ -1,7 +1,7 @@
-/* L34-3: an enum has no monomorphisation axis; the parser names it. */
-enum Option<T> {
-    int has;
-    T value;
+/* L34-3/S6: a payload-less enum has no monomorphisation axis; generic C enums stay rejected. */
+enum Color<T> {
+    Red,
+    Green,
 }
 
 int main(void) { return 0; }

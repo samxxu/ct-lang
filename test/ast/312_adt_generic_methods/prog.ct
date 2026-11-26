@@ -1,0 +1,65 @@
+/* v1-PH-2 S6: an inherent method block written against the template applies to
+   every instance. `self` is the concrete instance struct, and `match` in the
+   body still names the template (`Opt.Some`). */
+#include <stdio.h>
+
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
+impl<T> Opt<T> {
+    int is_some() {
+        match (self) {
+            Opt.Some(v) => { return 1; }
+            Opt.None() => { return 0; }
+        }
+        return 0;
+    }
+
+    T or_else(T d) {
+        match (self) {
+            Opt.Some(v) => { return v; }
+            Opt.None() => { }
+        }
+        return d;
+    }
+
+    T get(int i) {
+        match (self) {
+            Opt.Some(v) => { return v; }
+            Opt.None() => { }
+        }
+        return 0;
+    }
+
+    void set(int i, T v) {
+        match (self) {
+            Opt.Some(x) => { x = v; }
+            Opt.None() => { }
+        }
+    }
+
+    T pick(T d) {
+        return match (self) {
+            Opt.Some(v) => v,
+            Opt.None() => d,
+        };
+    }
+}
+
+int main(void)
+{
+    Opt<int> a = Opt<int>.Some(4);
+    Opt<int> b = Opt<int>.None();
+
+    int some = a.is_some();
+    int none = b.is_some();
+    int got = a.or_else(9);
+    int dflt = b.or_else(9);
+    int sub = a[0];
+    int pe = a.pick(9);
+    int pd = b.pick(9);
+    printf("%d %d %d %d %d %d %d\n", some, none, got, dflt, sub, pe, pd);
+    return 0;
+}

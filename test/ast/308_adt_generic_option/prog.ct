@@ -1,0 +1,37 @@
+/* v1-PH-2 S6: a generic ADT declares its payloads in terms of its type
+   parameters, instantiation substitutes them, and the constructor / match
+   patterns name the instance. `Opt.Some(v)` infers the instance from the
+   subject type; `Opt<int>.Some(v)` is the explicit form. */
+#include <stdio.h>
+
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
+int main(void)
+{
+    Opt<int> a = Opt<int>.Some(7);
+    Opt<int> b = Opt<int>.None();
+    Opt<int> c = Opt<int>.Some(9);
+
+    int x;
+    int seen;
+    seen = 0;
+    match (a) {
+        Opt.Some(v) => { x = v; seen = 1; }
+        Opt.None() => { x = -1; }
+    }
+    int y;
+    match (b) {
+        Opt.Some(v) => { y = v; }
+        Opt.None() => { y = -1; }
+    }
+    int z;
+    match (c) {
+        Opt<int>.Some(v) => { z = v * 2; }
+        Opt<int>.None() => { z = 0; }
+    }
+    printf("%d %d %d %d\n", x, y, z, seen);
+    return 0;
+}

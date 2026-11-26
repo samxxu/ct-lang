@@ -976,6 +976,14 @@ else
     bad "p85/m0" "$(cat "$work/p85m0.out" "$work/p85m0.err" | head -5)"
 fi
 
+# v1-PH-2 S6: generic ADTs. The positive fixtures are 308..312; this probe pins
+# the rejection half and the one-layout-per-instance promise.
+if bash test/ast/p86_adt_generic.sh "$work/ct-ast" >"$work/p86adtg.out" 2>"$work/p86adtg.err"; then
+    ok "p86/generic-adt (S6: instance identity, negatives)"
+else
+    bad "p86/generic-adt" "$(cat "$work/p86adtg.out" "$work/p86adtg.err" | head -8)"
+fi
+
 # PH-85 S85d (E85-5): the B checker on the build path with off / warn / error;
 # `off` is byte-for-byte the pre-PH-85 build and the escape hatch. SH-115 made
 # `warn` the default; v1-PH-1 S3 made `error` the default.
@@ -2971,7 +2979,7 @@ p34_diag() {
         bad "p34_diag_$1" "$(head -2 "$work/p34d.err")"
     fi
 }
-p34_diag generic_enum 2:12 "generic enums are not supported"
+p34_diag generic_enum 2:11 "generic enums are not supported"
 # S1a-0 C1: MAX_GENERIC_INSTS grows on demand, so the old 65th-instance hard
 # error is gone; the growth case lives in test/ast/table_tables_grow.sh (`ginsts`).
 # `_Generic` is copied verbatim; a type parameter inside it would leak into the

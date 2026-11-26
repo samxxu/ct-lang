@@ -1,0 +1,43 @@
+/* v1-PH-2 S6: a generic instance used as another instance's type argument
+   nests like any other by-value type. The inner layout must be complete before
+   the outer union. */
+#include <stdio.h>
+
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
+enum Pair<T> {
+    P(T a, T b),
+}
+
+int main(void)
+{
+    Opt<Pair<int>> a = Opt<Pair<int>>.Some(Pair<int>.P(1, 2));
+    Opt<Opt<int>> b = Opt<Opt<int>>.Some(Opt<int>.Some(8));
+    Opt<Opt<int>> c = Opt<Opt<int>>.None();
+
+    int s;
+    match (a) {
+        Opt.Some(Pair.P(x, y)) => { s = x + y; }
+        _ => { s = -1; }
+    }
+    int t;
+    match (b) {
+        Opt.Some(inner) => {
+            match (inner) {
+                Opt.Some(v) => { t = v; }
+                Opt.None() => { t = 0; }
+            }
+        }
+        Opt.None() => { t = -1; }
+    }
+    int u;
+    match (c) {
+        Opt.Some(inner) => { u = 1; }
+        Opt.None() => { u = 0; }
+    }
+    printf("%d %d %d\n", s, t, u);
+    return 0;
+}

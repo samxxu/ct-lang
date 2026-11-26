@@ -159,5 +159,28 @@ EOF
 } >"$w/generic_payload.ct"
 run_case generic_payload "$w/generic_payload.ct" 0 || fail=1
 
+# v1-PH-2 S6: generic ADTs grow with the same registries. 70 templates cross
+# the old MAX_ADTS (64) and MAX_STRUCT_TPLS (64) starting capacities; the last
+# one is instantiated, constructed and matched, so its instance row is real.
+{
+    i=0
+    while [ "$i" -lt 70 ]; do
+        printf 'enum G%d<T> {\n    V(T x),\n    N(),\n}\n' "$i"
+        i=$((i + 1))
+    done
+    cat <<'EOF'
+int main(void)
+{
+    G69<int> g = G69<int>.V(7);
+    match (g) {
+        G69.V(x) => { return x == 7 ? 0 : 1; }
+        G69.N() => { return 1; }
+    }
+    return 1;
+}
+EOF
+} >"$w/generic_adts.ct"
+run_case generic_adts "$w/generic_adts.ct" 0 || fail=1
+
 echo "cap_adt: $fail failure(s)"
 [ "$fail" -eq 0 ]
