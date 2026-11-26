@@ -321,7 +321,20 @@ struct backend_tir_ct_tedge;
 struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
 struct backend_verify_Verifier;
+struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
@@ -334,6 +347,7 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
+struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -350,6 +364,7 @@ extern void U16String_Drop_drop(void *self);
 int backend_tir_ct_tir_shadow_on(void);
 int backend_tir_ct_tir_shadow_unit(void *, int);
 int backend_tir_ct_tir_shadow_program(int, const char *, const char *, const char *, int, int);
+int backend_tir_ct_tir_build_program(int, const char *, const char *, const char *, int, int);
 static int tb_reserve(void * *, int *, int, int);
 static struct runtime_arena_Arena * tb_arena(void);
 static struct frontend_sym_Symbols * tb_sym(void);
@@ -1351,6 +1366,14 @@ static int tb_expr_children(struct backend_tir_TBuilder * tb, int eid, int n) {
                 tb_expr_kid(tb, eid, tb_expr(tb, c, 0));
             }
             return 0;
+        case N_CALL:
+            if (((ar->nodes[n].aux == 2) && (ar->nodes[n].b >= 0))) {
+                tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].b, 0));
+            }
+            for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
+                tb_expr_kid(tb, eid, tb_expr(tb, c, 0));
+            }
+            return 0;
         case N_INIT_ITEM:
             tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].a, 0));
             tb_expr_kid(tb, eid, tb_expr(tb, ar->nodes[n].b, 0));
@@ -1404,6 +1427,61 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
     m->exprs[(eid - 1)].type = t;
     m->exprs[(eid - 1)].vclass = tb_vclass(k);
     m->exprs[(eid - 1)].own = tb_own_of(tb, n);
+    switch (k) {
+        case N_NUM:
+            m->exprs[(eid - 1)].num = ar->nodes[n].num;
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].op = 1;
+            break;
+        case N_FNUM:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            m->exprs[(eid - 1)].op = 2;
+            break;
+        case N_STR:
+            m->exprs[(eid - 1)].text = ar->__runtime_arena_arenaops_vptr->str_at(ar, ar->nodes[n].num);
+            m->exprs[(eid - 1)].op = 3;
+            break;
+        case N_VAR:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            break;
+        case N_MEMBER:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].op = 1;
+            break;
+        case N_ARROW:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].op = 2;
+            break;
+        case N_CAST:
+        case N_SIZEOF:
+        case N_VAARG:
+        case N_COMPOUND:
+        case N_OFFSETOF:
+        case N_RAW:
+        case N_RAW_TEXT:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text);
+            break;
+        case N_CALL:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].op = ((ar->nodes[n].aux == 0) ? 1 : ((ar->nodes[n].aux == 1) ? 2 : ((ar->nodes[n].aux == 2) ? 3 : 4)));
+            break;
+        case N_MCALL:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            m->exprs[(eid - 1)].op = 2;
+            break;
+        case N_ADTCTOR:
+            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            break;
+        case N_BIN:
+        case N_UNARY:
+        case N_ASSIGN:
+        case N_POST:
+        case N_PRE:
+            m->exprs[(eid - 1)].op = ar->nodes[n].aux;
+            break;
+        default:
+            break;
+    }
     if (tb_target(tb, eid, n) != 0) {
         return (-1);
     }
@@ -1438,6 +1516,7 @@ static int tb_declare(struct backend_tir_TBuilder * tb, int n, int is_param, int
     if (vid < 0) {
         return (-1);
     }
+    m->vars[(vid - 1)].is_ref = (((ar->nodes[n].aux == 2) || (ar->nodes[n].aux == 3)) ? 1 : 0);
     if (((tb->func_decl > 0) && (tb->scope > 0))) {
         m->vars[(vid - 1)].decl_stmt = 0;
     }
@@ -1639,12 +1718,22 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
                 backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
             }
             return sid;
+        case N_ASSIGN:
+        case N_POST:
+        case N_PRE:
+            sid = backend_tir_tmod_new_stmt(m, TS_EXPR, tb->file, tb_line(n), tb_col(n), tb->scope);
+            if (sid < 0) {
+                return (-1);
+            }
+            backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, n, 0));
+            return sid;
         case N_RET:
             sid = backend_tir_tmod_new_stmt(m, TS_RET, tb->file, tb_line(n), tb_col(n), tb->scope);
             if (sid < 0) {
                 return (-1);
             }
             m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
+            m->stmts[(sid - 1)].err_edge = (ar->nodes[n].text2[0] ? 1 : 0);
             if (ar->nodes[n].b >= 0) {
                 for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
                     t = tb_stmt(tb, c);
@@ -1664,9 +1753,11 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
             }
             backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
             if (ar->nodes[n].b >= 0) {
+                m->stmts[(sid - 1)].flags |= 1;
                 backend_tir_tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].b));
             }
             if (ar->nodes[n].c >= 0) {
+                m->stmts[(sid - 1)].flags |= 2;
                 backend_tir_tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].c));
             }
             return sid;
@@ -1677,6 +1768,7 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
             }
             backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
             if (ar->nodes[n].b >= 0) {
+                m->stmts[(sid - 1)].flags |= 1;
                 backend_tir_tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].b));
             }
             return sid;
@@ -1701,20 +1793,30 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
                     return (-1);
                 }
                 if (ar->nodes[n].a >= 0) {
+                    m->stmts[(sid - 1)].flags |= 1;
                     if (((ar->nodes[ar->nodes[n].a].kind == N_DECL) || (ar->nodes[ar->nodes[n].a].kind == N_DECLS))) {
                         backend_tir_tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].a));
                     }
                     else {
-                        backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].a, 0));
+                        int isid;
+                        isid = backend_tir_tmod_new_stmt(m, TS_EXPR, tb->file, tb_line(ar->nodes[n].a), tb_col(ar->nodes[n].a), tb->scope);
+                        if (isid < 0) {
+                            return (-1);
+                        }
+                        backend_tir_tmod_stmt_add_kid(m, isid, tb_expr(tb, ar->nodes[n].a, 0));
+                        backend_tir_tmod_stmt_add_kid(m, sid, isid);
                     }
                 }
                 if (ar->nodes[n].b >= 0) {
+                    m->stmts[(sid - 1)].flags |= 2;
                     backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].b, 0));
                 }
                 if (ar->nodes[n].c >= 0) {
+                    m->stmts[(sid - 1)].flags |= 4;
                     backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, ar->nodes[n].c, 0));
                 }
                 if (ar->nodes[n].d >= 0) {
+                    m->stmts[(sid - 1)].flags |= 8;
                     backend_tir_tmod_stmt_add_kid(m, sid, tb_stmt(tb, ar->nodes[n].d));
                 }
                 tb_pop_scope(tb);
@@ -1797,6 +1899,7 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
                 return (-1);
             }
             m->stmts[(sid - 1)].aux = (ar->nodes[n].text2[0] ? 1 : 0);
+            m->stmts[(sid - 1)].err_edge = (ar->nodes[n].text2[0] ? 1 : 0);
             for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
                 t = tb_stmt(tb, c);
                 if (t > 0) {
@@ -1810,12 +1913,14 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
                 return (-1);
             }
             m->stmts[(sid - 1)].aux = 1;
+            m->stmts[(sid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
             return sid;
         case N_LABEL:
             sid = backend_tir_tmod_new_stmt(m, TS_LABEL, tb->file, tb_line(n), tb_col(n), tb->scope);
             if (sid < 0) {
                 return (-1);
             }
+            m->stmts[(sid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
             for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
                 t = tb_stmt(tb, c);
                 if (t > 0) {
@@ -1932,7 +2037,10 @@ static int tb_block(struct backend_tir_TBuilder * tb, int n, int kind) {
         if (ar->nodes[c].kind == N_DEFER_RUN) {
             int ck;
             int cbody;
-            ck = ((ar->nodes[c].aux == 1) ? CL_ERRDEFER : CL_DEFER);
+            if (ar->nodes[c].aux < 3) {
+                continue;
+            }
+            ck = ((ar->nodes[c].aux == 4) ? CL_ERRDEFER : CL_DEFER);
             cbody = tb_stmt(tb, ar->nodes[c].a);
             if (cbody < 0) {
                 return (-1);
@@ -2022,8 +2130,16 @@ static int tb_func_decl(struct backend_tir_TBuilder * tb, int n, const char * na
             return (-1);
         }
     }
-    if (((ar->nodes[n].b >= 0) && (tb_stmt(tb, ar->nodes[n].b) < 0))) {
-        return (-1);
+    m->decls[(decl - 1)].is_static = (ar->nodes[n].aux ? 1 : 0);
+    m->decls[(decl - 1)].is_inline = (ar->nodes[n].num ? 1 : 0);
+    m->decls[(decl - 1)].is_vararg = (ar->nodes[n].c ? 1 : 0);
+    if (ar->nodes[n].b >= 0) {
+        int body;
+        body = tb_stmt(tb, ar->nodes[n].b);
+        if (body < 0) {
+            return (-1);
+        }
+        m->decls[(decl - 1)].body = body;
     }
     tb_pop_scope(tb);
     tb->scope = saved_scope;
@@ -2567,11 +2683,14 @@ int backend_tir_ct_tir_shadow_on(void) {
     }
     return 0;
 }
+int backend_tir_ct_tir_build_program(int prog, const char * path, const char * base, const char * ns, int is_hdr, int is_map) {
+    return tb_build(prog, path, base, ns, is_hdr, is_map, (-1), 0, (const char *)(0));
+}
 int backend_tir_ct_tir_shadow_program(int prog, const char * path, const char * base, const char * ns, int is_hdr, int is_map) {
     if ((!backend_tir_ct_tir_shadow_on())) {
         return 0;
     }
-    return tb_build(prog, path, base, ns, is_hdr, is_map, (-1), 0, (const char *)(0));
+    return backend_tir_ct_tir_build_program(prog, path, base, ns, is_hdr, is_map);
 }
 int backend_tir_ct_tir_shadow_unit(void * up, int mod_unit) {
     struct frontend_module_Unit * u;

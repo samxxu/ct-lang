@@ -386,6 +386,19 @@ impl StmtDeferOps for Stmt {
             else self->arena->nodes[*tail].next = r;
             *tail = r;
         }
+        /* S1b-S2: one source-ordered metadata copy of every entry (normal and
+           error). The emitter skips aux >= 3; TIR registers the scope's
+           cleanup entries from these, which is the only place an `errdefer`
+           can be seen at all (it has no normal-exit run). */
+        for (k = self->defer_head[i]; k >= 0; k = self->arena->nodes[k].next) {
+            int r = self->defer_run_node(self->arena->nodes[k].a,
+                                         self->arena->nodes[k].line);
+            if (r < 0) return -1;
+            self->arena->nodes[r].aux = self->arena->nodes[k].aux == 1 ? 4 : 3;
+            if (*tail < 0) self->arena->nodes[blk].a = r;
+            else self->arena->nodes[*tail].next = r;
+            *tail = r;
+        }
         return 0;
     }
 }

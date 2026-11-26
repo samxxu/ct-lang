@@ -3,6 +3,7 @@
 #include "Verifier.h"
 #include "Intern.h"
 #include "TModule.h"
+#include "LModule.h"
 
 #line 1 "selfhost/ct-ast/backend/verify/Verifier.h.ct"
 #include <stdio.h>
@@ -29,6 +30,22 @@
 #define TD_STRUCT           3
 #define TE_INSTANTIATE      5
 #define CAP_LIMIT 65536
+#define LE_NAME              4
+#define LS_DECL              1
+#define LS_DEFER_RUN         5
+#define LS_ERRDEFER_RUN      6
+#define LS_DROP              4
+#define LS_JUMP             12
+#define LT_RETURN            1
+#define CL_DEFER             1
+#define CL_ERRDEFER          2
+#define CL_DROP              3
+#define CL_RELEASE           4
+#define CL_HANDBACK          5
+#define SC_FUNC              1
+#define LB_DEFER_BODY        8
+#define LX_MAX_CHAIN 256
+#define LEXP_MAX 64
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -100,7 +117,20 @@ struct backend_tir_ct_tedge;
 struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
 struct backend_verify_Verifier;
+struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
@@ -113,6 +143,7 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
+struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -135,7 +166,23 @@ static int v_check_value_class(struct backend_tir_TModule *, struct backend_tir_
 static int v_check_targets(struct backend_tir_TModule *, struct backend_tir_ct_tmark *);
 static int v_dfs(struct backend_tir_TModule *, int, int *);
 static int v_check_instances(struct backend_tir_TModule *, struct backend_tir_ct_tmark *);
+static void lfail(struct backend_lir_LModule *, int, int, int, const char *, const char *);
+static int lver_scope_kind(struct backend_lir_LModule *, int);
+static int lver_scope_parent(struct backend_lir_LModule *, int);
+static int lver_active(struct backend_lir_ct_lcleanup *, int, int, int);
+static int lver_chain(struct backend_lir_LModule *, int, int, int, int *, int *);
+static int lver_expect(struct backend_lir_LModule *, int *, int, int, int, int, int, struct backend_verify_lir_expect *, int *);
+static int lver_cmp(struct backend_lir_LModule *, struct backend_verify_lir_expect *, int, int *, int, int, int, int);
+static int lver_v7_set(struct backend_lir_LModule *, int *, int, int, int, int, int);
+static int lver_declared(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, const char *);
+static int lver_v8_set(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, int *, int, int, int, int);
+static int lver_tmp_prefix_ok(const char *);
+static int lver_v5(struct backend_lir_LModule *);
+static void lver_fault(struct backend_lir_LModule *, const char *);
+static void lver_block(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, int);
+int backend_verify_ct_lir_verify(struct backend_lir_LModule *);
 static struct backend_verify_Verifier backend_verify_g_verifier;
+static int backend_verify_g_lir_errors;
 static void vfail(struct backend_tir_TModule * m, int file, int line, int col, const char * code, const char * msg) {
     const char * path;
     path = "?";
@@ -325,6 +372,515 @@ int backend_verify_ct_verifier_run(struct backend_tir_TModule * m, int unit, str
     v_check_instances(m, mark);
     if (backend_verify_g_verifier.errors > 0) {
         fprintf(stderr, "tir: verifier: %d TIR invariant failure(s) in this unit\n", backend_verify_g_verifier.errors);
+        return (-1);
+    }
+    return 0;
+}
+static void lfail(struct backend_lir_LModule * l, int file, int line, int col, const char * code, const char * msg) {
+    struct backend_tir_TModule * m;
+    const char * path;
+    (void)(l);
+    m = backend_tir_tmod_get();
+    path = "?";
+    if (((m && (file > 0)) && (file <= m->nfiles))) {
+        path = m->files[(file - 1)];
+    }
+    fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+    backend_verify_g_lir_errors++;
+}
+static int lver_scope_kind(struct backend_lir_LModule * l, int scope) {
+    if (((scope <= 0) || (scope > l->nscopes))) {
+        return 0;
+    }
+    return l->scopes[(scope - 1)].kind;
+}
+static int lver_scope_parent(struct backend_lir_LModule * l, int scope) {
+    if (((scope <= 0) || (scope > l->nscopes))) {
+        return 0;
+    }
+    return l->scopes[(scope - 1)].parent;
+}
+static int lver_active(struct backend_lir_ct_lcleanup * c, int line, int col, int all) {
+    if (all) {
+        return 1;
+    }
+    if (c->span.line < line) {
+        return 1;
+    }
+    if (((c->span.line == line) && (c->span.col <= col))) {
+        return 1;
+    }
+    return 0;
+}
+static int lver_chain(struct backend_lir_LModule * l, int scope, int stop_scope, int stop_kind, int * out, int * nout) {
+    int n = 0;
+    while (scope > 0) {
+        if (n >= LX_MAX_CHAIN) {
+            (*nout) = n;
+            return (-1);
+        }
+        if (((stop_scope > 0) && (scope == stop_scope))) {
+            out[n] = scope;
+            n++;
+            break;
+        }
+        if (((stop_kind > 0) && (lver_scope_kind(l, scope) == stop_kind))) {
+            break;
+        }
+        out[n] = scope;
+        n++;
+        scope = lver_scope_parent(l, scope);
+    }
+    (*nout) = n;
+    return 0;
+}
+static int lver_expect(struct backend_lir_LModule * l, int * chain, int nchain, int edge, int all, int line, int col, struct backend_verify_lir_expect * out, int * nout) {
+    int n = 0;
+    int ci;
+    int k;
+    for (ci = 0; ci < nchain; ci++) {
+        struct backend_lir_ct_lscope * s = (&l->scopes[(chain[ci] - 1)]);
+        for (k = (s->ncleanups - 1); k >= 0; k--) {
+            struct backend_lir_ct_lcleanup * c = (&l->cleanups[(s->cleanups[k] - 1)]);
+            if (((c->kind != CL_DEFER) && (c->kind != CL_ERRDEFER))) {
+                continue;
+            }
+            if (((edge == 0) && c->on_error)) {
+                continue;
+            }
+            if ((!lver_active(c, line, col, all))) {
+                continue;
+            }
+            if (n >= LEXP_MAX) {
+                return (-1);
+            }
+            out[n].kind = ((c->kind == CL_ERRDEFER) ? LS_ERRDEFER_RUN : LS_DEFER_RUN);
+            out[n].origin = c->id;
+            n++;
+        }
+    }
+    for (ci = 0; ci < nchain; ci++) {
+        struct backend_lir_ct_lscope * s = (&l->scopes[(chain[ci] - 1)]);
+        for (k = (s->ncleanups - 1); k >= 0; k--) {
+            struct backend_lir_ct_lcleanup * c = (&l->cleanups[(s->cleanups[k] - 1)]);
+            if ((((c->kind != CL_DROP) && (c->kind != CL_RELEASE)) && (c->kind != CL_HANDBACK))) {
+                continue;
+            }
+            if ((!lver_active(c, line, col, all))) {
+                continue;
+            }
+            if (n >= LEXP_MAX) {
+                return (-1);
+            }
+            out[n].kind = LS_DROP;
+            out[n].origin = c->id;
+            n++;
+        }
+    }
+    (*nout) = n;
+    return 0;
+}
+static int lver_cmp(struct backend_lir_LModule * l, struct backend_verify_lir_expect * exp, int nexp, int * ids, int nids, int file, int line, int col) {
+    int i;
+    int j = 0;
+    for (i = 0; i < nids; i++) {
+        struct backend_lir_ct_lstmt * s;
+        if (((ids[i] <= 0) || (ids[i] > l->nstmts))) {
+            lfail(l, file, line, col, "E-IR-106", "a cleanup set names no statement");
+            return 1;
+        }
+        s = (&l->stmts[(ids[i] - 1)]);
+        if ((((s->kind != LS_DEFER_RUN) && (s->kind != LS_ERRDEFER_RUN)) && (s->kind != LS_DROP))) {
+            continue;
+        }
+        if (j >= nexp) {
+            lfail(l, file, line, col, "E-IR-106", "a cleanup statement is not in the recomputed exit set");
+            return 1;
+        }
+        if (((exp[j].kind != s->kind) || (exp[j].origin != s->origin))) {
+            lfail(l, file, line, col, "E-IR-106", "the cleanup set does not match the recomputed exit order");
+            return 1;
+        }
+        j++;
+    }
+    if (j != nexp) {
+        lfail(l, file, line, col, "E-IR-106", "the cleanup set is missing an entry");
+        return 1;
+    }
+    return 0;
+}
+static int lver_v7_set(struct backend_lir_LModule * l, int * ids, int nids, int error_edge, int file, int line, int col) {
+    int i;
+    int j;
+    for (i = 0; i < nids; i++) {
+        struct backend_lir_ct_lstmt * s;
+        if (((ids[i] <= 0) || (ids[i] > l->nstmts))) {
+            continue;
+        }
+        s = (&l->stmts[(ids[i] - 1)]);
+        if (((s->kind == LS_ERRDEFER_RUN) && (!error_edge))) {
+            lfail(l, file, line, col, "E-IR-107", "an errdefer runs on a normal exit");
+        }
+        if ((((s->kind != LS_DEFER_RUN) && (s->kind != LS_ERRDEFER_RUN)) && (s->kind != LS_DROP))) {
+            continue;
+        }
+        for (j = 0; j < i; j++) {
+            struct backend_lir_ct_lstmt * p;
+            if (((ids[j] <= 0) || (ids[j] > l->nstmts))) {
+                continue;
+            }
+            p = (&l->stmts[(ids[j] - 1)]);
+            if (((p->kind == s->kind) && (p->origin == s->origin))) {
+                lfail(l, file, line, col, "E-IR-107", "the exit repeats a cleanup entry");
+                break;
+            }
+        }
+    }
+    return 0;
+}
+static int lver_declared(struct backend_lir_LModule * l, struct backend_lir_ct_lfunc * f, const char * name) {
+    int i;
+    int j;
+    if (((!name) || (!name[0]))) {
+        return 0;
+    }
+    for (i = 0; i < f->nparams; i++) {
+        if ((f->params[i].name && (strcmp(f->params[i].name, name) == 0))) {
+            return 1;
+        }
+    }
+    for (i = 0; i < f->nblocks; i++) {
+        struct backend_lir_ct_lblock * b;
+        if (((f->blocks[i] <= 0) || (f->blocks[i] > l->nblocks))) {
+            continue;
+        }
+        b = (&l->blocks[(f->blocks[i] - 1)]);
+        for (j = 0; j < b->nstmts; j++) {
+            struct backend_lir_ct_lstmt * s;
+            if (((b->stmts[j] <= 0) || (b->stmts[j] > l->nstmts))) {
+                continue;
+            }
+            s = (&l->stmts[(b->stmts[j] - 1)]);
+            if ((((s->kind == LS_DECL) && s->name) && (strcmp(s->name, name) == 0))) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int lver_v8_set(struct backend_lir_LModule * l, struct backend_lir_ct_lfunc * f, int * ids, int nids, int file, int line, int col) {
+    int i;
+    int j;
+    for (i = 0; i < nids; i++) {
+        struct backend_lir_ct_lstmt * s;
+        if (((ids[i] <= 0) || (ids[i] > l->nstmts))) {
+            continue;
+        }
+        s = (&l->stmts[(ids[i] - 1)]);
+        if (s->kind != LS_DROP) {
+            continue;
+        }
+        if ((!lver_declared(l, f, s->name))) {
+            lfail(l, file, line, col, "E-IR-108", "a drop names an object that is not declared here");
+        }
+        for (j = 0; j < i; j++) {
+            struct backend_lir_ct_lstmt * p;
+            if (((ids[j] <= 0) || (ids[j] > l->nstmts))) {
+                continue;
+            }
+            p = (&l->stmts[(ids[j] - 1)]);
+            if (((((p->kind == LS_DROP) && p->name) && s->name) && (strcmp(p->name, s->name) == 0))) {
+                lfail(l, file, line, col, "E-IR-108", "the exit drops the same object twice");
+                break;
+            }
+        }
+    }
+    return 0;
+}
+static int lver_tmp_prefix_ok(const char * nm) {
+    const char * p;
+    if ((!nm)) {
+        return 0;
+    }
+    if (strncmp(nm, "__ct_", 5) != 0) {
+        return 0;
+    }
+    p = (nm + 5);
+    if (strncmp(p, "tmp", 3) == 0) {
+        p += 3;
+    }
+    else {
+        if (strncmp(p, "recv", 4) == 0) {
+            p += 4;
+        }
+        else {
+            if (strncmp(p, "opt", 3) == 0) {
+                p += 3;
+            }
+            else {
+                if (strncmp(p, "ret", 3) == 0) {
+                    p += 3;
+                }
+                else {
+                    if (strncmp(p, "sret", 4) == 0) {
+                        p += 4;
+                    }
+                    else {
+                        if (strncmp(p, "new", 3) == 0) {
+                            p += 3;
+                        }
+                        else {
+                            return 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ((!(*p))) {
+        return 0;
+    }
+    while ((*p)) {
+        if ((((*p) < '0') || ((*p) > '9'))) {
+            return 0;
+        }
+        p++;
+    }
+    return 1;
+}
+static int lver_v5(struct backend_lir_LModule * l) {
+    int i;
+    int j;
+    for (i = 0; i < l->ntemps; i++) {
+        struct backend_lir_ct_ltemp * t = (&l->temps[i]);
+        if ((!lver_tmp_prefix_ok(t->name))) {
+            lfail(l, 0, 0, 0, "E-IR-105", "a temporary does not use a compiler prefix");
+            continue;
+        }
+        if (((t->decl_block <= 0) || (t->decl_block > l->nblocks))) {
+            lfail(l, 0, 0, 0, "E-IR-105", "a temporary is declared outside every block");
+            continue;
+        }
+        for (j = 0; j < i; j++) {
+            if (((l->temps[j].name && t->name) && (strcmp(l->temps[j].name, t->name) == 0))) {
+                lfail(l, 0, 0, 0, "E-IR-105", "two temporaries share one name");
+                break;
+            }
+        }
+    }
+    for (i = 0; i < l->nfuncs; i++) {
+        struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
+        if ((!f->ok)) {
+            continue;
+        }
+        for (j = 0; j < f->nblocks; j++) {
+            struct backend_lir_ct_lblock * b;
+            if (((f->blocks[j] <= 0) || (f->blocks[j] > l->nblocks))) {
+                continue;
+            }
+            b = (&l->blocks[(f->blocks[j] - 1)]);
+            if (b->ret_temp <= 0) {
+                continue;
+            }
+            if (b->ret_temp > l->ntemps) {
+                lfail(l, b->span.file, b->span.line, b->span.col, "E-IR-105", "a return names a temporary that does not exist");
+            }
+            else {
+                if (l->temps[(b->ret_temp - 1)].decl_block != b->id) {
+                    lfail(l, b->span.file, b->span.line, b->span.col, "E-IR-105", "a temporary is used outside its declaring block");
+                }
+            }
+        }
+    }
+    return 0;
+}
+static void lver_fault(struct backend_lir_LModule * l, const char * key) {
+    int i;
+    int j;
+    if (strcmp(key, "ir-v5-temp-cross-scope") == 0) {
+        if (l->ntemps > 0) {
+            l->temps[0].decl_block = 0;
+        }
+        return;
+    }
+    if (strcmp(key, "ir-v6-cleanup-mismatch") == 0) {
+        for (i = 0; i < l->nblocks; i++) {
+            struct backend_lir_ct_lblock * b = (&l->blocks[i]);
+            if (b->ntermc > 0) {
+                b->ntermc--;
+                return;
+            }
+            if (b->ntail > 0) {
+                b->ntail--;
+                return;
+            }
+        }
+        return;
+    }
+    if (strcmp(key, "ir-v7-errdefer-normal") == 0) {
+        struct backend_lir_ct_lcleanup * c = 0;
+        for (j = 0; j < l->ncleanups; j++) {
+            if (l->cleanups[j].kind == CL_ERRDEFER) {
+                c = (&l->cleanups[j]);
+                break;
+            }
+        }
+        if ((!c)) {
+            return;
+        }
+        for (i = 0; i < l->nblocks; i++) {
+            struct backend_lir_ct_lblock * b = (&l->blocks[i]);
+            int blk;
+            int sid;
+            if (((b->ntail == 0) && (b->ntermc == 0))) {
+                continue;
+            }
+            blk = backend_lir_lmod_new_block(l, LB_DEFER_BODY, c->scope, 0);
+            sid = backend_lir_lmod_new_stmt(l, LS_ERRDEFER_RUN, 0, 0, 0);
+            if (((blk <= 0) || (sid <= 0))) {
+                return;
+            }
+            l->stmts[(sid - 1)].body_blk = blk;
+            l->stmts[(sid - 1)].origin = c->id;
+            if (b->ntail > 0) {
+                backend_lir_lmod_block_add_tail(l, (i + 1), sid);
+            }
+            else {
+                backend_lir_lmod_block_add_cleanup(l, (i + 1), sid);
+            }
+            return;
+        }
+        return;
+    }
+    if (strcmp(key, "ir-v8-double-drop") == 0) {
+        for (i = 0; i < l->nfuncs; i++) {
+            struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
+            const char * name = 0;
+            if ((!f->ok)) {
+                continue;
+            }
+            if (f->nparams > 0) {
+                name = f->params[0].name;
+            }
+            if ((!name)) {
+                for (j = 0; ((j < f->nblocks) && (!name)); j++) {
+                    struct backend_lir_ct_lblock * b;
+                    int k;
+                    if (((f->blocks[j] <= 0) || (f->blocks[j] > l->nblocks))) {
+                        continue;
+                    }
+                    b = (&l->blocks[(f->blocks[j] - 1)]);
+                    for (k = 0; k < b->nstmts; k++) {
+                        struct backend_lir_ct_lstmt * s;
+                        if (((b->stmts[k] <= 0) || (b->stmts[k] > l->nstmts))) {
+                            continue;
+                        }
+                        s = (&l->stmts[(b->stmts[k] - 1)]);
+                        if (((s->kind == LS_DECL) && s->name)) {
+                            name = s->name;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ((!name)) {
+                continue;
+            }
+            for (j = 0; j < 2; j++) {
+                int sid = backend_lir_lmod_new_stmt(l, LS_DROP, 0, 0, 0);
+                if (sid <= 0) {
+                    return;
+                }
+                l->stmts[(sid - 1)].name = name;
+                backend_lir_lmod_block_add_tail(l, f->root, sid);
+            }
+            return;
+        }
+        return;
+    }
+}
+static void lver_block(struct backend_lir_LModule * l, struct backend_lir_ct_lfunc * f, int bid) {
+    struct backend_lir_ct_lblock * b;
+    struct backend_verify_lir_expect exp[LEXP_MAX];
+    int chain[LX_MAX_CHAIN];
+    int nchain = 0;
+    int nexp = 0;
+    int i;
+    if (((bid <= 0) || (bid > l->nblocks))) {
+        return;
+    }
+    b = (&l->blocks[(bid - 1)]);
+    chain[0] = b->scope;
+    if (lver_expect(l, chain, 1, 0, 1, 0, 0, exp, (&nexp)) == 0) {
+        lver_cmp(l, exp, nexp, b->tail_cleanups, b->ntail, b->span.file, b->span.line, b->span.col);
+        lver_v7_set(l, b->tail_cleanups, b->ntail, 0, b->span.file, b->span.line, b->span.col);
+        lver_v8_set(l, f, b->tail_cleanups, b->ntail, b->span.file, b->span.line, b->span.col);
+    }
+    if (b->term == LT_RETURN) {
+        nchain = 0;
+        lver_chain(l, b->scope, 0, SC_FUNC, chain, (&nchain));
+        nexp = 0;
+        if (lver_expect(l, chain, nchain, b->term_err, 0, b->span.line, b->span.col, exp, (&nexp)) == 0) {
+            lver_cmp(l, exp, nexp, b->term_cleanups, b->ntermc, b->span.file, b->span.line, b->span.col);
+            lver_v7_set(l, b->term_cleanups, b->ntermc, b->term_err, b->span.file, b->span.line, b->span.col);
+            lver_v8_set(l, f, b->term_cleanups, b->ntermc, b->span.file, b->span.line, b->span.col);
+        }
+    }
+    for (i = 0; i < b->nstmts; i++) {
+        struct backend_lir_ct_lstmt * s;
+        int target_scope;
+        int stop_scope;
+        if (((b->stmts[i] <= 0) || (b->stmts[i] > l->nstmts))) {
+            continue;
+        }
+        s = (&l->stmts[(b->stmts[i] - 1)]);
+        if (s->kind != LS_JUMP) {
+            continue;
+        }
+        stop_scope = 0;
+        if (((s->target > 0) && (s->target <= l->nblocks))) {
+            stop_scope = l->blocks[(s->target - 1)].scope;
+        }
+        target_scope = ((s->scope > 0) ? s->scope : b->scope);
+        nchain = 0;
+        if (stop_scope > 0) {
+            lver_chain(l, target_scope, stop_scope, 0, chain, (&nchain));
+        }
+        else {
+            lver_chain(l, target_scope, 0, SC_FUNC, chain, (&nchain));
+        }
+        nexp = 0;
+        if (lver_expect(l, chain, nchain, s->err_edge, 0, s->span.line, s->span.col, exp, (&nexp)) == 0) {
+            lver_cmp(l, exp, nexp, s->cleanups, s->ncleanups, s->span.file, s->span.line, s->span.col);
+            lver_v7_set(l, s->cleanups, s->ncleanups, s->err_edge, s->span.file, s->span.line, s->span.col);
+            lver_v8_set(l, f, s->cleanups, s->ncleanups, s->span.file, s->span.line, s->span.col);
+        }
+    }
+}
+int backend_verify_ct_lir_verify(struct backend_lir_LModule * l) {
+    const char * fault;
+    int i;
+    int j;
+    backend_verify_g_lir_errors = 0;
+    if ((!l)) {
+        return (-1);
+    }
+    fault = getenv("CT_LIR_FAULT");
+    if ((fault && fault[0])) {
+        lver_fault(l, fault);
+    }
+    lver_v5(l);
+    for (i = 0; i < l->nfuncs; i++) {
+        struct backend_lir_ct_lfunc * f = (&l->funcs[i]);
+        if ((!f->ok)) {
+            continue;
+        }
+        for (j = 0; j < f->nblocks; j++) {
+            lver_block(l, f, f->blocks[j]);
+        }
+    }
+    if (backend_verify_g_lir_errors > 0) {
+        fprintf(stderr, "lir: verifier: %d LIR invariant failure(s) in this unit\n", backend_verify_g_lir_errors);
         return (-1);
     }
     return 0;

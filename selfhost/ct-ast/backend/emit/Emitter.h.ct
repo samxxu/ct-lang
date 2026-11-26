@@ -5825,6 +5825,9 @@ static int em_node_defer_run(struct Emitter *self, int n, int ind, int nk)
 {
     (void)nk;
 
+    /* S1b-S2: aux >= 3 is the source-ordered metadata copy TIR reads; it is
+       never a normal-exit run, so it prints nothing. */
+    if (self->arena->nodes[n].aux >= 3) return 0;
     return self->emit_node(self->arena->nodes[n].a, ind);
 }
 
@@ -8784,6 +8787,9 @@ impl EmitOps for Emitter {
         (void)self;
 
         for (; n >= 0; n = self->arena->nodes[n].next) {
+            /* a TIR metadata copy is not part of the emitted body */
+            if (self->arena->nodes[n].kind == N_DEFER_RUN
+                && self->arena->nodes[n].aux >= 3) continue;
             if (self->arena->nodes[n].kind == N_VAR && strcmp(self->arena->nodes[n].text2, name) == 0)
                 return 1;
             if (self->node_mentions(self->arena->nodes[n].a, name)) return 1;

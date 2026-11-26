@@ -4,6 +4,7 @@
 #include "ModuleBoundary.h"
 #include "Emitter.h"
 #include "TBuilder.h"
+#include "Lower.h"
 #include "Memory.h"
 #include "Lexer.h"
 #include "Module.h"
@@ -90,7 +91,20 @@ struct backend_tir_ct_tedge;
 struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
 struct backend_verify_Verifier;
+struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
@@ -103,6 +117,7 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
+struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -503,6 +518,23 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
             _self->m->emit_c = 1;
             continue;
         }
+        if (strncmp(argv[i], "--ir=", 5) == 0) {
+            const char * v = (argv[i] + 5);
+            if (strcmp(v, "on") == 0) {
+                backend_lir_ct_lir_set_switch(1);
+                continue;
+            }
+            if (strcmp(v, "off") == 0) {
+                backend_lir_ct_lir_set_switch(0);
+                continue;
+            }
+            if (strcmp(v, "shadow") == 0) {
+                backend_lir_ct_lir_set_switch(2);
+                continue;
+            }
+            fprintf(stderr, "ctc: unknown --ir value '%s' (on/off/shadow)\n", v);
+            return 1;
+        }
         if (strcmp(argv[i], "--freestanding") == 0) {
             _self->m->freestanding = 1;
             continue;
@@ -829,8 +861,15 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         }
         return 0;
     }
-    if ((backend_tir_ct_tir_shadow_on() && (backend_tir_ct_tir_shadow_program(prog, in, _self->p->c_base, "", _self->p->unit_is_hdr, _self->p->unit_is_map) != 0))) {
-        return 1;
+    if (backend_lir_ct_lir_on()) {
+        if (backend_lir_ct_lir_build_program(prog, in, _self->p->c_base, "", _self->p->unit_is_hdr, _self->p->unit_is_map) != 0) {
+            return 1;
+        }
+    }
+    else {
+        if ((backend_tir_ct_tir_shadow_on() && (backend_tir_ct_tir_shadow_program(prog, in, _self->p->c_base, "", _self->p->unit_is_hdr, _self->p->unit_is_map) != 0))) {
+            return 1;
+        }
     }
     f = fopen(out, "w");
     if ((!f)) {
@@ -862,10 +901,19 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     if (_self->m->line_mode) {
         fprintf(_self->out, "#line 1 \"%s\"\n", _self->m->path);
     }
-    if (_self->m->__frontend_module_moduleops_vptr->emit_program(_self->m, prog) != 0) {
-        fclose(f);
-        remove(out);
-        return frontend_parse_ct_parse_report();
+    if (((((((((backend_lir_ct_lir_on() && backend_lir_ct_lir_emit_on()) && backend_lir_ct_lir_ready()) && (!_self->m->line_mode)) && (!_self->m->have_map)) && (!_self->m->have_model)) && (!_self->m->abi_mode)) && (!_self->p->unit_is_hdr)) && (!_self->p->unit_is_map))) {
+        if (backend_lir_ct_lir_emit(_self->out) != 0) {
+            fclose(f);
+            remove(out);
+            return frontend_parse_ct_parse_report();
+        }
+    }
+    else {
+        if (_self->m->__frontend_module_moduleops_vptr->emit_program(_self->m, prog) != 0) {
+            fclose(f);
+            remove(out);
+            return frontend_parse_ct_parse_report();
+        }
     }
     if (fclose(f) != 0) {
         fprintf(stderr, "ctc: cannot write '%s'%s\n", out, (_self->m->diag_codes ? " [E-DRIVER-004]" : ""));

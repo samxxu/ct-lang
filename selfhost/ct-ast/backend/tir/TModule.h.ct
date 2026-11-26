@@ -255,6 +255,10 @@ pub struct ct_tdecl {
     int tcap;
     int abi;
     int unit;
+    int body;           /* TStmt id of a function's body, 0 elsewhere (S1b-S2) */
+    int is_static;      /* the source spelled `static` on the definition */
+    int is_inline;      /* the source spelled `inline` */
+    int is_vararg;      /* the parameter list ends in `...` */
 }
 
 pub struct ct_ttype {
@@ -284,6 +288,13 @@ pub struct ct_texpr {
     int target_a;
     int target_b;
     const char *target_key;
+    /* S1b-S2: the C-shaped facts a lowering needs. `text` is a literal's
+       spelling, a field/member name, a cast/sizeof type or a callee name;
+       `num` is an integer literal's value; `op` is the operator code of a
+       binary / unary / postfix / prefix / assignment row. */
+    const char *text;
+    long num;
+    int op;
 }
 
 pub struct ct_tstmt {
@@ -295,6 +306,9 @@ pub struct ct_tstmt {
     int nkids;
     int kcap;
     int aux;
+    int err_edge;       /* `return err:` / `break err:` / `continue err:` */
+    int flags;          /* per-kind child-shape bitmask (S1b-S2, see TBuilder) */
+    const char *text;   /* goto / label name (S1b-S2) */
 }
 
 pub struct ct_tscope {
@@ -318,6 +332,7 @@ pub struct ct_tvar {
     int decl;           /* file-scope TDecl id for a global, 0 for a local */
     int decl_stmt;      /* TStmt id of the declaration, for retro-attribution */
     int is_param;
+    int is_ref;         /* `ref` / `out`: the C spelling is a pointer */
 }
 
 pub struct ct_tcleanup {

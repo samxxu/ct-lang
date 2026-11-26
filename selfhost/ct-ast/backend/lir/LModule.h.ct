@@ -1,0 +1,792 @@
+/*
+ * LModule.h.ct - the LIR object model (S1b-S2, docs/design/tir-lir-contract.md §4).
+ *
+ * LIR is the lowered, C-shaped form: a function owns blocks, a block owns
+ * statements and (at most) one terminator, an expression is a C-shaped tree,
+ * and every temporary, type spelling and raw fragment is a row here. The
+ * emitter that prints it reads only this module, never the AST, the symbol
+ * table or the type pass (contract §6).
+ *
+ * Scope of this stage: the S2 subset. Blocks are C compound blocks and the
+ * structured C statements (`if` / `while` / `for`) are kept as statement
+ * kinds that reference child blocks; the terminator vocabulary is used for
+ * the exits (`return`, `break` / `continue` as `Jump`, `if` / `while`
+ * conditions as `CondJump`, `switch`, `goto`). S8 expands the structured
+ * forms into plain basic blocks; that is a printing problem (a C printer
+ * would have to reconstruct the braces), so it is out of S2 and recorded in
+ * test/ir/README.md as remaining work.
+ *
+ * Every exit carries its explicit cleanup set as statements
+ * (`DeferRun` / `ErrDeferRun` / `Drop`), materialised by the lowerer and
+ * recomputed independently by verifier V6. The temporary numbering mirrors
+ * the current emitter exactly: one module-wide counter, prefixes
+ * `__ct_tmpN`, `__ct_recvN`, `__ct_optN`, `__ct_retN`, `__ct_sretN`; a
+ * function does not restart it (contract §4.2 says "per function", the code
+ * says module-wide -- byte-identical output wins, the difference is recorded).
+ *
+ * All references are `int` ids, `0` means "none", ids are never reused.
+ * Arrays append in source order; the pool is process scoped and is released
+ * with the process. Tables grow to `CAP_LIMIT` / `NODE_LIMIT` (S1a-0).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+import runtime::text::Intern;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define CAP_LIMIT 65536
+#define NODE_LIMIT 16777216
+
+namespace backend::lir;
+
+/* ------------------------------------------------------------------------- */
+/* Expression kinds: the C-shaped tree (contract §4.1 / §4.2).               */
+/* ------------------------------------------------------------------------- */
+#define LE_NUM              1
+#define LE_FNUM             2
+#define LE_STR              3
+#define LE_NAME             4
+#define LE_FIELD            5
+#define LE_ARROW            6
+#define LE_INDEX            7
+#define LE_DEREF            8
+#define LE_ADDR             9
+#define LE_CAST            10
+#define LE_UNARY           11
+#define LE_BINARY          12
+#define LE_ASSIGN          13
+#define LE_CALL            14
+#define LE_INTRINSIC       15
+#define LE_POST            16
+#define LE_PRE             17
+#define LE_TERN            18
+#define LE_TEMP            19
+
+/* Binary / unary / assignment operator codes: the AST's, copied so the
+   printing tables stay one table (Arena.h.ct is authoritative). */
+#define LB_ADD              0
+#define LB_SUB              2
+#define LB_MUL              3
+#define LB_DIV              4
+#define LB_LT               5
+#define LB_GT               6
+#define LB_LE               7
+#define LB_GE               8
+#define LB_EQ               9
+#define LB_NE              10
+#define LB_MOD             11
+#define LB_AND             12
+#define LB_OR              13
+#define LB_XOR             14
+#define LB_BAND            15
+#define LB_BOR             16
+#define LB_SHL             17
+#define LB_SHR             18
+#define LB_COMMA           19
+#define LU_NEG              1
+#define LU_NOT              2
+#define LU_BNOT             3
+#define LP_INC              1
+
+/* Statement kinds (contract §4.1 plus the structured C forms of the subset;
+   `Block`/`If`/`While`/`For`/`Jump`/`Goto`/`Label`/`Empty` are the C shapes
+   the printing stage needs and the verifier checks). */
+#define LS_DECL             1
+#define LS_ASSIGN           2
+#define LS_EXPR             3
+#define LS_DROP             4
+#define LS_DEFER_RUN        5
+#define LS_ERRDEFER_RUN     6
+#define LS_RAWC             7
+#define LS_BLOCK            8
+#define LS_IF               9
+#define LS_WHILE           10
+#define LS_FOR             11
+#define LS_JUMP            12
+#define LS_GOTO            13
+#define LS_LABEL           14
+#define LS_SWITCH          15
+#define LS_CASE            16
+#define LS_EMPTY           17
+
+/* Jump kinds. */
+#define LJ_BREAK            1
+#define LJ_CONTINUE         2
+
+/* Block kinds: what the braces are. */
+#define LB_ROOT             1
+#define LB_BLOCK            2
+#define LB_THEN             3
+#define LB_ELSE             4
+#define LB_WHILE_BODY       5
+#define LB_FOR_BODY         6
+#define LB_DO_BODY          7
+#define LB_DEFER_BODY       8
+
+/* Terminators (contract §4.1): `Jump` / `CondJump` / `Switch` / `Return` /
+   `Goto`. `LT_NONE` is a block with no terminator (falls out). */
+#define LT_NONE             0
+#define LT_RETURN           1
+#define LT_JUMP             2
+#define LT_CONDJUMP         3
+#define LT_SWITCH           4
+#define LT_GOTO             5
+
+/* Temporary kinds: one prefix each, one module-wide counter. */
+#define LTK_TMP             1
+#define LTK_RECV            2
+#define LTK_OPT             3
+#define LTK_RET             4
+#define LTK_SRET            5
+#define LTK_NEW             6
+
+/* RawC origins (contract §4.1). */
+#define LR_INCLUDE          1
+#define LR_RECIPE           2
+#define LR_INTRINSIC        3
+
+/* Type kinds for the spelling table. */
+#define LTY_OTHER           0
+#define LTY_VOID            1
+#define LTY_PRIM            2
+#define LTY_PTR             3
+#define LTY_STRUCT          4
+#define LTY_UNION           5
+#define LTY_ENUM            6
+#define LTY_FN              7
+#define LTY_INST            8
+
+/* Exit facts, used by the cleanup bookkeeping in the verifier (V6/V7). */
+#define LX_FALL             1
+#define LX_RETURN           2
+#define LX_RETURN_ERR       3
+#define LX_BREAK            4
+#define LX_BREAK_ERR        5
+#define LX_CONTINUE         6
+#define LX_CONTINUE_ERR     7
+#define LX_GOTO             8
+
+/* ------------------------------------------------------------------------- */
+/* Value rows.                                                               */
+/* ------------------------------------------------------------------------- */
+pub struct ct_lspan {
+    int file;
+    int line;
+    int col;
+}
+
+pub struct ct_ltype {
+    int id;
+    int kind;
+    const char *cspell;
+}
+
+pub struct ct_lexpr {
+    int id;
+    int kind;
+    int type;
+    int *kids;
+    int nkids;
+    int kcap;
+    const char *text;   /* literal spelling / name / field / callee / cast type */
+    long num;           /* integer literal value */
+    int op;             /* operator code */
+    struct ct_lspan span;
+}
+
+pub struct ct_lstmt {
+    int id;
+    int kind;
+    int *kids;
+    int nkids;
+    int kcap;
+    int aux;            /* assignment op / jump kind / drop kind */
+    int type;           /* declared type for LS_DECL, pointee for LS_DROP */
+    const char *name;   /* declared name (LS_DECL), label (LS_GOTO/LS_LABEL) */
+    int expr;           /* init / lhs / value / condition / subject */
+    int rhs;            /* assignment rhs */
+    int cond;
+    int then_blk;
+    int else_blk;
+    int body_blk;
+    int init_stmt;
+    int step;
+    int target;         /* jump target block id */
+    int *cleanups;      /* explicit cleanup set at an exit */
+    int ncleanups;
+    int ccap;
+    int scope;          /* TScope id of the enclosing block */
+    int origin;         /* cleanup entry id (LModule.cleanups) this statement came from */
+    int err_edge;       /* the exit is the `err:` form */
+    struct ct_lspan span;
+}
+
+pub struct ct_lblock {
+    int id;
+    int kind;
+    int scope;          /* TScope id of this block */
+    int parent;         /* enclosing block id, 0 for the function root */
+    int *stmts;
+    int nstmts;
+    int scap;
+    int term;           /* LT_* */
+    int term_target;    /* block id for LT_JUMP / LT_GOTO */
+    int term_scope;     /* target scope of the terminator (0 = function root) */
+    int ret_expr;       /* LT_RETURN value expression, 0 for `return;` */
+    int ret_temp;       /* LTemp id materialising the value, 0 = none */
+    int term_err;       /* LT_RETURN uses the error edge */
+    int *term_cleanups;
+    int ntermc;
+    int tccap;
+    int *tail_cleanups; /* normal-exit cleanup, printed after `stmts` */
+    int ntail;
+    int tcap;
+    int tir_stmt;       /* TStmt id this block came from (0 = synthetic) */
+    struct ct_lspan span;
+}
+
+pub struct ct_ltemp {
+    int id;
+    int kind;
+    int type;
+    int decl_block;
+    const char *name;
+    struct ct_lspan span;
+}
+
+pub struct ct_lrawc {
+    int id;
+    int origin;
+    int trusted;
+    const char *text;
+    struct ct_lspan span;
+}
+
+pub struct ct_lparam {
+    const char *name;
+    int type;
+    int is_ref;         /* `ref` / `out`: the C spelling is a pointer */
+}
+
+pub struct ct_lfunc {
+    int id;
+    const char *name;
+    int ret;
+    struct ct_lparam *params;
+    int nparams;
+    int pcap;
+    int *blocks;
+    int nblocks;
+    int bcap;
+    int root;
+    int decl;           /* TDecl id */
+    int ok;             /* the whole function lowered; the verifier skips it otherwise */
+    int is_static;
+    struct ct_lspan span;
+}
+
+/* A copy of the TIR cleanup table (contract §4.3): the verifier recomputes
+   `exit(scope)` from these rows and compares it with the materialised
+   statements, so it never trusts the lowerer's own walk. */
+pub struct ct_lcleanup {
+    int id;
+    int kind;           /* CL_* (TModule values) */
+    int body_stmt;      /* TStmt id of the deferred body */
+    int on_error;
+    int scope;
+    struct ct_lspan span;
+}
+
+pub struct ct_lscope {
+    int id;
+    int parent;
+    int kind;           /* SC_* (TModule values) */
+    int *cleanups;
+    int ncleanups;
+    int ccap;
+}
+
+pub struct LModule {
+    struct ct_lfunc *funcs;
+    int nfuncs;
+    int fcap;
+    struct ct_ltype *types;
+    int ntypes;
+    int tcap;
+    struct ct_lexpr *exprs;
+    int nexprs;
+    int ecap;
+    struct ct_lstmt *stmts;
+    int nstmts;
+    int scap;
+    struct ct_lblock *blocks;
+    int nblocks;
+    int bcap;
+    struct ct_ltemp *temps;
+    int ntemps;
+    int tmpcap;
+    struct ct_lrawc *rawcs;
+    int nrawcs;
+    int rcap;
+    struct ct_lcleanup *cleanups;
+    int ncleanups;
+    int ccap;
+    struct ct_lscope *scopes;
+    int nscopes;
+    int sccap;
+    int *decls;         /* program order: LFunc ids */
+    int ndecls;
+    int dcap;
+    const char **headers;
+    int nheaders;
+    int hcap;
+    int tmp_next;       /* module-wide temporary counter (mirrors Emitter.ntmp) */
+    int ready;          /* 1 = the whole unit lowered, so LIR may print it */
+    int enabled;        /* the switch is on */
+    int emitting;       /* printing in progress */
+    const char *free_sym;
+    /* coverage counters for the report */
+    int stat_funcs;
+    int stat_blocks;
+    int stat_stmts;
+    int stat_temps;
+    int stat_cleanups;
+    int stat_fallback;
+}
+
+static struct LModule g_lir;
+
+pub struct LModule *lmod_get(void);
+pub void lmod_reset(struct LModule *self);
+pub int lmod_type(struct LModule *self, const char *spelling);
+pub const char *lmod_cspell(struct LModule *self, int tid);
+pub int lmod_new_expr(struct LModule *self, int kind, int file, int line, int col);
+pub int lmod_expr_add_kid(struct LModule *self, int expr, int kid);
+pub int lmod_new_stmt(struct LModule *self, int kind, int file, int line, int col);
+pub int lmod_stmt_add_kid(struct LModule *self, int stmt, int kid);
+pub int lmod_stmt_add_cleanup(struct LModule *self, int stmt, int kid);
+pub int lmod_new_block(struct LModule *self, int kind, int scope, int parent);
+pub int lmod_block_add_stmt(struct LModule *self, int block, int stmt);
+pub int lmod_block_add_cleanup(struct LModule *self, int block, int stmt);
+pub int lmod_block_add_tail(struct LModule *self, int block, int stmt);
+pub int lmod_new_func(struct LModule *self, const char *name, int ret, int decl);
+pub int lmod_func_add_param(struct LModule *self, int func, const char *name,
+                            int type, int is_ref);
+pub int lmod_func_add_block(struct LModule *self, int func, int block);
+pub int lmod_new_temp(struct LModule *self, int kind, int type, int decl_block);
+pub int lmod_new_rawc(struct LModule *self, int origin, int trusted, const char *text);
+pub int lmod_add_header(struct LModule *self, const char *text);
+pub int lmod_new_scope(struct LModule *self, int parent, int kind);
+pub int lmod_scope_add_cleanup(struct LModule *self, int scope, int kind,
+                               int body_stmt, int on_error, int file, int line,
+                               int col);
+pub int lmod_add_decl(struct LModule *self, int func);
+pub void lmod_report(struct LModule *self, const char *unit);
+
+/* ------------------------------------------------------------------------- */
+/* Tables                                                                    */
+/* ------------------------------------------------------------------------- */
+static int lir_reserve(void **slot, int *cap, int need, int row)
+{
+    int ncap;
+    void *grown;
+
+    if (need <= *cap) return 0;
+    ncap = *cap > 0 ? *cap * 2 : 32;
+    while (ncap < need && ncap < NODE_LIMIT) ncap *= 2;
+    if (ncap > NODE_LIMIT) ncap = NODE_LIMIT;
+    if (need > ncap) return -1;
+    grown = realloc(*slot, (size_t)ncap * (size_t)row);
+    if (!grown) return -1;
+    memset((char *)grown + (size_t)(*cap) * (size_t)row, 0,
+           (size_t)(ncap - *cap) * (size_t)row);
+    *slot = grown;
+    *cap = ncap;
+    return 0;
+}
+
+pub struct LModule *lmod_get(void)
+{
+    return &g_lir;
+}
+
+/* Compile mode runs once per process; the reset is for the harness and for a
+   future build-mode call that reuses the pool. */
+pub void lmod_reset(struct LModule *self)
+{
+    if (!self) return;
+    free(self->funcs);
+    free(self->types);
+    free(self->exprs);
+    free(self->stmts);
+    free(self->blocks);
+    free(self->temps);
+    free(self->rawcs);
+    free(self->cleanups);
+    free(self->scopes);
+    free(self->decls);
+    free(self->headers);
+    memset(self, 0, (size_t)sizeof(*self));
+    self->free_sym = "free";
+}
+
+static int lir_type_kind(const char *s)
+{
+    size_t n;
+
+    if (!s || !s[0] || strcmp(s, "void") == 0) return LTY_VOID;
+    if (strstr(s, "(*)")) return LTY_FN;
+    if (strncmp(s, "struct ", 7) == 0) return LTY_STRUCT;
+    if (strncmp(s, "union ", 6) == 0) return LTY_UNION;
+    if (strncmp(s, "enum ", 5) == 0) return LTY_ENUM;
+    if (strchr(s, '<')) return LTY_INST;
+    n = strlen(s);
+    if (n > 0 && s[n - 1] == '*') return LTY_PTR;
+    return LTY_PRIM;
+}
+
+pub int lmod_type(struct LModule *self, const char *spelling)
+{
+    int i, slot, id;
+    const char *cs;
+
+    if (!spelling) spelling = "";
+    for (i = 0; i < self->ntypes; i++)
+        if (strcmp(self->types[i].cspell, spelling) == 0) return self->types[i].id;
+    if (self->ntypes >= CAP_LIMIT) return -1;
+    if (lir_reserve((void **)&self->types, &self->tcap, self->ntypes + 1,
+                    (int)sizeof(struct ct_ltype)) != 0) return -1;
+    cs = runtime::text::ct_intern(spelling);
+    if (!cs) return -1;
+    slot = self->ntypes;
+    id = slot + 1;
+    self->types[slot].id = id;
+    self->types[slot].kind = lir_type_kind(spelling);
+    self->types[slot].cspell = cs;
+    self->ntypes++;
+    return id;
+}
+
+pub const char *lmod_cspell(struct LModule *self, int tid)
+{
+    if (tid <= 0 || tid > self->ntypes) return "";
+    return self->types[tid - 1].cspell;
+}
+
+pub int lmod_new_expr(struct LModule *self, int kind, int file, int line, int col)
+{
+    int slot, id;
+
+    if (lir_reserve((void **)&self->exprs, &self->ecap, self->nexprs + 1,
+                    (int)sizeof(struct ct_lexpr)) != 0) return -1;
+    slot = self->nexprs;
+    id = slot + 1;
+    self->exprs[slot].id = id;
+    self->exprs[slot].kind = kind;
+    self->exprs[slot].span.file = file;
+    self->exprs[slot].span.line = line;
+    self->exprs[slot].span.col = col;
+    self->nexprs++;
+    return id;
+}
+
+pub int lmod_expr_add_kid(struct LModule *self, int expr, int kid)
+{
+    struct ct_lexpr *e;
+
+    if (expr <= 0 || expr > self->nexprs) return -1;
+    e = &self->exprs[expr - 1];
+    if (lir_reserve((void **)&e->kids, &e->kcap, e->nkids + 1,
+                    (int)sizeof(int)) != 0) return -1;
+    e->kids[e->nkids] = kid;
+    e->nkids++;
+    return 0;
+}
+
+pub int lmod_new_stmt(struct LModule *self, int kind, int file, int line, int col)
+{
+    int slot, id;
+
+    if (lir_reserve((void **)&self->stmts, &self->scap, self->nstmts + 1,
+                    (int)sizeof(struct ct_lstmt)) != 0) return -1;
+    slot = self->nstmts;
+    id = slot + 1;
+    self->stmts[slot].id = id;
+    self->stmts[slot].kind = kind;
+    self->stmts[slot].span.file = file;
+    self->stmts[slot].span.line = line;
+    self->stmts[slot].span.col = col;
+    self->nstmts++;
+    return id;
+}
+
+pub int lmod_stmt_add_kid(struct LModule *self, int stmt, int kid)
+{
+    struct ct_lstmt *s;
+
+    if (stmt <= 0 || stmt > self->nstmts) return -1;
+    s = &self->stmts[stmt - 1];
+    if (lir_reserve((void **)&s->kids, &s->kcap, s->nkids + 1,
+                    (int)sizeof(int)) != 0) return -1;
+    s->kids[s->nkids] = kid;
+    s->nkids++;
+    return 0;
+}
+
+pub int lmod_stmt_add_cleanup(struct LModule *self, int stmt, int kid)
+{
+    struct ct_lstmt *s;
+
+    if (stmt <= 0 || stmt > self->nstmts) return -1;
+    s = &self->stmts[stmt - 1];
+    if (lir_reserve((void **)&s->cleanups, &s->ccap, s->ncleanups + 1,
+                    (int)sizeof(int)) != 0) return -1;
+    s->cleanups[s->ncleanups] = kid;
+    s->ncleanups++;
+    return 0;
+}
+
+pub int lmod_new_block(struct LModule *self, int kind, int scope, int parent)
+{
+    int slot, id;
+
+    if (lir_reserve((void **)&self->blocks, &self->bcap, self->nblocks + 1,
+                    (int)sizeof(struct ct_lblock)) != 0) return -1;
+    slot = self->nblocks;
+    id = slot + 1;
+    self->blocks[slot].id = id;
+    self->blocks[slot].kind = kind;
+    self->blocks[slot].scope = scope;
+    self->blocks[slot].parent = parent;
+    self->nblocks++;
+    return id;
+}
+
+pub int lmod_block_add_stmt(struct LModule *self, int block, int stmt)
+{
+    struct ct_lblock *b;
+
+    if (block <= 0 || block > self->nblocks) return -1;
+    b = &self->blocks[block - 1];
+    if (lir_reserve((void **)&b->stmts, &b->scap, b->nstmts + 1,
+                    (int)sizeof(int)) != 0) return -1;
+    b->stmts[b->nstmts] = stmt;
+    b->nstmts++;
+    return 0;
+}
+
+static int lir_add_int(int **arr, int *n, int *cap, int val)
+{
+    if (lir_reserve((void **)arr, cap, *n + 1, (int)sizeof(int)) != 0) return -1;
+    (*arr)[*n] = val;
+    (*n)++;
+    return 0;
+}
+
+pub int lmod_block_add_cleanup(struct LModule *self, int block, int stmt)
+{
+    struct ct_lblock *b;
+
+    if (block <= 0 || block > self->nblocks) return -1;
+    b = &self->blocks[block - 1];
+    return lir_add_int(&b->term_cleanups, &b->ntermc, &b->tccap, stmt);
+}
+
+pub int lmod_block_add_tail(struct LModule *self, int block, int stmt)
+{
+    struct ct_lblock *b;
+
+    if (block <= 0 || block > self->nblocks) return -1;
+    b = &self->blocks[block - 1];
+    return lir_add_int(&b->tail_cleanups, &b->ntail, &b->tcap, stmt);
+}
+
+pub int lmod_new_func(struct LModule *self, const char *name, int ret, int decl)
+{
+    int slot, id;
+
+    if (lir_reserve((void **)&self->funcs, &self->fcap, self->nfuncs + 1,
+                    (int)sizeof(struct ct_lfunc)) != 0) return -1;
+    slot = self->nfuncs;
+    id = slot + 1;
+    self->funcs[slot].id = id;
+    self->funcs[slot].name = runtime::text::ct_intern(name ? name : "");
+    self->funcs[slot].ret = ret;
+    self->funcs[slot].decl = decl;
+    self->nfuncs++;
+    return id;
+}
+
+pub int lmod_func_add_param(struct LModule *self, int func, const char *name,
+                            int type, int is_ref)
+{
+    struct ct_lfunc *f;
+
+    if (func <= 0 || func > self->nfuncs) return -1;
+    f = &self->funcs[func - 1];
+    if (lir_reserve((void **)&f->params, &f->pcap, f->nparams + 1,
+                    (int)sizeof(struct ct_lparam)) != 0) return -1;
+    f->params[f->nparams].name = runtime::text::ct_intern(name ? name : "");
+    f->params[f->nparams].type = type;
+    f->params[f->nparams].is_ref = is_ref;
+    f->nparams++;
+    return 0;
+}
+
+pub int lmod_func_add_block(struct LModule *self, int func, int block)
+{
+    struct ct_lfunc *f;
+
+    if (func <= 0 || func > self->nfuncs) return -1;
+    f = &self->funcs[func - 1];
+    if (lir_reserve((void **)&f->blocks, &f->bcap, f->nblocks + 1,
+                    (int)sizeof(int)) != 0) return -1;
+    f->blocks[f->nblocks] = block;
+    f->nblocks++;
+    return 0;
+}
+
+static const char *lir_tmp_prefix(int kind)
+{
+    switch (kind) {
+        case LTK_RECV: return "__ct_recv";
+        case LTK_OPT: return "__ct_opt";
+        case LTK_RET: return "__ct_ret";
+        case LTK_SRET: return "__ct_sret";
+        case LTK_NEW: return "__ct_new";
+        default: return "__ct_tmp";
+    }
+}
+
+/* One temporary. The number is the module-wide counter the current emitter
+   uses (`Emitter.ntmp`), so the printed name is byte-identical. */
+pub int lmod_new_temp(struct LModule *self, int kind, int type, int decl_block)
+{
+    int slot, id, n;
+    const char *nm;
+
+    if (self->ntemps >= CAP_LIMIT) return -1;
+    if (lir_reserve((void **)&self->temps, &self->tmpcap, self->ntemps + 1,
+                    (int)sizeof(struct ct_ltemp)) != 0) return -1;
+    slot = self->ntemps;
+    id = slot + 1;
+    n = self->tmp_next;
+    self->tmp_next++;
+    nm = runtime::text::ct_internf("%s%d", lir_tmp_prefix(kind), n);
+    if (!nm) return -1;
+    self->temps[slot].id = id;
+    self->temps[slot].kind = kind;
+    self->temps[slot].type = type;
+    self->temps[slot].decl_block = decl_block;
+    self->temps[slot].name = nm;
+    self->ntemps++;
+    return id;
+}
+
+pub int lmod_new_rawc(struct LModule *self, int origin, int trusted, const char *text)
+{
+    int slot, id;
+    const char *cs;
+
+    if (lir_reserve((void **)&self->rawcs, &self->rcap, self->nrawcs + 1,
+                    (int)sizeof(struct ct_lrawc)) != 0) return -1;
+    cs = runtime::text::ct_intern(text ? text : "");
+    if (!cs) return -1;
+    slot = self->nrawcs;
+    id = slot + 1;
+    self->rawcs[slot].id = id;
+    self->rawcs[slot].origin = origin;
+    self->rawcs[slot].trusted = trusted;
+    self->rawcs[slot].text = cs;
+    self->nrawcs++;
+    return id;
+}
+
+pub int lmod_add_header(struct LModule *self, const char *text)
+{
+    const char *cs;
+
+    if (lir_reserve((void **)&self->headers, &self->hcap, self->nheaders + 1,
+                    (int)sizeof(const char *)) != 0) return -1;
+    cs = runtime::text::ct_intern(text ? text : "");
+    if (!cs) return -1;
+    self->headers[self->nheaders] = cs;
+    self->nheaders++;
+    return 0;
+}
+
+pub int lmod_new_scope(struct LModule *self, int parent, int kind)
+{
+    int slot, id;
+
+    if (lir_reserve((void **)&self->scopes, &self->sccap, self->nscopes + 1,
+                    (int)sizeof(struct ct_lscope)) != 0) return -1;
+    slot = self->nscopes;
+    id = slot + 1;
+    self->scopes[slot].id = id;
+    self->scopes[slot].parent = parent;
+    self->scopes[slot].kind = kind;
+    self->nscopes++;
+    return id;
+}
+
+pub int lmod_scope_add_cleanup(struct LModule *self, int scope, int kind,
+                               int body_stmt, int on_error, int file, int line,
+                               int col)
+{
+    struct ct_lscope *s;
+    int slot, id;
+
+    if (scope <= 0 || scope > self->nscopes) return -1;
+    if (lir_reserve((void **)&self->cleanups, &self->ccap, self->ncleanups + 1,
+                    (int)sizeof(struct ct_lcleanup)) != 0) return -1;
+    s = &self->scopes[scope - 1];
+    if (lir_reserve((void **)&s->cleanups, &s->ccap, s->ncleanups + 1,
+                    (int)sizeof(int)) != 0) return -1;
+    slot = self->ncleanups;
+    id = slot + 1;
+    self->cleanups[slot].id = id;
+    self->cleanups[slot].kind = kind;
+    self->cleanups[slot].body_stmt = body_stmt;
+    self->cleanups[slot].on_error = on_error;
+    self->cleanups[slot].scope = scope;
+    self->cleanups[slot].span.file = file;
+    self->cleanups[slot].span.line = line;
+    self->cleanups[slot].span.col = col;
+    self->ncleanups++;
+    s->cleanups[s->ncleanups] = id;
+    s->ncleanups++;
+    return id;
+}
+
+pub int lmod_add_decl(struct LModule *self, int func)
+{
+    if (lir_reserve((void **)&self->decls, &self->dcap, self->ndecls + 1,
+                    (int)sizeof(int)) != 0) return -1;
+    self->decls[self->ndecls] = func;
+    self->ndecls++;
+    return 0;
+}
+
+/* The coverage line. Opt-in like the TIR report: `CT_LIR_REPORT=1`. */
+pub void lmod_report(struct LModule *self, const char *unit)
+{
+    const char *e;
+
+    e = getenv("CT_LIR_REPORT");
+    if (!e || !e[0]) return;
+    self->stat_funcs = self->nfuncs;
+    self->stat_blocks = self->nblocks;
+    self->stat_stmts = self->nstmts;
+    self->stat_temps = self->ntemps;
+    self->stat_cleanups = self->ncleanups;
+    fprintf(stderr,
+            "lir: unit=%s ready=%d funcs=%d blocks=%d stmts=%d exprs=%d"
+            " temps=%d cleanups=%d types=%d fallback=%d\n",
+            unit ? unit : "", self->ready, self->nfuncs, self->nblocks,
+            self->nstmts, self->nexprs, self->ntemps, self->ncleanups,
+            self->ntypes, self->stat_fallback);
+}

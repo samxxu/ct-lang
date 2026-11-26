@@ -93,7 +93,20 @@ struct backend_tir_ct_tedge;
 struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
 struct backend_verify_Verifier;
+struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
@@ -106,6 +119,7 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
+struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -478,6 +492,20 @@ static int frontend_parse_Stmt_frontend_parse_StmtDeferOps_defer_flush_block(voi
             return (-1);
         }
         _self->arena->nodes[r].aux = _self->arena->nodes[ids[k]].aux;
+        if ((*tail) < 0) {
+            _self->arena->nodes[blk].a = r;
+        }
+        else {
+            _self->arena->nodes[(*tail)].next = r;
+        }
+        (*tail) = r;
+    }
+    for (k = _self->defer_head[i]; k >= 0; k = _self->arena->nodes[k].next) {
+        int r = _self->__frontend_parse_stmtdeferops_vptr->defer_run_node(_self, _self->arena->nodes[k].a, _self->arena->nodes[k].line);
+        if (r < 0) {
+            return (-1);
+        }
+        _self->arena->nodes[r].aux = ((_self->arena->nodes[k].aux == 1) ? 4 : 3);
         if ((*tail) < 0) {
             _self->arena->nodes[blk].a = r;
         }

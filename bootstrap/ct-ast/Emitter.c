@@ -203,7 +203,20 @@ struct backend_tir_ct_tedge;
 struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
 struct backend_verify_Verifier;
+struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
@@ -216,6 +229,7 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
+struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -2153,6 +2167,9 @@ static int backend_emit_Emitter_backend_emit_EmitOps_node_mentions(void *self, i
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     (void)(_self);
     for (; n >= 0; n = _self->arena->nodes[n].next) {
+        if (((_self->arena->nodes[n].kind == N_DEFER_RUN) && (_self->arena->nodes[n].aux >= 3))) {
+            continue;
+        }
         if (((_self->arena->nodes[n].kind == N_VAR) && (strcmp(_self->arena->nodes[n].text2, name) == 0))) {
             return 1;
         }
@@ -9807,6 +9824,9 @@ static int em_node_func(struct backend_emit_Emitter * self, int n, int ind, int 
 }
 static int em_node_defer_run(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
+    if (self->arena->nodes[n].aux >= 3) {
+        return 0;
+    }
     return self->__backend_emit_emitops_vptr->emit_node(self, self->arena->nodes[n].a, ind);
 }
 static int em_node_defer(struct backend_emit_Emitter * self, int n, int ind, int nk) {

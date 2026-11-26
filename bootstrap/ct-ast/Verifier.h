@@ -11,6 +11,7 @@
 
 #include "Intern.h"
 #include "TModule.h"
+#include "LModule.h"
 
 
 struct ct_buf;
@@ -84,7 +85,20 @@ struct backend_tir_ct_tedge;
 struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
 struct backend_verify_Verifier;
+struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
 struct frontend_parse_MapBuild;
 struct frontend_parse_StmtRangeText;
@@ -97,6 +111,7 @@ struct frontend_parse_Parser;
 struct tool_cache_Cache;
 struct frontend_module_ModuleBoundary;
 struct frontend_module_Module;
+struct backend_lir_Lower;
 struct tool_pkg_PkgIndex;
 struct tool_pkg_IndexRow;
 struct tool_pkg_DepList;
@@ -110,7 +125,12 @@ struct tool_driver_Driver;
 struct backend_verify_Verifier {
     int errors;
 };
+struct backend_verify_lir_expect {
+    int kind;
+    int origin;
+};
 int backend_verify_ct_verifier_run(struct backend_tir_TModule *, int, struct backend_tir_ct_tmark *);
 int backend_verify_ct_verifier_errors(void);
+int backend_verify_ct_lir_verify(struct backend_lir_LModule *);
 
 #endif
