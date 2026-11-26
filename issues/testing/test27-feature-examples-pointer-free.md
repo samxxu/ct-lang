@@ -148,5 +148,6 @@ REQ 已把样例与文档面的剩余工作交给 **TEST/REVIEW**。以下是可
 | H4（部分） | `cd798dd7` | 3（README + snippet + expected） | 新增 `match`/ADT 片段；README 0.5.1；其余矩阵行未补 | `check-docs` 仅剩 D-013 既有死链；H4 未收口 |
 | H4（追加） | `fb355cf3` | 3（README + snippet + expected） | 新增 0.10 特性联展：泛型 struct/trait、函子、切片、ref/out、Box、Map；`match` 见 0.9 | `check-docs` 仅 D-013；E3 26 文件仍卡 LANG-30，S4–S6 样例卡 S5 |
 | H4（矩阵） | `05e43046` | 1（feature-examples-matrix） | 21 行补 README §0.3/0.5/0.6/0.7/0.8/0.9/0.10 来源 | 矩阵 A 轨覆盖已标注；第 8 行 S4–S6 仍待实现，E3 仍卡 LANG-30 |
+| H4（map 绑定） | `05e43046` 后一提交 | 3（README + snippet + expected） | 新增 0.11_map_binding；实测 uart1 -> 5 / uart2 -> 10 / sent 2 + 3 | 第 17 行 README §0.11 已补；E3/S4–S6 仍卡 |
 | H1（部分） | `aaf519fd` | 1（tutorial） | §15/§17/§22/§23 增加 examples 完整链接；§18 暂时不动（S5 在改 ADT 模式 B）；source/snippets 全量未做 | `check-docs` 仅 D-013；H1 未收口 |
 | H3（部分/标注） | `9c6f0d9c` | 1（idioms） | 新增 §11.1 C 互操作边界；原有 value 正文未逐条重写 | `check-docs` 仅 D-013；H3 标注完成、逐条版本仍可补 |
