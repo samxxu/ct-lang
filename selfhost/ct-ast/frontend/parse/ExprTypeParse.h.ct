@@ -1039,6 +1039,7 @@ impl ExprTypeParse for Expr {
         *out = "";
         buf = (char *)malloc(TEXT_LIMIT);
         if (!buf) return self->sup->fail("out of memory");
+        buf[0] = 0;                 /* parse_inst_type appends to `out` */
         rc = self->parse_inst_type(buf, TEXT_LIMIT);
         if (rc != 0) {
             free(buf);

@@ -432,8 +432,8 @@ static int ref_arg_place(struct Expr *self, int n)
    or struct. */
 static int type_is_owning(struct Expr *self, const char *type)
 {
-    char base[MAX_TEXT];
-    size_t bl, i;
+    const char *base;
+    size_t bl;
     int si;
 
     if (!type || !type[0]) return 0;
@@ -443,17 +443,13 @@ static int type_is_owning(struct Expr *self, const char *type)
         || strncmp(type, "Vec_", 4) == 0) return 1;
     if (strncmp(type, "Map<", 4) == 0 || strncmp(type, "struct Map_", 11) == 0
         || strncmp(type, "Map_", 4) == 0) return 1;
-    snprintf(base, sizeof base, "%s", type);
-    bl = strlen(base);
-    while (bl > 0 && base[bl - 1] == ' ') base[--bl] = 0;
-    if (bl > 0 && base[bl - 1] == '*') return 0;   /* a pointer is not owning */
-    if (strncmp(base, "struct ", 7) == 0) {
-        for (i = 0; base[i + 7] != 0; i++) base[i] = base[i + 7];
-        base[i] = 0;
-    } else if (strncmp(base, "union ", 6) == 0) {
-        for (i = 0; base[i + 6] != 0; i++) base[i] = base[i + 6];
-        base[i] = 0;
-    }
+    bl = strlen(type);
+    while (bl > 0 && type[bl - 1] == ' ') bl--;
+    if (bl > 0 && type[bl - 1] == '*') return 0;   /* a pointer is not owning */
+    base = runtime::text::ct_intern_len(type, (int)bl);
+    if (!base) return 0;
+    if (strncmp(base, "struct ", 7) == 0) base += 7;
+    else if (strncmp(base, "union ", 6) == 0) base += 6;
     si = self->sym->find_struct(base);
     return si >= 0 && self->sym->structs[si].uses_drop;
 }
@@ -671,8 +667,7 @@ static int bind_conv_explicit(struct Expr *self, int recv, const char *target, i
     const char *st = "";
     const char *sk;
     const char *tk;
-    char ret[MAX_TEXT];
-    char msg[MAX_TEXT * 2];
+    const char *ret;
     int ptr = 0, nm, mm;
 
     if (self->sup->expr_type_text(recv, &st) != 0 || !st[0])
@@ -682,8 +677,8 @@ static int bind_conv_explicit(struct Expr *self, int recv, const char *target, i
     tk = bind_conv_key_text(target);
     if (!sk || !tk) return self->sup->fail("out of memory");
     if (strcmp(sk, tk) == 0) return recv;
-    ret[0] = 0;
-    mm = bind_conv_inherent(self, st, "as", ret, sizeof ret, &ptr);
+    ret = "";
+    mm = bind_conv_inherent_text(self, st, "as", &ret, &ptr);
     if (mm == -2)
         return tool::diag::ct_sem_error(line, col,
             "method is private to its unit", self->sup->mem->path);
@@ -693,25 +688,22 @@ static int bind_conv_explicit(struct Expr *self, int recv, const char *target, i
     if (mm >= 0) {
         const char *rk = bind_conv_key_text(ret);
         if (!rk) return self->sup->fail("out of memory");
-        if (strcmp(rk, tk) != 0) {
-            snprintf(msg, sizeof msg,
-                     "no conversion from '%s' to '%s': inherent 'as' answers '%s'",
-                     st, target, ret);
-            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
-        }
+        if (strcmp(rk, tk) != 0)
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                "no conversion from '%s' to '%s': inherent 'as' answers '%s'",
+                st, target, ret), self->sup->mem->path);
         return bind_conv_call(self, recv, st, "as", target, line, col);
     }
     if (bind_conv_binding(self, st, target) > 0)
         return bind_conv_call_binding(self, recv, st, target, line, col);
-    ret[0] = 0;
-    nm = bind_conv_maps(self, st, "as", ret, sizeof ret);
+    ret = "";
+    nm = bind_conv_maps_text(self, st, "as", &ret);
     if (nm > 0) return bind_conv_call(self, recv, st, "as", target, line, col);
-    snprintf(msg, sizeof msg,
-             "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', "
-             "import a mapping trait that declares 'as', or import a mapping unit "
-             "with a 'map binding' for this pair",
-             st, target, st);
-    return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+        "no conversion from '%s' to '%s'; add an inherent 'as' method on '%s', "
+        "import a mapping trait that declares 'as', or import a mapping unit "
+        "with a 'map binding' for this pair",
+        st, target, st), self->sup->mem->path);
 }
 
 /* The strict tier: `x.to<T>()` answers `Option<T>`. The expected C spelling is
@@ -721,12 +713,11 @@ static int bind_conv_explicit(struct Expr *self, int recv, const char *target, i
 static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target, int line, int col)
 {
     const char *st = "";
-    char ret[MAX_TEXT];
+    const char *ret;
     const char *enc;
     const char *expect;
     const char *ek;
     const char *rk;
-    char msg[MAX_TEXT * 2];
     int ptr = 0, nm, mm;
 
     if (self->sup->expr_type_text(recv, &st) != 0 || !st[0])
@@ -746,8 +737,8 @@ static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target
             "the strict conversion target is too long", self->sup->mem->path);
     ek = bind_conv_key_text(expect);
     if (!ek) return self->sup->fail("out of memory");
-    ret[0] = 0;
-    mm = bind_conv_inherent(self, st, "to", ret, sizeof ret, &ptr);
+    ret = "";
+    mm = bind_conv_inherent_text(self, st, "to", &ret, &ptr);
     if (mm == -2)
         return tool::diag::ct_sem_error(line, col,
             "method is private to its unit", self->sup->mem->path);
@@ -757,21 +748,18 @@ static int bind_conv_explicit_to(struct Expr *self, int recv, const char *target
     if (mm >= 0) {
         rk = bind_conv_key_text(ret);
         if (!rk) return self->sup->fail("out of memory");
-        if (strcmp(rk, ek) != 0) {
-            snprintf(msg, sizeof msg,
-                     "no strict conversion from '%s' to '%s': 'to' answers '%s', expected '%s'",
-                     st, target, ret, expect);
-            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
-        }
+        if (strcmp(rk, ek) != 0)
+            return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+                "no strict conversion from '%s' to '%s': 'to' answers '%s', expected '%s'",
+                st, target, ret, expect), self->sup->mem->path);
         return bind_conv_call(self, recv, st, "to", expect, line, col);
     }
-    ret[0] = 0;
-    nm = bind_conv_maps(self, st, "to", ret, sizeof ret);
+    ret = "";
+    nm = bind_conv_maps_text(self, st, "to", &ret);
     if (nm > 0) return bind_conv_call(self, recv, st, "to", expect, line, col);
-    snprintf(msg, sizeof msg,
-             "no strict conversion from '%s' to '%s'; add an inherent 'to' method returning '%s' or import a mapping trait that declares 'to'",
-             st, target, expect);
-    return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+        "no strict conversion from '%s' to '%s'; add an inherent 'to' method returning '%s' or import a mapping trait that declares 'to'",
+        st, target, expect), self->sup->mem->path);
 }
 
 /* D-020 §6.1: an `out` actual whose formal and actual types convert both ways
@@ -790,8 +778,8 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
     const char *at = "";
     const char *ak;
     const char *fk;
-    char ret[MAX_TEXT];
-    char name[MAX_TEXT];
+    const char *ret;
+    const char *name;
     int cur, prev, k, np, pi;
 
     /* kind 0 = free function (`a` = func index), 1 = trait method
@@ -819,10 +807,10 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
         return args;
     }
     if (!bind_conv_on() || call < 0 || args <= 0 || np <= 0) return args;
-    ret[0] = 0;
-    if (kind == 0) snprintf(ret, sizeof ret, "%s", self->sym->funcs[a].ret);
-    else if (kind == 1) snprintf(ret, sizeof ret, "%s", self->sym->traits[a].m[b].ret);
-    else if (retin) snprintf(ret, sizeof ret, "%s", retin);
+    ret = "";
+    if (kind == 0) ret = self->sym->funcs[a].ret;
+    else if (kind == 1) ret = self->sym->traits[a].m[b].ret;
+    else if (retin) ret = retin;
     prev = -1;
     cur = args;
     k = 0;
@@ -838,12 +826,12 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
             && self->sup->expr_type_text(cur, &at) == 0 && at[0]
             && !strchr(at, '*')) {
             int ip = 0;
-            char itr[MAX_TEXT];
+            const char *itr;
             ak = bind_conv_key_text(at);
             fk = bind_conv_key_text(ft);
             if (!ak || !fk) return self->sup->fail("out of memory");
             if (strcmp(ak, fk) != 0
-                && !(self->sup->iface_ref_type(ft, itr, sizeof itr, &ip)
+                && !(self->sup->iface_ref_type_text(ft, &itr, &ip)
                      && self->sym->find_trait(itr) >= 0)
                 && !frontend::sym::ct_is_string_value_type(at)
                 && !frontend::sym::ct_is_string_value_type(ft)
@@ -872,7 +860,8 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
                declarations, so the compiler's own temp uses `_ct_outconvN` */
             seq = self->arena->noutconv;
             for (;;) {
-                snprintf(name, sizeof name, "_ct_outconv%d", seq);
+                name = runtime::text::ct_internf("_ct_outconv%d", seq);
+                if (!name) return self->sup->fail("out of memory");
                 if (self->sym->find_var(name) < 0) break;
                 seq++;
             }
@@ -926,7 +915,6 @@ static int bind_conv_arith(struct Expr *self, int left, int right, int line, int
 {
     const char *lt = "";
     const char *rt = "";
-    char msg[MAX_TEXT];
     int lc = 0, rc = 0;
 
     if (!bind_conv_on()) return 0;
@@ -937,10 +925,9 @@ static int bind_conv_arith(struct Expr *self, int left, int right, int line, int
         && bind_conv_struct_like(self, rt))
         rc = bind_conv_any(self, rt, "as");
     if (!lc && !rc) return 0;
-    snprintf(msg, sizeof msg,
-             "conversion is only allowed at a binding site (declaration/assignment/out/return); '%s' cannot be converted inside an expression",
-             lc ? lt : rt);
-    return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+    return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+        "conversion is only allowed at a binding site (declaration/assignment/out/return); '%s' cannot be converted inside an expression",
+        lc ? lt : rt), self->sup->mem->path);
 }
 
 /* S1a-0 C1: the per-argument position frame is two parallel int blocks.
@@ -1068,9 +1055,9 @@ impl ExprOps for Expr {
        the C spellings; both hold `nargs` rows (S1a-0 C3: any arity up to the
        formal cap). */
     /* Zero or more `[<len>]` groups after a declared name. The whole suffix is
-       kept verbatim in `text3`, so a macro constant (`char buf[MAX_TEXT]`) and a
-       second dimension (`[MAX_PARAMS][MAX_TEXT]`) both survive; a numeric length
-       keeps `num` for the callers that still read it. */
+       kept verbatim in `text3`, so a macro constant (`char buf[160]`) and a
+       second dimension (`[8][160]`) both survive; a numeric length keeps `num`
+       for the callers that still read it. */
     /* Is the *current* token a type name? The rules are the cast lookahead's
        (below), shared so that a bare type parameter is a type everywhere a
        type name is expected. Nothing is consumed. */
@@ -1326,10 +1313,9 @@ impl ExprOps for Expr {
             /* L30-4: an interface value has no static member table, and an
                `own` receiver would run the release path on every `$ = …`. */
             {
-                char ifc[MAX_TEXT];
+                const char *ifc;
                 int vi;
-                ifc[0] = 0;
-                if (self->sup->is_iface_type(type, ifc, sizeof ifc)
+                if (self->sup->is_iface_type_text(type, &ifc)
                     || (kind == N_VAR
                         && (vi = self->sym->find_var(self->arena->nodes[recv].text2)) >= 0
                         && self->sym->vars[vi].autodrop)) {
@@ -1412,33 +1398,30 @@ impl ExprOps for Expr {
     int into_member_check(int base, const char *fname, int line, int col)
     {
         int owner, si, fi, tlen;
-        char st[MAX_TEXT];
-        char msg[MAX_TEXT + 96];
+        const char *st;
 
         (void)self;
         if (self->arena->nodes[base].kind != N_INTO_SELF
             || self->arena->nodes[base].aux != 1) return 0;
         owner = self->arena->nodes[base].num;
         if (owner < 0) return 0;
-        snprintf(st, sizeof st, "%s", self->arena->nodes[owner].text);
-        tlen = strlen(st);
+        st = self->arena->nodes[owner].text;
+        tlen = (int)strlen(st);
         while (tlen > 0 && st[tlen - 1] == '*') {
-            st[--tlen] = 0;
+            tlen--;
             while (tlen > 0 && (st[tlen - 1] == ' ' || st[tlen - 1] == '\t'))
-                st[--tlen] = 0;
+                tlen--;
         }
-        if (strncmp(st, "struct ", 7) == 0) {
-            int k;
-            for (k = 0; st[k + 7] != 0; k++) st[k] = st[k + 7];
-            st[k] = 0;
-        }
+        st = runtime::text::ct_intern_len(st, tlen);
+        if (!st) return 0;
+        if (strncmp(st, "struct ", 7) == 0) st += 7;
         si = self->sym->find_struct(st);
         if (si < 0 || !self->sym->structs[si].defined) return 0;
         for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
             if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0)
                 return 0;
-        snprintf(msg, sizeof msg, "no member '%s' on the 'into' receiver", fname);
-        tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
+            "no member '%s' on the 'into' receiver", fname), self->sup->mem->path);
         return -1;
     }
 
@@ -1886,7 +1869,7 @@ impl ExprOps for Expr {
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("$")) {
                 int dl = self->lex->tokline;
                 int dc = self->lex->tokstart - self->lex->lstart + 1;
-                char mname[MAX_TEXT];
+                const char *mname;
                 int mvi, mv, mas;
                 if (!(self->mat_state & (1L << 62)))
                     return tool::diag::ct_sem_error(dl, dc,
@@ -1905,7 +1888,9 @@ impl ExprOps for Expr {
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID)
                     return self->sup->fail("expected a variable name after '$'");
-                self->lex->tok_copy(mname, sizeof mname);
+                mname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                     self->lex->tokstr.len);
+                if (!mname) return self->sup->fail("out of memory");
                 mvi = self->sym->find_var(mname);
                 if (mvi < 0)
                     return self->sup->fail("'$' target must be a declared variable");
@@ -1988,12 +1973,11 @@ impl ExprOps for Expr {
                     int bl = self->lex->tokline;
                     self->sup->note_slice();
                     int bc = self->lex->tokstart - self->lex->lstart + 1;
-                    char selem[MAX_TEXT];
+                    const char *selem;
                     int sc = s_slice ? self->sym->vars[svi].slice_const : 0;
                     int hi = -1;
-                    snprintf(selem, sizeof selem, "%s",
-                             s_slice ? self->sym->vars[svi].slice_elem
-                                     : self->sym->vars[svi].type);
+                    selem = s_slice ? self->sym->vars[svi].slice_elem
+                                    : self->sym->vars[svi].type;
                     self->sup->lex_next();          /* `[` */
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
@@ -2320,7 +2304,7 @@ impl ExprOps for Expr {
                         && n >= 0 && self->arena->nodes[n].kind == N_VAR) {
                         int gvi = self->sym->find_var(self->arena->nodes[n].text2);
                         if (gvi >= 0 && self->sym->vars[gvi].is_slice) {
-                            char gelem[MAX_TEXT];
+                            const char *gelem;
                             self->sup->note_slice();
                             args = self->parse_args();
                             if (args < 0) return -1;
@@ -2328,8 +2312,7 @@ impl ExprOps for Expr {
                                 return self->sup->fail("slice get() takes exactly one index");
                             m = self->sup->new_node(N_SLICE_GET);
                             if (m < 0) return -1;
-                            snprintf(gelem, sizeof gelem, "%s",
-                                     self->sym->vars[gvi].slice_elem);
+                            gelem = self->sym->vars[gvi].slice_elem;
                             if (self->sym->vars[gvi].slice_const) {
                                     self->arena->nodes[m].text = runtime::text::ct_internf("const %s", gelem);
                                     if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
@@ -2397,7 +2380,6 @@ impl ExprOps for Expr {
                         if (self->in_generic_ntparam > 0 && self->in_generic_tparam[0]
                             && self->in_generic_bound[0]
                             && strcmp(ibase, self->in_generic_tparam[0]) == 0) {
-                            char msgb[MAX_TEXT];
                             int bt, bmi = -1, bi2, bgot;
                             bt = self->sym->find_trait(self->in_generic_bound);
                             for (bi2 = 0; bt >= 0 && bi2 < self->sym->traits[bt].nm; bi2++)
@@ -2405,13 +2387,12 @@ impl ExprOps for Expr {
                                     bmi = bi2;
                                     break;
                                 }
-                            if (bmi < 0) {
-                                snprintf(msgb, sizeof msgb,
-                                         "trait '%s' has no method '%s'",
-                                         self->in_generic_bound, fname);
-                                return tool::diag::ct_sem_error(mline, mcol, msgb,
-                                                                self->sup->mem->path);
-                            }
+                            if (bmi < 0)
+                                return tool::diag::ct_sem_error(mline, mcol,
+                                    tool::sh::ct_scratch_fmt(
+                                        "trait '%s' has no method '%s'",
+                                        self->in_generic_bound, fname),
+                                    self->sup->mem->path);
                             bgot = arg_count(self->arena, args) + self->closure_arg_count(args);
                             if (self->arity_check(mline, mcol, fname, bgot,
                                                   self->sym->traits[bt].m[bmi].nparams) != 0)
@@ -2537,10 +2518,9 @@ impl ExprOps for Expr {
                                chain is the method's own N_PARAM list and the
                                result comes from the instance substitution. */
                             {
-                                char retm[MAX_TEXT];
-                                retm[0] = 0;
-                                if (self->sup->ty->inst_method_ret(ibase, fname,
-                                                                   retm, sizeof retm)) {
+                                const char *retm =
+                                    self->sup->ty->inst_method_ret_text(ibase, fname);
+                                if (retm) {
                                     int na = bind_outconv_rewrite(self, m, args, 2,
                                                 self->arena->nodes[inm].a, -1, retm,
                                                 mline, mcol);
@@ -2562,11 +2542,8 @@ impl ExprOps for Expr {
                                     || strcmp(fname, "put") == 0)) {
                                 int ai, vi;
                                 for (ai = args; ai > 0; ai = self->arena->nodes[ai].next) {
-                                    char anm[MAX_TEXT];
                                     if (self->arena->nodes[ai].kind != N_VAR) continue;
-                                    snprintf(anm, sizeof anm, "%s",
-                                             self->arena->nodes[ai].text2);
-                                    vi = self->sym->find_var(anm);
+                                    vi = self->sym->find_var(self->arena->nodes[ai].text2);
                                     if (vi < 0) continue;
                                     if (self->sym->vars[vi].autodrop
                                         || self->sym->vars[vi].borrowed)
@@ -2584,11 +2561,12 @@ impl ExprOps for Expr {
                                 int pi = self->arena->nodes[inm].a;
                                 int ai = args, prev = -1, aidx = 0;
                                 while (pi >= 0 && ai > 0) {
-                                    char fty[MAX_TEXT];
-                                    char ftr[MAX_TEXT];
+                                    const char *fty;
+                                    const char *ftr;
                                     int fip = 0;
-                                    if (self->inst_subst_type(ibase,
-                                            self->arena->nodes[pi].text, fty, sizeof fty)) {
+                                    fty = self->inst_subst_type_text(ibase,
+                                                                     self->arena->nodes[pi].text);
+                                    if (fty) {
                                         /* LANG-22: the storing methods copy the
                                            element into the container; a
                                            non-immortal `Str` view there would
@@ -2604,7 +2582,7 @@ impl ExprOps for Expr {
                                                    (self->arg_base + aidx < self->argcap)
                                                        ? self->arg_col[self->arg_base + aidx] : mcol) != 0)
                                             return -1;
-                                        if (self->sup->iface_ref_type(fty, ftr, sizeof ftr, &fip)) {
+                                        if (self->sup->iface_ref_type_text(fty, &ftr, &fip)) {
                                             int boxed = self->sup->maybe_box(ai, ftr, fip);
                                             if (boxed < 0) return -1;
                                             if (boxed != ai) {
@@ -2701,8 +2679,8 @@ impl ExprOps for Expr {
                            match it against the visible static maps. */
                         if (!self->arena->nodes[m].text[0]
                             && self->arena->nodes[m].kind == N_MCALL) {
-                            char it[MAX_TEXT];
-                            if (!self->sup->is_iface_type(rtype, it, sizeof it)) {
+                            const char *it;
+                            if (!self->sup->is_iface_type_text(rtype, &it)) {
                                 const char *rt2 = rtype;
                                 if (self->arena->nodes[n].kind == N_VAR) {
                                     int vi = self->sym->find_var(self->arena->nodes[n].text2);
@@ -2739,9 +2717,7 @@ impl ExprOps for Expr {
                                                + self->closure_arg_count(args);
                                     const char *rk;
                                     const char *tk;
-                                    char msg[MAX_TEXT];
-                                    char tmsg[MAX_TEXT];
-                                    tmsg[0] = 0;
+                                    const char *tmsg = "";
                                     hm = *self->sup->ty->maps;
                                     hn = *self->sup->ty->nmaps;
                                     /* the same host key the emitter and the
@@ -2811,8 +2787,8 @@ impl ExprOps for Expr {
                                                 fits = 1;
                                                 continue;
                                             }
-                                            if (!self->argtype_mismatch(args, -1, tt, tm,
-                                                                        tmsg, sizeof tmsg))
+                                            if (!frontend::parse::argtype_mismatch_text(
+                                                    self, args, -1, tt, tm, &tmsg))
                                                 fits = 1;
                                         }
                                     }
@@ -2825,21 +2801,20 @@ impl ExprOps for Expr {
                                                                    pt, pm) != 0)
                                         return -1;
                                     if (seen && !afits) {
-                                        snprintf(msg, sizeof msg,
-                                                 "takes %d argument(s), %d given",
-                                                 want, got2);
                                         if (self->sup->arity_warn(mline, mcol, fname,
-                                                                  msg) != 0)
+                                                tool::sh::ct_scratch_fmt(
+                                                    "takes %d argument(s), %d given",
+                                                    want, got2)) != 0)
                                             return self->sup->fail("too many warnings");
                                     } else if (seen && afits && !fits) {
                                         /* SH-60: every arity-fitting candidate
                                            disagreed with an actual, so this is
                                            a hard error -- see
                                            `argtype_check_static`. */
-                                        snprintf(msg, sizeof msg,
-                                                 "type mismatch: '%s' %s", fname, tmsg);
-                                        tool::diag::ct_sem_error(mline, mcol, msg,
-                                                                 self->sup->mem->path);
+                                        tool::diag::ct_sem_error(mline, mcol,
+                                            tool::sh::ct_scratch_fmt(
+                                                "type mismatch: '%s' %s", fname, tmsg),
+                                            self->sup->mem->path);
                                         return -1;
                                     }
                                     /* SH-60 / D-60-1: a method that writes
@@ -2868,7 +2843,7 @@ impl ExprOps for Expr {
                        answer needs no temporary: `f().v` is valid C. */
                     if (!arrow) {
                         const char *frty = "";
-                        char ifn[MAX_TEXT];
+                        const char *ifn;
                         int ifp = 0;
                         int self_recv = n >= 0
                                         && self->arena->nodes[n].kind == N_VAR
@@ -2881,27 +2856,23 @@ impl ExprOps for Expr {
                                interface value keeps one real field, `.self`. */
                             if (!frontend::sym::ct_is_container_type(frty)
                                 && strcmp(fname, "self") != 0
-                                && self->sup->iface_ref_type(frty, ifn, sizeof ifn, &ifp)
-                                && self->sym->find_trait(ifn) >= 0) {
-                                char imsg[MAX_TEXT];
-                                snprintf(imsg, sizeof imsg,
-                                    "'.' cannot access field '%s': '%s' is an interface value; "
-                                    "it has methods, not fields", fname, ifn);
-                                return tool::diag::ct_sem_error(mline, mcol, imsg,
-                                                                self->sup->mem->path);
-                            }
+                                && self->sup->iface_ref_type_text(frty, &ifn, &ifp)
+                                && self->sym->find_trait(ifn) >= 0)
+                                return tool::diag::ct_sem_error(mline, mcol,
+                                    tool::sh::ct_scratch_fmt(
+                                        "'.' cannot access field '%s': '%s' is an interface value; "
+                                        "it has methods, not fields", fname, ifn),
+                                    self->sup->mem->path);
                             {
                                 size_t fl = strlen(frty);
                                 while (fl > 0 && (frty[fl - 1] == ' ' || frty[fl - 1] == '\t'))
                                     fl--;
-                                if (fl > 0 && frty[fl - 1] == '*') {
-                                    char pmsg[MAX_TEXT];
-                                    snprintf(pmsg, sizeof pmsg,
-                                        "'.' cannot access field '%s' through a pointer receiver; "
-                                        "use '->%s'", fname, fname);
-                                    return tool::diag::ct_sem_error(mline, mcol, pmsg,
-                                                                    self->sup->mem->path);
-                                }
+                                if (fl > 0 && frty[fl - 1] == '*')
+                                    return tool::diag::ct_sem_error(mline, mcol,
+                                        tool::sh::ct_scratch_fmt(
+                                            "'.' cannot access field '%s' through a pointer receiver; "
+                                            "use '->%s'", fname, fname),
+                                        self->sup->mem->path);
                             }
                         }
                     }
@@ -2951,7 +2922,7 @@ impl ExprOps for Expr {
                        error). */
                     {
                         const char *dty = "";
-                        char dbase[MAX_TEXT];
+                        const char *dbase;
                         const char *dp;
                         size_t dn;
                         if (strcmp(fname, "data") == 0
@@ -2962,10 +2933,10 @@ impl ExprOps for Expr {
                             dn = strlen(dp);
                             while (dn > 0 && (dp[dn - 1] == ' ' || dp[dn - 1] == '\t'))
                                 dn--;
-                            if (dn < sizeof dbase) {
+                            {
                                 int aux = 0;
-                                memcpy(dbase, dp, dn);
-                                dbase[dn] = 0;
+                                dbase = runtime::text::ct_intern_len(dp, (int)dn);
+                                if (!dbase) return self->sup->fail("out of memory");
                                 if (strchr(dbase, '*') == 0) {
                                     if (strcmp(dbase, "String") == 0
                                         || strcmp(dbase, "Str") == 0) aux = 9;
@@ -3282,12 +3253,11 @@ impl ExprOps for Expr {
            to the C compiler, which owns the arm choice. ct does not read the
            arms, so a trait call or a boxing inside one is not rewritten. */
         if (self->lex->tok == T_ID && self->lex->tok_is("_Generic")) {
-            char gname[MAX_TEXT];
+            const char *gname = "_Generic";
             int off, depth, k, prev_tag;
             n = self->sup->new_node(N_RAW);
             if (n < 0) return -1;
             off = self->arena->str_begin();
-            snprintf(gname, sizeof gname, "%s", "_Generic");
             for (k = 0; gname[k]; k++)
                 if (self->arena->str_put(gname[k]) != 0)
                     return self->sup->fail("string pool is full");
@@ -3297,16 +3267,18 @@ impl ExprOps for Expr {
             depth = 0;
             prev_tag = 0;
             for (;;) {
-                char tbuf[MAX_TEXT];
+                const char *tbuf;
                 int m;
                 if (self->lex->tok == T_EOF) return self->sup->fail("unterminated _Generic");
                 if (self->arena->str_put(' ') != 0)
                     return self->sup->fail("string pool is full");
                 /* an integer token keeps its value, not its spelling */
                 if (self->lex->tok == T_NUM && !self->lex->tokfloat)
-                    snprintf(tbuf, sizeof tbuf, "%ld", self->lex->toknum);
+                    tbuf = runtime::text::ct_internf("%ld", self->lex->toknum);
                 else
-                    self->lex->tok_copy(tbuf, sizeof tbuf);
+                    tbuf = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                        self->lex->tokstr.len);
+                if (!tbuf) return self->sup->fail("out of memory");
                 /* the body is copied verbatim, so a bare type parameter here
                    would reach the output as an undeclared name; refuse it
                    instead of emitting bad C (SH-62). `struct T` / `union T` /
@@ -3513,17 +3485,17 @@ impl ExprOps for Expr {
                  || (self->lex->tok_is("box")
                      && frontend::sym::ct_tmpl_find("Box") >= 0))
                 && self->static_call_ahead()) {
-                char ibase[MAX_TEXT];
-                char sm[MAX_TEXT];
-                char smsg[MAX_TEXT + 64];
+                const char *ibase;
+                const char *sm;
                 int mn;
-                ibase[0] = 0;
-                if (self->parse_inst_type(ibase, sizeof ibase) != 0) return -1;
+                if (self->parse_inst_type_text(&ibase) != 0) return -1;
                 if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("::")))
                     return self->sup->fail("expected '::' after the instance type");
                 self->sup->lex_next();
                 if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
-                self->lex->tok_copy(sm, sizeof sm);
+                sm = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                  self->lex->tokstr.len);
+                if (!sm) return self->sup->fail("out of memory");
                 self->sup->lex_next();
                 if (!(self->lex->tok == T_PUNCT && self->lex->tok_is("(")))
                     return self->sup->fail("a static method call needs an argument list");
@@ -3534,11 +3506,9 @@ impl ExprOps for Expr {
                     if (smi == -2)
                         return tool::diag::ct_sem_error(id_line, id_col,
                             "static method is private to its unit", self->sup->mem->path);
-                    if (smi < 0) {
-                        snprintf(smsg, sizeof smsg, "'%s' has no static method '%s'",
-                                 ibase, sm);
-                        return self->sup->fail(smsg);
-                    }
+                    if (smi < 0)
+                        return self->sup->fail(tool::sh::ct_scratch_fmt(
+                            "'%s' has no static method '%s'", ibase, sm));
                     /* Phase 78 S2b: a receiverless inherent method's ref/out
                        actuals are checked exactly like a free call. */
                     {
@@ -3600,7 +3570,7 @@ impl ExprOps for Expr {
                 int sp2, sbol2, stok2, sline2, stokline2, sstart2, slstart2;
                 long snum2;
                 int sfloat2, strunc2;
-                char stext2[MAX_TEXT];
+                const char *stext2;
                 int stext2_len;
                 const char *ssuf2_ptr; int ssuf2_len;
                 sp2 = self->lex->pos; sbol2 = self->lex->bol;
@@ -3608,21 +3578,25 @@ impl ExprOps for Expr {
                 sline2 = self->lex->line; stokline2 = self->lex->tokline;
                 sstart2 = self->lex->tokstart; slstart2 = self->lex->lstart;
                 sfloat2 = self->lex->tokfloat; strunc2 = self->lex->toktrunc;
-                self->lex->tok_copy(stext2, sizeof stext2);
+                stext2 = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                      self->lex->tokstr.len);
+                if (!stext2) return self->sup->fail("out of memory");
                 stext2_len = self->lex->tokstr.len;
                 ssuf2_ptr = self->lex->toksuffix.ptr; ssuf2_len = self->lex->toksuffix.len;
                 self->sup->lex_next();   /* the struct name */
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(".")) {
                     self->sup->lex_next();
                     if (self->lex->tok == T_ID) {
-                        char sibase[MAX_TEXT];
-                        char sm2[MAX_TEXT];
-                        char smsg2[MAX_TEXT + 64];
+                        const char *sibase;
+                        const char *sm2;
                         int mn2;
-                        self->lex->tok_copy(sm2, sizeof sm2);
+                        sm2 = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                           self->lex->tokstr.len);
+                        if (!sm2) return self->sup->fail("out of memory");
                         self->sup->lex_next();
                         if (self->lex->tok == T_PUNCT && self->lex->tok_is("(")) {
-                            snprintf(sibase, sizeof sibase, "struct %s", sres2);
+                            sibase = runtime::text::ct_internf("struct %s", sres2);
+                            if (!sibase) return self->sup->fail("out of memory");
                             args = self->parse_args();
                             if (args < 0) return -1;
                             {
@@ -3630,11 +3604,9 @@ impl ExprOps for Expr {
                                 if (smi2 == -2)
                                     return tool::diag::ct_sem_error(id_line, id_col,
                                         "static method is private to its unit", self->sup->mem->path);
-                                if (smi2 < 0) {
-                                    snprintf(smsg2, sizeof smsg2, "'%s' has no static method '%s'",
-                                             stext2, sm2);
-                                    return self->sup->fail(smsg2);
-                                }
+                                if (smi2 < 0)
+                                    return self->sup->fail(tool::sh::ct_scratch_fmt(
+                                        "'%s' has no static method '%s'", stext2, sm2));
                             }
                             if (self->map_arity(id_line, id_col, sibase, sm2,
                                                 arg_count(self->arena, args)
@@ -3673,7 +3645,7 @@ impl ExprOps for Expr {
                     int tp2, tbol2, ttok2, tline2, ttokline2, tstart2, tlstart2;
                     long tnum2;
                     int tfloat2, ttrunc2;
-                    char tm2[MAX_TEXT];
+                    const char *tm2;
                     const char *ttext2_ptr; int ttext2_len;
                     const char *tsuf2_ptr; int tsuf2_len;
                     tp2 = self->lex->pos; tbol2 = self->lex->bol;
@@ -3683,16 +3655,18 @@ impl ExprOps for Expr {
                     tfloat2 = self->lex->tokfloat; ttrunc2 = self->lex->toktrunc;
                     ttext2_ptr = self->lex->tokstr.ptr; ttext2_len = self->lex->tokstr.len;
                     tsuf2_ptr = self->lex->toksuffix.ptr; tsuf2_len = self->lex->toksuffix.len;
-                    tm2[0] = 0;
+                    tm2 = "";
                     self->sup->lex_next();   /* the type name */
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is(".")) {
                         self->sup->lex_next();
                         if (self->lex->tok == T_ID) {
-                            self->lex->tok_copy(tm2, sizeof tm2);
+                            tm2 = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                               self->lex->tokstr.len);
+                            if (!tm2) return self->sup->fail("out of memory");
                             self->sup->lex_next();
                             if (!(self->lex->tok == T_PUNCT
                                   && self->lex->tok_is("(")))
-                                tm2[0] = 0;
+                                tm2 = "";
                         }
                     }
                     self->lex->pos = tp2; self->lex->bol = tbol2;
@@ -3702,14 +3676,11 @@ impl ExprOps for Expr {
                     self->lex->tokfloat = tfloat2; self->lex->toktrunc = ttrunc2;
                     self->lex->tokstr.ptr = ttext2_ptr; self->lex->tokstr.len = ttext2_len;
                     self->lex->toksuffix.ptr = tsuf2_ptr; self->lex->toksuffix.len = tsuf2_len;
-                    if (tm2[0]) {
-                        char tmsg3[MAX_TEXT + 96];
-                        snprintf(tmsg3, sizeof tmsg3,
-                            "static method '%s' cannot be resolved: '%s' is a type name, "
-                            "not a variable", tm2, sres2);
-                        return tool::diag::ct_sem_error(id_line, id_col, tmsg3,
-                                                        self->sup->mem->path);
-                    }
+                    if (tm2[0])
+                        return tool::diag::ct_sem_error(id_line, id_col,
+                            tool::sh::ct_scratch_fmt(
+                                "static method '%s' cannot be resolved: '%s' is a type name, "
+                                "not a variable", tm2, sres2), self->sup->mem->path);
                 }
             }
             n = self->sup->new_node(N_VAR);
@@ -3788,14 +3759,16 @@ impl ExprOps for Expr {
                    vtable is named after `text2` and `text3` keeps the source
                    spelling for the emitter's diagnostics. */
                 if (qf == 3) {
-                    char mname[MAX_TEXT];
+                    const char *mname;
                     int mn;
                     if (!(self->lex->tok == T_PUNCT && self->lex->tok_is(".")))
                         return self->sup->fail("a static trait has no interface value");
                     self->sup->lex_next();
                     if (self->lex->tok != T_ID)
                         return self->sup->fail("expected a method name");
-                    self->lex->tok_copy(mname, sizeof mname);
+                    mname = runtime::text::ct_intern_len(self->lex->tokstr.ptr,
+                                                         self->lex->tokstr.len);
+                    if (!mname) return self->sup->fail("out of memory");
                     self->sup->lex_next();
                     args = self->parse_args();
                     if (args < 0) return -1;
@@ -4028,9 +4001,9 @@ impl ExprOps for Expr {
                    field and pointer-expression paths share. */
                 if (self->types_mode && *self->types_mode
                     && self->sym->find_func(self->arena->nodes[n].text2) < 0) {
-                    char ft[MAX_TEXT];
                     const char *an0 = self->arena->nodes[n].text2;
-                    if (self->sym->var_type(an0, ft, sizeof ft) == 0
+                    const char *ft = self->sym->var_type_text(an0);
+                    if (ft
                         && self->chk_callptr_args(ft, an0, args,
                                                   self->call_line, self->call_col) != 0)
                         return -1;
@@ -4044,7 +4017,7 @@ impl ExprOps for Expr {
                         const char *asuf;
                         const char *t = "";
                         const char *base;
-                        char helper[MAX_TEXT];
+                        const char *helper;
                         const char *ap, *aq;
                         size_t alen;
                         int a1, a2, a3, got;
@@ -4079,22 +4052,18 @@ impl ExprOps for Expr {
                             if (self->arena->nodes[a1].kind == N_ADDR) {
                                 int ain = self->arena->nodes[a1].a;
                                 const char *vt = "";
-                                char vbuf[MAX_TEXT];
+                                const char *vbuf;
                                 if (self->sup->expr_type_text(ain, &vt) == 0
                                     && self->arena->nodes[ain].kind == N_VAR
-                                    && self->sym->var_type(self->arena->nodes[ain].text2,
-                                                           vbuf, sizeof vbuf) == 0)
+                                    && (vbuf = self->sym->var_type_text(
+                                            self->arena->nodes[ain].text2)) != 0)
                                     t = runtime::text::ct_internf("%s *", vbuf);
                                 else if (vt[0])
                                     t = runtime::text::ct_internf("%s *", vt);
                                 if (!t) return self->sup->fail("out of memory");
                             } else if (self->arena->nodes[a1].kind == N_VAR) {
-                                char vbuf[MAX_TEXT];
-                                if (self->sym->var_type(self->arena->nodes[a1].text2,
-                                                        vbuf, sizeof vbuf) == 0) {
-                                    t = runtime::text::ct_intern(vbuf);
-                                    if (!t) return self->sup->fail("out of memory");
-                                }
+                                t = self->sym->var_type_text(self->arena->nodes[a1].text2);
+                                if (!t) return self->sup->fail("out of memory");
                             }
                         }
                         ap = strstr(t, "_Atomic(");
@@ -4139,10 +4108,9 @@ impl ExprOps for Expr {
                                     vt = runtime::text::ct_intern("double");
                                 } else if (vk == N_ADDR
                                            && self->arena->nodes[self->arena->nodes[valarg].a].kind == N_VAR) {
-                                    char it[MAX_TEXT];
-                                    if (self->sym->var_type(self->arena->nodes[self->arena->nodes[valarg].a].text2,
-                                                            it, sizeof it) == 0)
-                                        vt = runtime::text::ct_internf("%s *", it);
+                                    const char *it = self->sym->var_type_text(
+                                        self->arena->nodes[self->arena->nodes[valarg].a].text2);
+                                    if (it) vt = runtime::text::ct_internf("%s *", it);
                                 }
                                 if (!vt) return self->sup->fail("out of memory");
                             }
@@ -4167,9 +4135,9 @@ impl ExprOps for Expr {
                             if (self->sup->expr_type_text(a2, &et) == 0
                                 && self->arena->nodes[a2].kind == N_ADDR
                                 && self->arena->nodes[self->arena->nodes[a2].a].kind == N_VAR) {
-                                char it[MAX_TEXT];
-                                if (self->sym->var_type(self->arena->nodes[self->arena->nodes[a2].a].text2,
-                                                        it, sizeof it) == 0) {
+                                const char *it = self->sym->var_type_text(
+                                    self->arena->nodes[self->arena->nodes[a2].a].text2);
+                                if (it) {
                                     et = runtime::text::ct_internf("%s *", it);
                                     if (!et) return self->sup->fail("out of memory");
                                 }
@@ -4186,7 +4154,8 @@ impl ExprOps for Expr {
                                     "pass &expected: a CAS needs the address of 'expected' to write the observed value back",
                                     self->sup->mem->path);
                         }
-                        snprintf(helper, sizeof helper, "__ct_atomic_%s_%s", aop, asuf);
+                        helper = runtime::text::ct_internf("__ct_atomic_%s_%s", aop, asuf);
+                        if (!helper) return self->sup->fail("out of memory");
                         self->arena->nodes[n].kind = N_CALL;
                         self->arena->nodes[n].a = args;
                         self->arena->nodes[n].b = -1;
@@ -4211,9 +4180,8 @@ impl ExprOps for Expr {
                    variable. Calls through a pointer are emitted uniformly as
                    `(*p)(args)` (D-7). */
                 if (fi < 0) {
-                    char vt[MAX_TEXT];
-                    if (self->sym->var_type(self->arena->nodes[n].text2, vt, sizeof vt) == 0
-                        && strstr(vt, "(*"))
+                    const char *vt = self->sym->var_type_text(self->arena->nodes[n].text2);
+                    if (vt && strstr(vt, "(*"))
                         self->arena->nodes[n].aux = 1;
                 }
                 if (record_io_call(self, self->arena->nodes[n].text2, fi >= 0, id_line) != 0) return -1;
@@ -4226,15 +4194,13 @@ impl ExprOps for Expr {
                 if (fi < 0 && self->arena->nodes[n].aux != 1 && args > 0) {
                     int hcur = args;
                     while (hcur > 0) {
-                        char hb[MAX_TEXT];
-                        if (str_handle_value(self, hcur, hb, sizeof hb)) {
-                            char hmsg[MAX_TEXT + 64];
-                            snprintf(hmsg, sizeof hmsg,
-                                     "cannot pass a '%s' handle to C function '%s': use cstr() at the C boundary",
-                                     hb, self->arena->nodes[n].text2);
-                            return tool::diag::ct_sem_error(id_line, id_col, hmsg,
-                                                            self->sup->mem->path);
-                        }
+                        const char *hb = str_handle_value_text(self, hcur);
+                        if (hb)
+                            return tool::diag::ct_sem_error(id_line, id_col,
+                                tool::sh::ct_scratch_fmt(
+                                    "cannot pass a '%s' handle to C function '%s': use cstr() at the C boundary",
+                                    hb, self->arena->nodes[n].text2),
+                                self->sup->mem->path);
                         hcur = self->arena->nodes[hcur].next;
                     }
                 }
@@ -4354,9 +4320,9 @@ impl ExprOps for Expr {
                     k = 0;
                     first_arg = args;
                     while (cur > 0 && k < self->sym->funcs[fi].nparams) {
-                        char tr[MAX_TEXT];
+                        const char *tr;
                         int ip = 0;
-                        if (self->sup->iface_ref_type(self->sym->funcs[fi].ptype[k], tr, sizeof tr, &ip)) {
+                        if (self->sup->iface_ref_type_text(self->sym->funcs[fi].ptype[k], &tr, &ip)) {
                             int boxed = self->sup->maybe_box(cur, tr, ip);
                             if (boxed < 0) return -1;
                             if (boxed != cur) {
@@ -4403,7 +4369,7 @@ impl ExprOps for Expr {
                 /* a declared variable: a namespaced global is emitted under its
                    mangled C name, which is kept on the node for the emitter; a
                    bare name may not pick between two imported exports */
-                char cn[MAX_TEXT];
+                const char *cn;
                 const char *nm = self->arena->nodes[n].text2;
                 if (self->sym->var_ambiguous(nm)) {
                     char amsg[512];
@@ -4411,7 +4377,8 @@ impl ExprOps for Expr {
                              "variable '%s' is exported by more than one namespace; use a qualified name", nm);
                     return self->sup->fail(amsg);
                 }
-                if (self->sym->var_cname(nm, cn, sizeof cn) == 0 && strcmp(cn, nm) != 0) {
+                cn = self->sym->var_cname_text(nm);
+                if (cn && strcmp(cn, nm) != 0) {
                         self->arena->nodes[n].text3 = runtime::text::ct_intern(cn);
                         if (!self->arena->nodes[n].text3) return self->sup->fail("out of memory");
                 }
@@ -4466,7 +4433,7 @@ impl ExprOps for Expr {
                             && ((gc >= 'A' && gc <= 'Z') || (gc >= 'a' && gc <= 'z')
                                 || gc == '_')) {
                             int gq = gpos + 1, gp, gd, gtp0, gtp1, gb;
-                            char gtp[MAX_TEXT];
+                            const char *gtp;
                             while (gsrc[gq]
                                    && ((gsrc[gq] >= 'A' && gsrc[gq] <= 'Z')
                                        || (gsrc[gq] >= 'a' && gsrc[gq] <= 'z')
@@ -4531,8 +4498,9 @@ impl ExprOps for Expr {
                                                            && gsrc[gw0 - 1] <= '9')
                                                        || gsrc[gw0 - 1] == '_'))
                                                 gw0--;
-                                            snprintf(gtp, sizeof gtp, "%.*s",
-                                                     gb - gw0 + 1, gsrc + gw0);
+                                            gtp = runtime::text::ct_intern_len(
+                                                      gsrc + gw0, gb - gw0 + 1);
+                                            if (!gtp) return self->sup->fail("out of memory");
                                             if ((gtp1 > gtp0
                                                  && gtp1 - gtp0 == (int)strlen(gtp)
                                                  && strncmp(gsrc + gtp0, gtp,

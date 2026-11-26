@@ -1079,6 +1079,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type_text
     if ((!buf)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
+    buf[0] = 0;
     rc = _self->__frontend_parse_exprtypeparse_vptr->parse_inst_type(_self, buf, TEXT_LIMIT);
     if (rc != 0) {
         free(buf);

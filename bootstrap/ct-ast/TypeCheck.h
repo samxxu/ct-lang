@@ -105,6 +105,7 @@ struct frontend_type_TypeOps_vtbl {
     int (*expr_ctype_text)(void *, int, const char * *);
     int (*maybe_box)(void *, int, const char *, int);
     int (*inst_method_ret)(void *, const char *, const char *, char *, int);
+    const char * (*inst_method_ret_text)(void *, const char *, const char *);
     int (*type_has_array_init)(void *, const char *);
     int (*init_item_text)(void *, const char *, const char *, char *, int);
     int (*rewrite_init_text)(void *, const char *, const char *, char * *, int *);

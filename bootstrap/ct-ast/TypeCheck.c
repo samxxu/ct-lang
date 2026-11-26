@@ -142,6 +142,108 @@ static int ctype_member(struct frontend_type_TypeCheck *, int, char *, int, int)
 static int tc_expr_match(struct frontend_type_TypeCheck *, int, char *, int);
 static int init_text_reserve(char * *, int *, int);
 static struct frontend_type_TypeCheck frontend_type_g_type = { .__frontend_type_typeops_vptr = &frontend_type_TypeCheck_frontend_type_TypeOps_vtable };
+static const char * frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret_text(void *self, const char * ibase, const char * fname) {
+    struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
+    const char * base;
+    const char * ret;
+    int m;
+    int inst;
+    int ti;
+    int tn;
+    int ii;
+    int nimpls;
+    int k;
+    int ni;
+    int j;
+    struct frontend_sym_StructImpl * im;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tp;
+    if (strncmp(ibase, "struct ", 7) != 0) {
+        return (const char *)(0);
+    }
+    base = (ibase + 7);
+    inst = frontend_sym_ct_inst_find(base);
+    if (inst < 0) {
+        int ni2;
+        int mi2;
+        for (ni2 = 0; ni2 < _self->arena->nnode; ni2++) {
+            if (_self->arena->nodes[ni2].kind != N_IMPL) {
+                continue;
+            }
+            if (_self->arena->nodes[ni2].text2[0]) {
+                continue;
+            }
+            if (_self->arena->nodes[ni2].aux == (-1)) {
+                continue;
+            }
+            if (strcmp(_self->arena->nodes[ni2].text, ibase) != 0) {
+                continue;
+            }
+            for (mi2 = _self->arena->nodes[ni2].a; mi2 >= 0; mi2 = _self->arena->nodes[mi2].next) {
+                if (strcmp(_self->arena->nodes[mi2].text2, fname) == 0) {
+                    break;
+                }
+            }
+            if (mi2 < 0) {
+                continue;
+            }
+            if ((!_self->arena->nodes[mi2].text[0])) {
+                return (const char *)(0);
+            }
+            ret = _self->arena->nodes[mi2].text;
+            if (strcmp(ret, "void") == 0) {
+                return (const char *)(0);
+            }
+            if ((((!strchr(ret, ' ')) && (!strchr(ret, '*'))) && (_self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, ret) >= 0))) {
+                return runtime_text_ct_internf("struct %s", ret);
+            }
+            return ret;
+        }
+        return (const char *)(0);
+    }
+    m = (-1);
+    im = frontend_sym_ct_impls((&nimpls));
+    for (ii = 0; ((im && (ii < nimpls)) && (m < 0)); ii++) {
+        if (im[ii].use[0]) {
+            continue;
+        }
+        if ((!frontend_sym_ct_impl_matches(ii, inst))) {
+            continue;
+        }
+        for (ni = _self->arena->nodes[im[ii].node].a; ni >= 0; ni = _self->arena->nodes[ni].next) {
+            if (strcmp(_self->arena->nodes[ni].text2, fname) == 0) {
+                m = ni;
+                break;
+            }
+        }
+    }
+    if (((m < 0) || (!_self->arena->nodes[m].text[0]))) {
+        return (const char *)(0);
+    }
+    ret = _self->arena->nodes[m].text;
+    ins = frontend_sym_ct_insts((&k));
+    ti = frontend_sym_ct_tmpl_find(ins[inst].tmpl);
+    tp = frontend_sym_ct_tmpls((&tn));
+    if (((ti >= 0) && tp)) {
+        for (j = 0; j < tp[ti].ntparams; j++) {
+            if (j >= ins[inst].nargs) {
+                break;
+            }
+            if (((!tp[ti].tparam[j]) || (!ins[inst].ctype[j]))) {
+                continue;
+            }
+            ret = frontend_sym_ct_generic_subst_text(ret, tp[ti].tparam[j], ins[inst].ctype[j]);
+            if ((!ret)) {
+                return (const char *)(0);
+            }
+        }
+    }
+    if (strcmp(ret, "void") == 0) {
+        return (const char *)(0);
+    }
+    return ret;
+}
+
 static int frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret(void *self, const char * ibase, const char * fname, char * out, int cap) {
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     char base[MAX_TEXT];
@@ -2102,6 +2204,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
 }
 
 const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_TypeOps_vtable = {
+    .inst_method_ret_text = frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret_text,
     .inst_method_ret = frontend_type_TypeCheck_frontend_type_TypeOps_inst_method_ret,
     .new_node = frontend_type_TypeCheck_frontend_type_TypeOps_new_node,
     .fail = frontend_type_TypeCheck_frontend_type_TypeOps_fail,
