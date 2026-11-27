@@ -83,6 +83,23 @@ $ CT_LIR=1 CT_LIR_STRICT=1 bash selfhost/check-ast.sh
 搬移必然改宿主函数体或引入访问器，违反纯搬移。设计 §4.5 也把 D4–D6 排在外壳
 LModule 化之后。记录为剩余项，不在本 stage 用非纯搬移冒充。
 
+### 3c S8 剩余子集（2026-11-27，DEV 施工记录）
+
+本表在 S8 之后补齐两个独立片（分支 `issue/s8r`；**未 push、未打 tag、未改版本号**）：
+
+| 片 | 提交 | 交付 | 判据 |
+| --- | --- | --- | --- |
+| 外壳 LModule 第一步 | `d75557fb` | 写者身份 `g_shell_u` / `g_shell_header` → `LModulePlan.shell_u` / `shell_header`（`lmod_plan_set_shell` / `lmod_plan_shell_u` / `lmod_plan_shell_header`）；走查状态 `g_shell_emit_state` / `g_shell_emit_cap` → `struct Emitter` | 82 语料单文件 + 自举 75 单元 C 树逐字节；`test/ir/run.sh` 15 checks；`g0/g1/g8` |
+| D4 EmitHeader | `96dcb656` | `backend/emit/EmitHeader.h.ct`（+ `.shim.h`）、`pub trait EmitHeader`；10 方法 + `adoption_default_only` 纯搬移 | 1585 body 多重集不变；10 方法 body sha 同父提交 `d75557fb`；`sh94_split_check` 6 个唯一名 + 独立脚本 4 个与 `Module` 同名者；cycles 0；unit-name lint；goldens 25/25；`test/ir/run.sh` OK |
+| seed | `3f73814e` | `gen-seed.sh` 重生成 | `check-seed` 两轮逐字节 + 手改负例 |
+
+**D4 的边界（仍未做）**：`write_unit_header` 与 `write_unit_header_body` 留在
+宿主——后者的实例闭包 / ADT 胶水走查仍读宿主 `g_sb` 生命周期状态，纯搬移须先
+把外壳的实例闭包判定移出（本子集只清掉跨单元 shell 全局，不冒充完成）。
+D5 `EmitDecl` / D6 `EmitExpr` 未开工。
+
+**单文件路径**：仍 AST 默认；§3 的 38 条差异**未清零**，`--ir=off` 回滚口径不变。
+
 ## 4 回滚
 
 | 回滚对象 | 动作 | 结果 |
@@ -96,4 +113,5 @@ LModule 化之后。记录为剩余项，不在本 stage 用非纯搬移冒充�
 | 角色 | 结论 | 日期 | 依据 |
 | --- | --- | --- | --- |
 | DEV | 提交等价证据与差异清单（§2、§3） | 2026-11-27 | 本文件 + `test/ir/run.sh`、`check-seed.sh` 原始输出 |
-| REV | 待签字 | — | 逐条复核 §3 的分诊与 §1 的切换边界 |
+| DEV（S8 剩余子集） | 外壳 LModule 第一步 + D4 完成；§3 的 38 条差异仍在 | 2026-11-27 | §3c + 提交 `d75557fb` / `96dcb656` / `3f73814e` |
+| REV | 待签字 | — | 逐条复核 §3c 的边界与 §3 的分诊 |

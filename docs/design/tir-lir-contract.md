@@ -198,6 +198,14 @@ LIR 打印每个函数体，AST body writer 只作 `--ir=off` 的 oracle；`buil
 留给 S8 之后的切片；单文件编译路径的剩余差异见
 [S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md)。
 
+**S8 剩余子集（2026-11-27）**：外壳的写者身份（正在写哪个 unit、`.c` 还是 `.h`）
+已从 Emitter 单元内的 `g_shell_u` / `g_shell_header` 移入 `LModulePlan`
+（`shell_u` / `shell_header`），实例 shell 的走查状态移入 `struct Emitter`；
+D4 的 10 个写者方法已纯搬移到 `backend/emit/EmitHeader.h.ct`（`pub trait EmitHeader`）。
+仍未迁：`.c` 侧的 `write_unit_header` / `write_unit_header_body`（实例闭包与
+ADT 胶水仍读宿主 `g_sb`）、类型/全局声明与 `.abi.h`/map 的判定逻辑，以及
+D5 `EmitDecl` / D6 `EmitExpr`。边界与证据见差异清单 §3c。
+
 ## 7 双跑、开关与回滚
 
 | 开关 | 行为 | 默认 |
