@@ -6,7 +6,7 @@
  * 赋值可以当取值使用；语句层的赋值完全不变。CT 的区别：目标是 own 变量
  * 时拒绝（所有权只在语句层记账）。
  */
-#include <stdio.h>
+
 
 static const char *input = "42";
 static int pos;

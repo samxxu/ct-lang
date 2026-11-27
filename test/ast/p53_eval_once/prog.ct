@@ -1,5 +1,5 @@
 /* Phase 53 / E53-7: `f()?.b` calls `f` exactly once. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct B {

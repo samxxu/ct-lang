@@ -2,7 +2,7 @@
 // the short owner name while the emitter writes the mangled C spelling, so the
 // ownership lookup must resolve through the namespace prefix; a miss drops the
 // environment struct and trampoline and leaves `cc` to reject the call.
-#include <stdio.h>
+
 
 namespace ns;
 

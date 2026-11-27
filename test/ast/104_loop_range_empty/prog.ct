@@ -1,6 +1,6 @@
 /* 104 (Phase 23): b <= a iterates zero times and is not a diagnostic -- an
    empty range is a legal, and often the natural, result of arithmetic. */
-#include <stdio.h>
+
 
 int main(void)
 {

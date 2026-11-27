@@ -1,5 +1,5 @@
 // 17: heap objects — the vptr is written automatically after malloc; delete releases
-#include <stdio.h>
+
 #include <stdlib.h>
 
 trait Counter {

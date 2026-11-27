@@ -6,7 +6,7 @@
 //   下一行的 impl 生成静态函数和一张 vtable；c.next() 在生成物里是
 //   c.__counter_vptr->next(&c)，所以同一个调用点可以运行任何实现了 Counter 的对象。
 // 因为只用到 L0 就有的 trait/impl/方法调用，这个样例也能被冻结种子 ctc 编译。
-#include <stdio.h>
+
 
 trait Counter {
     int next();

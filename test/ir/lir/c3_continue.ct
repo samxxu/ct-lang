@@ -1,6 +1,6 @@
 // S1b-S2 cleanup edge 3: `continue` runs the same cleanup set as `break`
 // before the next iteration.
-#include <stdio.h>
+
 
 static int sum(int n)
 {

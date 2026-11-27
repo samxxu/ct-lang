@@ -4,7 +4,7 @@
    reaches the host. */
 import host::host;
 
-#include <stdio.h>
+
 
 int main(void)
 {

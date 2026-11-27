@@ -5,7 +5,7 @@
 // 期望：stderr 与 expected.err 逐字节一致，退出码 1。
 import helper;
 
-#include <stdio.h>
+
 
 int main(void)
 {

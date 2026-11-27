@@ -5,7 +5,7 @@
 
    `p->who()` is the explicit dispatch: it reads the vptr the initialiser wrote,
    so a missing one segfaults instead of silently printing nothing. */
-#include <stdio.h>
+
 
 trait Greeter {
     char *who();

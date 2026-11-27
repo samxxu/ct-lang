@@ -1,6 +1,6 @@
 import sys::sys;
 
-#include <stdio.h>
+
 
 int main(void) {
     // 限定调用：Q.m(args) 形式只走静态表，不产生接口值。

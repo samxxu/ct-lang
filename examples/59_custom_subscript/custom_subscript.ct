@@ -10,7 +10,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 struct Slot { int value; int other; }
 

@@ -1,7 +1,7 @@
 /* v1-PH-2 S6: a generic instance used as another instance's type argument
    nests like any other by-value type. The inner layout must be complete before
    the outer union. */
-#include <stdio.h>
+
 
 enum Opt<T> {
     Some(T v),

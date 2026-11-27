@@ -1,6 +1,6 @@
 import csv::fields;
 
-#include <stdio.h>
+
 
 int main(void) {
     char *field = "alpha";

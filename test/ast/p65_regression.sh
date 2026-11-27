@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # PH-65 R6 probe, flipped by v1-PH-2 S9: the global default is strict.
-#   1. every in-repo tree (selfhost / lib/core / test / examples) resolves to
-#      strict, and selfhost + lib/core carry no direct `#include` at all;
+#   1. an in-repo unit with no allow row (selfhost / lib/core / test / examples)
+#      resolves to strict, and selfhost + lib/core carry no direct `#include`;
+#      the registered C-interop fixtures are the only in-repo allow rows;
 #   2. an external project sees strict by default and `--c-boundary=allow` on
 #      request, end to end through `ct build`;
 #   3. a plain `.ct` with no include is unaffected (it builds under the default).
@@ -18,8 +19,10 @@ trap 'rm -rf "$tmp"' EXIT
 fail=0
 mkdir -p "$tmp/proj"
 
-# 1) Every grandfathered directory resolves to strict from the repo root.
-for f in selfhost/ct-ast/main.ct lib/core/String.h.ct test/cases/01_trait_basic.ct \
+# 1) A plain unit in every tree resolves to strict from the repo root. 01 had
+#    a corpus-pinned include and is now an explicit allow row, so sample a
+#    plain case instead of it.
+for f in selfhost/ct-ast/main.ct lib/core/String.h.ct test/cases/02_multi_trait.ct \
          examples/37_nested_pattern/nested_pattern.ct; do
     got=$( cd "$root" && env -u CT_C_BOUNDARY "$CT" --show-c-boundary "$f" 2>"$tmp/e" )
     if [ "$got" != "strict" ]; then

@@ -1,7 +1,7 @@
 /* 128 (Phase 26 fix, SH-62 reopened): a type operand does not need
    parentheses. Every form must substitute the parameter instead of leaving
    `T` in the generated C. */
-#include <stdio.h>
+
 #include <stdalign.h>
 
 int sizeBare<T>(T x)

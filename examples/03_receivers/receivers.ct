@@ -5,7 +5,7 @@
 // built, so the two shapes are made by `person()` and `box()` instead of by
 // field-by-field assembly in `main`.
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

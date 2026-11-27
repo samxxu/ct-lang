@@ -4,9 +4,8 @@
  * callee does not own the caller's handle, and the assignment site already
  * releases the old value.
  */
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <stdlib.h>
 void copy_into(ref String dst, ref String src)
 {
     dst = src;

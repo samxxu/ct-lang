@@ -5,7 +5,7 @@
  * 规范顺序 `static _Alignas ( 16 ) int g;`；局部变量也接受属性前缀写法，
  * 发射时挪到声明尾部、`=` 之前。语义（能否用于某个对象）仍由 C 判断。
  */
-#include <stdio.h>
+
 
 _Alignas(16) static int g;
 __attribute__((aligned(32))) static int h;

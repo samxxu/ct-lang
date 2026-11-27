@@ -1,6 +1,6 @@
 // Phase 34 S8: `Point` lives in the consumer unit, so the `Option<Point>`
 // instance and its methods are emitted here, next to the type they mention.
-#include <stdio.h>
+
 
 import lib;
 

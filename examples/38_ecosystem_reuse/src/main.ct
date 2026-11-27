@@ -3,7 +3,7 @@
 // stay in the library, and `Option` / `Result` over both scalars and a type
 // that lives in this unit. A brace initialiser takes plain values, so the
 // generic call and the method calls land in locals first.
-#include <stdio.h>
+
 
 import eco;
 

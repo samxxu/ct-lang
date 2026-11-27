@@ -1,5 +1,5 @@
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 int main(void)
 {
     atomic int count = 0;

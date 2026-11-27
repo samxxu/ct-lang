@@ -1,6 +1,6 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_deref.ct`, 7:17):
    the base is a dereferenced handle, which stays an lvalue. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,7 +1,7 @@
 /* PH-80 S5a-3 / E80-4 + E80-6: the UTF-8 codepoint/byte API and the UTF-16
  * core JS method set (snake_case). Every method is called once with a known
  * value; the out-of-range branch is the negative half of each row. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 void put_u16(U16String *u)

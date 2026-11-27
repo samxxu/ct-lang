@@ -1,5 +1,5 @@
 /* Phase 53 / E53-5: `p?[i]` is `(p ? p[i] : 0)`; a null pointer never reads. */
-#include <stdio.h>
+
 
 int main(void)
 {

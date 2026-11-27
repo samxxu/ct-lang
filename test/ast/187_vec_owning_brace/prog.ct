@@ -1,6 +1,6 @@
 /* Phase 31 O2/O4 (E31-11): a brace list of owning elements retains each one,
    so the source rows can be released and the container still reads them. */
-#include <stdio.h>
+
 
 int main(void)
 {

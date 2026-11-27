@@ -1,7 +1,7 @@
 /* 102 (Phase 23): loop(a..b) is half-open -- it prints 2, 3, 4 and nothing
    else, next to the native `for` it stands for, so "equivalent" is an
    executable claim rather than prose. */
-#include <stdio.h>
+
 
 int main(void)
 {

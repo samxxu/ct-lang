@@ -2,7 +2,7 @@
    copies the tag row's `name` / `type`, and `dims` is what marks a field as an
    array. Without it the default initialiser takes the scalar vptr path and
    emits `.items.__t_vptr = ...` on an array, which C rejects. */
-#include <stdio.h>
+
 
 trait T {
     int twice(void);

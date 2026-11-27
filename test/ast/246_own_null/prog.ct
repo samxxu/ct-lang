@@ -1,9 +1,8 @@
 /* Phase 49 / E49-2: a factory that returns 0 owns nothing, and a literal zero
    initializer is not registered at all; the release's `if (p)` guard makes
    both safe without a drop. License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <stdlib.h>
 struct P {
     int n;
 } use Drop;

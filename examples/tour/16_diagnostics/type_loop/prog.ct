@@ -4,7 +4,7 @@
 //   本样例走 compile --diagnostics=json，expected.json 里比 type 与 callee。
 // 期望：编译退出 0、stderr 为空；stdout 与 expected.json 逐字节一致；
 //   随后的 C 程序输出与 expected.out 逐字节一致。
-#include <stdio.h>
+
 
 int main(void)
 {

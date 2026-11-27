@@ -1,6 +1,6 @@
 /* Phase 30: a left-value value receiver is addressed in place, so the block
    writes the original object; `$` is the receiver itself. */
-#include <stdio.h>
+
 
 struct Point {
     int x;

@@ -2,7 +2,7 @@
    stdbool spellings, the `volatile` and `restrict` qualifiers and `inline` in
    both orders are pass-through declarations, so a program written against those
    headers compiles here the same way L0 / L2 accept it. */
-#include <stdio.h>
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>

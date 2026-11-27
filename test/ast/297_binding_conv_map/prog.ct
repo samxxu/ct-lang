@@ -3,7 +3,7 @@
    is the explicit `node.as()` recipe. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 struct Num make(struct Node node) {
     return node;

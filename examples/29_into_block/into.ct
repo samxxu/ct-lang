@@ -3,7 +3,7 @@
    `into` is a contextual keyword, so `int into = 1;` below is still a plain
    identifier; the block only starts where an expression is followed by
    `into {`. */
-#include <stdio.h>
+
 
 struct ServerConfig {
     char *host;

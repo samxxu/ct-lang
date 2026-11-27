@@ -1,7 +1,7 @@
 /* 304 (S1a-0 C3): the generic arity is no longer a language limit. A struct
    and a trait each declare three type parameters; the concrete instance
    substitutes all three, and a generic impl binds all three positions. */
-#include <stdio.h>
+
 
 struct Stack<T, U, V> {
     T a;

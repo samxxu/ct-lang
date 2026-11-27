@@ -1,6 +1,6 @@
 /* The consumer: it reads and writes both exports, which are distinct objects
    because the namespace prefixes the C name. */
-#include <stdio.h>
+
 
 import a::one;
 import b::two;

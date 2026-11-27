@@ -2,7 +2,7 @@
    by its address -- that address is the returned frame. `make` reports the
    local's address; while the box is dangling, `res.self` equals it and the
    stale slot can be overwritten, so the status must not be 200. */
-#include <stdio.h>
+
 
 trait Resp {
     int status();

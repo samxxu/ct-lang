@@ -3,7 +3,7 @@
 //   这里外层 2 轮、内层 3 轮，内层每轮把 i 累加进 total：
 //   内层 i 为 0、1、2，两轮外层共 6。
 // 期望：stderr 与 expected.warn 逐字节一致，退出码 0；程序输出 6。
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,7 +1,7 @@
 /* SH-102 round 3 R6b: a struct defined by an aggregate zero initialiser owns
  * defined storage, so the loop's reassignment releases the old value and the
  * live count stays flat. */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

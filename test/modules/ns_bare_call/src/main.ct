@@ -4,7 +4,7 @@
 import app::model;
 import app::model::Point as Point;
 
-#include <stdio.h>
+
 
 int main(void)
 {

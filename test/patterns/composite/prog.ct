@@ -1,6 +1,6 @@
 /* Composite: a group holds interface values and treats itself like a leaf, so
    the recursive call walks the whole tree. */
-#include <stdio.h>
+
 
 trait Node {
     int sum();

@@ -1,7 +1,7 @@
 /* 97 (Phase 22): a `loop` inside a `loop` shadows the outer implicit `i`. The
    inner counter computes both totals; the shadowing itself is diagnosed
    (warning in compile mode / error under `ct check`, D22-5). */
-#include <stdio.h>
+
 
 int main(void)
 {

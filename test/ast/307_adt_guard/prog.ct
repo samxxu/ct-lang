@@ -3,7 +3,7 @@
    guard falls through to the next arm, and the pattern bindings are in scope
    inside the guard. A guarded arm never counts toward exhaustiveness, so an
    unguarded arm (or `_`) still has to cover the variant. */
-#include <stdio.h>
+
 
 enum Shape {
     Circle(int r),

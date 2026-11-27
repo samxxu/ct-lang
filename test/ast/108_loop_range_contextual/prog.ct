@@ -1,7 +1,7 @@
 /* 108 (Phase 23): the `..` form does not change how `loop` is recognised -- it
    is still an ordinary identifier except for a statement that starts with
    `loop(`, so a variable named `loop` and a label named `loop` keep working. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,7 +1,7 @@
 // Phase 33 O3: `ct build` with the element declared in another unit. The
 // container copies its element lifecycle helpers and its instance methods into
 // this unit as private statics, so the element's definition is in scope.
-#include <stdio.h>
+
 
 import elem;
 

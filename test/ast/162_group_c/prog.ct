@@ -1,7 +1,7 @@
 /* Phase 30 E30-9 group C: a handle with a lifecycle. The block only says what
    to do with the handle; closing it stays outside, where the resource's
    lifetime really ends. */
-#include <stdio.h>
+
 
 trait HandleOps {
     int read(int n);

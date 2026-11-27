@@ -1,6 +1,6 @@
 /* P-3.5 (SH-117) negative: the borrowed `Str` view is the same 16-byte struct,
  * so storing it into a `char *` is just as invalid as the owning handle. */
-#include <stdio.h>
+
 
 int main(void)
 {

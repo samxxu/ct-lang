@@ -1,7 +1,7 @@
 /* 38: variadic functions (batch 13) - a parameter list may end with `...`, the
    generated prototype carries it too, a `va_list` local is an ordinary
    declaration, and `va_arg(ap, T)` takes a type instead of an expression. */
-#include <stdio.h>
+
 #include <stdarg.h>
 
 static int sum_all(int n, ...);

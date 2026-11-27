@@ -1,5 +1,5 @@
 // 18: interface polymorphism — a trait used as a type dispatches to different structs
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

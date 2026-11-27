@@ -1,7 +1,7 @@
 /* trait default methods: `write` is the only method an impl must write. The
    default bodies expand per struct (D-1), dispatch siblings through the vtable,
    and an impl method of the same name overrides one (D-4). */
-#include <stdio.h>
+
 
 trait Logger {
     int write(char *buf, int len);

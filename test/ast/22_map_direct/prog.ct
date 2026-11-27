@@ -1,7 +1,7 @@
 /* 22: `map` direct binding - `-> real_put;` names the C function itself, so no
    wrapper is generated and the vtable slot points at `real_put` directly. Its
    first parameter is `void *`, matching the slot type. */
-#include <stdio.h>
+
 
 trait Sink {
     int put(char *buf, int len);

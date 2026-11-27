@@ -1,6 +1,6 @@
 /* L31-14: assignment carries the borrowed provenance, so the copy is not
    an owner either. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,7 +1,7 @@
 /* 56: real-world header compatibility (batch 33) - `_Atomic(type)` in every
    type position, `_Alignas` before the storage class, and GNU attributes
    before the declarator (global, function, local; trailing on a local too). */
-#include <stdio.h>
+
 
 _Atomic(int) counter;
 _Alignas(16) static int aligned_g;

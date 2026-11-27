@@ -6,7 +6,7 @@
    the out-of-range `get` zero value must not abort. An explicit `impl Drop`
    still owns its body, so the same field is released exactly once.
    License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 /* an owning element: `Vec<Probe>` retains on push and releases on container

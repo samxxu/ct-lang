@@ -13,7 +13,7 @@
 // expands in place into `ct_file_read(f, n)` -- no wrapper, no vtable, no box.
 import type_bridge::type_bridge;
 
-#include <stdio.h>
+
 
 int main(void) {
     struct ct_file file = { .fd = 3, .pos = 0 };

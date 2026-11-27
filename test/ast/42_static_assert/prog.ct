@@ -2,8 +2,7 @@
    inside a function body. The condition is emitted as written and the C
    compiler still owns the verdict; a non-constant condition is refused here
    with a message of its own. */
-#include <stdio.h>
-#include <stddef.h>
+
 
 struct Pair {
     int a;

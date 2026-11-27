@@ -2,7 +2,7 @@
  * struct, never a `char *`. `char *p = s` used to be accepted and emitted the
  * invalid C `char *p = s;`. The C boundary's only exit is `cstr()` /
  * `.data[i]`, so the implicit conversion must be a hard error. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -5,7 +5,7 @@
  * CT 与 C 一致：生成物把列表写成 `(a, (b, c))`，右结合只是解析产物，
  * 求值顺序仍是左到右。边界：for 条件里不带括号的逗号仍不做。
  */
-#include <stdio.h>
+
 
 static int twice(int x)
 {

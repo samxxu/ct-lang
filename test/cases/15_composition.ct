@@ -1,5 +1,5 @@
 // 15: composition — nested struct fields are qualified, constructed and callable
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

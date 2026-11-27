@@ -1,5 +1,5 @@
 /* L31-5: a container subscript names a value, not a slot. */
-#include <stdio.h>
+
 
 int main(void)
 {

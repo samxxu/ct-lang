@@ -1,5 +1,5 @@
 // 14: a `map`-bound instance used as a trait instance (Phase 11.2)
-#include <stdio.h>
+
 
 trait Controller {
     int send(char *buf, int len);

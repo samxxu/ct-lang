@@ -2,7 +2,7 @@
    can be assigned, passed as a struct argument, returned, read through a member
    suffix, and built with designated initialisers. A struct that carries a trait
    gets its vptr appended by the compiler, the same way a declaration does. */
-#include <stdio.h>
+
 
 trait Named {
     int val();

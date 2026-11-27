@@ -1,7 +1,6 @@
 /* P-7.4-4: `Map<Str, V>` migrated to owning `String` keys with borrowed `Str`
  * lookups; `str_slice` is the view form and `str_dup` the deep copy. */
-#include <stdio.h>
-#include <string.h>
+
 
 int main(void)
 {

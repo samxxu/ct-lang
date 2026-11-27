@@ -1,7 +1,7 @@
 /* PH-80 S5b after the deletion: the built-in `String` / `Str` pair is the
  * only string layer. A program that uses both compiles and runs; the old
  * owning type has no spelling left (see the negative fixture). */
-#include <stdio.h>
+
 
 int borrow_len(Str v)
 {

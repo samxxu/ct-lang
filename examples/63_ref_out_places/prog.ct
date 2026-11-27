@@ -9,7 +9,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 struct Counter { int hits; int misses; }
 

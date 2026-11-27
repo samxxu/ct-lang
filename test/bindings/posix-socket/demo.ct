@@ -1,6 +1,6 @@
 import posix::socket;
 
-#include <stdio.h>
+
 
 int main(void)
 {

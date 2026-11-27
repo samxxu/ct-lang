@@ -1,6 +1,6 @@
 /* SH-71 A-1: the request object lives in a .h.ct unit, so the string factory
    (a type host, which only a .m.ct may declare) can name its interface type. */
-#include <stdio.h>
+
 
 pub trait HttpRequest {
     HttpRequest header(char *k, char *v);

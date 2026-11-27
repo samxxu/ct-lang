@@ -1,5 +1,5 @@
 /* Phase 31 S28 (E31-30): a Map value keeps its own buffer across growth. */
-#include <stdio.h>
+
 
 int main(void)
 {

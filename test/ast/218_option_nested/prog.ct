@@ -2,7 +2,7 @@
    the inner option is an ordinary payload value, and each level is read with
    its own `unwrap_or` (a method call on a temporary is not legal, so the inner
    option lands in a variable first). */
-#include <stdio.h>
+
 
 int main(void)
 {

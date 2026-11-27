@@ -1,6 +1,6 @@
 /* Phase 30 E30-9 group C: the hand-written side. The handle is named on every
    line; the block side names it once and keeps close_handle outside too. */
-#include <stdio.h>
+
 
 trait HandleOps {
     int read(int n);

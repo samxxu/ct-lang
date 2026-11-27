@@ -1,5 +1,5 @@
 /* L31-23: `clear` releases the entries a `MapEntry` copy points into. */
-#include <stdio.h>
+
 
 int main(void)
 {

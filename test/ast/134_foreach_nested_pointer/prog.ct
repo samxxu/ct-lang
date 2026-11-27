@@ -1,7 +1,7 @@
 /* 134 (Phase 27): nesting shadows the outer `item` (compile warning, `ct
    check` error) and the two expansions keep distinct temporaries. An array of
    pointers copies the pointer, not the pointee, so `item[0]` reads through it. */
-#include <stdio.h>
+
 
 int main(void)
 {

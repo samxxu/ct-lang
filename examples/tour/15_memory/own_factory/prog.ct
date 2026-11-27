@@ -5,7 +5,7 @@
 // 角度：正例，作用域出口跑真实的 Drop 一次。其他指针表达式（&x、字段取址、
 //   指针算术）仍是 L49-1；工厂返回类型不匹配也拒绝。
 // 仅 ct-ast：own 是 CT 线能力。
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box { int n; } use Drop;

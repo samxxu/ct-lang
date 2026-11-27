@@ -3,7 +3,7 @@
    expression take two ring slots, so neither value is overwritten. */
 import lit::lit;
 
-#include <stdio.h>
+
 #include <string.h>
 
 struct Cmd {

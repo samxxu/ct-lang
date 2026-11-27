@@ -4,7 +4,7 @@
  * used to be a blanket ban (L38-3 / L40-5), which forced packages like ct-sse
  * to hand-write cleanup in every failure branch.
  */
-#include <stdio.h>
+
 
 namespace lib;
 

@@ -1,7 +1,7 @@
 /* Phase 50 / E50-5: a `Str` key compares by len + bytes, so an embedded NUL is
    data (`a\0b` != `a\0c`) and a longer/shorter prefix is a miss. A present zero
    value still reports `has == 1`. License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 
 int main(void)
 {

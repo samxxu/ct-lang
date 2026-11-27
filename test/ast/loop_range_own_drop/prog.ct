@@ -2,7 +2,7 @@
    released at the end of every iteration, exactly as in the counted form. If
    the body were parsed as a single branch rather than a block, the three boxes
    would leak silently. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box { int n; } use Drop;

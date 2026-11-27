@@ -1,4 +1,4 @@
-#include <stdio.h>
+
 
 enum M {
     A(int v),

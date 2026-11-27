@@ -5,7 +5,7 @@
  * CT 与 C 一致：三种拼写都作为类型拼写原样保留，声明、块作用域、cast 与
  * sizeof 都能识别；原子语义完全由 C 编译器负责。ct 只做语法接纳。
  */
-#include <stdio.h>
+
 
 _Atomic(int) counter;
 _Atomic int flag;

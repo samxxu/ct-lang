@@ -2,7 +2,7 @@
  * container owns the reference. Releasing it frees the element while the
  * container still points at it, and the container's own release would free it
  * a second time. The compiler must refuse the release and point at `retain()`. */
-#include <stdio.h>
+
 
 int main(void)
 {

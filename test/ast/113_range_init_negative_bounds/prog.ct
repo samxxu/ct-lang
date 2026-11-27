@@ -1,6 +1,6 @@
 /* 113 (Phase 24): bounds may be negative -- `-2..3` is five elements and the
    generated element keeps the sign, `((int)-2)`. */
-#include <stdio.h>
+
 
 int main(void)
 {

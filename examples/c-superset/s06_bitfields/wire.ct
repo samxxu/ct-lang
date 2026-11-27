@@ -6,7 +6,7 @@
  * 位宽可以来自宏或枚举成员（单名字放行，由 C 折叠）。ct 只校验「必须是
  * 整数类型、不能是数组」，布局仍交给 C。
  */
-#include <stdio.h>
+
 
 enum WireBits {
     KIND_BITS = 2,

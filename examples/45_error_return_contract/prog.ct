@@ -1,5 +1,5 @@
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 Result<int, char *> load(int n)
 {
     errdefer { printf("rollback\n"); }

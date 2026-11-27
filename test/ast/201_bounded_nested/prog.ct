@@ -2,7 +2,7 @@
 // written against the template tag and covers every `Box<...>` instance for
 // the bound check; no `use Show` is written on `Box`, so the generated C
 // stores no vptr for it.
-#include <stdio.h>
+
 
 trait Show {
     int show();

@@ -1,6 +1,6 @@
 // Phase 34 S2b: repeated `id<int>` calls share one consumer-owned instance;
 // the owner's `id<long>` does not consume a consumer instance number.
-#include <stdio.h>
+
 
 import lib;
 

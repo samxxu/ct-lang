@@ -1,7 +1,7 @@
 /* PH-80 S5a-4 / E80-5 / D-013 §2: `.data` is the read-only raw view with no
  * NUL guarantee, `cstr()` is the C-boundary exit that supplies the
  * terminator, and a sub-view's `.data` never becomes a C string. */
-#include <stdio.h>
+
 #include <stdlib.h>
 #include <string.h>
 

@@ -1,6 +1,6 @@
 /* Phase 30: a pointer receiver is promoted once and the block writes through
    it; a suffix after the block still reads the promoted receiver. */
-#include <stdio.h>
+
 
 struct AppConfig {
     char *host;

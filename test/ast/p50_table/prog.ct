@@ -3,7 +3,7 @@
    `Map`, and `val` is the borrowed value (or -1 for a miss). An in-range zero
    value and a present zero payload both print `has=1,hit=1,val=0`; misses
    print `has=0,hit=0,val=-1`. License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 
 int main(void)
 {

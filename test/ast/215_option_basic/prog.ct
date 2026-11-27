@@ -2,7 +2,7 @@
    `{ 1, v }` literal, an absent one is `{ 0 }`; the methods are ordinary impl
    members, so no compiler branch is involved. `unwrap` is the checked read,
    `set` / `clear` the mutators. */
-#include <stdio.h>
+
 
 int main(void)
 {

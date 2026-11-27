@@ -1,7 +1,7 @@
 /* SH-102 round 2 (B3a): an owning element of a struct literal is retained, so
  * releasing the source handle leaves the field valid (no shallow-copy UAF).
  * Positional and `.field =` forms are both covered. */
-#include <stdio.h>
+
 
 struct Holder {
     String tag;

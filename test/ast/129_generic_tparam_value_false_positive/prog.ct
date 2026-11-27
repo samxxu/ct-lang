@@ -1,7 +1,7 @@
 /* SH-64: a value legitimately named `T` outside a template is not a leaked
    type parameter. The residue scan only reads instance bodies, so this fixture
    must compile and run; scanning the whole file used to call it a leak. */
-#include <stdio.h>
+
 
 int idv<T>(T x)
 {

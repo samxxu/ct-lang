@@ -5,7 +5,7 @@
 //   注意 loop 的 i 不是只读常量：写它等价于写原生 for 的计数器，
 //   适合“每次吃掉两条”的合并场景。
 // 仅 ct-ast：loop 是 Phase 22/23 才进的语言特性。
-#include <stdio.h>
+
 
 static int g_budget_calls = 0;
 

@@ -3,7 +3,7 @@
    trampoline, so the compiler must copy it into the outer environment as well.
    `bump` is local to the outer body, so the inner literal reads it as a plain
    local instead of an environment field. */
-#include <stdio.h>
+
 
 int apply(int base)
 {

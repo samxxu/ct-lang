@@ -9,7 +9,7 @@
 //   写错会怎样：少写一行 delete self->buf，缓冲区就永远不释放（见
 //   15_memory/field_cascade_missed）。
 // 仅 ct-ast：Drop / delete 是 CT 线能力。
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Buffer { int id; } use Drop;

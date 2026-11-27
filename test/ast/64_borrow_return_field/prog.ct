@@ -1,6 +1,6 @@
 /* SH-45 (borrow path): `return c->fd;` reads the lent object before the
    handback runs; the handback still clears `in_use`. */
-#include <stdio.h>
+
 
 struct Conn {
     int fd;

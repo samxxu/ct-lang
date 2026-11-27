@@ -1,6 +1,6 @@
 /* every method has a default body, so `use Counted;` is the whole adoption:
    no `impl` block, and the vtable is still emitted once per struct (D-3). */
-#include <stdio.h>
+
 
 trait Counted {
     int base(void) {

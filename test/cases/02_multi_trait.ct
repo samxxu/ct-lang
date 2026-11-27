@@ -1,5 +1,5 @@
 // 02: multiple traits, `use` on its own line, nested calls, relative indentation in a body
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

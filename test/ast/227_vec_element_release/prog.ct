@@ -2,7 +2,7 @@
 // release) releases each live element on `release()`. `Vec<Probe>` with three
 // elements calls `Probe_release` three times; the generated C for `Vec<String>`
 // binds the element helper to `String_release`.
-#include <stdio.h>
+
 
 struct Probe { int id; }
 impl Probe {

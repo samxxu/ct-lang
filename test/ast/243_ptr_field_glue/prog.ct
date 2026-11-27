@@ -4,7 +4,7 @@
    (which would read the pointer's low bytes as the child). The child memory
    still belongs to the explicit owner: the fixture frees it after `delete`.
    License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Leaf {

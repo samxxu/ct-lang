@@ -2,7 +2,7 @@
    `static_ctype` slices answer -- member, call, index, address, deref,
    sizeof, ternary, unary, cast and the arithmetic operators. The probe also
    runs `ct check` on this file, so the slices are exercised. */
-#include <stdio.h>
+
 
 struct Point {
     int x;

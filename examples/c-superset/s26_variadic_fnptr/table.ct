@@ -6,7 +6,7 @@
  * ct 不检查实参类型（与 printf 一致），类型正确性由用户负责。
  */
 #include <stdarg.h>
-#include <stdio.h>
+
 
 typedef int (*handler_fn)(const char *fmt, ...);
 

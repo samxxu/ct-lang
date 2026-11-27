@@ -5,7 +5,7 @@
 // 角度：反例，固化确切诊断与退出码（1）。正确写法：直接返回，让 Handback
 //   在块尾归还；确实要销毁，只能由所有者 delete（见 15_memory/borrow_handback）。
 // 仅 ct-ast：borrow / Handback 是 CT 线能力。
-#include <stdio.h>
+
 
 struct Conn {
     int fd;

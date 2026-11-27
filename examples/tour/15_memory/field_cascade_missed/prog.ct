@@ -5,7 +5,7 @@
 // 角度：会泄漏的写法。输出里的 “leaf drops 0” 就是证据；修法只有一行：
 //   impl Drop for Node 里补 `delete self->leaf;`。
 // 仅 ct-ast：Drop / delete 是 CT 线能力。
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Leaf { int id; } use Drop;

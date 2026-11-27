@@ -1,5 +1,5 @@
 /* Phase 53 / E53-3: `m["k"]?.c` calls `get` once and tests its V*. */
-#include <stdio.h>
+
 
 struct B {
     int c;

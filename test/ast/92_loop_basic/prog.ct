@@ -1,6 +1,6 @@
 /* 92 (Phase 22): the basic form prints `loop` next to the native `for` it
    stands for, so "equivalent" is an executable claim, not prose. */
-#include <stdio.h>
+
 
 int main(void)
 {

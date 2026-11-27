@@ -8,7 +8,7 @@
 //   已知边界。
 // 对照 15_memory/drop_paths：那边演示块尾 / 嵌套块 / 提前 return 三条出口。
 // 仅 ct-ast：own / Drop 是 CT 线能力（`loop(n)` 的块尾释放规则与此相同）。
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box { int id; } use Drop;

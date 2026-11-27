@@ -1,6 +1,6 @@
 import shapes;
 
-#include <stdio.h>
+
 
 /* A `pub` trait on a `pub` struct exports its vtable (2a.1): `shapes.h`
    declares `struct Speak_vtbl Dog_Speak_vtable;` and this unit defines it with

@@ -1,7 +1,7 @@
 /* 146 (Phase 28 / A4): ownership inside a bounded template. The `own` local is
    released when the instance returns, and a pointer to it is the receiver the
    vtable slot expects. Every allocation is freed (the ASAN gate runs this). */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 trait Compare {

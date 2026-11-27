@@ -1,5 +1,5 @@
 // 14: same-named locals and parameters in different functions must not bleed
-#include <stdio.h>
+
 
 trait Barker { void bark(); }
 trait Meower { void meow(); }

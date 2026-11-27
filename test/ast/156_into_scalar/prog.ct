@@ -2,7 +2,7 @@
    receiver is promoted by category and the recipe's first binding parameter is
    replaced by its value form -- `ct_twice((*__ct_recv0))`, not `&n`. */
 import lib::lib;
-#include <stdio.h>
+
 
 int main(void)
 {

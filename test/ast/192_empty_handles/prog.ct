@@ -1,7 +1,7 @@
 /* Phase 31 D31-21 (E31-28): `Vec::from(0, 0)` and `Map::from(0, 0)` answer a
    non-zero header, so an empty literal is releasable; a named zero handle
    inside a container is skipped by the cascade instead of aborting. */
-#include <stdio.h>
+
 
 int main(void)
 {

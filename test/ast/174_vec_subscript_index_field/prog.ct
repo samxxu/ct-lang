@@ -1,6 +1,6 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_index_field.ct`,
    9:18): a member array of handles. */
-#include <stdio.h>
+
 
 struct Holder {
     Vec<int> v[1];

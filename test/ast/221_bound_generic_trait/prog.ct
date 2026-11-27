@@ -1,6 +1,6 @@
 /* 221 (Phase 35): `T: Iter<int>` stores the instance row as the bound, so a
    bounded body dispatches through the same vtable slot. */
-#include <stdio.h>
+
 
 trait Iter<T> {
     T next(void);

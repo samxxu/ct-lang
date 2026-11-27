@@ -1,7 +1,7 @@
 // 121 (Phase 25.4): a declared closure binding as the actual. Its own stack
 // instance is passed, so the second recipe slot is `&__ct_cl_env_v_N` instead
 // of a compound literal (Phase 25 §3.6).
-#include <stdio.h>
+
 
 import arr::arr;
 

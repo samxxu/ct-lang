@@ -3,7 +3,7 @@
    the expression form share the same pattern grammar. The coverage rule is
    conservative: a refutable nested arm does not cover its outer variant, so
    the `Box.One(_)` fallback is written out. */
-#include <stdio.h>
+
 
 enum Val { Leaf(int n), Pair(int a, int b), None() }
 enum Box { One(Val v), Zero() }

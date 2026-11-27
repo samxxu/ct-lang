@@ -14,7 +14,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 T nth<T>(T *items, int n, int i, T fallback)
 {

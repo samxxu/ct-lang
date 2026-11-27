@@ -5,7 +5,7 @@
    an enum member, a character literal, a unary minus, a macro); and
    `offsetof` on a struct tag and on a typedef alias. ct-ast folds nothing and
    re-emits the source spelling, so C computes the values. */
-#include <stdio.h>
+
 #include <stddef.h>
 
 #define KIND_B 5

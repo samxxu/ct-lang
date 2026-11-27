@@ -6,7 +6,7 @@
  * 名字。判据是「既不是已登记的类型，也不是变量/函数，还不是语句关键字」。
  * 转换与 sizeof 里同样可用，因此 (time_t)raw 不会退化成函数调用。
  */
-#include <stdio.h>
+
 #include <time.h>
 
 static time_t g_base;

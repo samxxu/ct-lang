@@ -11,7 +11,7 @@
      - `break` inside an arm still leaves the enclosing loop, because the match
        is not a C `switch`;
      - the wildcard `_` is an explicitly written fallback. */
-#include <stdio.h>
+
 
 enum Shape {
     Circle(int r),

@@ -7,7 +7,7 @@
    (`live=0`), which is the explicit leak evidence the platform's ASAN cannot
    give (LeakSanitizer is unavailable on macOS).
    License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 #ct-raw

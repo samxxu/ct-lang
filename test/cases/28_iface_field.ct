@@ -1,5 +1,5 @@
 // 28: an interface-value / interface-pointer used as a struct field
-#include <stdio.h>
+
 
 trait Node {
     void show();

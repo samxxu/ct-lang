@@ -1,6 +1,6 @@
 /* SH-114 negative: a generic template used before its definition. The parser
    must name the ordering rule, not report a generic undeclared variable. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,7 +1,7 @@
 /* Phase 31 O3 (E31-24): every chained receiver is named before its address is
    taken -- a nested subscript, an explicit `get` chain, a call result, a
    function-pointer call and a method of an instance. */
-#include <stdio.h>
+
 
 trait VecSource {
     Vec<int> mv();

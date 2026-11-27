@@ -1,5 +1,5 @@
 // 08: a method body may call a sibling method through self (vtable declared up front)
-#include <stdio.h>
+
 
 trait Counter {
     void reset();

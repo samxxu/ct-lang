@@ -4,7 +4,7 @@
    handle. `foreach` exposes the stored key as a borrowed copy: the loop below
    only reads it (releasing `item.key` would free what the entry still owns,
    D47-6). License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 
 int main(void)
 {

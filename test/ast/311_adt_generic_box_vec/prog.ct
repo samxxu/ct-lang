@@ -1,7 +1,7 @@
 /* v1-PH-2 S6: a generic ADT interoperates with the built-in owning
    containers. `Vec<Opt<int>>` stores the instance by value; `Box<Opt<int>>`
    boxes the same instance through its generic `of`. */
-#include <stdio.h>
+
 
 enum Opt<T> {
     Some(T v),

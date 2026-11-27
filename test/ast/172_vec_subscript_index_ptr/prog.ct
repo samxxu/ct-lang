@@ -1,6 +1,6 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_index_ptr.ct`, 6:17):
    the first subscript is C's pointer subscript, the second is the handle's. */
-#include <stdio.h>
+
 
 int main(void)
 {

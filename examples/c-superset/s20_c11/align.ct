@@ -7,7 +7,7 @@
  * _Atomic(type) 都原样保留。原子语义完全由 C 编译器负责——这里只验证
  * 声明、赋值与 sizeof 能过。
  */
-#include <stdio.h>
+
 
 _Alignas(16) int g_a;
 static _Alignas(16) int g_b;

@@ -3,7 +3,7 @@
    the constructor, the patterns and the `impl<T>` methods -- while the C tag
    stays distinct from the built-in `Option_int` (`ct_adt_Option_int`). The
    unshadowed built-in `Result` keeps working in the same unit. */
-#include <stdio.h>
+
 
 enum Option<T> {
     Some(T v),

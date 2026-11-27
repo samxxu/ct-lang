@@ -1,6 +1,6 @@
 /* REQ-INDEX-1 A3 / D-028: the borrow form `int *get(int)` writes through
    `*x[k] = v`, and the read-back sees the value. */
-#include <stdio.h>
+
 
 struct Buf {
     int a[4];

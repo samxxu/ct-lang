@@ -1,6 +1,6 @@
 // S1b-S2 cleanup edge 2: `break` leaves through every enclosing block with a
 // defer, innermost first.
-#include <stdio.h>
+
 
 static int find(int n)
 {

@@ -1,6 +1,6 @@
 /* The consumer: it imports the provider and boxes the namespace host without
    declaring any instance. */
-#include <stdio.h>
+
 
 import hal::writer;
 

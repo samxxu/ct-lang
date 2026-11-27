@@ -6,7 +6,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 static int map_sum(int *xs, int from, int to, int (*fn)(void *env, int x), void *env)
 {

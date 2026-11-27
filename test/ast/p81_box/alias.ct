@@ -2,7 +2,7 @@
  * parses (root or `core::` spelling) and produces the same `Box_*` instance
  * symbols; every use prints one
  * `warning: 'box<T>' is deprecated; write 'Box<T>'` (v1.1 removes it). */
-#include <stdio.h>
+
 
 struct R { int x; }
 

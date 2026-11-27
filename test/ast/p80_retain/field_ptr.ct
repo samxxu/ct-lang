@@ -1,6 +1,6 @@
 /* SH-102 round 3 C-4: `p->tag` may alias any object, so the old value is not
  * released automatically; the one leaked buffer is a registered limitation. */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

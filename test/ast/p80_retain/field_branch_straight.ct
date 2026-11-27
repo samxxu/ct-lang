@@ -1,6 +1,6 @@
 /* SH-102 round 4:C-1 误拒回归。循环前的直线赋值已定义 `h.tag`，分支内的
  * 重赋只作用于这一份已定义存储；分支之后仍按“定义在分支前”处理。 */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

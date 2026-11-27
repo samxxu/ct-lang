@@ -3,7 +3,7 @@
    takes a number, a quoted literal or a macro name, and declarations may sit
    in the switch block as long as no label guards them. A method call and a
    function-pointer field call are ordinary expressions inside a case. */
-#include <stdio.h>
+
 
 #define KIND_B 5
 

@@ -9,7 +9,7 @@
  *
  * Requires ct-ast (the installed `ct`): the L0 seed does not know `map`.
  */
-#include <stdio.h>
+
 
 trait Controller {
     int send(char *buf, int len);

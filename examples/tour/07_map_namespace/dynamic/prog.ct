@@ -8,7 +8,7 @@
 // 仅 ct-ast。
 namespace hal;
 
-#include <stdio.h>
+
 
 trait Writer {
     int write(char *buf, int n);

@@ -1,7 +1,7 @@
 /* PH-81 E81-5: a reference cycle is the author's responsibility. `retain()`
  * makes the two nodes own each other; releasing both handles leaves each
  * payload at refs=1, with no compiler warning and no run-time cycle check. */
-#include <stdio.h>
+
 struct Node { int id; Box<Node> next; }
 int main(void) {
     Box<Node> a = new Node { .id = 1 };

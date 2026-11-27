@@ -1,7 +1,6 @@
 /* Phase 52 / E52-3: the statement `x["k"] = 9;` expands to `set(k, 9)` and
    the read-back sees 9. */
-#include <stdio.h>
-#include <string.h>
+
 
 struct X {
     int v;

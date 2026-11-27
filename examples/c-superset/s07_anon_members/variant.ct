@@ -7,7 +7,7 @@
  * offsetof(..., lo) 的校验都与普通字段一致；生成物照原样发射嵌套记录。
  */
 #include <stddef.h>
-#include <stdio.h>
+
 
 struct Outer {
     int tag;

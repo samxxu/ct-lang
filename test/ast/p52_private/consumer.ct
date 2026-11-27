@@ -1,6 +1,6 @@
 /* PH-52 L52-10: `lib::X`'s `get` is not `pub`, so the consumer cannot use the
    protocol. */
-#include <stdio.h>
+
 import lib;
 
 int main(void)

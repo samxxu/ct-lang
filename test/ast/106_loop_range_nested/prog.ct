@@ -1,7 +1,7 @@
 /* 106 (Phase 23): nesting reuses L22-4 unchanged -- the inner `i` shadows the
    outer one (compile warning, `ct check` error) and the two `for` headers carry
    distinct temporaries, so four rounds run. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -4,7 +4,7 @@
  * CT 与 C 一致：格式串与实参类型的匹配由用户负责（与 printf 一样）；
  * ct 不折叠浮点常量，编译期常量仍由 C 处理。
  */
-#include <stdio.h>
+
 
 static double average(int a, int b)
 {

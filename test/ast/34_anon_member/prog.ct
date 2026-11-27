@@ -3,7 +3,7 @@
    works directly; two levels nest, an anonymous member may hold bit-fields, and
    a trait-carrying struct inside one still dispatches through the promoted
    name. */
-#include <stdio.h>
+
 
 trait Named {
     int pair_sum();

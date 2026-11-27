@@ -1,5 +1,5 @@
 /* Strategy: one interface parameter, two interchangeable algorithms. */
-#include <stdio.h>
+
 
 trait Strategy {
     int run(int x);

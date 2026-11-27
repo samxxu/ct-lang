@@ -1,7 +1,7 @@
 /* PH-80 E80-1 / D-013 §3: the 16-byte handle and the 8-byte refcount header.
  * The three `_Static_assert`s are emitted into the C and compiled by `cc`, so
  * a layout drift fails the probe at compile time, not only at run time. */
-#include <stdio.h>
+
 
 int main(void)
 {

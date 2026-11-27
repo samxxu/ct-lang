@@ -6,7 +6,7 @@
 // 角度：实例级 map 的核心是“同一个 struct 的不同实例可以有不同绑定”，
 //   这点和 impl（按类型绑定）相反；换成 impl，两个 LED 只能共用一套行为。
 // 仅 ct-ast：冻结种子不认 map（会把它当非法 C 透传）。
-#include <stdio.h>
+
 
 trait Lamp {
     int set(int on);

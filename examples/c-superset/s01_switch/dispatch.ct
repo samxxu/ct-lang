@@ -6,7 +6,7 @@
  * 这个文件不依赖任何 CT 扩展，dispatch.orig.c 是它的逐字节副本，
  * 直接用 cc 编译得到同样的输出。
  */
-#include <stdio.h>
+
 
 enum Verb {
     VERB_ADD = 1,

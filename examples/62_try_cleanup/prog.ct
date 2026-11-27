@@ -9,7 +9,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 static Result<int, char *> inner(int n)
 {

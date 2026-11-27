@@ -35,11 +35,6 @@
 
 set -u
 
-# This gate compiles generated C, so the source-level c-boundary policy is not
-# what it exercises; SH-93 removed the cwd-based allow, and a dialect example
-# copied to a temp path would otherwise be refused before it can be compiled.
-export CT_C_BOUNDARY=allow
-
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
@@ -66,6 +61,11 @@ if ! CC="$CC" CFLAGS="-Wall -Wextra -std=c99" \
     echo "  the AST compiler did not build from the frozen seed:"; sed 's/^/    /' "$work/astb.log"; exit 1
 fi
 ok "ct-ast builds from the frozen seed"
+# v1-PH-2 S9 M4: strict by default; only the registered C-interop fixtures get
+# the explicit CLI allow (test/c-boundary-allow.tsv).
+sh "$root/test/make-ct-ast-wrapper.sh" "$work/ct-ast" "$root" || {
+    echo "  could not install the C-boundary allow wrapper"; exit 1
+}
 
 # scan_one <label> <generated.c> [extra cc flags...]
 scan_one() {

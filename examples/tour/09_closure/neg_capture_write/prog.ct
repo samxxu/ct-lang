@@ -3,7 +3,7 @@
 //   如果允许写回，读者就无法从源码判断 n 到底有几个副本。
 //   编译器在赋值处报错并退出 1，并提示改成显式 env（tier-1）。
 // 期望：stderr 与 expected.err 逐字节一致，退出码 1。
-#include <stdio.h>
+
 
 int main(void) {
     int n = 0;

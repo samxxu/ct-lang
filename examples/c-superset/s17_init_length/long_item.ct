@@ -4,7 +4,7 @@
  *
  * CT 与 C 一致：字符串字面量原样发射；长度由 C 的 sizeof/strlen 计算。
  */
-#include <stdio.h>
+
 #include <string.h>
 
 static const char *notes[] = {

@@ -2,7 +2,7 @@
 // concrete type and produces one `<S>_Drop_drop` definition per instance, no
 // template `Box_Drop_drop` and no vtable. The explicit body takes full
 // responsibility and the field glue does not run.
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box<T> { T value; } use Drop;

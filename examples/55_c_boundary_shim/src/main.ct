@@ -4,7 +4,7 @@
 // 段都会构建并运行它。
 import lib::lib;
 
-#include <stdio.h>
+
 
 int main(void)
 {

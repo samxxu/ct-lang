@@ -8,9 +8,8 @@
  * reference. The alias call (`rebind(a, a)`) must stay a no-op on the count,
  * not free the buffer the source still owns.
  */
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <stdlib.h>
 void rebind(out String slot, ref String src)
 {
     slot = src;

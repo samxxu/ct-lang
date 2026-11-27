@@ -14,8 +14,7 @@
  * 但 clang 在 -std=c99 下会对它发 -Wc23-extensions 警告，与本目录「cc 零警告」
  * 的判据冲突，所以正例统一带消息。行为已单独实测，不是「规范写了就能用」。
  */
-#include <stddef.h>
-#include <stdio.h>
+
 
 struct Pair {
     int a;

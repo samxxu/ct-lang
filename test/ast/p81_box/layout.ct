@@ -2,7 +2,7 @@
  * shared `{refs, aux}` header is 8 bytes immediately before the payload. The
  * assertions are emitted into the C and compiled by `cc`, so a layout drift
  * fails the probe at compile time. */
-#include <stdio.h>
+
 
 struct Record { int id; String tag; }
 

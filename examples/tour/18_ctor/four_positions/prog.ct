@@ -7,7 +7,7 @@
 //   4) malloc 堆对象：`heap->s = r;` 堆上的宿主字段同样拿到 vptr。
 //   每种都打印 name() 与 area()，两者都来自 vt->，能区分“值对但没派发”的假绿。
 // 期望：stdout 与 expected.out 逐字节一致，退出码 0。
-#include <stdio.h>
+
 #include <stdlib.h>
 
 trait Shape {

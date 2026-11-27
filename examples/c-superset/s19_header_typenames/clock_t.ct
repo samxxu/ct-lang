@@ -5,7 +5,7 @@
  * CT 与 C 一致：clock_t / off_t 都是头文件 typedef，ct 不解析头文件，
  * 只把拼写保留下来交给 C。若名字已经登记为变量，`a * b;` 仍按乘法解析。
  */
-#include <stdio.h>
+
 #include <sys/types.h>
 #include <time.h>
 

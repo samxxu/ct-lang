@@ -1,5 +1,5 @@
 import ctypes::ctypes;
-#include <stdio.h>
+
 
 /* P20-03: the surplus argument sits inside another call's argument list. */
 int main(void)

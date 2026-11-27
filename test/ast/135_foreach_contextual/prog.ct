@@ -1,7 +1,7 @@
 /* 135 (Phase 27): `foreach` is a contextual keyword, never reserved (D27-1).
    A variable and a label may carry the name; only a statement-position
    `foreach (` is promoted to the statement form. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,6 +1,6 @@
 /* 115 (Phase 24): an explicit numeric dimension is kept as written and has to
    agree with the range; `[3]` with three elements is accepted. */
-#include <stdio.h>
+
 
 int main(void)
 {

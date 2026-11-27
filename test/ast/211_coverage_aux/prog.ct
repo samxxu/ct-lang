@@ -2,7 +2,7 @@
    globals are consumed so the behaviour loop builds warning-free; `gc` is a
    global so the interface return does not escape a stack frame, and the
    containers use Phase 31 brace initialisers. */
-#include <stdio.h>
+
 
 trait Show {
     void show();

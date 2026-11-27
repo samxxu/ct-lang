@@ -17,7 +17,7 @@
 // 注意：impl 方法体内部的 `self->m()` 也会被重写成 vptr 调用（见 docs/language-spec.md 4.3）；
 // 这里把对象间的相互调用留在对象层，而不是摊在 main 里。
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 
 trait Purse {
     int balance();

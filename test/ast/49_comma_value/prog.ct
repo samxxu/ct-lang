@@ -2,7 +2,7 @@
    ordinary expression, so its value is the last operand and it may stand in an
    assignment, an argument or a condition, where a bare comma would have been a
    separator. */
-#include <stdio.h>
+
 
 static int bump(int *p) {
     *p = *p + 1;

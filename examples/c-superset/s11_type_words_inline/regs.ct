@@ -6,8 +6,7 @@
  * 返回值上都成立；`_Bool` 与 `bool` 是同一个内置类型词。生成的 C 与手写
  * C 完全相同。
  */
-#include <stdbool.h>
-#include <stdio.h>
+
 
 static unsigned char fake_regs[4];
 static volatile unsigned char *reg;

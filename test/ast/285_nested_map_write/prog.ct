@@ -2,7 +2,7 @@
    receiver) and rewrites the outer sugar to `put`, so the generated C never
    takes the form `Map_get(...)[k] = ...` (W7). The read side derefs the slot
    pointer `at` answers with the declared zero value (W6). */
-#include <stdio.h>
+
 
 int main(void)
 {

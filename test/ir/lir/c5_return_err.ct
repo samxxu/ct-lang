@@ -1,6 +1,6 @@
 // S1b-S2 cleanup edge 5: `return err:` runs defers and errdefers; the value
 // is materialised first, so a defer that rewrites the local cannot change it.
-#include <stdio.h>
+
 
 static int fail(int n)
 {

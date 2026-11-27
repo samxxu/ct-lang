@@ -6,7 +6,7 @@
  * 连续的标签（retry: done:）允许，第一条拥有第二条。标签后必须有一条
  * 语句，最省的是空语句 `;`（见 src 里的 done: ;）。
  */
-#include <stdio.h>
+
 
 static int next_step(int step)
 {

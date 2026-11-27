@@ -6,7 +6,7 @@
 // `num()` / `add()` are the only constructors: node layout stays inside the
 // implementation, `main` only states which expression it wants.
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 
 struct Num;
 

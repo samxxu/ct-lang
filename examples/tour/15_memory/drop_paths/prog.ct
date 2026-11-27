@@ -6,7 +6,7 @@
 //   逆序释放；return 前先取值再释放，返回的值不会读到已释放内存（SH-45）。
 //   写错会怎样：把 own 改成裸 malloc，drop 2 / drop 3 / drop 4 都不会出现。
 // 仅 ct-ast：own / Drop 是 CT 线能力，冻结的 L0 只把它当普通标识符透传。
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box { int id; } use Drop;

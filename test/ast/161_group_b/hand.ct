@@ -3,7 +3,7 @@
    match after `recv_demo<N>` is folded with the promoted receiver. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 int main(void)
 {

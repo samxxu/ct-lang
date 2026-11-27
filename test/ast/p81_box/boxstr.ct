@@ -1,7 +1,7 @@
 /* PH-81 / D-013 backfill: `Box<String>` shares the payload header protocol.
  * The `Box<String>::of` factory takes its own retain, so the Box and the
  * caller each own one reference; `at()` is the borrowed view. */
-#include <stdio.h>
+
 
 int main(void)
 {

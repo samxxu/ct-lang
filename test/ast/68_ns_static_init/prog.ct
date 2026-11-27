@@ -2,7 +2,7 @@
 // source does, but their declarations are emitted under the unit prefix. The
 // captured `{ … }` text must be rewritten as well, or `cc` sees an undeclared
 // identifier while `ct compile` still returned 0.
-#include <stdio.h>
+
 
 namespace ns;
 

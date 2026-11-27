@@ -1,5 +1,5 @@
 #include <pthread.h>
-#include <stdio.h>
+
 atomic int count = 0;
 void *worker(void *arg)
 {

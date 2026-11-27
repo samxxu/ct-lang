@@ -6,7 +6,7 @@
  * sizeof 等于最大成员，所有成员的 offsetof 都是 0——这两点由 C 保证。
  */
 #include <stddef.h>
-#include <stdio.h>
+
 
 union Value {
     int i;

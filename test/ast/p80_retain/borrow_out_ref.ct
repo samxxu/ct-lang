@@ -8,9 +8,8 @@
  * Both are on the whitelist; a `ref Str` assignment is the same shape for the
  * other borrowed type.
  */
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <stdlib.h>
 void pick(out Str r, Str src)
 {
     r = src;

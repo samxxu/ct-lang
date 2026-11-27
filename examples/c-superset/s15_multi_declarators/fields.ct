@@ -6,7 +6,7 @@
  * 自己的星号、维度与位宽；位域也可以成列。字段表按名字逐个登记，
  * 成员访问与 offsetof 不受影响。
  */
-#include <stdio.h>
+
 
 struct Buf {
     char name[8];

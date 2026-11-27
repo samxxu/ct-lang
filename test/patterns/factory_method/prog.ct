@@ -1,6 +1,6 @@
 /* Factory Method: one interface-returning function picks the concrete product;
    the caller only knows the interface. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 trait Shape {

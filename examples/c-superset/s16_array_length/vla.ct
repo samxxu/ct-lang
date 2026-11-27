@@ -5,7 +5,7 @@
  * CT 与 C 一致：运行期长度同样原样发射，由 C 判断是否支持；ct 不展开
  * sizeof，`sizeof local / sizeof local[0]` 在 C 里是运行期表达式。
  */
-#include <stdio.h>
+
 
 static int fill_sum(int n)
 {

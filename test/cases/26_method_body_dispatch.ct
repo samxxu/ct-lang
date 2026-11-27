@@ -3,7 +3,7 @@
 // field-chain receiver and a parameter receiver all dispatch, alongside sibling
 // `self->m()` calls.
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 
 struct Num;
 trait Node {

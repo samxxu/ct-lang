@@ -8,7 +8,7 @@
 //
 // Kept apart from callback.ct because the L0 seed does not know `=>`.
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 
 struct IntRing {
     int items[4];

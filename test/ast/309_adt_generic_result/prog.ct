@@ -1,6 +1,6 @@
 /* v1-PH-2 S6: two type parameters, each substituted into its own variant.
    `Res<int, int>` and `Res<int, char *>` are distinct instances. */
-#include <stdio.h>
+
 
 enum Res<T, E> {
     Ok(T v),

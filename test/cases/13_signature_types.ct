@@ -1,5 +1,5 @@
 // 13: struct types across the whole signature — returns, prototypes, multi-word types
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

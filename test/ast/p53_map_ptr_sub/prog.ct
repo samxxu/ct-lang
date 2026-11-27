@@ -1,5 +1,5 @@
 /* Phase 53 / E53-4: `m?["k"]` on a Map pointer tests the Map first. */
-#include <stdio.h>
+
 
 int main(void)
 {

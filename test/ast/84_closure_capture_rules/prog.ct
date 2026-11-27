@@ -2,7 +2,7 @@
 // through a captured pointer is the sanctioned way to write back (D21-2).
 // `*p = v` inside the closure must pass; `n = 1`, `n++` and `&n` are pinned
 // under test/ast/errors/closure_capture_*.ct.
-#include <stdio.h>
+
 
 int main(void)
 {

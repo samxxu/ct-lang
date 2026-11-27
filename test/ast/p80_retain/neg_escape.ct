@@ -1,7 +1,7 @@
 /* SH-102 negative (escape): returning a borrowed `Str` view where the caller
  * expects an owning `String` would hand back a view of a buffer this frame does
  * not own. The compiler must refuse it and point at `to_string()`. */
-#include <stdio.h>
+
 
 String escape(Str v)
 {

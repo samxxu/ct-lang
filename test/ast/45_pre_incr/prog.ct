@@ -1,7 +1,7 @@
 /* 45: prefix `++` / `--` (batch 20) - the operator binds like the other unary
    forms, so it works inside a subscript, a dereference and an ordinary
    expression; the value is the updated one, unlike the postfix spelling. */
-#include <stdio.h>
+
 
 #define WIDTH 4
 

@@ -3,7 +3,7 @@
    unit; the layer's header forwards it instead of defining it. */
 import lib::types;
 
-#include <stdio.h>
+
 
 struct JsonRef jsonref_make(int tag)
 {

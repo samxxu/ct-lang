@@ -1,5 +1,5 @@
 // 27: static file-scope objects and arrays also get their vptrs written
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

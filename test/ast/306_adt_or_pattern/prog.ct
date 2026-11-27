@@ -3,7 +3,7 @@
    bound from different payloads is one binding (the emitter picks the arm
    that matched); coverage is counted per alternative, so a cross-variant or
    can complete the variant list without a `_` fallback. */
-#include <stdio.h>
+
 
 enum Shape {
     Circle(int r),

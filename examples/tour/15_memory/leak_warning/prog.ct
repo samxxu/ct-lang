@@ -5,7 +5,7 @@
 //   警告也真的释放；把 malloc 结果转手交给别的函数也会让这条分析闭嘴，
 //   所以“没有警告”不等于“没有泄漏”。
 // 仅 ct-ast：泄漏分析是 CT 线能力。
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box { int n; } use Drop;

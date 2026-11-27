@@ -1,5 +1,5 @@
 /* L31-13: `item` is a borrowed view of the stored element. */
-#include <stdio.h>
+
 
 int main(void)
 {

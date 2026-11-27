@@ -6,7 +6,7 @@
 // 角度：同一问题、两种严重级别——expected.warn 是 `ctc` 编译的 stderr，
 //   expected.err 是 `ct check` 的 stderr，退出码分别是 0 和 1。
 // 仅 ct-ast。
-#include <stdio.h>
+
 
 trait Op {
     int add(int a, int b);

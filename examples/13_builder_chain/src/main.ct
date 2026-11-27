@@ -10,7 +10,7 @@
 //@ct-requires: ct-ast
 import builder::builder;
 
-#include <stdio.h>
+
 
 int main(void)
 {

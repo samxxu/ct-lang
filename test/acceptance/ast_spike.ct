@@ -18,7 +18,7 @@
  * no error recovery (docs/language-spec.md: the first error terminates), so a
  * single compile of this file would hide all but the first gap.
  */
-#include <stdio.h>
+
 
 trait Node {
     int eval();

@@ -3,7 +3,7 @@
  * `snprintf(dst, n, "%s", dst)` returns an empty string on glibc, so a
  * self-copy would lose both field paths, the merge would insert nameless
  * entries and the later reassignments would not release the old values. */
-#include <stdio.h>
+
 
 struct Pair { String a; String b; }
 

@@ -1,6 +1,6 @@
 /* Phase 31 O1/O4 (E31-11): a Map literal boxes a concrete struct into an
    interface value, exactly like `put`, and `get` hands back the stored value. */
-#include <stdio.h>
+
 
 trait Show {
     int show();

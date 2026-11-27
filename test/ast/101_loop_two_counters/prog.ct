@@ -1,6 +1,6 @@
 /* 101 (Phase 22): three `loop`s and a nested one in one function get distinct
    private bounds (`__ct_loop_n_K`), so the sums never collide. */
-#include <stdio.h>
+
 
 int main(void)
 {

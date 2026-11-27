@@ -1,7 +1,7 @@
 /* 50: a type name that only a header declares (batch 25) - `time_t` and
    `clock_t` are not in the built-in word list, yet a declaration can name them:
    the spelling is kept as written and the C compiler supplies the typedef. */
-#include <stdio.h>
+
 #include <time.h>
 
 struct Stamp {

@@ -1,5 +1,5 @@
 /* L31-23: `remove` moves the entries, so an earlier `get` pointer is stale. */
-#include <stdio.h>
+
 
 int main(void)
 {

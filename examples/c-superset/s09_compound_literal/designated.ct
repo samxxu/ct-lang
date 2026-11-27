@@ -6,7 +6,7 @@
  * 不能对复合字面量直接调 trait 方法（先赋给变量），数组类型
  * `(int[]){...}` 也不在子集内。
  */
-#include <stdio.h>
+
 
 struct Inner {
     int a;

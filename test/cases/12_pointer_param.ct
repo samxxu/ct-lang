@@ -1,5 +1,5 @@
 // 12: pointer parameters — the type is qualified and t->m() dispatches to the vtable
-#include <stdio.h>
+
 
 trait Counter {
     void bump(int by);

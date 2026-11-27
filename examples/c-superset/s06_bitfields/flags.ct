@@ -6,7 +6,7 @@
  * 无名位域只占位、不进成员表。赋值超出位宽时按 C 的规则截断（uid=300
  * 读回来是 44），这正是要看的行为。
  */
-#include <stdio.h>
+
 
 struct Perm {
     unsigned read : 1;

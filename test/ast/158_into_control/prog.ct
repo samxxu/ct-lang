@@ -1,6 +1,6 @@
 /* Phase 30 D30-12: the block is a statement sequence, not a closure, so
    `break` / `continue` / `return` act on the host loop and host function. */
-#include <stdio.h>
+
 
 struct Item {
     int v;

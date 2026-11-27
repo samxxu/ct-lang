@@ -1,6 +1,6 @@
 /* E31-1: `Vec<Show>` stores interface values by value; a concrete struct boxes
    into `push` / `set`, and `get` answers a borrowed copy. */
-#include <stdio.h>
+
 
 trait Show {
     int show();

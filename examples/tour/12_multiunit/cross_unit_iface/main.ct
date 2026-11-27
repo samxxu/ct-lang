@@ -9,7 +9,7 @@
 import devices;
 import impl_temp;
 
-#include <stdio.h>
+
 
 // 接口作参数：这个函数在消费方单元里，仍然能派发到实现单元的 read()。
 static int offset_from(Sample s, int expect) {

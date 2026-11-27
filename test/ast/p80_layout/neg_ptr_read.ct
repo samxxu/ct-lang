@@ -1,7 +1,7 @@
 /* PH-80 E80-3 / D-013 §2 negative: `.ptr` is the raw implementation field.
  * Reading it would bypass the read-only `.data` view and `cstr()`, so it is a
  * hard error for every caller outside the built-in layer. */
-#include <stdio.h>
+
 
 int main(void)
 {

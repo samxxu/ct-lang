@@ -3,9 +3,8 @@
  * exit belong to the caller; the owning assignment released the caller's old
  * buffer, and nothing is rolled back when the function reports failure.
  */
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <stdlib.h>
 Result<int, char *> parse(Str s, out int len, out String echo)
 {
     if (s.len == 0) {

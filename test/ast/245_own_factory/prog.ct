@@ -3,7 +3,7 @@
    the real Drop body once. The counters are printed after the inner block
    closes, so `drops=1` is the value the release produced.
    License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct P {

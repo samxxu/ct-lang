@@ -5,7 +5,7 @@
  * （0xFFu -> 0xFFU，16l -> 16L，1ll -> 1LL）。值仍存放在 long 里，超过
  * LONG_MAX 的 ULL 会按 long 回绕——这是既有的容量边界。
  */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,6 +1,6 @@
 /* Phase 31 S24 (E31-29): both `Map` key blocks and the `Vec` constructors are
    emitted so their OOM branches can be inspected in the product. */
-#include <stdio.h>
+
 
 int main(void)
 {

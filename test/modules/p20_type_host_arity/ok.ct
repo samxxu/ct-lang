@@ -1,5 +1,5 @@
 import ctypes::ctypes;
-#include <stdio.h>
+
 
 /* P20-03: every position a type-host mapped call can take names the right
    count: a bare statement, an initialiser, a condition and a nested argument. */

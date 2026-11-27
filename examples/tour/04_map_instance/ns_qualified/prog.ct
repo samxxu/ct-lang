@@ -7,7 +7,7 @@
 // 仅 ct-ast。
 namespace hal;
 
-#include <stdio.h>
+
 
 trait Lamp {
     int set(int on);

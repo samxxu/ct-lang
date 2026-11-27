@@ -2,7 +2,7 @@
    as a pointer. The interface-pointer `.` spelling is also untouched: a
    `Show *` dispatches through the interface value, not through a struct
    receiver. License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 
 struct S {
     int id;

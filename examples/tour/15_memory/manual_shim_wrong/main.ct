@@ -5,7 +5,7 @@
 // 角度：错误收尾 vs 正确收尾。输出里没有 “free ...” 这一行、最后 live 仍是 1，
 //   就是 shim 的 pkt_free 从未执行的证据；正确版本见 15_memory/manual_shim。
 // 仅 ct-ast：多单元 build 与 .shim.h/.shim.c 由 CT 线支持。
-#include <stdio.h>
+
 #include <stdlib.h>
 #include "pkt.shim.h"
 

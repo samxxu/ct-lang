@@ -1,4 +1,4 @@
-#include <stdio.h>
+
 
 // The trait fixes the signature, so an implementation may ignore a parameter.
 // Both `mode` and `self` are unused here: the casts must lead the body, since a

@@ -1,6 +1,6 @@
 // Phase 33 O1/E33-4: a bounded `impl<T> Box<T>` body dispatches statically --
 // `self->value.show()` names Circle_Show_vtable and reads no vptr.
-#include <stdio.h>
+
 
 trait Show {
     int show();

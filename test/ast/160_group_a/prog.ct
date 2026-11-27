@@ -1,7 +1,6 @@
 /* Phase 30 E30-9 group A: field configuration plus external calls. The
    receiver (a pointer returned by a call) is named once, the verbs line up. */
-#include <stdio.h>
-#include <string.h>
+
 
 struct AppConfig {
     char *host;

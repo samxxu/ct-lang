@@ -1,7 +1,7 @@
 /* PH-81 E81-4: `at()` borrows the payload; `release()` invalidates it. The
  * probe is only useful under ASan, where the post-release read is a
  * heap-use-after-free. */
-#include <stdio.h>
+
 struct R { int id; String tag; }
 int main(void) {
     Box<R> b = new R { 1, "x" };

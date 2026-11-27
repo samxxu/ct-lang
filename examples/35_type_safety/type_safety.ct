@@ -5,7 +5,7 @@
 // `into` field, a value and a void return, and a `Vec`/`Map` argument. The
 // values are chosen so the program is legal under `ct check --types` and
 // still builds and runs; the output names each shape's result.
-#include <stdio.h>
+
 
 trait Shape {
     int area();

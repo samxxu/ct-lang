@@ -1,6 +1,6 @@
 /* PH-80 S5a-2 / E80-2: L1 immortal literals, the `String` / `Str` split, the
  * `as_str` / `to_string` conversions and the explicit UTF-16 factories. */
-#include <stdio.h>
+
 
 String g = "global";
 Str gv = "gview";

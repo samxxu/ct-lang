@@ -1,5 +1,5 @@
 // 07: positional initialisers also get vptr designators appended (Phase 0.1.2)
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

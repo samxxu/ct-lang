@@ -1,6 +1,6 @@
 /* 96 (Phase 22): break / continue / return / goto-out behave exactly as in the
    native `for` beside them. `skip` leaves two rounds (0 + 1) in both spellings. */
-#include <stdio.h>
+
 
 static int loop_total(void)
 {

@@ -1,5 +1,5 @@
 /* L31-14: copy-initializing a second binding keeps the borrowed provenance. */
-#include <stdio.h>
+
 
 int main(void)
 {

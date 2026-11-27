@@ -1,7 +1,7 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_call.ct`, 14:18):
    a free function's result is an rvalue, so the chain is materialised before
    the handle is taken by address. */
-#include <stdio.h>
+
 
 struct Holder {
     Vec<int> v;

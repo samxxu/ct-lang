@@ -7,7 +7,7 @@
 //   adapter 去调它的 trait 方法。这正是 `=>` 闭包在 tier-2 自动生成的形状；
 //   先看手工版，再看 09_closure/literal_capture 的糖，能分清“糖”和 ABI。
 // L0 可用：整个文件只用 trait/impl/函数指针，冻结种子就能编。
-#include <stdio.h>
+
 
 trait Strategy {
     int wait(int round);

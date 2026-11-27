@@ -6,7 +6,7 @@
  * 判断）。区别是 ct 会把 static 声明照常登记进变量表，所以成员访问、
  * 数组下标的类型推断不变；static own 被拒绝（静态对象不归作用域管）。
  */
-#include <stdio.h>
+
 
 static int next_id(void)
 {

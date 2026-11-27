@@ -1,7 +1,7 @@
 /* batch 28: an `own` variable is tracked by statement-level assignments only,
    so assigning one in a value position is refused instead of silently slipping
    past the ownership bookkeeping. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box {

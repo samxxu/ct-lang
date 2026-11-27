@@ -15,7 +15,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 /* A file-scope array has a length the compiler can count, so it can be walked
    from a helper that has no `n` parameter. */

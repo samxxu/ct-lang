@@ -1,6 +1,6 @@
 /* 111 (Phase 24): a block-scope `static` table works the same way -- storage
    class and scope do not change the expansion. */
-#include <stdio.h>
+
 
 int main(void)
 {

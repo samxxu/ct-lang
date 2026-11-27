@@ -1,6 +1,6 @@
 #include <pthread.h>
 #include <sched.h>
-#include <stdio.h>
+
 atomic bool stop = 0;
 void *worker(void *arg)
 {

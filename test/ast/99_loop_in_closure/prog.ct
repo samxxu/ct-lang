@@ -1,6 +1,6 @@
 /* 99 (Phase 22): `loop` inside a closure body. The count names a captured
    variable; `i` is a fresh local of the closure, not of `main`. */
-#include <stdio.h>
+
 
 int main(void)
 {

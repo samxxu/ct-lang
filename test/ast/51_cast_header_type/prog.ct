@@ -2,7 +2,7 @@
    `clock_t` are unknown to the parser, but inside `(...)` a name that closes the
    parenthesis (optionally behind stars) is a type, so the cast and `sizeof`
    forms work while `(MAX) + 1` stays an expression. */
-#include <stdio.h>
+
 #include <time.h>
 
 int main(void) {

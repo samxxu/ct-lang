@@ -6,9 +6,8 @@
  *
  * Do not "fix" this fixture into a compile error: J-4b's ruling is contract
  * level, and the probe asserts the heap-use-after-free report instead. */
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <stdlib.h>
 Str keep;
 
 void stash(ref String owner)

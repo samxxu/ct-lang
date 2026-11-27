@@ -1,7 +1,7 @@
 /* 105 (Phase 23): `i` in a range loop is the same ordinary `int` as in the
    counted form. `continue` still runs the increment, `break` leaves, and an
    assignment to `i` is visible to the increment and the next test. */
-#include <stdio.h>
+
 
 int main(void)
 {

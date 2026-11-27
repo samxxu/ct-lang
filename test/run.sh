@@ -22,6 +22,13 @@ else
     cat "$TMP/build.log" >&2; bad build "the seed did not build"; echo "test/run: FAIL"; exit 1
 fi
 
+# v1-PH-2 S9 M4: strict by default; the C-interop corpus rows in
+# test/c-boundary-allow.tsv get the explicit allow through the same wrapper the
+# other gates use.
+sh test/make-ct-ast-wrapper.sh "$TMP/ct" "$PWD" || {
+    echo "  could not install the C-boundary allow wrapper"; exit 1
+}
+
 ver=$("$TMP/ct" -v | awk '{print $NF}')
 case "$ver" in v[0-9]*.[0-9]*.[0-9]*) ok "version ($ver)" ;; *) bad version "$ver" ;; esac
 

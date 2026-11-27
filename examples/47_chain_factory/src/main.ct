@@ -17,7 +17,7 @@
 //@ct-requires: ct-ast
 import http::http;
 
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-# PH-65: these harnesses predate the C boundary and generate fixtures in temp
-# directories with free `#include`s; the p65 probes clear this themselves.
-export CT_C_BOUNDARY=allow
-#
 # check-all.sh - run every hard gate in one command.
 #
 # `./test/run.sh` drives the L0 seed compiler; the CT line (ct-ast from the

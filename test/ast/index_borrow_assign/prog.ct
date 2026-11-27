@@ -1,6 +1,6 @@
 /* REQ-INDEX-1 / D-028 §1.4: with no matching `set`, `x[k] = v` is the borrow
    write `*get(k) = v` when `get` answers a pointer. */
-#include <stdio.h>
+
 
 struct Buf {
     int a[4];

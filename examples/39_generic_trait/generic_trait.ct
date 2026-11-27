@@ -3,7 +3,7 @@
 // `Iter<T>` monomorphises per argument, so `Iter<int>` and `Iter<char *>` are
 // two ordinary traits with their own vtables; `T: Iter<int>` names the int
 // instance as a bound, and the bounded body dispatches through that same slot.
-#include <stdio.h>
+
 
 trait Iter<T> {
     T next(void);

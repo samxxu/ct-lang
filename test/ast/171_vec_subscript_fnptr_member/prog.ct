@@ -1,7 +1,7 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_fnptr_member.ct`,
    15:18): a function pointer returning a struct; the subscript reaches the
    handle through its field, so the call result is materialised first. */
-#include <stdio.h>
+
 
 struct Holder {
     Vec<int> v;

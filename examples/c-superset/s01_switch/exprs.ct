@@ -6,7 +6,7 @@
  * 这里用块把局部变量包起来（C 允许裸声明，但那是标签不构成作用域的老坑，
  * ct 直接拒绝，避免误读）。
  */
-#include <stdio.h>
+
 
 static int classify(int key)
 {

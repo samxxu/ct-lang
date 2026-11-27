@@ -31,7 +31,7 @@
 //@ state IDLE go RUN
 //@ state RUN stop IDLE
 
-#include <stdio.h>
+
 
 int main(void)
 {

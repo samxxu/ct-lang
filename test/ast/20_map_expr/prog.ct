@@ -2,7 +2,7 @@
    in them must resolve - a binding parameter, this map's instance, a declared
    variable, or an ALL_CAPS macro constant - and member names are skipped. The
    wrapper is still generated (only a bare function name is a direct binding). */
-#include <stdio.h>
+
 
 #define GPIO_MAX 3
 

@@ -1,6 +1,6 @@
 /* 117 (Phase 24): two range declarators on one line -- the second one keeps the
    shared type and prints its own initialiser. */
-#include <stdio.h>
+
 
 int main(void)
 {

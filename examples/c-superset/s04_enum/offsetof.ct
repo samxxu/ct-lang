@@ -7,7 +7,7 @@
  * 枚举成员还能出现在 case 标签与数组长度里——同样是整数常量表达式。
  */
 #include <stddef.h>
-#include <stdio.h>
+
 
 typedef struct Header {
     unsigned char magic;

@@ -2,7 +2,7 @@
    joins the same `cc` line; the block sees them through the promoted receiver. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 int main(void)
 {

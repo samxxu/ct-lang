@@ -1,6 +1,6 @@
 /* Phase 53 / E53-8 / T1: `c?.5 : 1.0` stays the conditional operator; the
    `.5` is a float literal, not an optional-chain field. */
-#include <stdio.h>
+
 
 int main(void)
 {

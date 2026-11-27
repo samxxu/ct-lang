@@ -2,7 +2,7 @@
    diagnosed, so the environment is simply not built on that path. This fixture
    records the current silent behaviour (the jump skips the whole block, so
    nothing uninitialised is used); it does not pretend the compiler catches it. */
-#include <stdio.h>
+
 
 int main(void)
 {

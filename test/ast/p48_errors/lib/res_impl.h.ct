@@ -2,7 +2,7 @@
    declares the struct, so a consumer could only call an empty stub. */
 import res;
 
-#include <stdio.h>
+
 
 impl Drop for Res {
     void drop() { printf("res drop %d\n", self->id); }

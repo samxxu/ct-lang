@@ -2,7 +2,7 @@
 // fields in declaration order. A generic `impl<T> Drop` declared after the
 // first use of an instance still takes effect (impls are resolved at emit
 // time, after the whole unit is parsed).
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Probe { int id; } use Drop;

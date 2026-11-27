@@ -2,7 +2,7 @@
    concrete struct boxes into a `Show` variable, which then fills the option's
    payload (a brace literal is an initialiser, not an assignment); `unwrap_or`
    answers a `Show` copy that dispatches through the vtable. */
-#include <stdio.h>
+
 
 trait Show {
     int show();

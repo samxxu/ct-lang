@@ -12,7 +12,7 @@
  *     (`int prod = p * q; yield prod + 1;`);
  *   - an arm whose block ends in `return` diverges and needs no `yield`.
  */
-#include <stdio.h>
+
 
 enum N {
     Leaf(int v),

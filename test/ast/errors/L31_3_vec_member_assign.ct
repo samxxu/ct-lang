@@ -1,6 +1,6 @@
 /* L31-3: the write target is walked down the member chain, so `v[0].x = 2`
    blames the subscript; bind the element to a local first. */
-#include <stdio.h>
+
 
 struct Point {
     int x;

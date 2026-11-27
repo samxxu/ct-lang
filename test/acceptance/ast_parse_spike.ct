@@ -11,7 +11,7 @@
  * foundation; if it does not, the first failing construct is the next capability
  * to build.
  */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 trait Expr {

@@ -2,7 +2,7 @@
  * glue retains on insertion and releases on container release; a `get` copy is
  * a second handle, so the caller retains it explicitly (the `Vec.get` contract
  * for every owning element). */
-#include <stdio.h>
+
 
 struct Item { int id; String name; }
 struct Holder { Box<Item> child; int n; } use Drop

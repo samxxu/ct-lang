@@ -1,7 +1,7 @@
 /* Phase 30 §2.8: consecutive `into` segments re-enter the same object, and a
    suffix after the last block belongs to the whole expression. A left-value
    value receiver stays an lvalue, so every segment writes the original. */
-#include <stdio.h>
+
 
 struct Config {
     int a;

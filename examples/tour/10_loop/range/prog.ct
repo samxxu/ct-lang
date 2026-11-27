@@ -4,7 +4,7 @@
 // 角度：区间形式 + 边界求值顺序。两个边界各求值一次，先 lo 后 hi；
 //   空区间（lo >= hi）安静地跑 0 轮；`loop(0..b)` 与 `loop(b)` 等价。
 // 仅 ct-ast。
-#include <stdio.h>
+
 
 static int lo(void) {
     printf("eval lo\n");

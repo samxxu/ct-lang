@@ -5,7 +5,7 @@
 // in a field or returned, and its own trampoline keeps the return type its
 // declaration took. A parameter tail that does not match the host, and a
 // position that is not a pair, are pinned in errors/.
-#include <stdio.h>
+
 
 int ring_each(int (*fn)(void *env, int x), void *env)
 {

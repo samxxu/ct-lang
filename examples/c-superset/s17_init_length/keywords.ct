@@ -5,7 +5,7 @@
  * CT 与 C 一致：长列表、尾逗号、字符串字面量都完整保留；ct 把最终文本
  * 存进 arena 的字符串池（单个初始化器 4 KiB，重写后 16 KiB）。
  */
-#include <stdio.h>
+
 #include <string.h>
 
 static const char *kw[] = {

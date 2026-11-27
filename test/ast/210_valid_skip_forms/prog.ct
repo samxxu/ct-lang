@@ -1,6 +1,6 @@
 /* E32-13: an array actual decays to a pointer on both sides, which the gate
    skips (D32-6); the program still builds and runs. */
-#include <stdio.h>
+
 
 int main(void)
 {

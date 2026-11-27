@@ -10,7 +10,7 @@
  * "call to undeclared function 'static_assert'"。所以本文件标 l0=no；
  * _Noreturn 与 __restrict 本身 L0 能过。
  */
-#include <stdio.h>
+
 
 _Noreturn void halt(void);
 

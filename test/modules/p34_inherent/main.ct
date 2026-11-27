@@ -3,7 +3,7 @@
 // never a vtable lookup.
 import lib;
 
-#include <stdio.h>
+
 
 int main(void)
 {

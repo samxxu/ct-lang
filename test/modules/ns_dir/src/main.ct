@@ -1,7 +1,7 @@
 import hal::uart;
 import plain::extra;
 
-#include <stdio.h>
+
 
 int main(void) {
     printf("%d %d\n", hal::ping(4), plain::twice(3));

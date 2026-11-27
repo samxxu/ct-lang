@@ -7,7 +7,7 @@
 //   写错会怎样：直接 free(p) 会跳过 payload 与记账，见
 //   15_memory/manual_shim_wrong。
 // 仅 ct-ast：多单元 build 与 .shim.h/.shim.c 由 CT 线支持。
-#include <stdio.h>
+
 #include "pkt.shim.h"
 
 int main(void)

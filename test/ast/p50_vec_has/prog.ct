@@ -2,7 +2,7 @@
    (`has == 1`, `*at == 0`) while an out-of-range index answers
    `has == 0 && at == 0`. `get` is untouched (D50-1) and `at` is a borrow
    (D50-2). License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 
 int main(void)
 {

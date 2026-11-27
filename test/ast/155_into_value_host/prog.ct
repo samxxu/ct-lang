@@ -3,7 +3,7 @@
    chain `.add(1).add(2)` forwards the recipe's by-value return each step. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 int main(void)
 {

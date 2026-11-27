@@ -1,5 +1,5 @@
 // 26 (SH-20): `map` may bind a trait to a namespace - no host object, NULL self
-#include <stdio.h>
+
 
 namespace hal;
 

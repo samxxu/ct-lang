@@ -2,7 +2,7 @@
    of its own, so `for (...) ;`, `case 1: ;` and a label followed by `;` all
    work; a `static` in a for's first clause initialises once and keeps its value
    across calls. */
-#include <stdio.h>
+
 
 static int counted(void) {
     int total;

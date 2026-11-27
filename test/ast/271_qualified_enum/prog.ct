@@ -1,5 +1,5 @@
 /* LANG-15: a value-position qualified enum member. */
-#include <stdio.h>
+
 
 namespace demo;
 

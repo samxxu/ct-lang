@@ -1,5 +1,5 @@
 // 05: variable declarations — designated init, struct-qualified form, pointer declaration
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

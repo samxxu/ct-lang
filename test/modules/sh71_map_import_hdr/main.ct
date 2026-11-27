@@ -1,7 +1,7 @@
 import entry;
 import host;
 
-#include <stdio.h>
+
 
 int main(void)
 {

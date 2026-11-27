@@ -3,7 +3,7 @@
    brace-less branch return and a return inside a braced branch are pinned;
    the braced one also shows that the release appended at the `}` is a no-op
    afterwards, because the pointer was nulled. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box {

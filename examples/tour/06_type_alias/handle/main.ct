@@ -3,7 +3,7 @@ import io::io;
 // 需要 struct ct_handle 的完整定义：这里显式包含 shim 头，
 // 说明“别名只是拼写，底层类型仍然来自 C 头文件”。
 #include "io/io.shim.h"
-#include <stdio.h>
+
 
 int main(void) {
     struct ct_handle raw = { .fd = 9 };

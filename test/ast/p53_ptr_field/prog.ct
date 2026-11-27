@@ -1,6 +1,6 @@
 /* Phase 53 / E53-1: `p?.f` on a struct pointer is `(p ? p->f : 0)`.
    License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 
 struct B {
     int b;

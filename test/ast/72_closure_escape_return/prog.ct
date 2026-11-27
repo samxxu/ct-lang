@@ -1,7 +1,7 @@
 // 72 (Phase 21 S4): a closure that only lives in its frame is fine -- it is
 // created, captures `n` and `base`, and is called before the frame returns.
 // The escape form (`return c;`) lives in test/ast/errors/closure_escape_return.ct.
-#include <stdio.h>
+
 
 int apply(int base)
 {

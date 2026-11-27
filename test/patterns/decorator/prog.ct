@@ -1,6 +1,6 @@
 /* Decorator: the same interface wraps another implementation of itself, so
    the outer object forwards to the inner one. */
-#include <stdio.h>
+
 
 trait Text {
     int len();

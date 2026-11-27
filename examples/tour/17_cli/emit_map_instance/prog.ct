@@ -2,7 +2,7 @@
 // 角度：--emit-map 的“实例宿主”形态——maps[].host 是 "instance"，
 //   每个实例一条记录、各自有 symbol；calls[] 还会记下装箱后派发的调用点。
 // 期望：stdout（map JSON）与 expected.out 逐字节一致，退出码 0。
-#include <stdio.h>
+
 
 trait Lamp {
     int set(int on);

@@ -1,6 +1,6 @@
 /* Phase 31 S23a (E31-25): `pop` hands ownership out, so releasing its result
    is legal -- directly and through a local. */
-#include <stdio.h>
+
 
 int main(void)
 {

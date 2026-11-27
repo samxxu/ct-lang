@@ -3,7 +3,7 @@
 // `release` drops one reference, `retain` shares it, and `delete` on an
 // `own String *` runs the Drop. `Option<String>` and `Vec<String>` propagate
 // the lifecycle to their payload.
-#include <stdio.h>
+
 #include <stdlib.h>
 
 int main(void)

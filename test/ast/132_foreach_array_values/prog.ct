@@ -2,7 +2,7 @@
    by value. Three element kinds share one lowering: an `int` array with an
    explicit length, a local `int a[] = {…}` whose length only the initialiser
    knows, and a struct array read through `item.field`. */
-#include <stdio.h>
+
 
 struct Point {
     int x;

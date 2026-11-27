@@ -2,7 +2,7 @@
  * must release every owning scope it leaves, not only the innermost block.
  * The loop body declares one handle per iteration; a leak shows up in the
  * live count after the loop. */
-#include <stdio.h>
+
 
 int main(void)
 {

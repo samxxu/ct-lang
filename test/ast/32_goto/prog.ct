@@ -2,7 +2,7 @@
    backward `goto` builds a loop without `while`, a label may sit in a nested
    block (jumping into it is legal C), a `case` may `goto` out of its switch, and
    two functions may reuse one label name. */
-#include <stdio.h>
+
 
 static int scan(int n) {
     int i, j, found;

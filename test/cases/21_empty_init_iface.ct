@@ -1,6 +1,6 @@
 // 21: empty initialiser list on an object, and an interface value declared
 // without an initialiser (then boxed by assignment)
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

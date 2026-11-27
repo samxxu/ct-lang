@@ -1,6 +1,6 @@
 /* P-7.4-3 std consumer smoke: Vec / Option / Result and the migrated
  * Map<String,V> key block still compile and behave. */
-#include <stdio.h>
+
 
 int main(void)
 {

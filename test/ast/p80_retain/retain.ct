@@ -11,9 +11,8 @@
  *   - `refs = -1` (immortal literal / empty) is skipped everywhere;
  *   - a `U16String` parameter and field follow the same protocol.
  */
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <stdlib.h>
 struct Holder {
     String tag;
     U16String utag;

@@ -1,7 +1,7 @@
 /* 125 (Phase 26 fix, TEST-17): the template body carries every type position:
    return type, parameter type, local declaration, `(T)` cast, `sizeof` /
    `_Alignof`, `offsetof(T, …)`, `va_arg(ap, T)` and a call argument. */
-#include <stdio.h>
+
 #include <stddef.h>
 #include <stdarg.h>
 

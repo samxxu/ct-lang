@@ -1,6 +1,6 @@
 /* 109 (Phase 24), semantic layer: the literal table the range must agree with.
    Compiled and run on its own; its output has to be byte-identical to 109's. */
-#include <stdio.h>
+
 
 int main(void)
 {

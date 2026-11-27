@@ -1,6 +1,6 @@
 /* Phase 30: a right-value value receiver is moved into a fresh local, the
    block writes that local and the value form copies it out. */
-#include <stdio.h>
+
 
 struct Box {
     int n;

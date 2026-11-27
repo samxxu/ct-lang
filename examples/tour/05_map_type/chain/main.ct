@@ -1,6 +1,6 @@
 import route::route;
 
-#include <stdio.h>
+
 
 int main(void) {
     struct Path p = { .hops = 0 };

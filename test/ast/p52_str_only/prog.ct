@@ -1,6 +1,6 @@
 /* Phase 52 / E52-7: only a single-layer string key is claimed. The protocol
    compares the key itself; `x[0]` is deliberately not a success case (D52-6). */
-#include <stdio.h>
+
 #include <string.h>
 
 struct Store {

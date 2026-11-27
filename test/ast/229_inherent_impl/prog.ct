@@ -2,7 +2,7 @@
 // `impl Counter { … }` syntax; S5a wires lookup, static dispatch and the
 // `<Struct>_<method>` emission. Instance methods take `&self`, static methods
 // take no receiver; `self.field` in the body spells `_self->field`.
-#include <stdio.h>
+
 
 struct Counter {
     int n;

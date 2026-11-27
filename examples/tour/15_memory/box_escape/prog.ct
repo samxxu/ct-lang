@@ -13,7 +13,7 @@
 //   如果对象必须跨函数，就在堆上分配并返回指针（此时 self 是指针本身，
 //   不再取 &local），释放责任交给 delete / 调用方。
 // 仅 ct-ast：trait / 接口值 / 自动装箱是 CT 线能力。
-#include <stdio.h>
+
 
 trait Renderer {
     int width();

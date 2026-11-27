@@ -6,7 +6,7 @@
 // 角度：捕获发生在创建点（按值），之后修改外部变量不会回流；
 //   同一段源码里既可以有“捕获一次的命名闭包”，也可以有“每轮捕获 i 的新闭包”。
 // 仅 ct-ast：`=>` 与闭包捕获是 Phase 21 才进的语言特性。
-#include <stdio.h>
+
 
 // 容器：接受 (fn, env)，用元素逐个喂给回调，返回“通过”的个数。
 static int keep_if(int *xs, int n, int (*fn)(void *env, int x), void *env) {

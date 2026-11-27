@@ -4,7 +4,7 @@
 // 期望：退出码 0、stderr 为空；$WORK/gen 下出现 main.c、helper.c、helper.h。
 import helper;
 
-#include <stdio.h>
+
 
 int main(void)
 {

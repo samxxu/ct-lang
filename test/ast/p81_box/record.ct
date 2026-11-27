@@ -3,7 +3,7 @@
  * `b.f` / `b.f = ...` auto-dereference the handle. `Box<T>` shares the
  * `{refs, aux}` header: releasing the last handle releases the payload's
  * owning fields. */
-#include <stdio.h>
+
 
 struct Record { int id; String tag; }
 struct Point { int x; int y; }

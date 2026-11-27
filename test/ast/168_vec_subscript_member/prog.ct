@@ -1,6 +1,6 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_member.ct`, 9:15):
    a handle held in a struct field is subscripted through the same rewrite. */
-#include <stdio.h>
+
 
 struct Holder {
     Vec<int> v;

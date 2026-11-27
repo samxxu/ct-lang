@@ -4,7 +4,7 @@
 //   实例级绑定本来就是“为这个对象显式接好每一根线”，漏一根就是漏一根，
 //   生成空函数指针只会在第一次调用时炸掉。
 // 期望：stderr 与 expected.err 逐字节一致，退出码 1。
-#include <stdio.h>
+
 
 trait Channel {
     int send(char *buf, int n);

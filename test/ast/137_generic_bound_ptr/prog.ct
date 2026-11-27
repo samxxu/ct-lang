@@ -1,7 +1,7 @@
 /* 137 (Phase 28 / A2): the same bound reached through a pointer receiver
    (`p->m`), through an array element (`arr[i].m`), and through a default
    method the adopting struct never writes. */
-#include <stdio.h>
+
 
 trait Compare {
     int cmp(void *other);

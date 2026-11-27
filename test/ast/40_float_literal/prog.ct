@@ -1,7 +1,7 @@
 /* 40: floating-point literals (batch 15) - `1.5`, `.5`, `1e9`, `2.25f` and
    `3.5L` lex as one token and are emitted with their spelling, so the `f` / `L`
    suffix survives. `1...5` still reads as an integer followed by three dots. */
-#include <stdio.h>
+
 
 static double half(double v) { return v / 2.0; }
 

@@ -1,6 +1,6 @@
 /* SH-102 round 4:两个分支都定义同一字段时，if/else 之后该字段是已定义的
  * （defined_after = defined_before || (then && else)），分支外的重赋合法。 */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

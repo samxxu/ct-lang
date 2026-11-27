@@ -4,7 +4,7 @@
    initialiser, one as a local filled element by element, and a struct field
    array `int (*cb[2])(int)`. A file-scope pointer may name a function of this
    unit because the prototypes are emitted before the globals (D-6). */
-#include <stdio.h>
+
 
 typedef int (*BinOp)(int, int);
 typedef int (*OpTable[2])(int, int);

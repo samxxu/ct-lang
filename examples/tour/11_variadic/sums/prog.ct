@@ -5,7 +5,7 @@
 //   逐个取 int。ct 不检查可变部分的类型（和 C 一样），所以 n 与实际个数必须
 //   由调用约定保证；这正是后一个样例用“格式化”封装它的原因。
 // L0 可用：变参声明与 va_* 都是 C 形态，冻结种子直接透传。
-#include <stdio.h>
+
 #include <stdarg.h>
 
 static int sum(int n, ...) {

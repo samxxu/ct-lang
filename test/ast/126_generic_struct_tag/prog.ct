@@ -1,7 +1,7 @@
 /* 126 (Phase 26 fix, SH-63): a struct tag named `T` coexists with a type
    parameter named `T`. `struct T` must stay a tag; bare `T` is the parameter.
    The `_Generic` arm keeps the tag form legal (SH-62 P2). */
-#include <stdio.h>
+
 
 struct T {
     int v;

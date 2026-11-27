@@ -4,7 +4,7 @@
    one host per type; each `id()` reports the host it reached. */
 import lit::lit;
 
-#include <stdio.h>
+
 #include <string.h>
 
 struct Cmd {

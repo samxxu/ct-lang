@@ -1,7 +1,7 @@
 /* A brace-less branch ends a scope just like a braced block, so an `own`
    declaration written there is released at the end of the branch: the emitter
    writes the braces, and the AutoDrop `delete` has somewhere to live. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box {

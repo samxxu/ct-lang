@@ -5,7 +5,7 @@
  * CT 与 C 一致：花括号按声明的初始化器处理；函数内是自动存储期。
  * 带 trait 的 struct 会由 ct 补 vptr 项（本文件没有 trait）。
  */
-#include <stdio.h>
+
 
 struct Point {
     int x;

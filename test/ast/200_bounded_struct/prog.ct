@@ -1,6 +1,6 @@
 // Phase 33 O1: `struct Box<T: Show>` and `impl<T> Box<T>`.
 // The bound is satisfied by Circle, and `get` returns the parameter's type.
-#include <stdio.h>
+
 
 trait Show {
     int show();

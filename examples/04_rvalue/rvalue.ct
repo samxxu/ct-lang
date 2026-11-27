@@ -18,7 +18,7 @@
 // Real `a.f().g()` chaining needs a type host whose methods return the host;
 // see 13_builder_chain.
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

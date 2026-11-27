@@ -1,7 +1,7 @@
 /* The implementation unit: it owns the impl, the vtable and the instance. The
    vtable has external linkage because both halves are public, so an importing
    unit may box a `Conn` of its own; `net.h` declares it. */
-#include <stdio.h>
+
 
 pub trait Stream {
     int write(char *buf, int len);

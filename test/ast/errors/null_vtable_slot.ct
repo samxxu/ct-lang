@@ -1,6 +1,6 @@
 /* A trait with two methods but an impl for only one: a NULL vtable slot would
    crash on the first `b()` call, so this must be rejected up front (SH-8). */
-#include <stdio.h>
+
 
 trait G { void a(); void b(); }
 

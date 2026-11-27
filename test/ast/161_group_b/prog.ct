@@ -3,7 +3,7 @@
    the receiver is named once, the transforms follow in order. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 int main(void)
 {

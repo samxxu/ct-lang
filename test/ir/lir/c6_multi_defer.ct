@@ -1,6 +1,6 @@
 // S1b-S2 cleanup edge 6: several defers in one block run in reverse source
 // order, both on the return edge and on the block-tail edge.
-#include <stdio.h>
+
 
 static int h(void)
 {

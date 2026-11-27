@@ -6,7 +6,7 @@
  * 发射（本文件在全局命名空间，所以看不出来），裸名 `State` 与
  * `enum State` 两种拼写都接受。
  */
-#include <stdio.h>
+
 
 enum State {
     ST_IDLE,

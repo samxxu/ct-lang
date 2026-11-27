@@ -1,7 +1,7 @@
 // 19: bitwise operators and their compound assignments. The precedence chain
 // is C's: `&` -> `^` -> `|` loosest among the bitwise levels, `<<` / `>>`
 // between `+` and the comparisons, `~` in the unary tier.
-#include <stdio.h>
+
 
 int main(void) {
     int a;

@@ -1,4 +1,4 @@
-#include <stdio.h>
+
 
 /* `lib` is only reachable through `app`: the alias is visible by the
    transitive import closure, like a C header that includes another. */

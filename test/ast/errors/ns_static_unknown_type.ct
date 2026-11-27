@@ -1,6 +1,6 @@
 /* LANG-2 反向覆盖：静态方法的接收者不是已声明类型时，仍必须是硬错
    （修复只放宽「按 namespace 解析」，没有把未知类型名一律放行）。 */
-#include <stdio.h>
+
 
 int main(void)
 {

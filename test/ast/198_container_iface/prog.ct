@@ -4,7 +4,7 @@
    This fixture was the negative `test/ast/errors/container_iface.ct`
    (L29-13, asserted at 19:15); the guard is now split, so the same shape is a
    positive. `v.h = 0` keeps the fresh handle releasable until O4's `{}`. */
-#include <stdio.h>
+
 
 trait Show {
     int show();

@@ -1,6 +1,6 @@
 /* Phase 44: a failed `?` takes the same exit a source `return err:` does:
    the block's errdefer and defer bodies run, in LIFO order, exactly once. */
-#include <stdio.h>
+
 
 Result<int, char *> f(int n)
 {

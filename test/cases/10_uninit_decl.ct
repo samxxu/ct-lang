@@ -1,5 +1,5 @@
 // 10: a declaration without an initialiser still gets a vptr initialiser
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

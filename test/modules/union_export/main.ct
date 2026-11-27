@@ -1,7 +1,7 @@
 /* The consumer names the exported union type bare (`Value`) and reaches the
    exported instance through its namespace (`app::value1`); the header carries
    `union app_Value`. */
-#include <stdio.h>
+
 
 import app::kinds;
 

@@ -1,5 +1,5 @@
 /* L31-14: the temporary a `get` chain names is a borrowed view too. */
-#include <stdio.h>
+
 
 int main(void)
 {

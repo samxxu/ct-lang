@@ -4,7 +4,7 @@
 // 因为零成本展开要求编译期就能决定调用哪张表。
 import units::units;
 
-#include <stdio.h>
+
 
 int main(void) {
     int c = 100;

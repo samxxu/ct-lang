@@ -3,7 +3,7 @@
    the temporary, and the call site converts it back into the caller's place
    after the call. The generated C is one GNU statement expression:
    `({ Num tmp = Node_as(&node); r = take(&tmp); node = Num_as(&tmp); r; })`. */
-#include <stdio.h>
+
 
 struct Node {
     int v;

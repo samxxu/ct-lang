@@ -7,7 +7,7 @@
    The program exercises both recursive containers, reads a payload back out of
    each, and returns the same answer whether the layout order is right (the
    point) or the C refuses to compile (the defect). */
-#include <stdio.h>
+
 
 enum N {
     Nil(),

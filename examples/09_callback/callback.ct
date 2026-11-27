@@ -12,7 +12,7 @@
 // The container must not retain either word.
 //
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 
 trait IntOp {
     int apply(int x);

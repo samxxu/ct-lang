@@ -1,7 +1,7 @@
 // S1b-S2 owned entry: AutoDrop lowers to a Drop cleanup entry, is verified
 // (V6/V8), and S2c prints it from LIR (
 // `if (b) { Box_Drop_drop(b); free(b); b = 0; }`), ready=1 byte for byte.
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box { int n; } use Drop;

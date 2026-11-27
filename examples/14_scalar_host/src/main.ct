@@ -9,7 +9,7 @@
 //@ct-requires: ct-ast
 import host::host;
 
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -10,7 +10,7 @@
 import shapes;
 import ops;
 
-#include <stdio.h>
+
 
 struct Num twice(struct Node n)
 {

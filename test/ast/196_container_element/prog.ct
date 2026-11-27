@@ -2,7 +2,7 @@
    negative `test/ast/errors/container_element.ct` (L29-11, asserted at 3:20);
    the guard is gone, so the same declaration is a positive. No inner handle is
    released here: before H-A (S27a/S27b) a copied handle aliases its sibling. */
-#include <stdio.h>
+
 
 int main(void)
 {

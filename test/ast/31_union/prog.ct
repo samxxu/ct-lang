@@ -2,7 +2,7 @@
    an untagged typedef union, and one nested as a struct field. The tag is
    usable with and without its `union` keyword, and `offsetof` reads the shared
    offset like any other record. Anonymous members are not part of the subset. */
-#include <stdio.h>
+
 #include <stddef.h>
 
 union Value { int i; char c; long long ll; };

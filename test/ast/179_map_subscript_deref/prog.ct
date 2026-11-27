@@ -1,6 +1,6 @@
 /* V29-4 turned positive in Phase 31 (was `map_subscript_deref.ct`, 7:17):
    `(*pm)["k"]` reads through the handle behind the pointer. */
-#include <stdio.h>
+
 
 int main(void)
 {

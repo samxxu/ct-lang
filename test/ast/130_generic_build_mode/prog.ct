@@ -3,7 +3,7 @@
    must be scanned in every build product, just as it is in compile mode. */
 import arr::arr;
 
-#include <stdio.h>
+
 
 T twice<T>(T x)
 {

@@ -6,7 +6,7 @@
  * 表达式。范围是 GNU 扩展（C23 正式化），clang 与 gcc 在 -std=c99 下
  * 都接受且不告警——这是该特性的编译期依赖。
  */
-#include <stdio.h>
+
 
 static char grade(int score)
 {

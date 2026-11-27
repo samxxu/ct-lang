@@ -2,7 +2,7 @@
    across calls, one declared without an initialiser starts zeroed, arrays and
    strings keep their initialisers, and a struct that carries a trait gets its
    vptr through a constant initialiser. */
-#include <stdio.h>
+
 
 trait Named {
     int val();

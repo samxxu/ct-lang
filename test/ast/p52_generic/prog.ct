@@ -1,6 +1,6 @@
 /* Phase 52 / E52-2: a generic instance (`Box<int>`) also resolves the
    protocol; the product names Box_int_get, never the template spelling. */
-#include <stdio.h>
+
 
 struct Box<T> {
     T value;

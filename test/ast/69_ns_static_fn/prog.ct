@@ -1,7 +1,7 @@
 // 69 (M4): a static initialiser that names a namespace function must rewrite it
 // to the mangled C spelling, exactly as it does for a global (SH-52). Without
 // the rewrite `&twice` reaches `cc` while the declaration is `ns_twice`.
-#include <stdio.h>
+
 
 namespace ns;
 

@@ -1,4 +1,4 @@
-#include <stdio.h>
+
 
 struct Pair<T, U> {
     T a;

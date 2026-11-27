@@ -1,7 +1,7 @@
 /* 292: the consumer half of a `pub` ADT (PH-84 S84c). `Shape` reaches this unit
    from `lib.h`, so construction and an exhaustive match work exactly as they do
    inside the declaring unit, and the pattern is a qualified name. */
-#include <stdio.h>
+
 
 import lib::lib;
 

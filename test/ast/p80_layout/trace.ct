@@ -11,7 +11,7 @@
  * releases the old one; a scope releases its owning locals. A `Vec` insertion
  * retains through the container element glue. `refs = -1` (literal / empty) is
  * immortal and every automatic position skips it. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Holder {

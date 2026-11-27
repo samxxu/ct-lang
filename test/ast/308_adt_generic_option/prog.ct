@@ -2,7 +2,7 @@
    parameters, instantiation substitutes them, and the constructor / match
    patterns name the instance. `Opt.Some(v)` infers the instance from the
    subject type; `Opt<int>.Some(v)` is the explicit form. */
-#include <stdio.h>
+
 
 enum Opt<T> {
     Some(T v),

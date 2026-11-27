@@ -2,7 +2,7 @@
    assignment-expressions; they run left to right and the value is the last
    one. The list is accepted where a statement or a `for` init / step clause
    expects a full expression. */
-#include <stdio.h>
+
 
 static int bump(int *p) {
     *p = *p + 1;

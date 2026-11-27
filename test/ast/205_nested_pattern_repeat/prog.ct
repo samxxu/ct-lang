@@ -1,5 +1,5 @@
 // Phase 33 O2/E33-9: a parameter written twice must see the same C spelling.
-#include <stdio.h>
+
 
 struct Box<T> {
     T value;

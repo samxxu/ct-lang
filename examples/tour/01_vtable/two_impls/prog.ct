@@ -5,7 +5,7 @@
 //   （report(r) 展开为 (struct Shape_iface){ &r, &Rect_Shape_vtable }）。
 //   如果只在单个 struct 上 impl，动态派发退化成一个固定跳转，看不出价值。
 // L0 可用：trait 作参数、实参自动装箱都是冻结种子就支持的能力。
-#include <stdio.h>
+
 
 trait Shape {
     int area();

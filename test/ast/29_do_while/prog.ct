@@ -1,7 +1,7 @@
 /* 29: do-while (batch 4) - the condition sits after the body, the body may be a
    block or a single statement, and a `for` with `continue` inside the body
    keeps its own break/continue target. */
-#include <stdio.h>
+
 
 int main(void) {
     int i, inner, total;

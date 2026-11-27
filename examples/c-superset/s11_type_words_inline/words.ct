@@ -6,10 +6,9 @@
  * volatile / restrict 是类型的一部分，因此能出现在参数、返回值和局部上。
  * ct 只多一条限制：`inline` 后面必须是函数。
  */
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
+
 
 static volatile int ticks;
 

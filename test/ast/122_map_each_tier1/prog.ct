@@ -1,7 +1,7 @@
 // 122 (Phase 25.4): tier ① -- a plain `(fn, env)` pair spelled out by hand.
 // This worked before Phase 25 and must keep working unchanged; it is the
 // regression guard for the closure slots added around it.
-#include <stdio.h>
+
 
 import arr::arr;
 

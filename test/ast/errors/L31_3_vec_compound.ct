@@ -1,6 +1,6 @@
 /* L31-3: a compound assignment writes the subscript too; use
    `set(i, v.get(i) + 1)`. */
-#include <stdio.h>
+
 
 int main(void)
 {

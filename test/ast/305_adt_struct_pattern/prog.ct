@@ -2,7 +2,7 @@
    A struct value or a struct payload can be destructured by field: an explicit
    subpattern (`x: 0`), a shorthand binding (`y`), and `..` for the rest. A
    pointer-to-struct subject reads the same fields through the match temp. */
-#include <stdio.h>
+
 
 struct Point { int x; int y; }
 enum Shape { At(Point p), Away() }

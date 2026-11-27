@@ -1,5 +1,5 @@
 // 06: a method name declared by two traits resolves to the first trait in `use` order
-#include <stdio.h>
+
 
 trait Alpha {
     void info();

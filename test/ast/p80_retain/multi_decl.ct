@@ -1,7 +1,7 @@
 /* SH-102 round 2 (B3b): every declarator of a `String` line retains its place
  * initialiser, so `String y = x, z = y;` ends with three owning references
  * (plus the source) and releasing each frees the buffer exactly once. */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -2,7 +2,7 @@
    it must be able to check lives in the imported unit's `.c` product. */
 import extra::lib;
 
-#include <stdio.h>
+
 
 int main(void)
 {

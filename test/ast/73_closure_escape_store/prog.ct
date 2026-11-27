@@ -2,7 +2,7 @@
 // side in the same frame. A closure is refused only when it is moved out of the
 // frame that owns its environment (see the closure_store_* fixtures under
 // test/ast/errors/).
-#include <stdio.h>
+
 
 int twice(int x)
 {

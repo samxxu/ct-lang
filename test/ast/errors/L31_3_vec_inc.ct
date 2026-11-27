@@ -1,5 +1,5 @@
 /* L31-3: `++` needs a writable slot, and the subscript is a value. */
-#include <stdio.h>
+
 
 int main(void)
 {

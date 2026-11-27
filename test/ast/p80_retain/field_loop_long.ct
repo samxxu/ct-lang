@@ -1,6 +1,6 @@
 /* SH-102 round 3 R6b: 100 iterations, so a fix that only covers the first few
  * turns cannot pass by accident. */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

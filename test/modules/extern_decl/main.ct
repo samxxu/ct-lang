@@ -1,6 +1,6 @@
 /* The consumer: it imports the declaration unit and reads the C library's
    global, then calls the library function through the declared prototype. */
-#include <stdio.h>
+
 
 import lib;
 

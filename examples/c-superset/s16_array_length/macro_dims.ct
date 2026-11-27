@@ -6,7 +6,7 @@
  * 表达式原样保留，单个名字若解析为枚举成员则按 mangling 后的 C 拼写发射。
  * 维度只影响「是不是数组」的判定，对成员访问、sizeof、offsetof 没有区别。
  */
-#include <stdio.h>
+
 
 #define WIDTH 4
 #define SLOTS (WIDTH * 2)

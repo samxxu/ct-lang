@@ -5,7 +5,7 @@
  * 复用同名标签。区别是 ct 在解析期就校验「目标必须在同一函数里」，
  * 并把重复标签（即使分处不同块）当作错误。
  */
-#include <stdio.h>
+
 
 static int find_pair(int limit, int *out_i, int *out_j)
 {

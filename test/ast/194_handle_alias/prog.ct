@@ -1,6 +1,6 @@
 /* Phase 31 S28 (E31-30): a retained sibling and a nested element keep their
    own buffer across growth (H-A: the handle is only the `h` pointer). */
-#include <stdio.h>
+
 
 int main(void)
 {

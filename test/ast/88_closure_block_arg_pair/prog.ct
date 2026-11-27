@@ -2,7 +2,7 @@
 // directly. Its return type is not written anywhere in the literal -- it is
 // inferred from the hosting function pointer's return type (D21-14), so the
 // emitted trampoline must return `int`.
-#include <stdio.h>
+
 
 int apply(int (*f)(void *env, int x), void *env);
 

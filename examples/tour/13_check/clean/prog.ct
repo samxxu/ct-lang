@@ -5,7 +5,7 @@
 // 角度：干净单元——check 退出 0，stdout/stderr 都必须为空；
 //   连续两次运行没有状态残留（run.sh 只跑一次，但契约是纯函数式的）。
 // 仅 ct-ast：`ct check` 子命令。
-#include <stdio.h>
+
 
 trait Level {
     int weight();

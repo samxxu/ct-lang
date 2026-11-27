@@ -2,7 +2,7 @@
    call site can bind that result to a variable.  `header()` returns the same
    interface (`HttpRequest`), `send()` another one (`HttpResponse`); both
    static types are knowable from the receiver's trait signature. */
-#include <stdio.h>
+
 
 trait HttpResponse {
     int status();

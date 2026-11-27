@@ -1,5 +1,5 @@
 // 13: `map` — a trait method bound to a declared global instance (Phase 11.1)
-#include <stdio.h>
+
 
 trait Controller {
     int send(char *buf, int len);

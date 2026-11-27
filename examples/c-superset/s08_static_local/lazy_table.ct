@@ -5,7 +5,7 @@
  * CT 与 C 一致：static 声明跨调用保持；ct 不把 static 声明纳入泄漏分析
  * （`static T *p = malloc(...)` 这种刻意的单例不会被报泄漏）。
  */
-#include <stdio.h>
+
 
 static int table_sum(void)
 {

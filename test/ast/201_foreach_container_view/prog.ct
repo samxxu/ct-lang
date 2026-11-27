@@ -1,6 +1,6 @@
 /* Phase 31 D31-4 (L29-15 unfrozen): `foreach` may iterate container elements;
    `item` is a borrowed view, so reading it is enough. */
-#include <stdio.h>
+
 
 int main(void)
 {

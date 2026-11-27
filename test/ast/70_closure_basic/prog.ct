@@ -2,7 +2,7 @@
 // stack environment plus a `static` trampoline. Reading a captured name reads
 // the environment, a call through the binding passes that environment, and a
 // closure declared inside a block goes out of scope with it.
-#include <stdio.h>
+
 
 int apply(int base)
 {

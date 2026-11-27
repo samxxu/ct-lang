@@ -5,7 +5,7 @@
  * CT 与 C 完全一致：do { ... } while (c); 原样发射。注意 C 要求
  * while (...) 后面的分号，ct 也要求。
  */
-#include <stdio.h>
+
 
 static int drain(int start)
 {

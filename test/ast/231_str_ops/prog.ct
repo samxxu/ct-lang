@@ -1,7 +1,7 @@
 // E36-7 (P36): slice / concat / compare work on byte lengths: the empty
 // string, an all-`\0` buffer and UTF-8 multi-byte text. `str_c_str` is a
 // NUL-terminated copy the caller frees; `len` stays the contract.
-#include <stdio.h>
+
 #include <stdlib.h>
 
 int main(void)

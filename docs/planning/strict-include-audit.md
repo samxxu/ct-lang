@@ -151,14 +151,65 @@ M3 可以与 M1/M2 并行（文件集不重叠，也不改编译器），M4 必�
 头，`U16String` 另补 `<string.h>`（`memcpy`）与 `<stdio.h>`（`Vec<U16String>` 实例的
 `fprintf`）；这两条是既有隐式声明在 clang 21 上的显式化，不改语言语义。
 
-### 8.2 剩余（未做，不宣称完成）
+### 8.2 M3/M4 执行结果（2026-11-27，`issue/s9b`）
 
-| 片 | 剩余 | 规模（2026-11-27 实测） |
+> 基线：`77f654db`（S9 M1/M2/M5 + 默认 strict 已落）。本节数字由 `examples/**`、`test/**`
+> 的 `.ct` 重新审计；`selfhost/`、`lib/core/` 仍为零系统 `#include`。
+
+| 口径 | `examples/` | `test/` | 合计 |
+| --- | --- | --- | --- |
+| 迁移前含 `#include` 的文件 / 行 | 189 / 227 | 602 / 695 | **791 / 922** |
+| 迁移后含 `#include` 的文件 / 行 | 45 / 53 | 131 / 153 | **176 / 206** |
+| 删除的文件 / 行 | 144 / 174 | 471 / 542 | **615 / 716** |
+| 其中：`<stdio.h>` 文件（前 → 后） | 734 → 26 | （合并在左） | 734 → **26** |
+
+- **M3 冗余 `<stdio.h>`**：删除 **708 行**。全部删除在生成 C 上对拍：`test/probes/p85_corpus_sha.tsv`
+  的 79 行 corpus pin **与基线逐字相同**，`check-goldens-ast` **25/25**。保留的 26 行 stdio 都是
+  有理由的 C 互操作/负例：`65_raw`（raw 行锚）、`hdr`/`hdr_prologue`（断言头 prologue 复制
+  `#include`）、`io.m.ct`（map 单元）、`p65_include/inside.ct`（strict 负例）、`vprintf`/`FILE`
+  不在自动补头集合的 6 个夹具、跨单元构建根，以及 `test/archive/**` 的历史语料（清单固定，见下）。
+  删除后不再用 stdio 的纯头文件也删；**纯 stdio 文件 620 → 12**（12 个均为上述例外）。
+- **M4 其余头**：剩余 176 文件 / 206 行按头分桶：`stdlib.h` 83、`string.h` 29、`stddef.h` 20、
+  `stdarg.h` 9、`stdio.h` 26、`time.h`/`sys/types.h` 7、`stdbool.h`/`stdint.h`/`stdalign.h` 5、
+  `pthread.h`/`sched.h` 3、板级/自定义头 10、shim 14。**没有非互操作用例继续靠 allow**：
+  - 32 个 `.m.ct` 映射单元本身即 C 边界（strict 不拦），不需要 allow；
+  - 154 条登记在 [`test/c-boundary-allow.tsv`](../../test/c-boundary-allow.tsv)，每行带理由；
+  - `p65_include/inside.ct` 保持严格负例（不登记 allow）；
+  - 其余非互操作且符号已不用的 `#include` 已删（含 `stdbool.h` 全部删除，`bool` 是语言内建）。
+- **保留字节的 3 个例外**：`test/cases/01_trait_basic.ct`、`test/cases/04_signatures.ct`、
+  `examples/01_greeter/greeter.ct` 的 include 虽非互操作符号，但保留以钉住 golden / corpus 字节
+  （登记 allow）；`test/archive/**` 6 个文件整树回退到基线，`archive-manifest` 46 文件全对。
+- **生成的 C 差异**：corpus 与 goldens **逐字节不变**；仅 `test/modules/p39_lib/baseline.sha`
+  的 `split impl_dog.h` 一行变化（`impl_dog.h.ct` 的冗余 stdio 被删，头不再复制该行），
+  baseline 已按 S9 口径更新；`test/ast` 闭包/字面量序号（`ct_str_lit_N`）在 14 个非 corpus
+  夹具中因 token 序号前移而不同，程序输出不变。
+
+### 8.3 默认 strict 的落地形态（不再有 harness 全局 allow）
+
+| 门禁 | 迁移前 | 迁移后 |
 | --- | --- | --- |
-| **M3** 冗余 `<stdio.h>` | examples / test 的纯 stdio 文件删头；删后生成 C 逐字节对拍、goldens 25/25 | examples 189 文件 / 227 行、test 602 文件 / 695 行里的大部分；`examples` 与 `test` 的 `#include` 全部未动 |
-| **M4** 其余 examples/test | `<stdlib.h>`/`<string.h>` 迁 `Box`/`Vec`/`String`；C 互操作/负例逐条显式 allow（manifest 或 harness 的 `CT_C_BOUNDARY=allow`） | 与 M3 同一文件集，需按 §3.2 分桶 |
-| E-V3-10 全量 | 「默认 strict 下 `check-all` 绿」目前成立的方式是 harness 显式 `CT_C_BOUNDARY=allow`；`selfhost`/`lib/core` 才是零 allow。examples/test 的默认 strict 全量构建要等 M3/M4 | — |
+| `check-all.sh` | `export CT_C_BOUNDARY=allow` | 删除；各门自己按登记表 allow |
+| `check-ast.sh` | 同上 | 删除；[`test/c-boundary-wrap.sh`](../../test/c-boundary-wrap.sh) 只对登记表行加 allow；临时目录里的历史探针用 `CT_HARNESS_TEMP_ALLOW=1`，p65/p66 strict 探针用 `CT_STRICT_BOUNDARY=1` 关闭该分支 |
+| `check-warnings.sh` | 同上 | 删除；同一 wrapper；607/607 ok |
+| `test/pkg/run.sh` | 同上 | 删除；生成项目的 `main.ct` 不再写 `#include`（printf 自动补头），165/165 ok |
+| `check-sanitizers.sh` | 同上 | 删除；同一 wrapper |
+| `test/run.sh`（L0） | 依赖 `check-all` 的全局 allow | 自己给 seed `ct` 装 wrapper；4/4 ok |
 
-> 现在 `examples/`、`test/` 的构建不是靠目录豁免：`check-all.sh`、`check-ast.sh`、
-> `check-warnings.sh`、`test/pkg/run.sh` 各自 `export CT_C_BOUNDARY=allow`，是显式 allow；
-> 目录豁免已从 `c_boundary_for` 删除，外部输入与非豁免路径默认 strict。
+证据（均在本 worktree、默认 strict、无 `CT_C_BOUNDARY` 导出）：
+
+- `check-ast.sh`（`check-all` 内）：**1735 passed, 0 failed, 6 skipped**；p65/p66 strict 探针全绿。
+- `check-warnings.sh`：**607 ok, 0 failed**。
+- `test/pkg/run.sh`：**165 passed, 0 failed**。
+- `test/run.sh`：**4/4**；`check-goldens-ast.sh`：**25/25 + archive 46**。
+- `check-seed.sh`：两轮逐字节 + 手改负例红，OK。
+- `check-docs.py`：OK（3299 links / v1.1.0 / 8 gates）。
+- `check-sanitizers.sh`：**661 checks, 0 failed，无 sanitizer report**。
+- `check-all.sh`：**OK（8 hard gates green，13m05s 最后一次全量）**；G0/G8 前置通过。
+
+> 另：`test/ast/` 等 64 个探针脚本仍保留脚本内的 `export CT_C_BOUNDARY=allow`，它们只为自己
+> **生成的临时夹具**（不是 `examples/`、`test/` 仓库语料）声明 C 互操作；每份脚本开头说明其
+> 生成物。该集合不在本卡迁移面内，且与 `check-ast` 的临时分支同源。
+>
+> 边界：`check-ast` 自己的**临时探针夹具**仍保留历史 allow 分支，因为它们不是 P-1.1 语料、
+> 也不属于本卡的 `examples`/`test` 迁移面；该分支不是进程级 `CT_C_BOUNDARY`，且 p65/p66 用
+> `CT_STRICT_BOUNDARY=1` 明确否决它。生产编译器与仓库语料仍是 strict。

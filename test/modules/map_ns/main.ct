@@ -1,5 +1,5 @@
 /* The consumer: it calls the namespaced entry that boxes the mapped instance. */
-#include <stdio.h>
+
 
 import hal::uart;
 

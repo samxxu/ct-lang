@@ -1,7 +1,7 @@
 /* Phase 50 / E50-6: the pointer `at` hands back is borrowed (D50-2). Reading it
    and then releasing the container must not double-free the element; the caller
    never releases the `at` pointer. Run under ASAN/UBSAN by p50_has.sh. */
-#include <stdio.h>
+
 
 int main(void)
 {

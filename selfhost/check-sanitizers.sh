@@ -55,13 +55,6 @@ chmod +x "$work/cc-san"
 SANCC="$work/cc-san"
 CC="$SANCC"
 export CC
-# v1-PH-2 S9: the fixtures under test/ and examples/ are C-interop corpora
-# that predate the strict default; they get the explicit harness allow, the
-# same one check-ast.sh / check-warnings.sh / test/pkg/run.sh set. The compiler
-# under test is built from the frozen seed (plain C), so this does not relax
-# the selfhost/lib zero-allow migration.
-export CT_C_BOUNDARY=allow
-
 pass=0
 fail=0
 ok()  { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }
@@ -82,6 +75,11 @@ if ! CC="$SANCC" CFLAGS="-Wall -Wextra -std=c99" \
     sed 's/^/    /' "$work/ast.out"; exit 1
 fi
 ok "ct-ast builds from the frozen seed (sanitized)"
+# v1-PH-2 S9 M4: strict by default; only registered C-interop fixtures get the
+# explicit CLI allow (test/c-boundary-allow.tsv).
+sh "$root/test/make-ct-ast-wrapper.sh" "$work/ct-ast" "$root" || {
+    echo "  could not install the C-boundary allow wrapper"; exit 1
+}
 
 echo
 echo "== L0 suite (test/run.sh, sanitized) =="

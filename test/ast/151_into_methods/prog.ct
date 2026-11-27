@@ -1,6 +1,6 @@
 /* Phase 30 S4: inside the block `.m(...)` is resolved exactly like a call on
    the receiver outside it, so trait dispatch reaches the same vtable. */
-#include <stdio.h>
+
 
 trait Counter {
     int bump(int by);

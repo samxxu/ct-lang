@@ -1,6 +1,6 @@
 /* 94 (Phase 22): `loop(0)` and a negative count iterate zero times, without a
    diagnostic. */
-#include <stdio.h>
+
 
 int main(void)
 {

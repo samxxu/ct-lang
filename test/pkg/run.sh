@@ -1,9 +1,5 @@
 #!/bin/sh
 
-# PH-65: these harnesses predate the C boundary and generate fixtures in temp
-# directories with free `#include`s; the p65 probes clear this themselves.
-export CT_C_BOUNDARY=allow
-#
 # test/pkg/run.sh - Phase 8.1 + 8.2 + 8.3: the local, git and install halves of ct-pkg.
 #
 # Builds ct-ast from the frozen seed (the compiler that now ships
@@ -57,6 +53,7 @@ fail=0
 ok()  { pass=$((pass + 1)); printf '  ok    %s\n' "$1"; }
 bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 
+
 echo "cc: $CC"
 echo
 echo "== build the AST compiler (frozen seed) =="
@@ -73,7 +70,7 @@ echo
 echo "== a project and two local packages =="
 mkdir -p "$work/proj" "$work/pkgs/util" "$work/pkgs/extra"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkgs/util@^0.2.0\n' >"$work/proj/ct.pkg"
-printf 'import util;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$work/proj/main.ct"
+printf 'import util;\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$work/proj/main.ct"
 printf 'name = util\npublisher = ct\nversion = 0.2.0\nns-root = .\nlicense = MIT\ndep = ../extra@^0.1.0\n' >"$work/pkgs/util/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$work/pkgs/util/util.h.ct"
 printf 'name = extra\npublisher = ct\nversion = 0.1.0\nns-root = .\n' >"$work/pkgs/extra/ct.pkg"
@@ -1304,7 +1301,7 @@ mkdir -p "$S2/home" "$S2/cthome" "$S2/pkg/src" "$S2/proj"
 printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S2/pkg/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S2/pkg/src/p.h.ct"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkg@^0.1.0\n' >"$S2/proj/ct.pkg"
-printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$S2/proj/main.ct"
+printf 'import p;\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$S2/proj/main.ct"
 if ( cd "$S2/proj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
         "$work/ct-ast" get ../pkg >"$S2/g.out" 2>"$S2/g.err" ); then
     ok "S2 fixture get exits 0"
@@ -1351,7 +1348,7 @@ mkdir -p "$S2/devpkg/src" "$S2/devproj"
 printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S2/devpkg/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S2/devpkg/src/p.h.ct"
 printf 'name = demo\nversion = 0.1.0\ndep = ../devpkg@^0.1.0\n' >"$S2/devproj/ct.pkg"
-printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(6)); return 0; }\n' >"$S2/devproj/main.ct"
+printf 'import p;\nint main(void) { printf("%%d\\n", twice(6)); return 0; }\n' >"$S2/devproj/main.ct"
 ( cd "$S2/devproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
     "$work/ct-ast" get ../devpkg >/dev/null 2>&1 )
 if ( cd "$S2/devproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
@@ -1366,7 +1363,7 @@ fi
 mkdir -p "$S2/vproj/vendor/p"
 printf 'name = demo\nversion = 0.1.0\n' >"$S2/vproj/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S2/vproj/vendor/p/p.h.ct"
-printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(5)); return 0; }\n' >"$S2/vproj/main.ct"
+printf 'import p;\nint main(void) { printf("%%d\\n", twice(5)); return 0; }\n' >"$S2/vproj/main.ct"
 if ( cd "$S2/vproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
         "$work/ct-ast" build main.ct -o "$S2/vapp" >"$S2/v.out" 2>"$S2/v.err" ); then
     bad "S2 vendor fallback" "vendor/ was still read"
@@ -1400,7 +1397,7 @@ else
 fi
 # explicit -I still works with no lock and no vendor.
 mkdir -p "$S2/iproj"
-printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(7)); return 0; }\n' >"$S2/iproj/main.ct"
+printf 'import p;\nint main(void) { printf("%%d\\n", twice(7)); return 0; }\n' >"$S2/iproj/main.ct"
 if ( cd "$S2/iproj" && HOME="$S2/home" CT_HOME="$S2/cthome" \
         "$work/ct-ast" build main.ct -I ../devpkg/src -o "$S2/iapp" >"$S2/i.out" 2>"$S2/i.err" ) \
    && [ "$("$S2/iapp")" = "14" ]; then
@@ -1421,7 +1418,7 @@ mkdir -p "$S3/home" "$S3/cthome" "$S3/pkg/src" "$S3/proj"
 printf 'name = p\npublisher = ct\nversion = 0.1.0\nns-root = src\n' >"$S3/pkg/ct.pkg"
 printf 'pub int twice(int x);\nint twice(int x) { return 2 * x; }\n' >"$S3/pkg/src/p.h.ct"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkg@^0.1.0\n' >"$S3/proj/ct.pkg"
-printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(9)); return 0; }\n' >"$S3/proj/main.ct"
+printf 'import p;\nint main(void) { printf("%%d\\n", twice(9)); return 0; }\n' >"$S3/proj/main.ct"
 ( cd "$S3/proj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
     "$work/ct-ast" get ../pkg >/dev/null 2>&1 )
 printf x >>"$S3/cthome/pkg/ct/p/0.1.0/src/p.h.ct"
@@ -1486,7 +1483,7 @@ cp -R "$S3/cthome/pkg/ct/p/0.1.0/." "$S3/mproj/vendor/p/"
 mdig="$(awk '$1 == "ct/p" { print $NF }' "$S3/proj/ct.lock")"
 printf 'p 0.1.0 dir ./vendor/p %s\n' "$mdig" >"$S3/mproj/ct.lock"
 printf 'name = demo\nversion = 0.1.0\ndep = ../pkg@^0.1.0\n' >"$S3/mproj/ct.pkg"
-printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(9)); return 0; }\n' >"$S3/mproj/main.ct"
+printf 'import p;\nint main(void) { printf("%%d\\n", twice(9)); return 0; }\n' >"$S3/mproj/main.ct"
 if ( cd "$S3/mproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
         "$work/ct-ast" migrate >"$S3/m.out" 2>"$S3/m.err" ); then
     if [ "$(head -1 "$S3/mproj/ct.lock")" = "# ct-lock 2" ] \
@@ -1553,7 +1550,7 @@ export GIT_CONFIG_VALUE_1="https://s5.invalid/"
 for n in 1 2; do
     mkdir -p "$S5/home$n" "$S5/cthome$n" "$S5/c$n"
     printf 'name = demo\nversion = 0.1.0\ndep = ct/p@^0.1.0\n' >"$S5/proj$n/ct.pkg"
-    printf 'import p;\n#include <stdio.h>\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$S5/proj$n/main.ct"
+    printf 'import p;\nint main(void) { printf("%%d\\n", twice(21)); return 0; }\n' >"$S5/proj$n/main.ct"
     ( cd "$S5/proj$n" && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \
         "$work/ct-ast" get https://s5.invalid/p@^0.1.0 >/dev/null 2>&1 \
       && HOME="$S5/home$n" CT_HOME="$S5/cthome$n" \

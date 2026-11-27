@@ -1,5 +1,5 @@
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 enum Msg {
     Text(String body),

@@ -5,7 +5,7 @@
 // 角度：返回位装箱——`return 对象;` 由函数返回类型驱动装箱，
 //   与参数位装箱是两条独立的规则（一个看被调函数签名，一个看返回类型）。
 // L0 可用：返回接口值 + return 装箱是冻结种子的能力。
-#include <stdio.h>
+
 
 trait Sink {
     void put(char *line);

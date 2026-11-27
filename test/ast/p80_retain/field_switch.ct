@@ -1,6 +1,6 @@
 /* SH-102 round 3 R6a: a field assigned in one `case` and reassigned after the
  * switch is only conditionally defined; the compiler must refuse it. */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

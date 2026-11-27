@@ -2,7 +2,7 @@
 // call, by value or by pointer, and after a field hop, dispatches normally. The
 // receiver value is hoisted into a temp so it is evaluated exactly once.
 // License: MIT; see LICENSE.EXCEPTION
-#include <stdio.h>
+
 #include <stdlib.h>
 
 trait Greeter {

@@ -1,7 +1,7 @@
 /* v1-PH-2 S6: an inherent method block written against the template applies to
    every instance. `self` is the concrete instance struct, and `match` in the
    body still names the template (`Opt.Some`). */
-#include <stdio.h>
+
 
 enum Opt<T> {
     Some(T v),

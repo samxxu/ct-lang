@@ -1,7 +1,7 @@
 /* Phase 50 / E50-2: `Map::has` agrees with `Map::get` for the three key
    families; a present zero value is `has == 1` with `*get == 0`, a missing key
    is `has == 0 && get == 0`. `get` keeps returning `V *` (D50-1). */
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -2,7 +2,7 @@
 // Before S1b this was test/ast/errors/generic_pub.ct — the parser rejected
 // `pub` on a generic free function. It is now legal; the template body is
 // parsed in place (same-unit consumption) and emitted as a static instance.
-#include <stdio.h>
+
 
 pub T id<T>(T x)
 {

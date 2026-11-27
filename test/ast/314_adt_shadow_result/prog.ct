@@ -2,7 +2,7 @@
    two-parameter substitution, constructors, patterns, inherent methods and
    Box/Vec storage all resolve to the user ADT, while the built-in `Option`
    stays in scope. */
-#include <stdio.h>
+
 
 enum Result<T, E> {
     Ok(T v),

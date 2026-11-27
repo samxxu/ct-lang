@@ -1,6 +1,6 @@
 /* Phase 53 / E53-6: `m["a"]?.b?.c` short-circuits on a missing key and on a
    null intermediate pointer. */
-#include <stdio.h>
+
 
 struct C {
     int v;

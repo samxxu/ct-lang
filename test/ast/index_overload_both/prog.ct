@@ -1,6 +1,6 @@
 /* REQ-INDEX-1 A1 / D-028: `int get(int)` and `char *get(char *)` coexist, and
    the same two key types select the two `set` versions on the write side. */
-#include <stdio.h>
+
 #include <string.h>
 
 struct Vault {

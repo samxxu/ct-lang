@@ -1,7 +1,7 @@
 /* P0 (REQ-HW-002): an array *without* an initialiser keeps its old shape -- a
    per-element write loop for a local, the per-unit constructor for file scope.
    The fix must not change that path, and must not make it worse. */
-#include <stdio.h>
+
 
 trait Greeter {
     char *who();

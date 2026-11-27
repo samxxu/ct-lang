@@ -5,7 +5,7 @@
 //   保证这个样例的 JSON 形状稳定。
 // 角度：机器可读的同一个错误（与 13_check/arity 是同一类 arity 不匹配）。
 // 仅 ct-ast。
-#include <stdio.h>
+
 
 trait Op {
     int add(int a, int b);

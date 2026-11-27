@@ -1,7 +1,7 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_mcall.ct`, 24:18):
    an instance method of a generic struct returns a `Vec`; both the assigned
    form and the direct chain read it. */
-#include <stdio.h>
+
 
 Vec<int> mk(void)
 {

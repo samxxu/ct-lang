@@ -1,7 +1,7 @@
 /* 109 (Phase 24): `0..13($ * 2 + 1)` expands to a brace list that prints the
    same values as the hand-written literal table beside it, and the element
    count is the range's, not a guess. */
-#include <stdio.h>
+
 
 int main(void)
 {

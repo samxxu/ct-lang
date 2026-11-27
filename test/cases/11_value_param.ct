@@ -1,5 +1,5 @@
 // 11: objects passed by value — the parameter type is qualified and dispatch works
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

@@ -1,7 +1,7 @@
 /* REQ-JSACCESS-1 A4: the v0-PH-52 single-layer string key keeps working
    (`x["k"]` -> `get(k)`); this is the pre-existing behaviour under a name the
    requirement's acceptance command greps for. */
-#include <stdio.h>
+
 #include <string.h>
 
 struct X {

@@ -3,7 +3,7 @@
    the chain instead of forcing a temporary variable. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 int main(void)
 {

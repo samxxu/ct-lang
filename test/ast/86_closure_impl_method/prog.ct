@@ -1,7 +1,7 @@
 // 86 (Phase 21 R06): a closure inside an impl method body. The literal's owner
 // is the method, whose C spelling is `<Struct>_<method>`; the emitter has to
 // find that row and emit the trampoline, not fall back to the bare name.
-#include <stdio.h>
+
 
 trait Op {
     int run(int x);

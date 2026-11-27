@@ -1,7 +1,7 @@
 /* 43: several declarators in one field declaration (batch 18) - the shared type
    is written once, each name keeps its own dimensions, and a pointer applies only
    to the declarator that carries the star. Bit-fields may share a list too. */
-#include <stdio.h>
+
 
 struct Range {
     int lo, hi;

@@ -3,7 +3,7 @@
    on the temp. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 int main(void)
 {

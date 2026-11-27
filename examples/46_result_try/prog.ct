@@ -1,5 +1,5 @@
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 Result<int, char *> parse(int n)
 {
     if (n < 0) return err: (Result<int, char *>){ 0, 0, "negative" };

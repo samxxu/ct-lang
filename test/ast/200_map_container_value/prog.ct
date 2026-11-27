@@ -1,7 +1,7 @@
 /* Phase 31 S20b: a `Map` literal whose value is itself a container. The value
    spelling the encoder sees is the nested instance's C name, so the literal and
    the nested `MapEntry` registration agree on one spelling. */
-#include <stdio.h>
+
 
 int main(void)
 {

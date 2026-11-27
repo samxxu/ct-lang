@@ -7,7 +7,7 @@
  * 声明报 `an attribute must prefix a declaration`。
  */
 #include <stddef.h>
-#include <stdio.h>
+
 
 __attribute__((unused)) static int helper(int n);
 

@@ -1,5 +1,5 @@
 // 09: pointer receivers rewrite p->m() to a vptr call, passing the pointer itself
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

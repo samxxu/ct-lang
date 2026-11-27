@@ -1,6 +1,6 @@
 /* 95 (Phase 22): the implicit `i` is writable. Writing it in the body moves the
    next test, exactly as it does in the native `for` printed below. */
-#include <stdio.h>
+
 
 int main(void)
 {

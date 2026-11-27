@@ -1,6 +1,6 @@
 /* SH-102 round 3 C-4: a shadowed struct local must not inherit the outer
  * record's field state; both releases affect their own object only. */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

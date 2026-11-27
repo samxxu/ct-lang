@@ -1,5 +1,5 @@
 // 23: file-scope objects and arrays — vptrs are written by a constructor (D5=A)
-#include <stdio.h>
+
 
 trait Greeter {
     void greet();

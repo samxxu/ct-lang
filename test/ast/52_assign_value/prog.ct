@@ -1,7 +1,7 @@
 /* 52: an assignment used as a value (batch 28) - a parenthesized assignment is
    an expression, so it can stand in an assignment, be chained, and drive a
    condition; the statement form is unchanged. */
-#include <stdio.h>
+
 
 static int calls;
 

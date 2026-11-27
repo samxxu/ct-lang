@@ -2,7 +2,7 @@
 // 角度：单点触发 ambiguous_method，文本通道；同时验证“警告不阻断”：
 //   编译器按第一个 trait 解析（Sizer），程序仍能编译运行，输出 7。
 // 期望：stderr 与 expected.warn 逐字节一致，退出码 0；程序输出与 expected.out 一致。
-#include <stdio.h>
+
 
 trait Sizer {
     int len();

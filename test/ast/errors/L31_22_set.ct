@@ -1,5 +1,5 @@
 /* L31-22: the loop reads the container the body would write through `set`. */
-#include <stdio.h>
+
 
 int main(void)
 {

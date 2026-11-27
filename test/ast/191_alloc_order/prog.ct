@@ -1,6 +1,6 @@
 /* Phase 31 S24 (E31-27): the ownership protocol on owners, with a capacity
    failure leaving before any element is retained. */
-#include <stdio.h>
+
 
 int main(void)
 {

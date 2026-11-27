@@ -2,7 +2,7 @@
  * `if` that may not run, then reassigned outside. The old value is not
  * definitely defined, so releasing it would read uninitialised storage; the
  * compiler must refuse the reassignment instead. */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

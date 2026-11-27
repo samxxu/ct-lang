@@ -11,7 +11,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 static int fold(int (*fn)(void *env, int acc, int x), void *env, int n)
 {

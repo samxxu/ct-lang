@@ -5,7 +5,7 @@
  * ct 把它提到自带块里发射成 `{ static int i = 0; for (; i < 2; i++) ... }`，
  * 生成的 C 是标准 C99。第二次调用 run() 时 i 已经是 2，循环体一次都不跑。
  */
-#include <stdio.h>
+
 
 static int run(void)
 {

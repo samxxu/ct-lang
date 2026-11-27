@@ -1,6 +1,6 @@
 /* V29-4 turned positive in Phase 31 (was `vec_subscript_fnptr_field.ct`,
    17:18): a function-pointer field called through `h.fp()`. */
-#include <stdio.h>
+
 
 Vec<int> mk(void)
 {

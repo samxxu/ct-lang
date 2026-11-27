@@ -1,7 +1,7 @@
 /* SH-102 round 4:C-1 误拒回归。聚合零初始化先把 `h.tag` 定义为零句柄，分支
  * 里的赋值是对“已定义”字段的重赋（release 旧值），分支之后仍是已定义，所以
  * 分支外的重赋合法。 */
-#include <stdio.h>
+
 
 struct Holder { String tag; }
 

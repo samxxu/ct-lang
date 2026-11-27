@@ -1,7 +1,7 @@
 // Phase 33 O2/E33-7: `impl<T> Box<Box<T>>` dispatches on `Box<Box<Circle>>`.
 // `Box` carries the O1 bound `T: Show`; `impl Show for Box` satisfies it for
 // the inner instance (no `use Show`, card section 14 item 12).
-#include <stdio.h>
+
 
 trait Show {
     int show();

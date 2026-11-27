@@ -1,7 +1,7 @@
 /* 25.2, qf == 3: `ns::Trait.method(...)` -- the closure fills the pair of a
    namespace host's recipe. */
 import probe::probe;
-#include <stdio.h>
+
 
 int main(void)
 {

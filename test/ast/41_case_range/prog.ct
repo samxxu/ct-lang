@@ -1,7 +1,7 @@
 /* 41: `case` ranges (batch 16) - `case <low> ... <high>:` is a GNU / C23
    extension the C compiler accepts; both ends are integer constant expressions,
    and a range may sit beside ordinary labels in the same switch. */
-#include <stdio.h>
+
 
 static int grade(int score) {
     switch (score) {

@@ -3,7 +3,7 @@
    but this is the exact shape the `tc_expr_*` slices become once it can: one
    arm per variant, no `switch`, no fallthrough, exhaustiveness proved by the
    compiler. */
-#include <stdio.h>
+
 
 enum Shape {
     Circle(int r),

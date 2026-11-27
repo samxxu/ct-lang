@@ -1,6 +1,6 @@
 /* Template Method: a free function owns the skeleton and calls the steps of an
    interface it receives, so two implementations share one algorithm. */
-#include <stdio.h>
+
 
 trait Steps {
     void begin();

@@ -1,7 +1,7 @@
 /* 25.2, qf == 5: `Trait::method(recv, ...)` -- the receiver is not part of the
    argument tail, so the closure still fills the pair that follows it. */
 import probe::probe;
-#include <stdio.h>
+
 
 int main(void)
 {

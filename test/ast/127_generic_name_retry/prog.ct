@@ -1,6 +1,6 @@
 /* 127 (Phase 26 fix, TEST-17): the instance name retries when a user symbol
    already owns `id__ct1`, so R6 is pinned by a generated name, not by prose. */
-#include <stdio.h>
+
 
 int id__ct1(int x)
 {

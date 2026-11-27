@@ -2,7 +2,7 @@
    failure `{ 0, v, err }`; the methods are ordinary impl members, so no
    compiler branch is involved. `unwrap` / `unwrap_err` are the checked reads,
    `set_ok` / `set_err` the mutators. */
-#include <stdio.h>
+
 
 int main(void)
 {

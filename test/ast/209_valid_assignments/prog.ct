@@ -1,7 +1,7 @@
 /* E32-12: the phase-32 gate must stay silent on every legal initialiser.
    `char *` from a string, a null constant into a pointer, arithmetic widths,
    `void *` from a pointer and an interface slot boxed from a struct. */
-#include <stdio.h>
+
 
 trait Show {
     int show();

@@ -7,7 +7,7 @@
 //   in_use 回到 0 0。写错会怎样：用 own 接池对象，块尾会 delete 一块不归你的
 //   内存（双重释放 / 释放静态对象）。
 // 仅 ct-ast：borrow / Handback 是 CT 线能力。
-#include <stdio.h>
+
 
 struct Conn {
     int fd;

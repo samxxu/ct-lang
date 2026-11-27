@@ -18,7 +18,7 @@
    line reads 0 -- no leak, no double free. `bind refs=4` is the refcount at
    the binding: the factory value + `copy` + `inner` + the binding's retained
    copy. */
-#include <stdio.h>
+
 
 enum Msg {
     Text(String s),

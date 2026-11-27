@@ -5,7 +5,7 @@
  * CT 与 C 一致：匿名成员里的位域同样提升，sizeof 由 C 计算；
  * 带 use 的 struct，vptr 字段仍排在外层记录最后（本文件没有 use）。
  */
-#include <stdio.h>
+
 
 struct Packet {
     unsigned char version;

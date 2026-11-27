@@ -3,7 +3,7 @@
 // zero-initialised payload (see `Option::none`) that is safe to drop. A present
 // Option drops the real payload; a none Option drops the zero payload (here a
 // Probe with id 0, whose `drop` is a harmless print).
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Probe { int id; } use Drop;

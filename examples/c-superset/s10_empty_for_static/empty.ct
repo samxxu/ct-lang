@@ -6,7 +6,7 @@
  * 的最省写法（`done: ;`）。CT 的区别：`case 3: ;` 合法，`case 3: int x;`
  * 仍被拒绝。
  */
-#include <stdio.h>
+
 
 static int scan_to(int limit)
 {

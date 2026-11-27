@@ -226,6 +226,12 @@ set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
+# v1-PH-2 S9 M4: the repo corpus is strict; only the registered C-interop rows
+# (test/c-boundary-allow.tsv) get allow. The probe fixtures this gate copies
+# into a temp dir are pre-PH-65 and keep their historical allow via
+# CT_HARNESS_TEMP_ALLOW; the p65/p66 probes set CT_STRICT_BOUNDARY=1 to opt out.
+export CT_HARNESS_TEMP_ALLOW=1
+
 CC="${CC:-cc}"
 work=$(mktemp -d "${CT_SHORT_TMP:-/tmp}/ctast.XXXXXX") || exit 1
 
@@ -240,11 +246,6 @@ bad() { fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$1" "$2"; }
 # A probe that cannot run on this host (no sanitizer runtime, no BSD libc) exits
 # 77; it is reported, counted, and never silently green.
 skip() { skipped=$((skipped + 1)); printf '  skip  %s: %s\n' "$1" "$2"; }
-
-# PH-65 R2: the probes below generate fixtures in a temp dir and (pre-PH-65)
-# wrote `#include` freely; they are not the thing under test here. The p65
-# probes clear this variable themselves (they test the default).
-export CT_C_BOUNDARY=allow
 
 # PH-88 S88b (D-017 A1 / D88): the self-hosting fixpoint is parameterised by
 # its round count. A daily run uses 2 rounds; a tag candidate uses 3. The
@@ -495,6 +496,12 @@ if ! "$CC" -Wall -Wextra -std=c99 -I "$seeddir" "$seeddir"/*.c -o "$work/ct-ast"
     echo "  the AST compiler did not build from the seed:"; sed 's/^/    /' "$work/astb.log"; exit 1
 fi
 ok "ct-ast builds from the frozen seed (L0/L1/L2 retired)"
+# v1-PH-2 S9 M4: the default is strict. This wrapper adds --c-boundary=allow
+# only for the C-interop rows in test/c-boundary-allow.tsv; the p65 probes
+# still see strict because their temp fixtures are not registered.
+sh "$root/test/make-ct-ast-wrapper.sh" "$work/ct-ast" "$root" || {
+    echo "  could not install the C-boundary allow wrapper"; exit 1
+}
 # The white-box probes (p86 token/C API, TEST-25 unit slices) need the compiler's
 # emitted C tree. That tree is exactly the frozen seed: gate 13 proves the seed
 # rebuilds itself byte for byte, and the seed is what the compiler under test was
@@ -756,28 +763,28 @@ fi
 
 # PH-65 R1 / v1-PH-2 S9: the C boundary policy resolves to the documented side
 # for every input (global strict), package manifests and the command line.
-if env -u CT_C_BOUNDARY bash test/ast/p65_policy.sh "$work/ct-ast" >"$work/p65pol.out" 2>"$work/p65pol.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p65_policy.sh "$work/ct-ast" >"$work/p65pol.out" 2>"$work/p65pol.err"; then
     ok "p65/policy"
 else
     bad "p65/policy" "$(cat "$work/p65pol.out" "$work/p65pol.err" | head -4)"
 fi
 
 # PH-65 R2: strict units may not include a system header; only their own shim.
-if env -u CT_C_BOUNDARY bash test/ast/p65_include.sh "$work/ct-ast" >"$work/p65inc.out" 2>"$work/p65inc.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p65_include.sh "$work/ct-ast" >"$work/p65inc.out" 2>"$work/p65inc.err"; then
     ok "p65/include"
 else
     bad "p65/include" "$(cat "$work/p65inc.out" "$work/p65inc.err" | head -4)"
 fi
 
 # PH-65 R3: strict also closes #ct-raw, extern and function-like macros.
-if env -u CT_C_BOUNDARY bash test/ast/p65_raw_extern.sh "$work/ct-ast" >"$work/p65raw.out" 2>"$work/p65raw.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p65_raw_extern.sh "$work/ct-ast" >"$work/p65raw.out" 2>"$work/p65raw.err"; then
     ok "p65/raw-extern"
 else
     bad "p65/raw-extern" "$(cat "$work/p65raw.out" "$work/p65raw.err" | head -4)"
 fi
 
 # PH-65 R4: a `.m.ct` is the boundary: include and object-like macros only.
-if env -u CT_C_BOUNDARY bash test/ast/p65_map.sh "$work/ct-ast" >"$work/p65map.out" 2>"$work/p65map.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p65_map.sh "$work/ct-ast" >"$work/p65map.out" 2>"$work/p65map.err"; then
     ok "p65/map"
 else
     bad "p65/map" "$(cat "$work/p65map.out" "$work/p65map.err" | head -4)"
@@ -792,7 +799,7 @@ else
 fi
 
 # PH-65 R6 / S9: the global strict default and an external project end to end.
-if env -u CT_C_BOUNDARY bash test/ast/p65_regression.sh "$work/ct-ast" >"$work/p65reg.out" 2>"$work/p65reg.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p65_regression.sh "$work/ct-ast" >"$work/p65reg.out" 2>"$work/p65reg.err"; then
     ok "p65/regression ($(tail -1 "$work/p65reg.out"))"
 else
     bad "p65/regression" "$(cat "$work/p65reg.out" "$work/p65reg.err" | head -4)"
@@ -806,28 +813,28 @@ else
 fi
 
 # PH-66 R1: the libc I/O set is detected from direct calls only.
-if env -u CT_C_BOUNDARY bash test/ast/p66_io_detect.sh "$work/ct-ast" >"$work/p66det.out" 2>"$work/p66det.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p66_io_detect.sh "$work/ct-ast" >"$work/p66det.out" 2>"$work/p66det.err"; then
     ok "p66/io-detect"
 else
     bad "p66/io-detect" "$(cat "$work/p66det.out" "$work/p66det.err" | head -4)"
 fi
 
 # PH-66 R2: the detected headers reach the product exactly once.
-if env -u CT_C_BOUNDARY bash test/ast/p66_io_emit.sh "$work/ct-ast" >"$work/p66emi.out" 2>"$work/p66emi.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p66_io_emit.sh "$work/ct-ast" >"$work/p66emi.out" 2>"$work/p66emi.err"; then
     ok "p66/io-emit"
 else
     bad "p66/io-emit" "$(cat "$work/p66emi.out" "$work/p66emi.err" | head -4)"
 fi
 
 # PH-66 R3: an empty program carries no system header in either mode.
-if env -u CT_C_BOUNDARY bash test/ast/p66_io_empty.sh "$work/ct-ast" >"$work/p66emp.out" 2>"$work/p66emp.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p66_io_empty.sh "$work/ct-ast" >"$work/p66emp.out" 2>"$work/p66emp.err"; then
     ok "p66/io-empty"
 else
     bad "p66/io-empty" "$(cat "$work/p66emp.out" "$work/p66emp.err" | head -4)"
 fi
 
 # PH-66 R4: the edges -- user-defined names, names outside the set, freestanding.
-if env -u CT_C_BOUNDARY bash test/ast/p66_io_boundary.sh "$work/ct-ast" >"$work/p66bnd.out" 2>"$work/p66bnd.err"; then
+if env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 bash test/ast/p66_io_boundary.sh "$work/ct-ast" >"$work/p66bnd.out" 2>"$work/p66bnd.err"; then
     ok "p66/io-boundary"
 else
     bad "p66/io-boundary" "$(cat "$work/p66bnd.out" "$work/p66bnd.err" | head -4)"
@@ -9318,7 +9325,11 @@ echo "== summary: $pass passed, $fail failed, $skipped skipped =="
 # Gate 12 (ct-ast static goldens) reuses this binary; opt-in so a standalone
 # check-ast run keeps its old behaviour.
 if [ -n "${CT_AST_KEEP:-}" ] && [ -x "$work/ct-ast" ]; then
-    cp "$work/ct-ast" "$CT_AST_KEEP" || echo "  warn: could not keep ct-ast at $CT_AST_KEEP" >&2
+    # S9 M4: `$work/ct-ast` is the allow wrapper; keep the real binary and a
+    # wrapper that points at it so gate 12 can still honour the registry.
+    cp "$work/ct-ast.real" "$CT_AST_KEEP" || echo "  warn: could not keep ct-ast at $CT_AST_KEEP" >&2
+    sh "$root/test/make-ct-ast-wrapper.sh" "$CT_AST_KEEP" "$root" \
+        || echo "  warn: could not install the kept ct-ast wrapper" >&2
 fi
 rm -rf "$work"
 [ "$fail" -eq 0 ]

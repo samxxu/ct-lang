@@ -3,7 +3,7 @@
    covers (declaration, assignment, return, and the explicit spelling). The
    generated C is the same `Node_as(&x)` / `Node_to(&x)` a hand-written call
    produces. */
-#include <stdio.h>
+
 
 struct Node {
     int v;

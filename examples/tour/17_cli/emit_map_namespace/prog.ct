@@ -4,7 +4,7 @@
 // 期望：stdout（map JSON）与 expected.out 逐字节一致，退出码 0。
 namespace hal;
 
-#include <stdio.h>
+
 
 trait Writer {
     int write(char *buf, int n);

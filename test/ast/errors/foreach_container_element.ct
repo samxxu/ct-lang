@@ -1,4 +1,4 @@
-#include <stdio.h>
+
 
 /* L29-15: interfaces/containers are caught at the declaration (L29-13 / L29-11). */
 int main(void)

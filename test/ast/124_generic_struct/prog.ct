@@ -1,6 +1,6 @@
 /* 124 (Phase 26): a struct spelling is a valid type argument. The instance
    passes the whole value through, and the caller reads the fields back. */
-#include <stdio.h>
+
 
 struct Point {
     int x;

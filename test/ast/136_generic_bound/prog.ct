@@ -1,7 +1,7 @@
 /* 136 (Phase 28 / A1+A2): one bounded template, two concrete structs. Each
    instance calls its own `S_Compare_vtable.cmp` slot: no vptr read, no shared
    instance body, no residual type parameter in the product. */
-#include <stdio.h>
+
 
 trait Compare {
     int cmp(void *other);

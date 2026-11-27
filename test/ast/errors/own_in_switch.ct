@@ -1,7 +1,7 @@
 /* batch 4: a switch may skip a case or fall through, so an `own` object inside
    one has no defined release point; refused by name until the ownership pass
    learns case reachability. */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Box {

@@ -1,5 +1,5 @@
 // 16: arrays of objects — element vptrs are written and element calls dispatch
-#include <stdio.h>
+
 
 trait Counter {
     void bump(int by);

@@ -3,7 +3,7 @@
    pointer as the by-value first argument. */
 import lib::types;
 import lib::ops;
-#include <stdio.h>
+
 
 int main(void)
 {

@@ -2,7 +2,7 @@
    the type (`int (*p)(int)`), may be a parameter or a struct field, takes a
    function with `p = handler;` or `p = &handler;`, and is called as `p(x)` or
    `(*p)(x)`. */
-#include <stdio.h>
+
 
 struct Box {
     int base;

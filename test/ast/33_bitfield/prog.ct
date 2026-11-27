@@ -2,7 +2,7 @@
    constant expression printed as written (a macro or `(1 << 2)`), a nameless
    `: 4` pads, and the form works in `struct`, `union`, an anonymous
    `typedef struct` and a struct that also carries a trait vptr. */
-#include <stdio.h>
+
 
 #define NIBBLE (1 << 2)
 

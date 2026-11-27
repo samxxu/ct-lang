@@ -2,9 +2,8 @@
    `match` on an integer-family value takes integer / character literal arms
    and needs an explicit `_` fallback. The same literals are accepted inside a
    variant payload, in statement and expression form. */
-#include <stdio.h>
-#include <stdbool.h>
 
+#include <stdbool.h>
 enum Mode { Off(), Level(int n) }
 
 int classify(int n)

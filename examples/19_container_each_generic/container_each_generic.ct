@@ -20,7 +20,7 @@
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
-#include <stdio.h>
+
 
 trait TableEach {
     int each(int (*visit)(void *env, char *s), void *env);

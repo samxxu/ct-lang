@@ -1,6 +1,6 @@
 /* Phase 30 E30-2 / §2.8: the receiver is evaluated exactly once, and a suffix
    after the block keeps reading the same promoted receiver. */
-#include <stdio.h>
+
 
 struct Box {
     int n;

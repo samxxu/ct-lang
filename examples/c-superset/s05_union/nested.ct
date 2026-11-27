@@ -6,7 +6,7 @@
  * 裸名与 `union Name` 两种拼写等价。注意读取非当前写入的成员在 C 里是
  * 实现定义行为，这里只读取刚写入的那个成员。
  */
-#include <stdio.h>
+
 
 typedef union Box {
     int i;

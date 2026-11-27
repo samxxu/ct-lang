@@ -1,6 +1,6 @@
 // E36-6 (P36): `str_from_len` copies exactly `n` bytes, so an embedded `\0`
 // survives; `str_len` answers the byte count, never `strlen`.
-#include <stdio.h>
+
 
 int main(void)
 {

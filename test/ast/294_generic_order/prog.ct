@@ -1,6 +1,6 @@
 /* SH-114: a generic function template defined before its first instantiation. */
 
-#include <stdio.h>
+
 
 T twice<T>(T x)
 {

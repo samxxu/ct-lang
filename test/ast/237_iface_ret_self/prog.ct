@@ -2,7 +2,7 @@
    object `self` points at, not the address of the emitter's local `_self`
    slot.  `header()` returns `self`; `x` outlives the call, so both lines below
    must see `x` itself. */
-#include <stdio.h>
+
 
 trait HttpResponse {
     int status();

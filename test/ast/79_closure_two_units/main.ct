@@ -3,7 +3,7 @@
    and a literal crosses the boundary as a `(fn, env)` pair. */
 import dep;
 
-#include <stdio.h>
+
 
 int main(void)
 {

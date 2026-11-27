@@ -7,7 +7,7 @@
 //   L0 对指针接口字段只支持“派发”，赋值需要已有胖指针的地址
 //   （`row.cell = &slot;`），不接受直接写 `row.cell = a;`。
 // L0 可用。
-#include <stdio.h>
+
 
 trait Expr {
     int eval();

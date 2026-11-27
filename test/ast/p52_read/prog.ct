@@ -1,6 +1,6 @@
 /* Phase 52 / E52-1: `x["k"]` on a user struct with an inherent `get` expands
    to `get(k)` (scheme A: name + arity only). License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 #include <string.h>
 
 struct X {

@@ -1,6 +1,6 @@
 /* Phase 52 / E52-5: C arrays, pointers and pointer-to-struct keep C subscript
    arithmetic; the protocol only applies to a non-pointer struct value. */
-#include <stdio.h>
+
 
 struct X {
     int n;

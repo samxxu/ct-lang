@@ -4,7 +4,7 @@
 // 角度：参数位装箱——接口值的 self 指向实参，vt 指向该 struct 的 vtable；
 //   play 内部每次 s.sound() 都是 s.vt->sound(s.self)，与具体类型无关。
 // L0 可用：接口作参数 + 实参自动装箱是冻结种子的能力。
-#include <stdio.h>
+
 
 trait Speaker {
     char *sound();

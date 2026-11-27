@@ -1,5 +1,5 @@
 // Phase 33 O2/E33-8: `impl<T> Pair<int, Box<T>>` only matches the first slot.
-#include <stdio.h>
+
 
 struct Box<T> {
     T value;

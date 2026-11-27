@@ -4,7 +4,7 @@
 //   规则依赖“后面还有没有语句”，也让 break/continue 的归属变得含糊。
 //   编译器在语句处报错并退出 1。
 // 期望：stderr 与 expected.err 逐字节一致，退出码 1。
-#include <stdio.h>
+
 
 int main(void) {
     loop(3) printf("x\n");

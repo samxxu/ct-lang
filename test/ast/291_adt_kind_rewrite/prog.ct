@@ -10,7 +10,7 @@
    This is the mechanical replacement the rewrite train will apply: one
    `case K_X:` per `Type.X(...)`, the tag field gone (the variant *is* the
    tag), and the payload fields scoped to their arm. */
-#include <stdio.h>
+
 
 enum OldKind { K_NUM, K_ADD };
 

@@ -4,7 +4,7 @@
    License: MIT; see LICENSE.EXCEPTION */
 namespace lib;
 
-#include <stdio.h>
+
 
 pub struct Res {
     int id;

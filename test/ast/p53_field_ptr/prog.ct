@@ -1,6 +1,6 @@
 /* Phase 53 / E53-2: a pointer obtained from a value field is materialised once
    in a `__ct_optN` before the conditional. */
-#include <stdio.h>
+
 
 struct B {
     int c;

@@ -1,6 +1,6 @@
 /* Observer: an interface array field, registered and notified through a
    Subject pointer. */
-#include <stdio.h>
+
 
 trait Observer {
     void update(int v);

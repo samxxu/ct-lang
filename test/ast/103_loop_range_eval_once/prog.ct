@@ -2,7 +2,7 @@
    writing a variable the bound reads inside the body cannot change the trip
    count. `lo` / `hi` count their calls and record their order; the second loop
    raises its own upper-bound variable to 99 and still runs twice. */
-#include <stdio.h>
+
 
 static int calls = 0;
 static int seq = 0;

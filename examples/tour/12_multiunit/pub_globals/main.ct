@@ -5,7 +5,7 @@
 //   `left::hits = 5` 改的只是 left 的那一份。对比 12_multiunit/cross_unit_iface：
 //   那边导出的是类型和对象，这边导出的是可变状态与函数。
 // 仅 ct-ast：多单元 build 与 pub 导出。
-#include <stdio.h>
+
 
 import left::lstate;
 import right::rstate;

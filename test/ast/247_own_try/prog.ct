@@ -1,7 +1,7 @@
 /* Phase 49 / E49-6: an `own` factory value and the `?` failure path keep the
    PH-40 cleanup order (`errdefer` runs before the owned object's Drop); the
    factory allocation is released exactly once. License: MIT; see LICENSE.EXCEPTION */
-#include <stdio.h>
+
 #include <stdlib.h>
 
 struct Res {

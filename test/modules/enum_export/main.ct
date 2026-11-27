@@ -1,6 +1,6 @@
 /* The consumer uses the exported enum type by its bare name and reaches a
    member both bare (`Mid`) and qualified (`app::High`). */
-#include <stdio.h>
+
 
 import app::kinds;
 
