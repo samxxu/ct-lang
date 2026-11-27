@@ -30,9 +30,29 @@ import tool::driver::Driver;
 import tool::pkg::Pkg;
 import tool::sh::Sh;
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+/* v1-PH-2 S9: the entry is a strict unit, so it carries no C header. The two
+   C string helpers it used (`strrchr`, `strcmp`) become plain Ct loops; the
+   `printf` family still gets `<stdio.h>` from the direct-call exception
+   (spec §4.67). */
+static int main_eq(const char *a, const char *b)
+{
+    if (a == 0 || b == 0) return 0;
+    while (*a != 0 && *a == *b) {
+        a = a + 1;
+        b = b + 1;
+    }
+    return *a == *b;
+}
+
+static const char *main_last_slash(const char *s)
+{
+    const char *r = 0;
+    while (*s != 0) {
+        if (*s == '/') r = s;
+        s = s + 1;
+    }
+    return r;
+}
 
 #define CTC_VERSION "1.1.0"
 
@@ -94,10 +114,10 @@ int main(int argc, char **argv)
        all in place. It owns the unit table and the options the emitter reads. */
     frontend::module::ct_module_bind(arena, lex, sym, ty, mem, p, cache);
 
-    base = strrchr(argv[0], '/');
+    base = main_last_slash(argv[0]);
     base = base ? base + 1 : argv[0];
-    if (strcmp(base, "ct") == 0) m->prog = "ct";
-    else if (strcmp(base, "ctc") == 0) m->prog = "ctc";
+    if (main_eq(base, "ct")) m->prog = "ct";
+    else if (main_eq(base, "ctc")) m->prog = "ctc";
     /* the emitter (backend::emit) reads the same collaborators, the module
        tables, the options and the version; `out`/`path` follow through the
        setters as the driver re-points them. Bind after the entry-name branch
@@ -114,13 +134,13 @@ int main(int argc, char **argv)
     /* PH-83: `ct index verify` is read-only. PKG-18 adds `ct index refresh`,
        which rebuilds rows from local package trees and never fetches. Any
        other spelling is a usage error, never a compile run. */
-    if (argc > 1 && strcmp(argv[1], "index") == 0) {
-        if (argc > 2 && strcmp(argv[2], "verify") == 0)
+    if (argc > 1 && main_eq(argv[1], "index")) {
+        if (argc > 2 && main_eq(argv[2], "verify"))
             return tool::pkg::ct_index_verify(argc - 3, argv + 3, m->prog, CTC_VERSION);
-        if (argc > 2 && strcmp(argv[2], "refresh") == 0)
+        if (argc > 2 && main_eq(argv[2], "refresh"))
             return tool::pkg::ct_index_refresh(argc - 3, argv + 3, m->prog, CTC_VERSION);
-        if (argc == 2 || (argc == 3 && (strcmp(argv[2], "-h") == 0
-                                        || strcmp(argv[2], "--help") == 0))) {
+        if (argc == 2 || (argc == 3 && (main_eq(argv[2], "-h")
+                                        || main_eq(argv[2], "--help")))) {
             printf("usage: %s index verify [<file>] [--json] [-q]\n", m->prog);
             printf("  read-only: check all rows (file: <file> > CT_INDEX > $CT_HOME/index/index)\n");
             printf("usage: %s index refresh --packages <list> --out <index> [--check]\n", m->prog);
@@ -132,17 +152,17 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s index refresh --packages <list> --out <index> [--check]\n", m->prog);
         return 2;
     }
-    if (argc > 1 && strcmp(argv[1], "get") == 0)
+    if (argc > 1 && main_eq(argv[1], "get"))
         return tool::pkg::ct_pkg_get(argc - 2, argv + 2, m->prog, CTC_VERSION);
-    if (argc > 1 && strcmp(argv[1], "install") == 0)
+    if (argc > 1 && main_eq(argv[1], "install"))
         return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);
-    if (argc > 1 && strcmp(argv[1], "update") == 0)
+    if (argc > 1 && main_eq(argv[1], "update"))
         return tool::pkg::ct_pkg_update(argc - 2, argv + 2, m->prog, CTC_VERSION);
-    if (argc > 1 && strcmp(argv[1], "verify") == 0)
+    if (argc > 1 && main_eq(argv[1], "verify"))
         return tool::pkg::ct_pkg_verify(argc - 2, argv + 2, m->prog, CTC_VERSION);
-    if (argc > 1 && strcmp(argv[1], "migrate") == 0)
+    if (argc > 1 && main_eq(argv[1], "migrate"))
         return tool::pkg::ct_pkg_migrate(argc - 2, argv + 2, m->prog, CTC_VERSION);
-    if (argc > 1 && strcmp(argv[1], "pkg") == 0)
+    if (argc > 1 && main_eq(argv[1], "pkg"))
         return tool::pkg::ct_pkg_install(argc - 2, argv + 2, m->prog, CTC_VERSION);
     {
         int rc = tool::driver::ct_driver_run(argc, argv);

@@ -20,8 +20,7 @@ namespace core::utf16;
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdlib.h>
-#include <stdint.h>
+#include "U16String.shim.h"
 
 pub struct U16String {
     uint16_t *ptr;

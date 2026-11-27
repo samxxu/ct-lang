@@ -8,9 +8,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <string.h>
 
+#include "EmitterMapText.shim.h"
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import runtime::text::Intern;

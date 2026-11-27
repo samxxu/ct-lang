@@ -6,12 +6,8 @@
  * prototype, the interface change the M0 card allows. See
  * docs/design/p85_m0.md for the baseline and the old->new map.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
+#include "ModuleBoundary.shim.h"
 import backend::emit::Emitter;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
@@ -29,11 +25,6 @@ import tool::sh::Sh;
 #define MAX_TEXT   160
 
 namespace frontend::module;
-/* `realpath` is POSIX/XSI; glibc and musl hide its declaration under
-   `-std=c99`, so the explicit prototype keeps every host warning-free. It
-   moved here with `ct_norm_path` (macOS exposes it by default; the Linux
-   musl cross build does not, which is how the missing declaration showed). */
-extern char *realpath(const char *path, char *resolved);
 
 /* A stateless unit: the type exists only because a unit file is
    named after its main type. Nothing instantiates it. */
@@ -41,9 +32,7 @@ pub struct ModuleBoundary {
     int unused;
 }
 
-pub int c_has_manifest(const char *dir);
 pub int c_manifest_boundary(const char *dir);
-pub int c_path_is_core(const char *path);
 pub int ct_append_flags(char **buf, int *cap, int init, const char *val);
 pub int ct_cmd_raw(char **cmd, int *cap, const char *frag);
 pub int ct_cmd_token(char **cmd, int *cap, const char *tok);
@@ -58,21 +47,8 @@ pub const char *io_header_for(const char *name);
 pub int word_is(const char *s, const char *w);
 
 /* `c-boundary = allow|strict` in `<dir>/ct.pkg`; -1 when the file or the key is
-   absent, which keeps the allow window for packages published before PH-65
-   (D65-7). */
-int c_has_manifest(const char *dir)
-{
-    char *p;
-    FILE *f;
-
-    if (dir == 0 || dir[0] == 0) return 0;
-    p = tool::sh::ct_scratch_fmt("%s/ct.pkg", dir);
-    f = fopen(p, "r");
-    if (!f) return 0;
-    fclose(f);
-    return 1;
-}
-
+   absent. v1-PH-2 S9: a missing key is strict (the old allow window for
+   packages published before PH-65 is gone; `ct migrate` writes the key). */
 int c_manifest_boundary(const char *dir)
 {
     char *p;
@@ -107,33 +83,6 @@ int c_manifest_boundary(const char *dir)
     }
     fclose(f);
     return r;
-}
-
-/* PH-65 R1: the CT tree keeps the pre-1.0 behaviour; every in-repo include
-   lives in one of these four directories. An absolute path or a `..` escape is
-   not "inside" the tree. The policy is decided by the input path alone: SH-93
-   removed the old "cwd is the CT tree => allow" shortcut, which let a run from
-   the repo root silently relax an external unit (spec §4.66 lists only these
-   four directories, not a cwd rule). */
-int c_path_is_core(const char *path)
-{
-    static const char *const core[5] = { "selfhost/", "lib/core/", "lib/std/", "test/", "examples/" }; /* DOC-87 迁移回退 */
-    char cwd[1024];
-    const char *p = path;
-    size_t n;
-    int i;
-
-    if (path == 0 || path[0] == 0) return 0;
-    /* A build invoked from the repo root may hand us absolute unit paths
-       (`$PWD/lib/core/Vec.h.ct`); strip the cwd before matching. */
-    if (path[0] == '/' && getcwd(cwd, sizeof cwd) != 0) {
-        n = strlen(cwd);
-        if (strncmp(path, cwd, n) == 0 && path[n] == '/') p = path + n + 1;
-    }
-    if (p[0] == '/' || (p[0] == '.' && p[1] == '.')) return 0;
-    for (i = 0; i < 5; i++)
-        if (strncmp(p, core[i], strlen(core[i])) == 0) return 1;
-    return 0;
 }
 
 /* Append one `--cflags` / `--ldflags` value, growing the accumulator on

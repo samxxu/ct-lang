@@ -13,8 +13,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypeText.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "ExprTypeText.shim.h"
 #define MAX_TEXT 160
 #define N_METHOD 29
 struct ct_buf;

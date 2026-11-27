@@ -11,10 +11,7 @@
  * #include, so neither the FILE * nor the trait may appear in its surface.
  * The driver reaches it through the `pub` primitives at the end of the file.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
+#include "Emitter.shim.h"
 import frontend::sym::SymbolsTypeText;
 
 import backend::emit::Init;

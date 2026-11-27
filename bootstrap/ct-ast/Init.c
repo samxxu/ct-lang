@@ -7,7 +7,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Init.h.ct"
-#include <string.h>
+#include "Init.shim.h"
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

@@ -7,8 +7,7 @@
 #include "Diag.h"
 
 #line 1 "selfhost/ct-ast/backend/mem/Memory.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "Memory.shim.h"
 #define MAX_TEXT  160
 #define MAX_VARS  4096
 #define N_CALL   7

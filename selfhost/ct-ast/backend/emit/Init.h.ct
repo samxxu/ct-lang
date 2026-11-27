@@ -13,9 +13,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <string.h>
 
+#include "Init.shim.h"
 import frontend::sym::Symbols;
 import runtime::text::Intern;
 import tool::sh::Sh;

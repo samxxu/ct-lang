@@ -4,10 +4,7 @@
 #include "Intern.h"
 
 #line 1 "selfhost/ct-ast/backend/lir/LModule.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include "LModule.shim.h"
 #define CAP_LIMIT 65536
 #define NODE_LIMIT 16777216
 #define LE_NUM              1

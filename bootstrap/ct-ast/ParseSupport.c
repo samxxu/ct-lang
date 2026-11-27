@@ -11,8 +11,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "ParseSupport.shim.h"
 #define MAX_RAW_INIT 4096
 #define CAP_LIMIT 65536
 #define MAX_FUNCS 512

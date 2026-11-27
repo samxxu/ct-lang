@@ -4,10 +4,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/tool/cache/Cache.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
+#include "Cache.shim.h"
 #define MAX_KEY  768
 #define CAP_LIMIT 65536
 struct ct_buf;

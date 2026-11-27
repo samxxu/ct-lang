@@ -22,7 +22,7 @@
 | # | 条款 | 判据 |
 | --- | --- | --- |
 | N-1 | shim 与映射单元**同目录、同基名**：`<base>.m.ct` + `<base>.shim.h` + 可选 `<base>.shim.c`；`.shim.c` 存在则 `.shim.h` 必须存在 | `a shim source needs a matching .shim.h` |
-| N-2 | 只有 `.m.ct` 探测 shim；`.h.ct` 的姊妹 `<base>.shim.h` 自动进公开头与 `-I` | [§4.10](language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、[§4.66](language-spec.md#466-c-边界c-boundary-与-shimphase-65仅-ct-ast) |
+| N-2 | `.m.ct` 与 `.h.ct` 都会探测姊妹 `<base>.shim.h`：`.m.ct` 的 shim 进消费方编译行，`.h.ct` 的 shim 自动进公开头；编译产物目录随构建复制该 shim，`--emit-c` 因此自包含 | [§4.10](language-spec.md#410-mapphase-11-新增--sh-20-扩展仅-ct-ast)、[§4.66](language-spec.md#466-c-边界c-boundary-与-shimphase-65仅-ct-ast) |
 | N-3 | 函数名 `<domain>_<verb>`；板级公共入口用 `board_*`（`board_init` / `board_idle` / `board_dma_submit`）。外设用 `uart_*` / `dma_*` / `clock_*`；既有样例按原样登记，不重命名 | 同一 shim 内前缀一致；导出名不得撞下文 N-4 |
 | N-4 | shim 导出名不得占用 Ct 保留面：`ct_*`、`_ct_*`、`core_*`、`std_*`、`String_*`、`Str_*`、`Vec_*`、`Map_*`、`Result_*`、`*_iface`、`*_vtbl`、`*_Drop_drop`、`main` | 生成物与 Ct 运行时符号不得被遮蔽 |
 | N-5 | 头文件必须有 include guard（`<BASE>_SHIM_H`）、可被 C99 单独包含；只 include C 头，不 include `.h.ct` 或生成物 | `cc -std=c99 -fsyntax-only` 能单独通过 |

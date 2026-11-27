@@ -5,11 +5,7 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <limits.h>
-#include <assert.h>
-#include <string.h>
+#include "Lexer.shim.h"
 
 
 struct ct_buf;

@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=11088 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=11085 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=88858 io_cap=2048
+     emitted_before=48223 emitted_after=88919 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -251,6 +251,11 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   环检测），发射 C 87910 → 88858（+948：TGraph 单元 + 发射器计划绑定）。
   默认 `ct build` 由 LIR 打印函数体；用户语料/自举发射 C 与 AST 路径逐字节相同。
   切片清单仍为 76。
+- **v1-PH-2 S9（全局默认 strict）后的 live 校准**：`Emitter.h.ct` 11088 → 11085
+  行（-3：四条系统 include 收进 `Emitter.shim.h`，`.h.ct` 只写自己的 shim），
+  发射 C 88858 → 88919（+61：每个单元一条 shim include 取代原来的 3–5 条系统
+  include，`ct build` 把 shim 复制进产物目录）。
+  `p88_metrics` 的 baseline 树按它自己的年代用显式 allow 发射。
 - **v1-PH-2 S7-c（REQ-MEM-2 写入摘要）后的 live 校准**：`Emitter.h.ct` 仍为
   11065 行；新增 `frontend/parse/Mem2Writes.h.ct` 一个单元，发射 C 87080 → 87839
   （+759：定义出口的直接写扫描、一层组合与调用点判定）。发射器与切片清单不变。

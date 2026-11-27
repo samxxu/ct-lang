@@ -1496,6 +1496,14 @@ if ( cd "$S3/mproj" && HOME="$S3/home" CT_HOME="$S3/cthome" \
     else
         bad "S3 migrate lock" "$(cat "$S3/mproj/ct.lock")"
     fi
+    # v1-PH-2 S9 (REQ-STRICT-1): the global default flipped to strict, so a
+    # project migrated from a v1 lock gets the allow bridge written into its
+    # own ct.pkg -- exactly once.
+    if [ "$(grep -c '^c-boundary = allow$' "$S3/mproj/ct.pkg")" = "1" ]; then
+        ok "S3 migrate writes c-boundary = allow for a pre-S9 project"
+    else
+        bad "S3 migrate boundary bridge" "$(cat "$S3/mproj/ct.pkg")"
+    fi
 else
     bad "S3 migrate" "$(cat "$S3/m.err")"
 fi

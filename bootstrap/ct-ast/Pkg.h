@@ -5,13 +5,7 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <stdarg.h>
+#include "Pkg.shim.h"
 
 #include "Sh.h"
 #include "PkgIndex.h"

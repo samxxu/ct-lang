@@ -17,9 +17,7 @@
  * S1a-0 C2l: the compile-mode default output path and the `-I` root handed to
  * `ct check` are run-scoped blocks (tool/sh), not `char[MAX_PATH]` arrays.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "Driver.shim.h"
 import frontend::module::ModuleBoundary;
 
 import backend::emit::Emitter;
@@ -414,6 +412,132 @@ impl DriverOps for Driver {
                     self->mem->path = savepath;
                     self->sym->path = savepath;
                     return -1;
+                }
+                /* v1-PH-2 S9: the built-in layer's units keep their system
+                   includes in a sibling `<base>.shim.h`. Compile mode is one
+                   translation unit and copies a unit's `#include` lines
+                   verbatim into the product, so expand the shim here: the
+                   emitted C keeps the raw system includes it always had, and
+                   a single-file product needs no shim file beside it. The
+                   shim sits next to its unit, so no include root is involved. */
+                {
+                    char shimname[64];
+                    char *shimpath;
+                    FILE *sf;
+                    long ssz;
+                    char *shimbuf;
+                    size_t shimlen, need, used;
+                    const char *src;
+                    const char *lastslash;
+                    const char *bnf;
+                    size_t srclen, bnl;
+                    int hits;
+
+                    shimbuf = (char *)0;
+                    shimlen = 0;
+                    bnl = strlen(base) > 5 ? strlen(base) - 5 : 0;
+                    lastslash = strrchr(cand, '/');
+                    /* `base` may carry a subdirectory ("utf16/U16Str.h.ct");
+                       the shim is named after the file, so keep only the leaf. */
+                    bnf = base;
+                    {
+                        const char *bs = strrchr(base, '/');
+                        if (bs) bnf = bs + 1;
+                        bnl = strlen(bnf) > 5 ? strlen(bnf) - 5 : 0;
+                    }
+                    if (bnl > 0 && bnl < sizeof shimname) {
+                        snprintf(shimname, sizeof shimname, "%.*s", (int)bnl, bnf);
+                        shimpath = tool::sh::ct_scratch_fmt(
+                            "%.*s/%s.shim.h",
+                            lastslash ? (int)(lastslash - cand) : 0, cand,
+                            shimname);
+                        sf = fopen(shimpath, "rb");
+                        if (sf) {
+                            if (fseek(sf, 0, SEEK_END) == 0
+                                && (ssz = ftell(sf)) > 0
+                                && ssz < (long)(4 << 20)) {
+                                shimbuf = (char *)malloc((size_t)ssz + 1);
+                                if (shimbuf) {
+                                    rewind(sf);
+                                    if (fread(shimbuf, 1, (size_t)ssz, sf) != (size_t)ssz) {
+                                        free(shimbuf);
+                                        shimbuf = (char *)0;
+                                    } else {
+                                        shimbuf[ssz] = 0;
+                                        shimlen = (size_t)ssz;
+                                    }
+                                }
+                            }
+                            fclose(sf);
+                        }
+                    }
+                    if (shimbuf) {
+                        /* Count the own-shim include lines and size the
+                           expanded source exactly: source minus the include
+                           lines plus the shim text. */
+                        src = self->lex->src;
+                        srclen = (size_t)self->lex->srclen;
+                        need = srclen;
+                        hits = 0;
+                        used = 0;
+                        while (used < srclen) {
+                            size_t ls, le, tl;
+                            ls = used;
+                            le = ls;
+                            while (le < srclen && src[le] != '\n') le++;
+                            tl = le;
+                            while (tl > ls && (src[tl - 1] == ' ' || src[tl - 1] == '\t'
+                                               || src[tl - 1] == '\r')) tl--;
+                            if (tl > ls && src[ls] == '#'
+                                && (size_t)(tl - ls) == 10 + strlen(shimname) + 8
+                                && strncmp(src + ls, "#include \"", 10) == 0
+                                && strncmp(src + ls + 10, shimname, strlen(shimname)) == 0
+                                && strncmp(src + ls + 10 + strlen(shimname),
+                                           ".shim.h\"", 8) == 0) {
+                                /* `#include "<base>.shim.h"` */
+                                hits++;
+                                need += shimlen;
+                                need -= (tl - ls);
+                            }
+                            used = (le < srclen) ? le + 1 : srclen;
+                        }
+                        if (hits > 0) {
+                            char *exp = (char *)malloc(need + 1);
+                            if (!exp) {
+                                free(shimbuf);
+                                return -1;
+                            }
+                            used = 0;
+                            need = 0;
+                            while (used < srclen) {
+                                size_t ls, le, tl;
+                                ls = used;
+                                le = ls;
+                                while (le < srclen && src[le] != '\n') le++;
+                                tl = le;
+                                while (tl > ls && (src[tl - 1] == ' ' || src[tl - 1] == '\t'
+                                                   || src[tl - 1] == '\r')) tl--;
+                                if (tl > ls && src[ls] == '#'
+                                    && (size_t)(tl - ls) == 10 + strlen(shimname) + 7 + 1
+                                    && strncmp(src + ls, "#include \"", 10) == 0
+                                    && strncmp(src + ls + 10, shimname, strlen(shimname)) == 0
+                                    && strncmp(src + ls + 10 + strlen(shimname),
+                                               ".shim.h\"", 8) == 0) {
+                                    memcpy(exp + need, shimbuf, shimlen);
+                                    need += shimlen;
+                                } else {
+                                    memcpy(exp + need, src + ls, le - ls);
+                                    need += le - ls;
+                                    if (le < srclen) exp[need++] = '\n';
+                                }
+                                used = (le < srclen) ? le + 1 : srclen;
+                            }
+                            exp[need] = 0;
+                            self->lex->src = exp;
+                            self->lex->srclen = (int)need;
+                        }
+                        free(shimbuf);
+                    }
                 }
                 self->lex->pos = 0;
                 self->lex->bol = 1;

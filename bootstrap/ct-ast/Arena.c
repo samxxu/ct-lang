@@ -5,8 +5,7 @@
 #include "Intern.h"
 
 #line 1 "selfhost/ct-ast/runtime/arena/Arena.h.ct"
-#include <stdlib.h>
-#include <string.h>
+#include "Arena.shim.h"
 #define MAX_NODES 262144
 #define NODE_LIMIT 16777216
 struct ct_buf;

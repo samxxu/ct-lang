@@ -7,10 +7,7 @@
 #include "Symbols.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TGraph.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include "TGraph.shim.h"
 #define CAP_LIMIT 65536
 #define NODE_LIMIT 16777216
 #define GN_UNIT             1

@@ -13,10 +13,7 @@
 #include "SymbolsTypeText.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterText.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
+#include "EmitterText.shim.h"
 #define TEXT_LIMIT 65536
 struct ct_buf;
 struct Str;

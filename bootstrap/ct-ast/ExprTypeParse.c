@@ -29,9 +29,7 @@
 #include "ExprInstantiate.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypeParse.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "ExprTypeParse.shim.h"
 #define B_ADD 1
 #define B_AND 12
 #define B_BAND 15

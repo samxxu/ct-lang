@@ -5,10 +5,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/tool/pkg/PkgIndex.h.ct"
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <dirent.h>
+#include "PkgIndex.shim.h"
 #define INDEX_ERR_STRIDE   560
 #define INDEX_ERR_KIND_OFF 4
 #define INDEX_ERR_MSG_OFF  36

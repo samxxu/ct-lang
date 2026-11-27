@@ -22,10 +22,7 @@
 #include "ModuleBoundary.h"
 
 #line 1 "selfhost/ct-ast/frontend/module/Module.h.ct"
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "Module.shim.h"
 #define MAX_TEXT   160
 #define MAX_UNITS  64
 #define CAP_LIMIT 65536
@@ -2219,6 +2216,40 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
                 }
             }
             for (u = 0; u < _self->nunits; u++) {
+                FILE * sf;
+                FILE * df;
+                char * dst;
+                char sbuf[4096];
+                size_t got;
+                if (((!_self->units[u].has_shim) || (!_self->units[u].shim_h))) {
+                    continue;
+                }
+                if ((_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, u) && (!_self->__frontend_module_moduleops_vptr->builtin_live_for(_self, u)))) {
+                    continue;
+                }
+                sf = fopen(_self->units[u].shim_h, "rb");
+                if ((!sf)) {
+                    continue;
+                }
+                dst = tool_sh_ct_scratch_fmt("%s/%s.shim.h", _self->outdir, _self->units[u].base);
+                df = fopen(dst, "wb");
+                if ((!df)) {
+                    fclose(sf);
+                    return 1;
+                }
+                while ((got = fread(sbuf, 1, sizeof(sbuf), sf)) > 0) {
+                    if (fwrite(sbuf, 1, got, df) != got) {
+                        fclose(sf);
+                        fclose(df);
+                        return 1;
+                    }
+                }
+                fclose(sf);
+                if (fclose(df) != 0) {
+                    return 1;
+                }
+            }
+            for (u = 0; u < _self->nunits; u++) {
                 char * src;
                 char * obj;
                 char * cmd;
@@ -2537,6 +2568,40 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         }
         free(key);
     }
+    for (u = 0; u < _self->nunits; u++) {
+        FILE * sf;
+        FILE * df;
+        char * dst;
+        char sbuf[4096];
+        size_t got;
+        if (((!_self->units[u].has_shim) || (!_self->units[u].shim_h))) {
+            continue;
+        }
+        if ((_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, u) && (!_self->__frontend_module_moduleops_vptr->builtin_live_for(_self, u)))) {
+            continue;
+        }
+        sf = fopen(_self->units[u].shim_h, "rb");
+        if ((!sf)) {
+            continue;
+        }
+        dst = tool_sh_ct_scratch_fmt("%s/%s.shim.h", _self->outdir, _self->units[u].base);
+        df = fopen(dst, "wb");
+        if ((!df)) {
+            fclose(sf);
+            return 1;
+        }
+        while ((got = fread(sbuf, 1, sizeof(sbuf), sf)) > 0) {
+            if (fwrite(sbuf, 1, got, df) != got) {
+                fclose(sf);
+                fclose(df);
+                return 1;
+            }
+        }
+        fclose(sf);
+        if (fclose(df) != 0) {
+            return 1;
+        }
+    }
 {
         int entry = ((_self->lib_root >= 0) ? _self->lib_root : (-1));
         int ui;
@@ -2755,12 +2820,6 @@ static int frontend_module_Module_frontend_module_ModuleOps_c_boundary_for(void 
         if (r >= 0) {
             return r;
         }
-        if (frontend_module_c_has_manifest(_self->incdirs[i])) {
-            return 0;
-        }
-    }
-    if (frontend_module_c_path_is_core(path)) {
-        return 0;
     }
     return 1;
 }

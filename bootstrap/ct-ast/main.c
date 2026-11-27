@@ -17,9 +17,6 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/main.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #define CTC_VERSION "1.1.0"
 struct ct_buf;
 struct Str;
@@ -147,7 +144,29 @@ struct tool_driver_Driver;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+static int main_eq(const char *, const char *);
+static const char * main_last_slash(const char *);
 int main(int, char * *);
+static int main_eq(const char * a, const char * b) {
+    if (((a == 0) || (b == 0))) {
+        return 0;
+    }
+    while ((((*a) != 0) && ((*a) == (*b)))) {
+        a = (a + 1);
+        b = (b + 1);
+    }
+    return ((*a) == (*b));
+}
+static const char * main_last_slash(const char * s) {
+    const char * r = 0;
+    while ((*s) != 0) {
+        if ((*s) == '/') {
+            r = s;
+        }
+        s = (s + 1);
+    }
+    return r;
+}
 int main(int argc, char * * argv) {
     const char * base;
     struct runtime_arena_Arena * arena;
@@ -180,13 +199,13 @@ int main(int argc, char * * argv) {
     ty->maps = (&p->maps);
     ty->nmaps = (&p->nmaps);
     frontend_module_ct_module_bind(arena, lex, sym, ty, mem, p, cache);
-    base = strrchr(argv[0], '/');
+    base = main_last_slash(argv[0]);
     base = (base ? (base + 1) : argv[0]);
-    if (strcmp(base, "ct") == 0) {
+    if (main_eq(base, "ct")) {
         m->prog = "ct";
     }
     else {
-        if (strcmp(base, "ctc") == 0) {
+        if (main_eq(base, "ctc")) {
             m->prog = "ctc";
         }
     }
@@ -195,14 +214,14 @@ int main(int argc, char * * argv) {
     backend_emit_ct_emit_bind_flags((&m->freestanding), m->alloc_map, (&p->slice_used));
     backend_emit_ct_emit_bind_parse((&p->nparams), p->pend_fields, (&p->npend));
     tool_driver_ct_driver_bind(arena, lex, sym, mem, m, p, CTC_VERSION);
-    if (((argc > 1) && (strcmp(argv[1], "index") == 0))) {
-        if (((argc > 2) && (strcmp(argv[2], "verify") == 0))) {
+    if (((argc > 1) && main_eq(argv[1], "index"))) {
+        if (((argc > 2) && main_eq(argv[2], "verify"))) {
             return tool_pkg_ct_index_verify((argc - 3), (argv + 3), m->prog, CTC_VERSION);
         }
-        if (((argc > 2) && (strcmp(argv[2], "refresh") == 0))) {
+        if (((argc > 2) && main_eq(argv[2], "refresh"))) {
             return tool_pkg_ct_index_refresh((argc - 3), (argv + 3), m->prog, CTC_VERSION);
         }
-        if (((argc == 2) || ((argc == 3) && ((strcmp(argv[2], "-h") == 0) || (strcmp(argv[2], "--help") == 0))))) {
+        if (((argc == 2) || ((argc == 3) && (main_eq(argv[2], "-h") || main_eq(argv[2], "--help"))))) {
             printf("usage: %s index verify [<file>] [--json] [-q]\n", m->prog);
             printf("  read-only: check all rows (file: <file> > CT_INDEX > $CT_HOME/index/index)\n");
             printf("usage: %s index refresh --packages <list> --out <index> [--check]\n", m->prog);
@@ -214,22 +233,22 @@ int main(int argc, char * * argv) {
         fprintf(stderr, "usage: %s index refresh --packages <list> --out <index> [--check]\n", m->prog);
         return 2;
     }
-    if (((argc > 1) && (strcmp(argv[1], "get") == 0))) {
+    if (((argc > 1) && main_eq(argv[1], "get"))) {
         return tool_pkg_ct_pkg_get((argc - 2), (argv + 2), m->prog, CTC_VERSION);
     }
-    if (((argc > 1) && (strcmp(argv[1], "install") == 0))) {
+    if (((argc > 1) && main_eq(argv[1], "install"))) {
         return tool_pkg_ct_pkg_install((argc - 2), (argv + 2), m->prog, CTC_VERSION);
     }
-    if (((argc > 1) && (strcmp(argv[1], "update") == 0))) {
+    if (((argc > 1) && main_eq(argv[1], "update"))) {
         return tool_pkg_ct_pkg_update((argc - 2), (argv + 2), m->prog, CTC_VERSION);
     }
-    if (((argc > 1) && (strcmp(argv[1], "verify") == 0))) {
+    if (((argc > 1) && main_eq(argv[1], "verify"))) {
         return tool_pkg_ct_pkg_verify((argc - 2), (argv + 2), m->prog, CTC_VERSION);
     }
-    if (((argc > 1) && (strcmp(argv[1], "migrate") == 0))) {
+    if (((argc > 1) && main_eq(argv[1], "migrate"))) {
         return tool_pkg_ct_pkg_migrate((argc - 2), (argv + 2), m->prog, CTC_VERSION);
     }
-    if (((argc > 1) && (strcmp(argv[1], "pkg") == 0))) {
+    if (((argc > 1) && main_eq(argv[1], "pkg"))) {
         return tool_pkg_ct_pkg_install((argc - 2), (argv + 2), m->prog, CTC_VERSION);
     }
 {

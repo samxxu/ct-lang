@@ -754,8 +754,8 @@ else
     bad "p64_freestanding" "$(cat "$work/p64fs.out" "$work/p64fs.err")"
 fi
 
-# PH-65 R1: the C boundary policy must resolve to the documented side for
-# external code, the CT tree, package manifests and the command line.
+# PH-65 R1 / v1-PH-2 S9: the C boundary policy resolves to the documented side
+# for every input (global strict), package manifests and the command line.
 if env -u CT_C_BOUNDARY bash test/ast/p65_policy.sh "$work/ct-ast" >"$work/p65pol.out" 2>"$work/p65pol.err"; then
     ok "p65/policy"
 else
@@ -791,7 +791,7 @@ else
     bad "p65/hdr-shim" "$(cat "$work/p65hdr.out" "$work/p65hdr.err" | head -4)"
 fi
 
-# PH-65 R6: the grandfathered tree and an external project end to end.
+# PH-65 R6 / S9: the global strict default and an external project end to end.
 if env -u CT_C_BOUNDARY bash test/ast/p65_regression.sh "$work/ct-ast" >"$work/p65reg.out" 2>"$work/p65reg.err"; then
     ok "p65/regression ($(tail -1 "$work/p65reg.out"))"
 else

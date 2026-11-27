@@ -24,10 +24,7 @@
 #include "StmtUninit.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "Stmt.shim.h"
 #define MAX_TEXT 160
 #define TEXT_LIMIT 65536
 #define CAP_LIMIT 65536

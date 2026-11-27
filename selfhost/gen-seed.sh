@@ -64,6 +64,20 @@ mkdir -p "$out"
     die "ct-ast could not emit its own C"
 # .ctcache/ is a rebuild accelerator, not seed content.
 rm -rf "$out/.ctcache"
+# v1-PH-2 S9: a unit that owns `<base>.shim.h` publishes it next to the emitted
+# `.c`/`.h` (the build copies it). The emitter used for this regeneration is the
+# previous release's seed, which may predate that copy, so copy every source
+# shim explicitly; the flat names are unique because a duplicate base is a hard
+# build error (`ct_shim_ambiguity`).
+# The emitter of the previous release may also have copied the built-in
+# layer's shims; the seed's closure does not emit those units, so keep only the
+# compiler's own shim set and let the explicit pass below define it.
+rm -f "$out"/*.shim.h
+dups=$(find selfhost/ct-ast -name '*.shim.h' -type f -exec basename {} \; | sort | uniq -d)
+[ -z "$dups" ] || die "duplicate shim base name(s): $dups"
+find selfhost/ct-ast -name '*.shim.h' -type f | while IFS= read -r h; do
+    cp "$h" "$out/$(basename "$h")" || die "cannot copy the shim $h"
+done
 
 nc=$(find "$out" -maxdepth 1 -type f -name '*.c' | wc -l | tr -d ' ')
 nh=$(find "$out" -maxdepth 1 -type f -name '*.h' | wc -l | tr -d ' ')

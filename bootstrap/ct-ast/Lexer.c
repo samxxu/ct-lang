@@ -3,11 +3,6 @@
 #include "Lexer.h"
 
 #line 1 "selfhost/ct-ast/frontend/lex/Lexer.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <limits.h>
-#include <assert.h>
-#include <string.h>
 #define TEXT_LIMIT 65536
 #define T_EOF    0
 #define T_ID     1
@@ -15,6 +10,7 @@
 #define T_STR    3
 #define T_PUNCT  4
 #define T_PP     5
+#include "Lexer.shim.h"
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

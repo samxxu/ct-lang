@@ -6,9 +6,7 @@
 #include "Intern.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtRangeScan.h.ct"
-#include <stdio.h>
-#include <string.h>
-#include <limits.h>
+#include "StmtRangeScan.shim.h"
 #define MAX_TEXT 160
 #define T_NUM 2
 struct ct_buf;

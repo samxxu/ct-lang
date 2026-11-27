@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# PH-65 R1 probe: the C boundary policy resolves to the right side.
-#   external code        -> strict (the pre-PH-65 default was "everything goes")
-#   the CT tree          -> allow  (688 in-repo includes; D65-1)
+# PH-65 R1 probe, flipped by v1-PH-2 S9: the C boundary policy resolves to the
+# right side.
+#   every input          -> strict by default (the CT-tree exemption is gone)
 #   the working dir      -> not an input (SH-93: an external unit stays strict
 #                           even when ct runs from the repo root)
-#   a package manifest   -> its `c-boundary` key; no key keeps the allow window
+#   a package manifest   -> its `c-boundary` key; no key is strict too
 #   the command line     -> wins over all of the above
 # Usage: bash test/ast/p65_policy.sh <ct-ast>
 set -u
@@ -48,14 +48,17 @@ check_in() {   # check <label> <want> <dir> <cmd...>
 }
 check_in "external default" strict "$tmp" "$CT" --show-c-boundary "$tmp/ext/x.ct"
 # SH-93 negative: running from the CT repo root must not relax an external
-# unit; only the input path decides (§4.66 lists four directories, not a cwd).
+# unit; only the input path decides. S9 removed the directory exemption, so the
+# CT tree is strict as well.
 check "external from repo root" strict "$CT" --show-c-boundary "$tmp/ext/x.ct"
 check_in "CLI allow"        allow  "$tmp" "$CT" --c-boundary=allow --show-c-boundary "$tmp/ext/x.ct"
-check "CT tree default"  allow  "$CT" --show-c-boundary test/ast/p65_policy/inside.ct
+check "CT tree default"  strict "$CT" --show-c-boundary test/ast/p65_policy/inside.ct
+check "selfhost default" strict "$CT" --show-c-boundary selfhost/ct-ast/main.ct
+check "lib/core default"  strict "$CT" --show-c-boundary lib/core/Vec.h.ct
 check "CLI strict wins"  strict "$CT" --c-boundary=strict --show-c-boundary test/ast/p65_policy/inside.ct
 check "package allow"    allow  "$CT" build -I "$tmp/allow" --show-c-boundary "$tmp/allow/u.ct"
 check "package strict"   strict "$CT" build -I "$tmp/strict" --show-c-boundary "$tmp/strict/v.ct"
-check "old package"      allow  "$CT" build -I "$tmp/old" --show-c-boundary "$tmp/old/w.ct"
+check "old package (no key)" strict "$CT" build -I "$tmp/old" --show-c-boundary "$tmp/old/w.ct"
 check "CLI over package" allow "$CT" build -I "$tmp/strict" --c-boundary=allow --show-c-boundary "$tmp/strict/v.ct"
 
 ( cd "$root" && "$CT" --c-boundary=nope --show-c-boundary "$tmp/ext/x.ct" >"$tmp/bad.out" 2>"$tmp/bad.err" )

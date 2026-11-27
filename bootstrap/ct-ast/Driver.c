@@ -17,9 +17,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/tool/driver/Driver.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "Driver.shim.h"
 #define MAX_FLAGS 1024                  /* mirrors Module.h.ct's --cflags cap */
 struct ct_buf;
 struct Str;
@@ -254,6 +252,122 @@ static int tool_driver_Driver_tool_driver_DriverOps_load_builtin(void *self, con
                 _self->mem->path = savepath;
                 _self->sym->path = savepath;
                 return (-1);
+            }
+{
+                char shimname[64];
+                char * shimpath;
+                FILE * sf;
+                long ssz;
+                char * shimbuf;
+                size_t shimlen;
+                size_t need;
+                size_t used;
+                const char * src;
+                const char * lastslash;
+                const char * bnf;
+                size_t srclen;
+                size_t bnl;
+                int hits;
+                shimbuf = (char *)(0);
+                shimlen = 0;
+                bnl = ((strlen(base) > 5) ? (strlen(base) - 5) : 0);
+                lastslash = strrchr(cand, '/');
+                bnf = base;
+{
+                    const char * bs = strrchr(base, '/');
+                    if (bs) {
+                        bnf = (bs + 1);
+                    }
+                    bnl = ((strlen(bnf) > 5) ? (strlen(bnf) - 5) : 0);
+                }
+                if (((bnl > 0) && (bnl < sizeof(shimname)))) {
+                    snprintf(shimname, sizeof(shimname), "%.*s", (int)(bnl), bnf);
+                    shimpath = tool_sh_ct_scratch_fmt("%.*s/%s.shim.h", (lastslash ? (int)((lastslash - cand)) : 0), cand, shimname);
+                    sf = fopen(shimpath, "rb");
+                    if (sf) {
+                        if ((((fseek(sf, 0, SEEK_END) == 0) && ((ssz = ftell(sf)) > 0)) && (ssz < (long)((4 << 20))))) {
+                            shimbuf = (char *)(malloc(((size_t)(ssz) + 1)));
+                            if (shimbuf) {
+                                rewind(sf);
+                                if (fread(shimbuf, 1, (size_t)(ssz), sf) != (size_t)(ssz)) {
+                                    free(shimbuf);
+                                    shimbuf = (char *)(0);
+                                }
+                                else {
+                                    shimbuf[ssz] = 0;
+                                    shimlen = (size_t)(ssz);
+                                }
+                            }
+                        }
+                        fclose(sf);
+                    }
+                }
+                if (shimbuf) {
+                    src = _self->lex->src;
+                    srclen = (size_t)(_self->lex->srclen);
+                    need = srclen;
+                    hits = 0;
+                    used = 0;
+                    while (used < srclen) {
+                        size_t ls;
+                        size_t le;
+                        size_t tl;
+                        ls = used;
+                        le = ls;
+                        while (((le < srclen) && (src[le] != '\n'))) {
+                            le++;
+                        }
+                        tl = le;
+                        while (((tl > ls) && (((src[(tl - 1)] == ' ') || (src[(tl - 1)] == '\t')) || (src[(tl - 1)] == '\r')))) {
+                            tl--;
+                        }
+                        if (((((((tl > ls) && (src[ls] == '#')) && ((size_t)((tl - ls)) == ((10 + strlen(shimname)) + 8))) && (strncmp((src + ls), "#include \"", 10) == 0)) && (strncmp(((src + ls) + 10), shimname, strlen(shimname)) == 0)) && (strncmp((((src + ls) + 10) + strlen(shimname)), ".shim.h\"", 8) == 0))) {
+                            hits++;
+                            need += shimlen;
+                            need -= (tl - ls);
+                        }
+                        used = ((le < srclen) ? (le + 1) : srclen);
+                    }
+                    if (hits > 0) {
+                        char * exp = (char *)(malloc((need + 1)));
+                        if ((!exp)) {
+                            free(shimbuf);
+                            return (-1);
+                        }
+                        used = 0;
+                        need = 0;
+                        while (used < srclen) {
+                            size_t ls;
+                            size_t le;
+                            size_t tl;
+                            ls = used;
+                            le = ls;
+                            while (((le < srclen) && (src[le] != '\n'))) {
+                                le++;
+                            }
+                            tl = le;
+                            while (((tl > ls) && (((src[(tl - 1)] == ' ') || (src[(tl - 1)] == '\t')) || (src[(tl - 1)] == '\r')))) {
+                                tl--;
+                            }
+                            if (((((((tl > ls) && (src[ls] == '#')) && ((size_t)((tl - ls)) == (((10 + strlen(shimname)) + 7) + 1))) && (strncmp((src + ls), "#include \"", 10) == 0)) && (strncmp(((src + ls) + 10), shimname, strlen(shimname)) == 0)) && (strncmp((((src + ls) + 10) + strlen(shimname)), ".shim.h\"", 8) == 0))) {
+                                memcpy((exp + need), shimbuf, shimlen);
+                                need += shimlen;
+                            }
+                            else {
+                                memcpy((exp + need), (src + ls), (le - ls));
+                                need += (le - ls);
+                                if (le < srclen) {
+                                    exp[need++] = '\n';
+                                }
+                            }
+                            used = ((le < srclen) ? (le + 1) : srclen);
+                        }
+                        exp[need] = 0;
+                        _self->lex->src = exp;
+                        _self->lex->srclen = (int)(need);
+                    }
+                    free(shimbuf);
+                }
             }
             _self->lex->pos = 0;
             _self->lex->bol = 1;

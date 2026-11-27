@@ -5,11 +5,7 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "ModuleBoundary.shim.h"
 
 #include "Emitter.h"
 #include "Memory.h"
@@ -150,9 +146,7 @@ struct tool_driver_Driver;
 struct frontend_module_ModuleBoundary {
     int unused;
 };
-int frontend_module_c_has_manifest(const char *);
 int frontend_module_c_manifest_boundary(const char *);
-int frontend_module_c_path_is_core(const char *);
 int frontend_module_ct_append_flags(char * *, int *, int, const char *);
 int frontend_module_ct_cmd_raw(char * *, int *, const char *);
 int frontend_module_ct_cmd_token(char * *, int *, const char *);

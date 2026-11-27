@@ -88,7 +88,7 @@ acme/
 | `ns-root` | S1 起是 | 包内单元树根（相对包根，无 `..`，目录必须存在）；`-I` 指向 `<版本目录>/<ns-root>` |
 | `version` | 是 | `x.y.z`（工具只解析前三位数字；预发布 / 构建元数据不纳入） |
 | `dep` | 否，可重复 | 依赖，`name` 或 `name@range`；格式与 Phase 8 一致 |
-| `c-boundary` | 否 | `strict` \| `allow`：本包单元的 C 边界策略。缺省按外部 `strict`；**有 manifest 但缺这个键**的旧包保留 `allow` 窗口 |
+| `c-boundary` | 否 | `strict` \| `allow`：本包单元的 C 边界策略。**缺键即 strict**（v1.2 起，不再有旧包 allow 窗口）；从 v1 lock 迁移的项目由 `ct migrate` 一次性写入 `allow`，显式键不被改写 |
 | `leaks` | 否 | `warn` \| `error`：本包泄漏诊断与 `Box<X>` 字段直接环告警的级别（v0.82.0，D-012）。缺省 `warn`；`error` 让 `ct build` / `ct compile` 失败；与 `c-boundary` 无关 |
 | `cflags` | 否 | 消费者编译该包时附加的编译选项，`ct install` 折进打印的命令 |
 | `ldflags` | 否 | 链接选项（如 C 映射包的 `-lm`），同上 |
@@ -103,8 +103,9 @@ S1 起 `publisher` + `ns-root` 是 store 与 lock v2 的必填身份；写 `ns-r
 需要 `syslog`/`open` 这类集合外的符号时，用 `.m.ct` 映射或在 shim 里声明。
 
 `c-boundary` 由 `ct build` / `ct pkg check` 读取：`strict` 时包内 `.ct/.h.ct` 不得直接
-`#include`、不得 `#ct-raw`/`extern`/函数式宏，唯一出口是 `<base>.shim.h`；`allow` 保持旧行为。
-未写该键的旧包按 `allow` 处理，新包建议显式写 `strict`（见语言规范 §4.66）。
+`#include`、不得 `#ct-raw`/`extern`/函数式宏，出口是 `<base>.shim.h` 或 `.m.ct`；`allow` 保持旧行为。
+**v1.2 起缺键即 strict**：新包写 `c-boundary = strict` 是显式声明，旧包在 `ct migrate` 时自动获得
+`c-boundary = allow`（见语言规范 §4.66、本文 §8）。
 
 `leaks` 由 `ct build` / `ct compile` / `ct check` 读取（语言规范 §4.72）：`error` 时本包的
 `potential leak` 诊断与 `Box<X>` 字段直接环告警升为构建失败，写任何 `.c` 之前退出；缺键、
@@ -335,6 +336,8 @@ mv vendor /tmp/v            # 迁移后可移走
 ct build main.ct -o build   # 从 store 取包
 ```
 
-迁移失败（缺 `publisher` / `ns-root`、摘要不符、vendor 缺项）时 `ct migrate` 返回非零，
-不会把旧目录当成成功。v1 lock 的 `ct build` / `install` / `verify` / `update` 都直接报错并提示
+v1.2 起 `ct migrate` 还做一件事：若项目自己的 `ct.pkg` 没有 `c-boundary` 键，就写入
+`c-boundary = allow`，让旧项目在全局 strict 默认下保持原来的 C 用法；已经有该键（任一值）的
+项目不被改写。迁移失败（缺 `publisher` / `ns-root`、摘要不符、vendor 缺项）时 `ct migrate`
+返回非零，不会把旧目录当成成功。v1 lock 的 `ct build` / `install` / `verify` / `update` 都直接报错并提示
 `run 'ct migrate'`；`ct get` 也拒绝在 v1 lock 上追加 v2 行。

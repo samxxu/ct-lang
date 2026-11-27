@@ -10,8 +10,7 @@
 #include "Diag.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtDefer.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "StmtDefer.shim.h"
 #define MAX_TEXT 160
 #define N_ASSIGN 13
 #define N_BLOCK 4

@@ -19,10 +19,7 @@
 #include "StmtMatch.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtLoop.h.ct"
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "StmtLoop.shim.h"
 #define MAX_TEXT 160
 #define CAP_LIMIT 65536
 #define MAX_LABELS 64

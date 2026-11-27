@@ -11,9 +11,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <string.h>
 
+#include "EmitterTry.shim.h"
 import backend::emit::EmitterCore;
 import frontend::parse::Expr;
 import frontend::sym::Symbols;

@@ -6,12 +6,7 @@
 #include "PkgIndex.h"
 
 #line 1 "selfhost/ct-ast/tool/pkg/Pkg.h.ct"
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <stdarg.h>
+#include "Pkg.shim.h"
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* old flat lock text (8 * 512) */
 #define CAP_LIMIT   65536             /* = TEXT_LIMIT; S1a-0 C2d */
@@ -27,7 +22,6 @@
 #define INDEX_ERR_STRIDE   560
 #define INDEX_ERR_KIND_OFF 4
 #define INDEX_ERR_MSG_OFF  36
-#define CT_ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -5861,6 +5855,49 @@ static int pkg_migrate(const char * prog) {
         return 1;
     }
     free(out);
+{
+        FILE * mf;
+        char mline[512];
+        int has_pkg = 0;
+        int have_key = 0;
+        int need_nl = 0;
+        int mc;
+        mf = fopen("./ct.pkg", "r");
+        if (mf) {
+            has_pkg = 1;
+            while (fgets(mline, sizeof(mline), mf)) {
+                char * q = mline;
+                while ((((*q) == ' ') || ((*q) == '\t'))) {
+                    q++;
+                }
+                if (((strncmp(q, "c-boundary", 10) == 0) && (((((q[10] == ' ') || (q[10] == '\t')) || (q[10] == '\n')) || (q[10] == '\r')) || (q[10] == 0)))) {
+                    have_key = 1;
+                    break;
+                }
+            }
+            fclose(mf);
+        }
+        if ((has_pkg && (!have_key))) {
+            mf = fopen("./ct.pkg", "rb");
+            if (mf) {
+                int last = 0;
+                while ((mc = fgetc(mf)) != EOF) {
+                    last = mc;
+                }
+                need_nl = ((last != 0) && (last != '\n'));
+                fclose(mf);
+            }
+            mf = fopen("./ct.pkg", "a");
+            if (mf) {
+                if (need_nl) {
+                    fputc('\n', mf);
+                }
+                fputs("c-boundary = allow\n", mf);
+                fclose(mf);
+                printf("wrote c-boundary = allow to ct.pkg (pre-S9 project)\n");
+            }
+        }
+    }
     printf("migrated %d package(s)\n", nrow);
     (void)(i);
     (void)(prog);

@@ -17,7 +17,7 @@
 
 | 文件 | 基线 | 当前 | Δ |
 | --- | --- | --- | --- |
-| `frontend/lex/Lexer.h.ct` | 391 | 474 | +83 |
+| `frontend/lex/Lexer.h.ct` | 391 | 470 | +79 |
 | `frontend/parse/Expr.h.ct` | 8703 | 8710 | +7 |
 | `frontend/parse/Parser.h.ct` | 4785 | 4795 | +10 |
 | `frontend/parse/Stmt.h.ct` | 5055 | 5056 | +1 |

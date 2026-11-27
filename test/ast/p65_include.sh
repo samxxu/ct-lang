@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PH-65 R2 probe: strict `.ct` / `.h.ct` reject a direct `#include`; the only
-# include a strict unit may write is its own `<base>.shim.h`. The CT tree and
-# `--c-boundary=allow` keep the old behaviour.
+# include a strict unit may write is its own `<base>.shim.h`. The CT tree is
+# strict too (v1-PH-2 S9); `--c-boundary=allow` is the explicit escape.
 # Usage: bash test/ast/p65_include.sh <ct-ast>
 set -u
 CT=${1:?usage: p65_include.sh <ct-ast>}
@@ -78,8 +78,15 @@ expect_err "strict .h.ct system include" 1 "$tmp/hdr/h.h.ct"
 expect_err "foreign shim name" 1 "$tmp/other/o.ct"
 expect_ok  "own shim allowed" "$tmp/own/good.ct"
 expect_ok  "allow keeps old behaviour" "$tmp/allow/a.ct" --c-boundary=allow
-( cd "$root" && "$CT" test/ast/p65_include/inside.ct -o "$tmp/out/core.c" ) >"$tmp/out/o.log" 2>"$tmp/out/e.log" \
-    || { echo "FAIL p65/include: CT tree keeps old behaviour" >&2; sed 's/^/  /' "$tmp/out/e.log" | head -3 >&2; fail=1; }
+# v1-PH-2 S9: the CT tree is strict too, so the same fixture that used to
+# resolve to allow is now refused with the boundary diagnostic.
+( cd "$root" && "$CT" test/ast/p65_include/inside.ct -o "$tmp/out/core.c" ) >"$tmp/out/o.log" 2>"$tmp/out/e.log"
+rc=$?
+if [ "$rc" -ne 1 ] || ! grep -q "a strict C boundary forbids '#include'" "$tmp/out/e.log"; then
+    echo "FAIL p65/include: the CT tree is not strict (rc=$rc)" >&2
+    sed 's/^/  /' "$tmp/out/e.log" | head -3 >&2
+    fail=1
+fi
 
 [ "$fail" -eq 0 ] && echo "OK p65/include"
 exit "$fail"

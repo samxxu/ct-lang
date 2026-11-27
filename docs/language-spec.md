@@ -188,9 +188,9 @@ v1.1 先固化轻量 lowering 不变量——临时值物化、求值顺序、`D
 
 | 维度 | 承诺 |
 | --- | --- |
-| 仍接受 | C 的表达式、语句、类型核心按原语法透传；`struct` / `union` / `enum`、指针、`#ct-raw` 等 C 机制可用 |
-| 不再承诺 | C 全集：函数式宏、strict C 边界下的 `#include`、旧 L1/L2 管线语法；不以「C 代码原样全收」为兼容目标 |
-| 旧工程迁移 | 用 v0.x 编译器或 `ct migrate`；弃用窗口内旧拼写仍可用，窗口结束即硬错 |
+| 仍接受 | C 的表达式、语句、类型核心按原语法透传；`struct` / `union` / `enum`、指针等 C 机制可用，但 C 头文件/裸 C 声明只在**显式 C 边界**（`.m.ct`、`<base>.shim.h`、`--c-boundary=allow`、包清单 `c-boundary = allow`）内可用 |
+| 不再承诺 | C 全集：函数式宏、strict C 边界下的 `#include` / `#ct-raw` / `extern`、旧 L1/L2 管线语法；不以「C 代码原样全收」为兼容目标 |
+| 旧工程迁移 | 用 v0.x 编译器或 `ct migrate`；**v1.2 起 C 边界全局默认 strict**（Ct 仓四目录豁免已收回），`ct migrate` 为旧项目写 `c-boundary = allow`；弃用窗口内旧拼写仍可用，窗口结束即硬错 |
 
 **四类常见偏离**（v1.0 起；细节见各节）：
 
@@ -200,6 +200,7 @@ v1.1 先固化轻量 lowering 不变量——临时值物化、求值顺序、`D
 | 单维 `T a[]` 作形参 / 字段 / 无初值声明 | `T[]`（切片）或 `T a[N]`；v0.x 警告，v1 起硬错 | §4.69 |
 | 字符串字面量的裸类型 | 仍是 `char *`；要 owning 写 `String s = "x";` 或 `Str v = "x";` | §4.70 |
 | `String` / `Str` 传给 `printf` | 先 `cstr()`；`%s` 直接吃 `.data` 不保证 NUL | §4.70 |
+| `.ct` / `.h.ct` 里的 `#include`、`#ct-raw`、`extern`、函数式宏 | 全局 strict（v1.2 起）：改放 `.m.ct`、`<base>.shim.h`，或显式 `--c-boundary=allow` / `c-boundary = allow` | §4.66 |
 
 **弃用窗口**（窗口结束即硬错，不自动续期）：
 
@@ -2989,8 +2990,10 @@ Result<long, char *> twice(int n)
 
 ### 4.66 C 边界：`c-boundary` 与 shim（Phase 65，仅 ct-ast）
 
-默认只有 Ct 树（`selfhost/**`、`lib/core/**`、`test/**`、`examples/**`）与 `--c-boundary=allow`
-的构建可以直接和 C 打交道；**外部代码默认 strict**。
+**全局默认 strict**（v1.2 / REQ-STRICT-1）：所有 `.ct` / `.h.ct` 都不能直接和 C 打交道，
+包括 Ct 仓自己的 `selfhost/**`、`lib/core/**`、`test/**`、`examples/**`；v0-PH-65 的 pre-1.0
+四目录豁免已收回。`--c-boundary=allow`、包清单的 `c-boundary = allow`、`.m.ct` 边界单元与
+`<base>.shim.h` 仍是显式出口。
 
 | 形态 | strict 下 | 出口 |
 | --- | --- | --- |
@@ -3000,10 +3003,12 @@ Result<long, char *> twice(int n)
 | 函数式 `#define` | 硬错 | 对象式常量宏，或 shim |
 | `.m.ct` | 允许 `#include` 与对象式宏；函数式宏硬错 | `.shim.h` |
 
-开关：`ct build --c-boundary=strict|allow` / `ct --c-boundary=...`；
-包在 `ct.pkg` 写 `c-boundary = strict|allow`（缺省按外部 strict；**有 manifest 但没这个键**
-的旧包保留 allow 窗口）。`.h.ct` 的姊妹 `<base>.shim.h` 会自动进公开头并加入 `ct build` 的 `-I`；
-两个同名 shim 同时入构建是硬错。
+开关：`ct build --c-boundary=strict|allow` / `ct --c-boundary=...`；包在 `ct.pkg` 写
+`c-boundary = strict|allow`。**缺键即 strict**（v1.2 起，不再有"有 manifest 但没这个键就保留
+allow 窗口"的旧包例外）：从 v1 lock 迁移的项目由 `ct migrate` 一次性写入
+`c-boundary = allow`，显式写了键的包不被改写。`.h.ct` 的姊妹 `<base>.shim.h` 会自动进公开头；
+`ct build` 把每个已编译 shim 复制到输出目录（`--emit-c` 的产物因此自包含），并把 shim 目录
+加入编译行；两个同名 shim 同时入构建是硬错。
 
 strict 是**护栏**不是沙箱：shim 的内容、`--ldflags` 外链的 `.c` 仍能绕过文件边界（D65-8）。
 

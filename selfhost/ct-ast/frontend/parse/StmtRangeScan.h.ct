@@ -8,10 +8,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <string.h>
-#include <limits.h>
 
+#include "StmtRangeScan.shim.h"
 import frontend::lex::Lexer;
 import frontend::parse::StmtRangeText;
 import runtime::text::Intern;

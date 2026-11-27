@@ -8,9 +8,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <string.h>
 
+#include "EmitterQuery.shim.h"
 import frontend::module::MapTable::MapBind as MapBind;
 import frontend::sym::Symbols;
 import frontend::sym::Symbols::StructInst as StructInst;

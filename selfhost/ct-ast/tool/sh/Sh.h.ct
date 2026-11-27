@@ -14,14 +14,11 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
 
 /* Mirror of the formal text bound in frontend/sym/Limits.h.ct. */
 #define TEXT_LIMIT 65536
 
+#include "Sh.shim.h"
 namespace tool::sh;
 /* A stateless unit: the type exists only because a unit file is named after its
    main type. Nothing instantiates it. */

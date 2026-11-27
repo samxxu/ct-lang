@@ -72,7 +72,10 @@ fi
 git archive "$base" | tar -x -C "$tmp" 2>/dev/null || bad "cannot extract baseline $base"
 mkdir -p "$tmp/out-base" "$tmp/out-head"
 case "$CT" in /*) ctabs="$CT" ;; *) ctabs="$root/$CT" ;; esac
-( cd "$tmp" && "$ctabs" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct \
+# The baseline tree is a historical snapshot: its lib/std (or lib/core) still
+# carries direct includes and predates the v1.2 strict default, so it is
+# emitted with the explicit allow that its own era had.
+( cd "$tmp" && CT_C_BOUNDARY=allow "$ctabs" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct \
       -o "$tmp/out-base" >/dev/null 2>"$tmp/base.err" )
 "$ctabs" build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct \
       -o "$tmp/out-head" >/dev/null 2>"$tmp/head.err"

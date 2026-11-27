@@ -15,11 +15,6 @@
  * the formal bound, and a longer one is an explicit error rather than a silent
  * truncation.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <limits.h>
-#include <assert.h>
-#include <string.h>
 
 /* S1a-0 C2o: one formal text bound for a single token, spelled as a literal
    because a `pub struct` lands in the generated header, which carries no
@@ -32,6 +27,7 @@
 #define T_PUNCT  4
 #define T_PP     5
 
+#include "Lexer.shim.h"
 namespace frontend::lex;
 
 /* The text of the current token is a view into the source buffer: `ptr` is

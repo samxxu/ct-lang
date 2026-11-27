@@ -7,8 +7,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterQuery.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "EmitterQuery.shim.h"
 #define N_IMPL 33
 #define N_VAR 10
 #define N_ARROW 25

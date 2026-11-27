@@ -14,11 +14,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "ModuleBoundary.shim.h"
 #define MAX_TEXT   160
 struct ct_buf;
 struct Str;
@@ -146,10 +142,7 @@ struct tool_driver_Driver;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-char * realpath(const char *, char *);
-int frontend_module_c_has_manifest(const char *);
 int frontend_module_c_manifest_boundary(const char *);
-int frontend_module_c_path_is_core(const char *);
 int frontend_module_ct_append_flags(char * *, int *, int, const char *);
 int frontend_module_ct_cmd_raw(char * *, int *, const char *);
 int frontend_module_ct_cmd_token(char * *, int *, const char *);
@@ -161,20 +154,6 @@ int frontend_module_ct_root_find(const char *, const char *, char * *, int *, in
 int frontend_module_has_word(const char *, const char *);
 const char * frontend_module_io_header_for(const char *);
 int frontend_module_word_is(const char *, const char *);
-int frontend_module_c_has_manifest(const char * dir) {
-    char * p;
-    FILE * f;
-    if (((dir == 0) || (dir[0] == 0))) {
-        return 0;
-    }
-    p = tool_sh_ct_scratch_fmt("%s/ct.pkg", dir);
-    f = fopen(p, "r");
-    if ((!f)) {
-        return 0;
-    }
-    fclose(f);
-    return 1;
-}
 int frontend_module_c_manifest_boundary(const char * dir) {
     char * p;
     char line[512];
@@ -229,31 +208,6 @@ int frontend_module_c_manifest_boundary(const char * dir) {
     }
     fclose(f);
     return r;
-}
-int frontend_module_c_path_is_core(const char * path) {
-    static const char * const core[5] = { "selfhost/", "lib/core/", "lib/std/", "test/", "examples/" };
-    char cwd[1024];
-    const char * p = path;
-    size_t n;
-    int i;
-    if (((path == 0) || (path[0] == 0))) {
-        return 0;
-    }
-    if (((path[0] == '/') && (getcwd(cwd, sizeof(cwd)) != 0))) {
-        n = strlen(cwd);
-        if (((strncmp(path, cwd, n) == 0) && (path[n] == '/'))) {
-            p = ((path + n) + 1);
-        }
-    }
-    if (((p[0] == '/') || ((p[0] == '.') && (p[1] == '.')))) {
-        return 0;
-    }
-    for (i = 0; i < 5; i++) {
-        if (strncmp(p, core[i], strlen(core[i])) == 0) {
-            return 1;
-        }
-    }
-    return 0;
 }
 int frontend_module_ct_append_flags(char * * buf, int * cap, int init, const char * val) {
     if (((!val) || (!val[0]))) {

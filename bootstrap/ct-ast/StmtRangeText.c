@@ -11,9 +11,7 @@
 #include "Intern.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtRangeText.h.ct"
-#include <limits.h>
-#include <stdio.h>
-#include <string.h>
+#include "StmtRangeText.shim.h"
 #define MAX_TEXT 160
 struct ct_buf;
 struct Str;

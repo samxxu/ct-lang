@@ -10,7 +10,7 @@
 #include "Arena.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterCore.h.ct"
-#include <stdio.h>
+#include "EmitterCore.shim.h"
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

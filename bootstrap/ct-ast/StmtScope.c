@@ -4,8 +4,7 @@
 #include "Symbols.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtScope.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "StmtScope.shim.h"
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

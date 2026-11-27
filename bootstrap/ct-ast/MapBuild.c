@@ -12,8 +12,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/MapBuild.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "MapBuild.shim.h"
 #define MAX_TEXT   160
 #define TEXT_LIMIT 65536
 #define MAX_PARAMS 16

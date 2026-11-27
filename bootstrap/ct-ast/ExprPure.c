@@ -8,9 +8,7 @@
 #include "Intern.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprPure.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "ExprPure.shim.h"
 #define MAX_TEXT 160
 #define N_VAR 10
 struct ct_buf;

@@ -6,10 +6,7 @@
 #include "TGraph.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TModule.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include "TModule.shim.h"
 #define CAP_LIMIT 65536
 #define NODE_LIMIT 16777216
 #define TK_LITERAL           1

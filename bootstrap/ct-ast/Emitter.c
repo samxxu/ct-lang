@@ -24,10 +24,7 @@
 #include "LModule.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
+#include "Emitter.shim.h"
 #define MAX_TEXT   160
 #define TEXT_LIMIT 65536
 #define MAX_HOISTS 4

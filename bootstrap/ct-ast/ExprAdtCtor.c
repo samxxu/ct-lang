@@ -12,8 +12,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprAdtCtor.h.ct"
-#include <stdio.h>
-#include <string.h>
+#include "ExprAdtCtor.shim.h"
 #define MAX_TEXT 160
 #define MAX_ARG_POS 32
 #define CAP_LIMIT 65536

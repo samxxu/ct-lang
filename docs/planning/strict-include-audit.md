@@ -131,3 +131,34 @@ M3 可以与 M1/M2 并行（文件集不重叠，也不改编译器），M4 必�
 - [language-spec §4.66](../language-spec.md#466-c-边界c-boundary-与-shimphase-65仅-ct-ast)（C 边界与 shim）
 - [language-spec §4.67](../language-spec.md#467-libc-io-内置例外按直接调用补头phase-66仅-ct-ast)（libc I/O 补头）
 - [requirements-pool](requirements-pool.md)（REQ-STRICT-1）
+
+## 8 S9 执行记录（2026-11-27）
+
+> 本记录回填 S9 的实际落地范围与剩余清单；M1–M5 编号沿用 §4。
+
+### 8.1 已完成
+
+| 片 | 落地 | 证据 |
+| --- | --- | --- |
+| **M1** `lib/core` | 8 个单元改为「本单元 `<base>.shim.h` + `#include "<base>.shim.h"`」，零 manifest/CLI allow；编译模式（`ct check` / 单文件 `-o`）在 `Driver.load_builtin` 展开 shim，单文件产物仍只有原始系统 include、不落额外文件 | `grep -rE '^[[:space:]]*#include[[:space:]]*<' lib/core --include='*.ct'` 零命中；`p65/regression` |
+| **M2** `selfhost` | 62 个 `.h.ct` 改为本单元 shim；`realpath` 原型移入 `Module`/`ModuleBoundary` 的 shim，函数式宏 `CT_ROR` 移入 `Pkg` 的 shim；`main.ct` 的 `strrchr`/`strcmp` 改为 Ct 循环，入口不再需要任何 C 头 | `grep` 零系统 include；自举两轮逐字节；`check-seed` 两轮 |
+| **M5** 默认翻转 | `c_path_is_core` 与五目录豁免删除；manifest 无 `c-boundary` 键 = strict；`ct migrate` 为旧项目自己的 `ct.pkg` 补 `c-boundary = allow`（已有键不改写）；`ct build/check/compile` 默认 strict；`ct build` 把每个已编译 `<base>.shim.h` 复制到输出目录，`--emit-c` 产物自包含 | `p65/policy`、`p65/regression`、`S3 migrate` 探针（写 allow 且只写一次） |
+| 文档 | spec §1.2 / §4.66、README、package-guide §2/§8、glossary、c-shim-contract N-2 同步 | `check-docs`、`p65/docs` |
+
+边界单元形态：`.h.ct` 用**本单元 shim**（spec §4.66 的唯一严格出口），编译模式展开；
+`selfhost/` 不再有 `.m.ct` 边界单元（原先的目录级 map 会以可达闭包把全部头文件灌进每个
+编译单元，且空 map 会让 TIR shadow 报 empty module）。`lib/core` 的 shim 只含该单元原本的
+头，`U16String` 另补 `<string.h>`（`memcpy`）与 `<stdio.h>`（`Vec<U16String>` 实例的
+`fprintf`）；这两条是既有隐式声明在 clang 21 上的显式化，不改语言语义。
+
+### 8.2 剩余（未做，不宣称完成）
+
+| 片 | 剩余 | 规模（2026-11-27 实测） |
+| --- | --- | --- |
+| **M3** 冗余 `<stdio.h>` | examples / test 的纯 stdio 文件删头；删后生成 C 逐字节对拍、goldens 25/25 | examples 189 文件 / 227 行、test 602 文件 / 695 行里的大部分；`examples` 与 `test` 的 `#include` 全部未动 |
+| **M4** 其余 examples/test | `<stdlib.h>`/`<string.h>` 迁 `Box`/`Vec`/`String`；C 互操作/负例逐条显式 allow（manifest 或 harness 的 `CT_C_BOUNDARY=allow`） | 与 M3 同一文件集，需按 §3.2 分桶 |
+| E-V3-10 全量 | 「默认 strict 下 `check-all` 绿」目前成立的方式是 harness 显式 `CT_C_BOUNDARY=allow`；`selfhost`/`lib/core` 才是零 allow。examples/test 的默认 strict 全量构建要等 M3/M4 | — |
+
+> 现在 `examples/`、`test/` 的构建不是靠目录豁免：`check-all.sh`、`check-ast.sh`、
+> `check-warnings.sh`、`test/pkg/run.sh` 各自 `export CT_C_BOUNDARY=allow`，是显式 allow；
+> 目录豁免已从 `c_boundary_for` 删除，外部输入与非豁免路径默认 strict。

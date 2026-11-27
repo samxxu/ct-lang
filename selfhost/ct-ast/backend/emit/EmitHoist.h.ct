@@ -9,11 +9,8 @@
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
 
+#include "EmitHoist.shim.h"
 import frontend::sym::SymbolsTypeText;
 import backend::emit::Init;
 import frontend::lex::Lexer;

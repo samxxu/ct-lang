@@ -222,7 +222,7 @@
 | 绑定（bindings） | `test/bindings/<库>/` 下的 `.ct` / `#include` + 镜像 trait/struct + `map` | **已实现**：首个 binding 为 `test/bindings/mock-hal/`（Phase 12.1）；跨单元消费已由 Batch 2 解除限制 |
 | 反向映射表（reverse mapping table） | `--emit-map <file\|->` 的 JSON | 生成的 C 符号 ← Ct 定义点；Phase 6.1 已落地（D16） |
 | 包管理器（package manager） | `ct-pkg` | 2026-10-17 定名；日常入口是 `ct get` / `ct update` / `ct install` / `ct verify` 子命令，Phase 8 落地（本地目录源 + git 源），Phase 17.5 补齐更新、校验与索引，Phase 18 建组织（`github.com/ct-pkg`）并发布首批官方包 |
-| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` 必填；S1 起 `publisher` / `ns-root` 必填；`licence` 仅约定；可重复 `dep = <spec>[@<range>]`；可选 `c-boundary`（`strict` \| `allow`）/ `cflags` / `ldflags` / `requires`。**未知键静默忽略**（向前兼容；`ns-root` / `publisher` 已不再是未知键）。键表与失败行为见 [package-guide](package-guide.md) §2 |
+| 包清单（manifest） | `ct.pkg` | 极简 `key = value`：`name` / `version` 必填；S1 起 `publisher` / `ns-root` 必填；`licence` 仅约定；可重复 `dep = <spec>[@<range>]`；可选 `c-boundary`（`strict` \| `allow`，**缺键即 strict**；`ct migrate` 为旧项目写 `allow`）/ `cflags` / `ldflags` / `requires`。**未知键静默忽略**（向前兼容；`ns-root` / `publisher` 已不再是未知键）。键表与失败行为见 [package-guide](package-guide.md) §2 |
 | 锁文件（lock file） | `ct.lock` | v2 每个依赖一行 `<publisher>/<name> <version> <type> <locator> <commit\|-> <ns-root> <sha256:<64 hex>>`；`ct build` 默认读 `./ct.lock`，`ct verify` / `ct install` / `ct update` 离线校验。v1 旧锁（`name ver kind ref digest`）只由 `ct migrate` 读取后重写。见 [package-guide](package-guide.md) §7.5 |
 | 共享 store | `$CT_HOME/pkg/<publisher>/<name>/<version>/` | `ct get` 写入、`ct build` 按 v2 `ct.lock` 自动读取的包树；`-I` 指向 `<version>/<ns-root>`。S7 后不再读写 `vendor/` |
 | 包根（package root） | 含 `ct.pkg` 的目录 | 仓库根；单元树根由 `ns-root` 声明，二者可不同（`ns-root = .` 时相同）。消费端 `-I` 指向 `<版本目录>/<ns-root>`，不再手写 `vendor/` |

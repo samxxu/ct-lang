@@ -7,9 +7,7 @@
 #include "LModule.h"
 
 #line 1 "selfhost/ct-ast/backend/verify/Verifier.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "Verifier.shim.h"
 #define TK_ADDR              7
 #define TK_CALL             11
 #define TK_INTRINSIC        12

@@ -11,9 +11,7 @@
 #include "Diag.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprNewObject.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "ExprNewObject.shim.h"
 #define MAX_TEXT 160
 #define N_ARROW 25
 #define N_MEMBER 24

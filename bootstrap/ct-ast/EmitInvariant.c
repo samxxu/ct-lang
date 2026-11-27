@@ -18,10 +18,7 @@
 #include "EmitterTry.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitInvariant.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
+#include "EmitInvariant.shim.h"
 #define MAX_TEXT   160
 #define MAX_HOISTS 4
 #define CAP_LIMIT 65536

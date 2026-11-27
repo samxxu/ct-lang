@@ -11,9 +11,7 @@
 #include "Verifier.h"
 
 #line 1 "selfhost/ct-ast/backend/lir/Lower.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "Lower.shim.h"
 #define CAP_LIMIT 65536
 #define TK_LITERAL           1
 #define TK_NAME_LOCAL        2

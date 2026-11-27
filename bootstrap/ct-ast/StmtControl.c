@@ -21,10 +21,7 @@
 #include "StmtSwitch.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtControl.h.ct"
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "StmtControl.shim.h"
 #define MAX_TEXT 160
 #define CAP_LIMIT 65536
 #define MAX_LABELS 64

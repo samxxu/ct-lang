@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # PH-65 R3 probe: strict also closes the three bypass channels -- `#ct-raw`,
 # `extern` C declarations, and function-like `#define`. An object-like macro
-# stays (it is a constant), `.m.ct` stays a mapping unit, and the CT tree plus
-# `--c-boundary=allow` keep the old behaviour.
+# stays (it is a constant), `.m.ct` stays a mapping unit, and `--c-boundary=allow`
+# keeps the old behaviour. The CT tree is strict too (v1-PH-2 S9).
 # Usage: bash test/ast/p65_raw_extern.sh <ct-ast>
 set -u
 CT=${1:?usage: p65_raw_extern.sh <ct-ast>}
@@ -79,13 +79,16 @@ expect_ok  "allow keeps the old behaviour" raw.ct --c-boundary=allow
     fail=1
 }
 
-# The CT tree keeps its behaviour.
+# v1-PH-2 S9: the CT tree is strict too, so the fixture that used to rely on
+# the exemption is now refused. `#ct-raw` lives in a `.m.ct` or a shim.
 ( cd "$root" && "$CT" test/ast/p65_raw_extern/inside.ct -o "$tmp/out/core.c" ) \
-    >"$tmp/out/o.log" 2>"$tmp/out/e.log" || {
-    echo "FAIL p65/raw-extern: the CT tree lost #ct-raw/extern" >&2
+    >"$tmp/out/o.log" 2>"$tmp/out/e.log"
+rc=$?
+if [ "$rc" -ne 1 ] || ! grep -q "a strict C boundary forbids #ct-raw" "$tmp/out/e.log"; then
+    echo "FAIL p65/raw-extern: the CT tree is not strict (rc=$rc)" >&2
     sed 's/^/  /' "$tmp/out/e.log" | head -3 >&2
     fail=1
-}
+fi
 
 [ "$fail" -eq 0 ] && echo "OK p65/raw-extern"
 exit "$fail"

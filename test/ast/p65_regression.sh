@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# PH-65 R6 probe: the four CT-tree directories keep the pre-PH-65 behaviour
-# (policy `allow`), and an external project sees the new default: strict by
-# default, `--c-boundary=allow` on request, end to end through `ct build`.
+# PH-65 R6 probe, flipped by v1-PH-2 S9: the global default is strict.
+#   1. every in-repo tree (selfhost / lib/core / test / examples) resolves to
+#      strict, and selfhost + lib/core carry no direct `#include` at all;
+#   2. an external project sees strict by default and `--c-boundary=allow` on
+#      request, end to end through `ct build`;
+#   3. a plain `.ct` with no include is unaffected (it builds under the default).
 # Usage: bash test/ast/p65_regression.sh <ct-ast>
 set -u
 CT=${1:?usage: p65_regression.sh <ct-ast>}
@@ -15,15 +18,24 @@ trap 'rm -rf "$tmp"' EXIT
 fail=0
 mkdir -p "$tmp/proj"
 
-# 1) The four grandfathered directories resolve to allow from the repo root.
+# 1) Every grandfathered directory resolves to strict from the repo root.
 for f in selfhost/ct-ast/main.ct lib/core/String.h.ct test/cases/01_trait_basic.ct \
          examples/37_nested_pattern/nested_pattern.ct; do
     got=$( cd "$root" && env -u CT_C_BOUNDARY "$CT" --show-c-boundary "$f" 2>"$tmp/e" )
-    if [ "$got" != "allow" ]; then
-        echo "FAIL p65/regression: $f resolved to '$got' (want allow)" >&2
+    if [ "$got" != "strict" ]; then
+        echo "FAIL p65/regression: $f resolved to '$got' (want strict)" >&2
         fail=1
     fi
 done
+
+# 1b) The compiler and the built-in layer are migrated to `.m.ct` boundary
+#     units: no strict `.ct` / `.h.ct` may carry a direct include there.
+ninc=$( cd "$root" && grep -rlE '^[[:space:]]*#include[[:space:]]*<' selfhost lib/core --include='*.ct' | grep -v '/cbound/' | wc -l | tr -d ' ' )
+if [ "$ninc" != "0" ]; then
+    echo "FAIL p65/regression: $ninc selfhost/lib/core unit(s) still carry a direct system #include" >&2
+    ( cd "$root" && grep -rlE '^[[:space:]]*#include[[:space:]]*<' selfhost lib/core --include='*.ct' | grep -v '/cbound/' | head -5 ) >&2
+    fail=1
+fi
 
 # 2) An external project: strict rejects a direct include, allow builds and runs.
 cat >"$tmp/proj/app.ct" <<'CT'
@@ -53,12 +65,17 @@ elif [ ! -x "$tmp/proj/app" ] || [ "$("$tmp/proj/app")" != "external ok" ]; then
     fail=1
 fi
 
-# 3) Report the grandfathered surface (the card's 688 files); fail only on zero.
-n=$( cd "$root" && find selfhost lib/core test examples -name '*.ct' 2>/dev/null | wc -l | tr -d ' ' )
-if [ "$n" -lt 600 ]; then
-    echo "FAIL p65/regression: only $n .ct files under the grandfathered dirs" >&2
+# 3) A plain `.ct` with no include builds under the default (the flip changed
+#    the boundary policy, not ordinary programs).
+cat >"$tmp/proj/plain.ct" <<'CT'
+int main(void) { return 0; }
+CT
+if ! ( cd "$tmp/proj" && env -u CT_C_BOUNDARY "$CT" build plain.ct -o plain ) \
+        >"$tmp/plain.log" 2>"$tmp/plain.err"; then
+    echo "FAIL p65/regression: a plain .ct without includes no longer builds" >&2
+    sed 's/^/  /' "$tmp/plain.err" | head -3 >&2
     fail=1
 fi
 
-[ "$fail" -eq 0 ] && echo "OK p65/regression ($n grandfathered .ct sources)"
+[ "$fail" -eq 0 ] && echo "OK p65/regression (global default strict; selfhost + lib/core carry no direct include)"
 exit "$fail"

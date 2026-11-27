@@ -136,13 +136,13 @@ else
     bad "JSON warn shape" "$(head -2 "$work/warn.log")"
 fi
 
-# 7) c-boundary is untouched: a leaks-only manifest stays allow, and an
-#    explicit strict key still wins.
+# 7) c-boundary: v1-PH-2 S9 flipped the no-key default to strict, so a
+#    leaks-only manifest is strict too; an explicit key still wins.
 got=$(env -u CT_C_BOUNDARY "$ctast" build -I "$work/err" --show-c-boundary "$work/err/prog.ct" 2>"$work/err.cb")
-if [ "$got" = "allow" ]; then
-    ok "c-boundary: leaks = error alone does not make the package strict"
+if [ "$got" = "strict" ]; then
+    ok "c-boundary: a leaks-only manifest is strict by default (S9)"
 else
-    bad "c-boundary leaks-only" "want 'allow', got '$got' ($(head -1 "$work/err.cb"))"
+    bad "c-boundary leaks-only" "want 'strict', got '$got' ($(head -1 "$work/err.cb"))"
 fi
 got=$(env -u CT_C_BOUNDARY "$ctast" build -I "$work/strict" --show-c-boundary "$work/strict/prog.ct" 2>"$work/strict.cb")
 if [ "$got" = "strict" ]; then

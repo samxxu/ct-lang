@@ -24,9 +24,7 @@
 #include "ExprTypes.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprBinding.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "ExprBinding.shim.h"
 #define B_ADD 1
 #define B_AND 12
 #define B_BAND 15

@@ -17,9 +17,7 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "Verifier.shim.h"
 import runtime::text::Intern;
 
 import backend::tir::TModule;

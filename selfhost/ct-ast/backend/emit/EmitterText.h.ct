@@ -6,11 +6,8 @@
  * prototype, the interface change the M0 card allows. See
  * docs/design/p85_m0.md for the baseline and the old->new map.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
 
+#include "EmitterText.shim.h"
 import backend::emit::Init;
 import frontend::lex::Lexer;
 import frontend::module::MapTable::Call as Call;

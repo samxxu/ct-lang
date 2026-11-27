@@ -25,10 +25,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
+#include "Mem2Writes.shim.h"
 import frontend::sym::Symbols;
 import frontend::sym::SymbolsTypeText;
 import runtime::arena::Arena;

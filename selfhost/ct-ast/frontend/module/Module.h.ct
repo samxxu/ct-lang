@@ -16,12 +16,8 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
+#include "Module.shim.h"
 import backend::emit::Emitter;
 import backend::tir::TBuilder;
 import backend::tir::TGraph;
@@ -81,10 +77,6 @@ static int mod_lir_body(const char *name, void *out, int ind, int ntmp,
 /* Shell-line helpers for the one-step build (Phase 17.6); defined after the
    impl. They are free functions, not methods: the L2 build path caps impl
    methods per compile, and these need no object state. */
-/* `realpath` is POSIX/XSI, and glibc hides its declaration under `-std=c99`
-   (strict ANSI) unless a feature-test macro asks for it. Declare the symbol
-   here so the build stays flag-free; this is the POSIX.1 prototype. */
-extern char *realpath(const char *path, char *resolved);
 pub trait ModuleOps {
     int  fail(const char *msg);
     int  fail_emit(const char *msg);
@@ -231,8 +223,8 @@ pub struct Module {
        constructor, no libc, no implicit heap. `--alloc A[,B[,C[,D]]]` maps
        malloc/free/realloc/calloc onto the target's own symbols. */
     int  freestanding;
-    /* PH-65 R1: the C boundary policy. -1 resolves per path (external strict,
-       the CT tree allow, a package manifest may override); 0 = allow,
+    /* PH-65 R1 / v1-PH-2 S9: the C boundary policy. -1 resolves per path
+       (strict by default, a package manifest may override); 0 = allow,
        1 = strict. */
     int  c_boundary;
     int  show_c_boundary;
@@ -2489,6 +2481,39 @@ impl ModuleOps for Module {
                     if (self->emit_unit(u) != 0) return 1;
                     if (self->units[u].is_hdr && self->write_unit_header(u) != 0) return 1;
                 }
+                /* v1-PH-2 S9: `--lib` publishes headers, so it publishes the
+                   shims those headers include: copy every `<base>.shim.h` next
+                   to the object files (the normal build does the same after
+                   its emit loop). */
+                for (u = 0; u < self->nunits; u++) {
+                    FILE *sf;
+                    FILE *df;
+                    char *dst;
+                    char sbuf[4096];
+                    size_t got;
+                    if (!self->units[u].has_shim || !self->units[u].shim_h) continue;
+                    /* A dead built-in unit has no `.c`/`.h` in the product, so
+                       its shim is not part of the product either. */
+                    if (self->is_builtin_unit(u) && !self->builtin_live_for(u)) continue;
+                    sf = fopen(self->units[u].shim_h, "rb");
+                    if (!sf) continue;
+                    dst = tool::sh::ct_scratch_fmt("%s/%s.shim.h", self->outdir,
+                                                   self->units[u].base);
+                    df = fopen(dst, "wb");
+                    if (!df) {
+                        fclose(sf);
+                        return 1;
+                    }
+                    while ((got = fread(sbuf, 1, sizeof sbuf, sf)) > 0) {
+                        if (fwrite(sbuf, 1, got, df) != got) {
+                            fclose(sf);
+                            fclose(df);
+                            return 1;
+                        }
+                    }
+                    fclose(sf);
+                    if (fclose(df) != 0) return 1;
+                }
                 for (u = 0; u < self->nunits; u++) {
                     char *src, *obj;
                     /* S1a-0 C2f: one composed cc line per object, grown from
@@ -2818,6 +2843,42 @@ impl ModuleOps for Module {
                 self->cache->store(outc, key);
             free(key);
         }
+        /* v1-PH-2 S9: a compiled shim is part of what a build publishes. Copy
+           every unit's `<base>.shim.h` next to the emitted `.c`/`.h` so the
+           product tree is self-contained: the printed cc line, the frozen seed
+           (`bootstrap/ct-ast`) and the harnesses then find it with
+           `-I <outdir>` alone, without a second include root per shim
+           directory. Ambiguous bases were rejected by `ct_shim_ambiguity`
+           above, so the flat copy cannot collide. */
+        for (u = 0; u < self->nunits; u++) {
+            FILE *sf;
+            FILE *df;
+            char *dst;
+            char sbuf[4096];
+            size_t got;
+            if (!self->units[u].has_shim || !self->units[u].shim_h) continue;
+            /* A dead built-in unit has no `.c`/`.h` in the product, so its
+               shim is not part of the product either. */
+            if (self->is_builtin_unit(u) && !self->builtin_live_for(u)) continue;
+            sf = fopen(self->units[u].shim_h, "rb");
+            if (!sf) continue;              /* discovery already stat()ed it */
+            dst = tool::sh::ct_scratch_fmt("%s/%s.shim.h", self->outdir,
+                                           self->units[u].base);
+            df = fopen(dst, "wb");
+            if (!df) {
+                fclose(sf);
+                return 1;
+            }
+            while ((got = fread(sbuf, 1, sizeof sbuf, sf)) > 0) {
+                if (fwrite(sbuf, 1, got, df) != got) {
+                    fclose(sf);
+                    fclose(df);
+                    return 1;
+                }
+            }
+            fclose(sf);
+            if (fclose(df) != 0) return 1;
+        }
         {
             /* SH-79: the model/map describe the entry unit, not whatever unit
                happened to load first (the builtin layer) or last (a dependency
@@ -2998,9 +3059,12 @@ cmd_too_long:
         return self->tgraph_live[slot];
     }
 
-    /* PH-65 R1: the policy for one unit path. The CLI wins; then the package
-       manifest (its units follow the package's key); then the four
-       grandfathered in-repo directories; else the external default, strict.
+    /* v1-PH-2 S9 (REQ-STRICT-1): the policy for one unit path. The CLI wins;
+       then the environment; then the package manifest (its units follow the
+       package's key); anything else is strict. The pre-1.0 allowance for
+       `selfhost/`, `lib/core/`, `lib/std/`, `test/` and `examples/` is gone,
+       and a manifest without a `c-boundary` key is strict too -- `ct migrate`
+       writes `c-boundary = allow` into an old package that needs the bridge.
        SH-93: the working directory is not an input. */
     int c_boundary_for(const char *path)
     {
@@ -3013,19 +3077,15 @@ cmd_too_long:
             if (e != 0 && strcmp(e, "strict") == 0) return 1;
         }
         /* A package manifest is the most specific statement about a unit that
-           lives inside that package: it wins over the four in-repo
-           directories, so a package's own strict setting is testable from the
-           repo root. */
+           lives inside that package: its `c-boundary` key wins over the
+           default. A manifest without the key is strict (S9 flipped the old
+           allow window; `ct migrate` writes the key for an old package). */
         for (i = 0; i < self->ninc; i++) {
             if (strncmp(path, self->incdirs[i], strlen(self->incdirs[i])) != 0)
                 continue;
             r = c_manifest_boundary(self->incdirs[i]);
             if (r >= 0) return r;
-            /* A package published before PH-65 has no `c-boundary` key: it
-               keeps the allow window instead of breaking on upgrade (D65-7). */
-            if (c_has_manifest(self->incdirs[i])) return 0;
         }
-        if (c_path_is_core(path)) return 0;
         return 1;
     }
 

@@ -12,10 +12,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TBuilder.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include "TBuilder.shim.h"
 #define CAP_LIMIT 65536
 #define MAX_TEXT 160
 #define N_PROG     1

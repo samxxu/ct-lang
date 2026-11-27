@@ -11,14 +11,8 @@
  * MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists, the MAX_PKG_*
  * and MAX_LOCK caps are this package manager's own.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <stdarg.h>
 
+#include "Pkg.shim.h"
 import tool::sh::Sh;
 import tool::pkg::PkgIndex;
 
@@ -581,7 +575,6 @@ struct Sha256 {
 #define INDEX_ERR_KIND_OFF 4
 #define INDEX_ERR_MSG_OFF  36
 
-#define CT_ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 
 static void sha256_init(struct Sha256 *s)
 {
@@ -5252,6 +5245,48 @@ static int pkg_migrate(const char *prog)
         return 1;
     }
     free(out);
+    /* v1-PH-2 S9 (REQ-STRICT-1): the global C boundary default flipped to
+       strict, and a project migrated from a v1 lock may still carry raw C
+       includes in its own units. The one-time bridge gives that old project
+       what it had before the flip: write `c-boundary = allow` into its own
+       `ct.pkg` when the key is absent. An explicit key (either value) is
+       never touched, so a project that already chose strict stays strict. */
+    {
+        FILE *mf;
+        char mline[512];
+        int has_pkg = 0, have_key = 0, need_nl = 0, mc;
+        mf = fopen("./ct.pkg", "r");
+        if (mf) {
+            has_pkg = 1;
+            while (fgets(mline, sizeof mline, mf)) {
+                char *q = mline;
+                while (*q == ' ' || *q == '\t') q++;
+                if (strncmp(q, "c-boundary", 10) == 0
+                    && (q[10] == ' ' || q[10] == '\t' || q[10] == '\n'
+                        || q[10] == '\r' || q[10] == 0)) {
+                    have_key = 1;
+                    break;
+                }
+            }
+            fclose(mf);
+        }
+        if (has_pkg && !have_key) {
+            mf = fopen("./ct.pkg", "rb");
+            if (mf) {
+                int last = 0;
+                while ((mc = fgetc(mf)) != EOF) last = mc;
+                need_nl = (last != 0 && last != '\n');
+                fclose(mf);
+            }
+            mf = fopen("./ct.pkg", "a");
+            if (mf) {
+                if (need_nl) fputc('\n', mf);
+                fputs("c-boundary = allow\n", mf);
+                fclose(mf);
+                printf("wrote c-boundary = allow to ct.pkg (pre-S9 project)\n");
+            }
+        }
+    }
     printf("migrated %d package(s)\n", nrow);
     (void)i;
     (void)prog;

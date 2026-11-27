@@ -15,7 +15,7 @@ namespace core;
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include <stdlib.h>
+#include "Str.shim.h"
 
 pub struct Str {
     char *ptr;

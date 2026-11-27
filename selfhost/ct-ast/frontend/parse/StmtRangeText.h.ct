@@ -6,10 +6,8 @@
  * prototype, the interface change the M0 card allows. See
  * docs/design/p85_m0.md for the baseline and the old->new map.
  */
-#include <limits.h>
-#include <stdio.h>
-#include <string.h>
 
+#include "StmtRangeText.shim.h"
 import runtime::arena::Arena;
 import runtime::arena::Arena::Node as Node;
 import frontend::lex::Lexer;

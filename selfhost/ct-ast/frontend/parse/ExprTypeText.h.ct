@@ -6,9 +6,8 @@
  * prototype, the interface change the M0 card allows. See
  * docs/design/p85_m0.md for the baseline and the old->new map.
  */
-#include <stdio.h>
-#include <string.h>
 
+#include "ExprTypeText.shim.h"
 import frontend::lex::Lexer;
 import frontend::module::MapTable::Call as Call;
 import frontend::module::MapTable;

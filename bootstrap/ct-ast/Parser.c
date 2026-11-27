@@ -18,9 +18,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Parser.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "Parser.shim.h"
 #define MAX_CALLS 8192
 #define CAP_LIMIT 65536
 #define MAX_FIELDS 64

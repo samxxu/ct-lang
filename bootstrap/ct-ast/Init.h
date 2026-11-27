@@ -5,8 +5,7 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include <stdio.h>
-#include <string.h>
+#include "Init.shim.h"
 
 #include "Symbols.h"
 #include "Intern.h"

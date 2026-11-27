@@ -6,10 +6,7 @@
 #include "Sh.h"
 
 #line 1 "selfhost/ct-ast/frontend/sym/Symbols.h.ct"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
+#include "Symbols.shim.h"
 #define MAX_TEXT    160
 #define MAX_PARAMS  16
 #define CAP_LIMIT 65536
