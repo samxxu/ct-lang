@@ -1,17 +1,14 @@
 /*
- * EmitDecl.h.ct - the declaration / trait / impl-surface writers (SH-94 S1a-1
- * Phase D5, pure move out of Emitter.h.ct).
+ * EmitDecl.h.ct - the declaration / trait / impl-surface writers
+ * (SH-94 S1a-1 Phase D5, completed by the v1-PH-2 S8 tail).
  *
- * S8 D5 slice: the globals, trait declarations, link externs, vtable
- * visibility, Drop visibility, unit initialiser and the overload-suffix /
- * type-substitution helpers moved here. The bodies are byte-identical; the
- * `Emitter` type and the `EmitOps` / `EmitDecl` declarations live in
- * EmitterCore.h.ct, so this unit imports Core instead of the host and the
- * import graph stays acyclic.
- *
- * Left in the host for now: `emit_type_decl` (its six `em_decl_*` kind slices
- * are the D5 tail) and `emit_impls` (still reads the unit-scope `g_sb`
- * lifecycle bookkeeping).
+ * The globals, trait declarations, link externs, vtable / Drop visibility,
+ * unit initialiser, `emit_type_decl` with its six `em_decl_*` kind slices,
+ * `emit_impls` and the instance / closure / ADT glue they call moved here.
+ * Every body is byte-identical to the one Emitter.h.ct held; the `Emitter`
+ * type and the `EmitDecl` declarations live in EmitterCore.h.ct, so this unit
+ * imports Core and the sibling emit units, and the import graph stays acyclic
+ * (Host -> EmitShell, EmitDecl -> {EmitHeader, EmitExpr}).
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */

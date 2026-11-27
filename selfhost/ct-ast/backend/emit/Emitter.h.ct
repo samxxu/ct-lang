@@ -1,15 +1,19 @@
 /*
- * Emitter.h.ct - the C emitter, one class of its own.
+ * Emitter.h.ct - the C emitter's entry and binding layer (v1-PH-2 S8 tail).
  *
- * It turns the AST into C: it reads the node pool, the symbol tables, the type
- * queries and the module tables, and writes the `.c`/`.h` files and the map
- * JSON. Macros do not cross a unit boundary, so the node kinds, the operator
- * tags and the caps are declared here; MAX_TEXT 160 and MAX_PARAMS 16 are the
- * values `frontend/sym/Symbols.h.ct` lists.
+ * After the D4-D6 and shell moves this unit only owns the program entry
+ * (`emit_program`), the single-unit entry (`emit_unit`), the error helpers and
+ * the `ct_emit_*` bindings the driver calls. The writers themselves live in
+ * `EmitHeader` (header / map / ABI), `EmitDecl` (declarations and concrete
+ * impls), `EmitExpr` (the body writer and kind slices) and `EmitShell` (the
+ * per-unit `.c` / `.h` shell and instance / ADT / Box glue).
  *
- * The instance is private to this unit: a generated header carries no
- * #include, so neither the FILE * nor the trait may appear in its surface.
- * The driver reaches it through the `pub` primitives at the end of the file.
+ * Macros do not cross a unit boundary, so every emit unit carries its own
+ * mirrors of the node kinds and caps; MAX_TEXT 160 and MAX_PARAMS 16 are the
+ * values `frontend/sym/Symbols.h.ct` lists. The instance is private to this
+ * unit (`g_emit`); a generated header carries no #include, so neither the
+ * FILE * nor the trait may appear in its surface. The driver reaches it
+ * through the `pub` primitives at the end of the file.
  */
 #include "Emitter.shim.h"
 import frontend::sym::SymbolsTypeText;

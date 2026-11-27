@@ -1,16 +1,18 @@
 /*
- * EmitExpr.h.ct - expression spelling / condition / indentation (SH-94 S1a-1
- * Phase D6, pure move out of Emitter.h.ct).
+ * EmitExpr.h.ct - the body writer: kind dispatchers and their slices
+ * (SH-94 S1a-1 Phase D6, completed by the v1-PH-2 S8 tail).
  *
- * S8 D6 slice: the six expression helpers that do not depend on the kind
- * dispatchers or the `g_sb` lifecycle state moved here. The bodies are
- * byte-identical; the `Emitter` type and the `EmitOps` / `EmitExpr`
- * declarations live in EmitterCore.h.ct, so this unit imports Core instead of
- * the host and the import graph stays acyclic.
+ * `emit_expr` / `emit_node` / `emit_field` / `emit_inline` / `emit_outconv`
+ * and the `em_expr_*` / `em_node_*` / `em_inline_*` / `em_field_*` slices
+ * moved here, together with the owning-handle bookkeeping (`StrRetain` /
+ * `g_sb`), the match-arm / `EmitBuf` helpers and the type-substitution /
+ * overload-suffix helpers. Every body is byte-identical to the one
+ * Emitter.h.ct held; the `Emitter` type and the `EmitExpr` declarations live
+ * in EmitterCore.h.ct, so this unit imports Core and the sibling emit units,
+ * and the import graph stays acyclic.
  *
- * Left in the host: `emit_expr` / `emit_node` / `emit_field` / `emit_inline`
- * (their `em_*` kind slices are the D6 tail) and `emit_outconv` (it reads the
- * host `g_oc_bypass_node` intercept flag).
+ * `EmitDecl` (concrete impls / declarations) and `EmitShell` import this unit
+ * for the shared helpers; this unit never imports them.
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
