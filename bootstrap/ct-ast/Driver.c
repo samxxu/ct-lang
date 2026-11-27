@@ -484,7 +484,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         argc--;
     }
     if (_self->m->check_mode == 0) {
-        tool_diag_ct_diag_set_types_class(3, 2);
+        tool_diag_ct_diag_set_types_class(7, 2);
     }
     _self->m->build_mode = 0;
     _self->m->line_mode = 0;
@@ -630,7 +630,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
                     }
                 }
             }
-            tool_diag_ct_diag_set_types_class(3, lv);
+            tool_diag_ct_diag_set_types_class(7, lv);
             continue;
         }
         if (strcmp(argv[i], "--semantics") == 0) {

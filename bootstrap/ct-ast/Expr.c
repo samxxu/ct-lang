@@ -1789,7 +1789,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                             _self->arena->nodes[m].b = ((args == 0) ? (-1) : args);
                                         }
                                     }
-                                    if ((_self->types_mode && (*_self->types_mode))) {
+                                    if (((_self->types_mode && (*_self->types_mode)) || tool_diag_ct_type_class_container())) {
                                         if (_self->__frontend_parse_exprtypes_vptr->chk_mcall_args(_self, ibase, fname, args) != 0) {
                                             return (-1);
                                         }
