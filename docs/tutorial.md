@@ -2062,7 +2062,11 @@ Box<Point> b = Box<Point>::of(p);       // 复制构造；owning 叶 retain
 ## 18. 最小 ADT 与 `match`（Phase 84，v0.84.0 起可用）
 
 一个成员的负载列表把 `enum` 变成**名义和类型**；`match` 用穷尽分支把它拆开。
-这一轮只覆盖重写需要的最小集合：名义和类型、负载、穷尽检查、变量绑定。
+v0.84 先落最小集合（名义和类型、负载、穷尽检查、变量绑定）；v1-PH-2 的 S4–S6
+补上字面量 / 嵌套 / 结构体模式、or / 守卫与泛型 ADT。完整可跑样例见
+[examples/67_adt_patterns](../examples/67_adt_patterns/prog.ct)、
+[examples/68_adt_guards](../examples/68_adt_guards/prog.ct) 与
+[examples/69_generic_adt](../examples/69_generic_adt/prog.ct)。
 
 ```ct
 enum Shape {
@@ -2157,8 +2161,29 @@ int area2(Shape s)
 臂写 `Pattern => expr`，或写块并用 `yield expr;` 作为唯一正常出口；所有产值臂的类型
 必须一致；臂以 `return` / `break` / `continue` 结尾时按发散处理。主语仍只求值一次。
 
-**边界**：泛型 ADT、or / 守卫 / 字面量 / 嵌套 / 结构体模式留到 v1.1+；`match` 只接受
-ADT 主语（普通 `int` 会报 `match needs an ADT value, but 'int' is not an ADT`）；
+**模式扩展（v1-PH-2 S4 / S5）**：除变体模式外，`match` 还接受三种模式，并可组合：
+
+- **字面量**：整数 / 字符字面量按值比较（`bool` 写 `0` / `1`；字符串字面量不支持）；
+- **嵌套 / 结构体**：负载位置可再写任意模式（`Shape.At(Point { x: 0, y })`），
+  `x: 0` 是显式子模式、`y` 是字段简写绑定、`..` 收掉剩余字段；
+- **or / 守卫**：`Circle(r) | Square(r)` 在任意模式位置可选其一，`pattern if expr`
+  在匹配后求值、为假就落到下一臂；**守卫不计穷尽**，仍要一条无守卫臂覆盖该变体。
+
+```ct
+match (s) {
+    Shape.Circle(r) | Shape.Square(r) => { return r * r; }
+    Shape.Rect(w, h) if w > h => { return w; }
+    Shape.Rect(w, h) => { return h; }
+}
+```
+
+**泛型 ADT（S6）**：`enum Opt<T> { Some(T v), None() }` 的负载可写类型参数；实例化
+`Opt<int>` 是独立布局，构造与模式可写全名 `Opt<int>.Some(7)`，也可由主语类型推断成
+`Opt.Some(v)`；泛型实例可再作类型实参（`Opt<Opt<int>>`）。完整用法见
+[examples/69_generic_adt](../examples/69_generic_adt/prog.ct)。
+
+**边界**：`match` 的主语是 ADT、结构体或整数族值（普通 `int` 必须带字面量臂与 `_`；
+ADT 主语之外仍保留 `match needs an ADT value` 的旧诊断文案）；
 owning payload 按 retain 副本绑定，ADT 值按 retain/release 浅共享，作用域出口自动释放
 （LANG-29 S2 / B3）。计数：ADT / 变体 / 负载字段按需增长到形式上限 65536，旧 64 / 16 / 8 语义上限已退役。
 C enum 与 `switch` 的行为完全不变。
@@ -2390,7 +2415,7 @@ ct build sum.ct -o sum && ./sum
 - [roadmap.md](roadmap.md) —— 已落地与后续阶段
 - 新特性专章：§14 可选链、§15 `ref` / `out`、§16 `ct check --types`、§17 `Box`、§18 ADT/`match`、
   §22 `String` / `Str`、§23 切片 `T[]`（先看顶层「按层阅读」选层）
-- `examples/**` —— 59 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；
+- `examples/**` —— 71 个示例目录（`find examples -mindepth 1 -maxdepth 1 -type d | wc -l` 实测；
   其中 `49_socket` 为文档型；完整索引见 [examples/README.md](../examples/README.md)）；
   `test/cases/**` —— 每个语法点的最小快照
 - 编辑器支持：独立仓 [ct-vscode](https://github.com/samxxu/ct-vscode)（纯声明式高亮、snippets、跳转索引，零运行时依赖）

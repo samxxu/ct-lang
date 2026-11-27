@@ -203,29 +203,29 @@ int main(void)
 
 ```ct
 // source: docs/snippets/README/0.6_driver_rollback.ct
-Result<int, char *> open_dev(int ok)
+Result<int, int> open_dev(int ok)
 {
-    if (!ok) return err: (Result<int, char *>){ 0, 0, "open failed" };
-    return (Result<int, char *>){ 1, 7, 0 };
+    if (!ok) return err: (Result<int, int>){ 0, 0, 5 };
+    return (Result<int, int>){ 1, 7, 0 };
 }
-Result<int, char *> init_dev(int ok)
+Result<int, int> init_dev(int ok)
 {
     defer { printf("release dev\n"); }
     errdefer { printf("rollback init\n"); }
     int fd = open_dev(ok)?;
-    return (Result<int, char *>){ 1, fd, 0 };
+    return (Result<int, int>){ 1, fd, 0 };
 }
 int main(void)
 {
-    Result<int, char *> a = init_dev(1);
-    Result<int, char *> b = init_dev(0);
-    printf("%d %s\n", a.ok ? a.value : -1, b.ok ? "ok" : b.err);
+    Result<int, int> a = init_dev(1);
+    Result<int, int> b = init_dev(0);
+    printf("%d %d\n", a.ok ? a.value : -1, b.ok ? 0 : b.err);
     return 0;
 }
 ```
 
 `ct build docs/snippets/README/0.6_driver_rollback.ct --c-boundary=allow -o /tmp/dev && /tmp/dev`
-输出 `release dev` / `rollback init` / `release dev` / `7 open failed`（成功只跑 `defer`，失败先回滚再释放）。
+输出 `release dev` / `rollback init` / `release dev` / `7 5`（成功只跑 `defer`，失败先回滚再释放）。
 
 #### 0.7 泛型：模板函数、trait 约束与泛型 trait
 
@@ -390,15 +390,15 @@ int main(void)
     int x;
     int y;
     Box<Point> b = new Point { 4, 5 };
-    Map<char *, int> m;
+    Map<int, int> m;
     m.h = 0;
-    m.put("x", 7);
+    m.put(1, 7);
 
     inc(v);
     two(x, y);
     printf("%d %d %d %d %d %d %d %d %d %d\n",
            p.first(), best<Run>(r), apply(add, 2, 5), sum(a),
-           v, x, y, b.x, *m.get("x"), c.next());
+           v, x, y, b.x, *m.get(1), c.next());
     m.release();
     b.release();
     return 0;
@@ -474,6 +474,67 @@ int main(void) {
 
 `ct build docs/snippets/README/0.11_map_binding.ct --c-boundary=allow -o /tmp/mapb && /tmp/mapb`
 实测三行：`uart1 -> 5` / `uart2 -> 10` / `sent 2 + 3`。
+
+#### 0.12 ADT 模式扩展与泛型 ADT：S4 / S5 / S6
+
+v1-PH-2 把 `match` 的模式文法扩到字面量、嵌套、结构体、or 与守卫，并让 `enum` 能带类型参数；
+规范口径见 [spec §4.73](docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast) 的三个小节。
+三个完整样例：[67_adt_patterns](examples/67_adt_patterns/prog.ct)、
+[68_adt_guards](examples/68_adt_guards/prog.ct)、[69_generic_adt](examples/69_generic_adt/prog.ct)。
+
+字面量 + 嵌套 + 结构体模式（S4）：
+
+```ct
+// source: examples/67_adt_patterns/prog.ct
+static int at(Shape s)
+{
+    match (s) {
+        Shape.At(Point { x: 0, y: 0 }) => { return 1; }
+        Shape.At(Point { x: 0, y }) => { return y; }
+        Shape.At(Point { x, y: 2 }) => { return x + 40; }
+        Shape.At(p) => { return p.x + p.y + 70; }
+        Shape.Away() => { return -2; }
+    }
+}
+```
+
+or 模式与守卫（S5）；守卫不计入穷尽，未带守卫的臂仍须覆盖变体：
+
+```ct
+// source: examples/68_adt_guards/prog.ct
+static int gated(Shape s, int limit)
+{
+    match (s) {
+        Shape.Circle(r) if r > limit => { return 100 + r; }
+        Shape.Circle(r) => { return r; }
+        Shape.Square(x) => { return x; }
+        Shape.Rect(w, h) if w > h => { return w; }
+        Shape.Rect(w, h) => { return h; }
+    }
+    return -1;
+}
+```
+
+泛型 ADT（S6）：构造与模式可写 `Opt<int>.Some(7)`，也可由主语类型推断成 `Opt.Some(v)`：
+
+```ct
+// source: examples/69_generic_adt/prog.ct
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
+static int unwrap_or(Opt<int> o, int fallback)
+{
+    return match (o) {
+        Opt.Some(v) => v,
+        Opt.None() => fallback
+    };
+}
+```
+
+`ct build examples/67_adt_patterns/prog.ct -o /tmp/p67 && /tmp/p67` 实测
+`10 11 12 99` / `0 100 200` / `1 9 47 72` / `-2` / `0 37 60`；`68` 与 `69` 同法。
 
 ### 1. 快速开始
 

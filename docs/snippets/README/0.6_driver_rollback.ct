@@ -1,19 +1,19 @@
-Result<int, char *> open_dev(int ok)
+Result<int, int> open_dev(int ok)
 {
-    if (!ok) return err: (Result<int, char *>){ 0, 0, "open failed" };
-    return (Result<int, char *>){ 1, 7, 0 };
+    if (!ok) return err: (Result<int, int>){ 0, 0, 5 };
+    return (Result<int, int>){ 1, 7, 0 };
 }
-Result<int, char *> init_dev(int ok)
+Result<int, int> init_dev(int ok)
 {
     defer { printf("release dev\n"); }
     errdefer { printf("rollback init\n"); }
     int fd = open_dev(ok)?;
-    return (Result<int, char *>){ 1, fd, 0 };
+    return (Result<int, int>){ 1, fd, 0 };
 }
 int main(void)
 {
-    Result<int, char *> a = init_dev(1);
-    Result<int, char *> b = init_dev(0);
-    printf("%d %s\n", a.ok ? a.value : -1, b.ok ? "ok" : b.err);
+    Result<int, int> a = init_dev(1);
+    Result<int, int> b = init_dev(0);
+    printf("%d %d\n", a.ok ? a.value : -1, b.ok ? 0 : b.err);
     return 0;
 }

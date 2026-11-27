@@ -65,15 +65,15 @@ int main(void)
     int x;
     int y;
     Box<Point> b = new Point { 4, 5 };
-    Map<char *, int> m;
+    Map<int, int> m;
     m.h = 0;
-    m.put("x", 7);
+    m.put(1, 7);
 
     inc(v);
     two(x, y);
     printf("%d %d %d %d %d %d %d %d %d %d\n",
            p.first(), best<Run>(r), apply(add, 2, 5), sum(a),
-           v, x, y, b.x, *m.get("x"), c.next());
+           v, x, y, b.x, *m.get(1), c.next());
     m.release();
     b.release();
     return 0;
