@@ -1476,8 +1476,8 @@ void ct_emit_set_out(void *out)
    declaration stay with this writer, so the switch cannot change their text.
    `fn` returns 1 when it printed the body, 0 to let this writer print it, -1
    on an I/O error. `void *` keeps the pointer type out of the unit boundary. */
-pub void ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *, int));
-void ct_emit_set_body_hook(int (*fn)(const char *, void *, int, int, int *, int))
+pub void ct_emit_set_body_hook((const char *, void *, int, int, int *, int) => int fn);
+void ct_emit_set_body_hook((const char *, void *, int, int, int *, int) => int fn)
 {
     g_body_hook = fn;
 }
@@ -1488,7 +1488,7 @@ int ct_emit_body_hook(const char *name, void *out, int ind, int ntmp,
                       int *new_ntmp, int stmts)
 {
     {
-        int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
+        (const char *, void *, int, int, int *, int) => int body_hook = g_body_hook;
         if (!body_hook) return 0;
         return body_hook(name, out, ind, ntmp, new_ntmp, stmts);
     }

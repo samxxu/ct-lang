@@ -655,7 +655,7 @@ impl EmitDecl for Emitter {
                    lowerer carries, under its TIR key `<Base>.<method>`; the
                    signature and the `_self` / void-cast prologue stay here. */
                 {
-                    int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
+                    (const char *, void *, int, int, int *, int) => int body_hook = g_body_hook;
                     int printed = 0;
                     if (body_hook) {
                         const char *key = tool::sh::ct_scratch_fmt("%s_%s%s%s",
@@ -818,7 +818,7 @@ impl EmitDecl for Emitter {
                    the lowerer carries under `<Struct>_<method>`; the signature
                    and prologue stay here. */
                 {
-                    int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
+                    (const char *, void *, int, int, int *, int) => int body_hook = g_body_hook;
                     int printed = 0;
                     if (body_hook) {
                         const char *key = tool::sh::ct_scratch_fmt("%s_%s%s", tag,

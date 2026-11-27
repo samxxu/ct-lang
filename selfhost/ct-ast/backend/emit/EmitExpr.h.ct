@@ -3622,7 +3622,7 @@ pub int em_node_func(struct Emitter *self, int n, int ind, int nk)
        The hook is consulted before any body state is pushed; a body it does
        not print keeps this writer's own state machine untouched. */
     {
-        int (*body_hook)(const char *, void *, int, int, int *, int) = g_body_hook;
+        (const char *, void *, int, int, int *, int) => int body_hook = g_body_hook;
     if (body_hook && !self->gtname[0]) {
         int new_ntmp = self->ntmp;
         int hr = body_hook(self->arena->nodes[n].text2, self->out, ind,

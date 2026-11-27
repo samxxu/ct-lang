@@ -575,7 +575,7 @@ pub struct Expr {
        parser installs a hook after both sub-objects are bound. Phase 44 reuses
        the same hook for the postfix `?`: op 0 parses a block body, op 1
        snapshots the defer / `own` failure cleanup of the `?` node in `arg`. */
-    int (*st_hook)(int op, int arg);
+    (int, int) => int st_hook;
     /* Enclosing closures while a literal's body is being parsed. An inner
        literal's captures are copied up into every enclosing environment whose
        frame is outside this literal, so the inner environment can be built
