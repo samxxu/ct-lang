@@ -13,7 +13,8 @@
 #   g1  phase-card completeness (phase_card.py g1)
 #   g2  design-acceptable: every interface/protocol promise maps to an ACC-* row
 #       (acc_map.py; docs/design/acc-scope.tsv; CI-16)
-#   g4  docs executable/timeliness (reuses test/docs/check-docs.py)
+#   g4  docs executable/timeliness (reuses test/docs/check-docs.py) plus the
+#       S8c feature matrix assertion (warn by default, MATRIX_STRICT=1 hard)
 #   g5  criterion <-> case minimal subset (phase_card.py g5)
 #   g6  issue-ledger closure (issue_ledger.py; strict by default, 5 negative
 #       fixtures).  `g6 --ratchet` judges against issues/.g6-baseline.tsv
@@ -72,7 +73,18 @@ g1() {
 
 g2() { gate=g2; python3 "$root/tools/gates/acc_map.py" "$root"; }
 
-g4() { gate=g4; python3 "$root/test/docs/check-docs.py"; }
+g4() {
+  gate=g4
+  python3 "$root/test/docs/check-docs.py"
+  # S8c matrix consistency: warn by default, MATRIX_STRICT=1 at closeout.
+  # The selftest carries the negative fixtures for this gate change.
+  python3 "$root/tools/check-feature-matrix.py" --selftest >/dev/null
+  if [ "${MATRIX_STRICT:-0}" = 1 ]; then
+    python3 "$root/tools/check-feature-matrix.py" --strict
+  else
+    python3 "$root/tools/check-feature-matrix.py" --warn
+  fi
+}
 
 g5() { gate=g5; python3 "$root/tools/gates/phase_card.py" "$root" g5; }
 
