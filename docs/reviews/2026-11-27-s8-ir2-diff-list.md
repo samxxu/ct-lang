@@ -91,12 +91,21 @@ LModule 化之后。记录为剩余项，不在本 stage 用非纯搬移冒充�
 | --- | --- | --- | --- |
 | 外壳 LModule 第一步 | `d75557fb` | 写者身份 `g_shell_u` / `g_shell_header` → `LModulePlan.shell_u` / `shell_header`（`lmod_plan_set_shell` / `lmod_plan_shell_u` / `lmod_plan_shell_header`）；走查状态 `g_shell_emit_state` / `g_shell_emit_cap` → `struct Emitter` | 82 语料单文件 + 自举 75 单元 C 树逐字节；`test/ir/run.sh` 15 checks；`g0/g1/g8` |
 | D4 EmitHeader | `96dcb656` | `backend/emit/EmitHeader.h.ct`（+ `.shim.h`）、`pub trait EmitHeader`；10 方法 + `adoption_default_only` 纯搬移 | 1585 body 多重集不变；10 方法 body sha 同父提交 `d75557fb`；`sh94_split_check` 6 个唯一名 + 独立脚本 4 个与 `Module` 同名者；cycles 0；unit-name lint；goldens 25/25；`test/ir/run.sh` OK |
-| seed | `3f73814e` | `gen-seed.sh` 重生成 | `check-seed` 两轮逐字节 + 手改负例 |
+| D5 EmitDecl（部分） | `a6905317` | `backend/emit/EmitDecl.h.ct`；`pub trait EmitDecl`；13 方法 + `unit_init_needed` / `emit_overload_suffix` / `emit_gsub_type_text`（改 pub） | 1585 body 多重集不变；16 个搬移定义 body sha 同父提交；cycles 0；lint；goldens 25/25；ir OK |
+| D6 EmitExpr（部分） | `b6ed12ff` | `backend/emit/EmitExpr.h.ct`；`pub trait EmitExpr`；6 个无 kind 依赖 helper | 1585 body 多重集不变；6 个 body sha 同父提交；cycles 0；lint；goldens 25/25；ir OK |
+| seed | `3f73814e` / `265d62d2` / `4c7b8d77` | 每片后 `gen-seed.sh` 重生成 | `check-seed` 两轮逐字节 + 手改负例（72 .c + 138 .h） |
 
-**D4 的边界（仍未做）**：`write_unit_header` 与 `write_unit_header_body` 留在
-宿主——后者的实例闭包 / ADT 胶水走查仍读宿主 `g_sb` 生命周期状态，纯搬移须先
-把外壳的实例闭包判定移出（本子集只清掉跨单元 shell 全局，不冒充完成）。
-D5 `EmitDecl` / D6 `EmitExpr` 未开工。
+**D4–D6 的边界（仍未做）**：
+- D4：`write_unit_header` 与 `write_unit_header_body` 留在宿主——后者的实例
+  闭包 / ADT 胶水走查仍读宿主 `g_sb` 生命周期状态；
+- D5：`emit_type_decl`（六个 `em_decl_*` kind 切片）与 `emit_impls`（`g_sb`）
+  留在宿主；
+- D6：`emit_expr` / `emit_node` / `emit_field` / `emit_inline`（`em_*` kind
+  切片，占 Emitter.h.ct 绝大部分）与 `emit_outconv`（`g_oc_bypass_node`）
+  留在宿主；
+- 因此外壳的类型/实例闭包/胶水判定只完成了“写者身份”这一层，
+  `emit_module` / `write_header` / `write_abi_header` / `write_map` 仍未做到
+  “只消费 LModule”。本子集不把部分搬移冒充为完整契约。
 
 **单文件路径**：仍 AST 默认；§3 的 38 条差异**未清零**，`--ir=off` 回滚口径不变。
 

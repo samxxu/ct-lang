@@ -161,7 +161,10 @@ A1 是 spike：先验证“子单元只 import Core、宿主 import 子单元、
 **施工状态（2026-11-27）**：D4 已落 10/11 方法 + 依赖自由函数
 `adoption_default_only` 到 `backend/emit/EmitHeader.h.ct`；`write_unit_header`
 与其 `write_unit_header_body` 仍留宿主——后者经 `g_sb` 读实例闭包/ADT 胶水的
-生命周期状态，纯搬移须先完成外壳的实例判定迁移。D5 / D6 未开工。证据见
+生命周期状态，纯搬移须先完成外壳的实例判定迁移。D5 已落 13/15 方法 + 3 个
+自由函数到 `EmitDecl.h.ct`（留 `emit_type_decl` / `emit_impls`）。D6 已落
+6 个无 kind 依赖 helper 到 `EmitExpr.h.ct`（留四个 kind 分发器与
+`emit_outconv`）。证据见
 [S8 差异清单 §3c](../reviews/2026-11-27-s8-ir2-diff-list.md)。
 
 ### 4.5.1 D1–D3 施工单（S1a-1 内，IR 之前）
