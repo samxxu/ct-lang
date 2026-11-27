@@ -15,6 +15,7 @@
 import frontend::sym::Symbols;
 import runtime::text::Intern;
 import runtime::arena::Arena;
+import runtime::arena::Arena::NodeKind as NodeKind;
 import tool::diag::Diag;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
@@ -26,9 +27,6 @@ import tool::diag::Diag;
 #define N_NUM    8
 #define N_DECLS  40
 #define N_VAR    10
-#define N_MEMBER 24
-#define N_ARROW  25
-#define N_INDEX  26
 
 namespace backend::mem;
 pub trait MemoryOps {
@@ -220,19 +218,30 @@ impl MemoryOps for Memory {
        scans words on the line, not values. */
     int expr_mentions(int e, const char *name)
     {
-        int p;
+        int p, k;
         (void)self;
         if (e < 0) return 0;
-        if (self->arena->nodes[e].kind == N_VAR) return strcmp(self->arena->nodes[e].text2, name) == 0;
-        if (self->arena->nodes[e].kind == N_MEMBER || self->arena->nodes[e].kind == N_ARROW) {
-            if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
-            return self->expr_mentions(self->arena->nodes[e].a, name);
-        }
-        if (self->arena->nodes[e].kind == N_CALL) {
-            if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
-            for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
-                if (self->expr_mentions(p, name)) return 1;
-            return 0;
+        /* D4: the closed node-kind set is read through the ADT view
+           (`Arena.NodeKind`), not through the flat kind numbers: the node pool
+           keeps its int tag and the match is the exhaustiveness check. The
+           kind is bound first: the emitter rewrites `self` to `_self` in
+           expressions, not inside a compound literal (dogfooding sharp edge). */
+        k = self->arena->nodes[e].kind;
+        match ((NodeKind){ .tag = k }) {
+            NodeKind.NK_VAR() => {
+                return strcmp(self->arena->nodes[e].text2, name) == 0;
+            }
+            NodeKind.NK_MEMBER() | NodeKind.NK_ARROW() => {
+                if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
+                return self->expr_mentions(self->arena->nodes[e].a, name);
+            }
+            NodeKind.NK_CALL() => {
+                if (strcmp(self->arena->nodes[e].text2, name) == 0) return 1;
+                for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
+                    if (self->expr_mentions(p, name)) return 1;
+                return 0;
+            }
+            _ => { }
         }
         if (self->expr_mentions(self->arena->nodes[e].a, name)) return 1;
         if (self->expr_mentions(self->arena->nodes[e].b, name)) return 1;
@@ -246,16 +255,24 @@ impl MemoryOps for Memory {
        character test L2 applies after the name. */
     int expr_returns(int e, const char *name)
     {
-        int p;
+        int p, k;
         (void)self;
         if (e < 0) return 0;
-        if (self->arena->nodes[e].kind == N_VAR) return strcmp(self->arena->nodes[e].text2, name) == 0;
-        if (self->arena->nodes[e].kind == N_MEMBER || self->arena->nodes[e].kind == N_ARROW) return 0;
-        if (self->arena->nodes[e].kind == N_INDEX) return self->expr_returns(self->arena->nodes[e].a, name);
-        if (self->arena->nodes[e].kind == N_CALL) {
-            for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
-                if (self->expr_returns(p, name)) return 1;
-            return 0;
+        k = self->arena->nodes[e].kind;
+        match ((NodeKind){ .tag = k }) {
+            NodeKind.NK_VAR() => {
+                return strcmp(self->arena->nodes[e].text2, name) == 0;
+            }
+            NodeKind.NK_MEMBER() | NodeKind.NK_ARROW() => { return 0; }
+            NodeKind.NK_INDEX() => {
+                return self->expr_returns(self->arena->nodes[e].a, name);
+            }
+            NodeKind.NK_CALL() => {
+                for (p = self->arena->nodes[e].a; p >= 0; p = self->arena->nodes[p].next)
+                    if (self->expr_returns(p, name)) return 1;
+                return 0;
+            }
+            _ => { }
         }
         if (self->expr_returns(self->arena->nodes[e].a, name)) return 1;
         if (self->expr_returns(self->arena->nodes[e].b, name)) return 1;
@@ -349,18 +366,23 @@ impl MemoryOps for Memory {
        anything else owned and named on the line escapes. */
     int leak_assign(int n)
     {
-        int lhs, rhs, bv, i;
+        int lhs, rhs, bv, i, k;
         (void)self;
         lhs = self->arena->nodes[n].a;
         rhs = self->arena->nodes[n].b;
         bv = -1;
         if (lhs >= 0) {
-            if (self->arena->nodes[lhs].kind == N_VAR)
-                bv = self->sym->find_var(self->arena->nodes[lhs].text2);
-            else if (self->arena->nodes[lhs].kind == N_MEMBER || self->arena->nodes[lhs].kind == N_ARROW) {
-                int b = self->arena->nodes[lhs].a;
-                if (b >= 0 && self->arena->nodes[b].kind == N_VAR)
-                    bv = self->sym->find_var(self->arena->nodes[b].text2);
+            k = self->arena->nodes[lhs].kind;
+            match ((NodeKind){ .tag = k }) {
+                NodeKind.NK_VAR() => {
+                    bv = self->sym->find_var(self->arena->nodes[lhs].text2);
+                }
+                NodeKind.NK_MEMBER() | NodeKind.NK_ARROW() => {
+                    int b = self->arena->nodes[lhs].a;
+                    if (b >= 0 && self->arena->nodes[b].kind == N_VAR)
+                        bv = self->sym->find_var(self->arena->nodes[b].text2);
+                }
+                _ => { }
             }
         }
         for (i = 0; i < self->sym->nvar; i++) {

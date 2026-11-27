@@ -871,8 +871,8 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
                 }
                 else {
                     if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "map"))) {
-                        struct frontend_parse_MapBuild * __ct_tmp15 = frontend_parse_mapbuild_get();
-                        n = __ct_tmp15->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp15, _self->cur_unit);
+                        struct frontend_parse_MapBuild * __ct_tmp18 = frontend_parse_mapbuild_get();
+                        n = __ct_tmp18->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp18, _self->cur_unit);
                     }
                     else {
                         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "enum"))) {
