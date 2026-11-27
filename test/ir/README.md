@@ -142,7 +142,7 @@ defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，D
   SH-113 的 6 组 8 条边界断言保持全绿；注释/字符串/前缀不再可能拉活一个单元。
 - 图节点/边枚举与 TIR 共用；`tgraph_has_cycle` 接替 Verifier V4 的实例环 DFS。
 - `ct build` 默认由 LIR 打印函数体（`--ir=off` / `CT_LIR=0` 是 oracle）；单文件编译路径
-  默认仍是 AST，剩余 69 项差异登记在
+  默认仍是 AST，剩余 37 个夹具（38 条断言）登记在
   [S8 差异清单](../../docs/reviews/2026-11-27-s8-ir2-diff-list.md)。
 
 ## S1 的已知边界（不声称已覆盖）
