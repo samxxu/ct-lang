@@ -1173,9 +1173,7 @@ pub int closure_var_lookup(struct Emitter *self, const char *name)
 
 pub int eb_int(struct EmitBuf *b, int v)
 {
-    char tmp[32];
-    snprintf(tmp, sizeof tmp, "%d", v);
-    return eb_str(b, tmp);
+    return eb_str(b, tool::sh::ct_scratch_fmt("%d", v));
 }
 
 pub int eb_put(struct EmitBuf *b, const char *s, int n)
@@ -2208,7 +2206,7 @@ pub int em_expr_newobj(struct Emitter *self, int n, int nk)
        calls the instance constructor with the compound literal. The
        payload is copied by move; the literal's owning place
        initialisers were already retained by `emit_raw_init`. */
-    char tmp[MAX_TEXT];
+    const char *tmp;
     const char *ctype;
     int k;
     if (!self->cur_ret[0])
@@ -2216,7 +2214,7 @@ pub int em_expr_newobj(struct Emitter *self, int n, int nk)
             "'new' is only supported in a local initializer; a file-scope or static object cannot allocate at run time");
     k = self->ntmp;
     self->ntmp++;
-    snprintf(tmp, sizeof tmp, "__ct_new%d", k);
+    tmp = tool::sh::ct_scratch_fmt("__ct_new%d", k);
     ctype = runtime::text::ct_internf("struct %s", self->arena->nodes[n].text2);
     if (!ctype) return self->fail_from(n, "out of memory");
     fprintf(self->out, "({ %s %s = %s__new(&(%s)", ctype, tmp,
@@ -2511,7 +2509,7 @@ pub int em_expr_try(struct Emitter *self, int n, int nk)
     char *rerr;
     const char *vty;
     const char *ety;
-    char qt[MAX_TEXT];
+    const char *qt;
     int od = 0;
     int q, si, fi, h, save_disc;
 
@@ -2561,7 +2559,7 @@ pub int em_expr_try(struct Emitter *self, int n, int nk)
     }
     q = self->ntmp;
     self->ntmp++;
-    snprintf(qt, sizeof qt, "__ct_q%d", q);
+    qt = tool::sh::ct_scratch_fmt("__ct_q%d", q);
     fprintf(self->out, "({ %s %s = ", opty, qt);
     /* the operand is an ordinary value context, so an inner `?` must
        not inherit the outer statement's discard */
@@ -5025,9 +5023,7 @@ pub int match_expr_emit(struct Emitter *self, int n)
             int asg = self->arena->nodes[arm].c;
             int tv = self->arena->nodes[asg].a;
             if (tv >= 0) {
-                char nm[32];
-                snprintf(nm, sizeof nm, "__ct_mres%d", k);
-                self->arena->nodes[tv].text2 = runtime::text::ct_intern(nm);
+                self->arena->nodes[tv].text2 = runtime::text::ct_internf("__ct_mres%d", k);
                 if (!self->arena->nodes[tv].text2) return self->fail("out of memory");
             }
         }
@@ -5744,7 +5740,7 @@ pub void sb_push(struct Emitter *self, const char *name, const char *type, int o
 pub int sb_push_params(struct Emitter *self, int first, int anon)
 {
     int p, ai, ai2;
-    char uname[32];
+    const char *uname;
     g_sb.n = 0;
     g_sb.ln = 0;
     g_sb.nblk = 0;
@@ -5752,7 +5748,7 @@ pub int sb_push_params(struct Emitter *self, int first, int anon)
     for (p = first; p >= 0; p = self->arena->nodes[p].next) {
         const char *nm = self->arena->nodes[p].text2;
         if (!nm[0] && anon) {
-            snprintf(uname, sizeof uname, "__arg%d", ai);
+            uname = tool::sh::ct_scratch_fmt("__arg%d", ai);
             nm = uname;
         }
         if (nm[0] && self->arena->nodes[p].text3[0] == 0) {

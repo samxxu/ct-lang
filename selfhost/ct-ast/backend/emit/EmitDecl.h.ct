@@ -1542,7 +1542,7 @@ pub int emit_default_method(struct Emitter *e, int si, const char *stype, int ti
 {
     struct MethodSig *sig;
     int p, k, ai;
-    char uname[32];
+    const char *uname;
     const char *fld;
     const char *msg;
 
@@ -1574,7 +1574,7 @@ pub int emit_default_method(struct Emitter *e, int si, const char *stype, int ti
             } else if (e->emit_type_name_dims(e->arena->nodes[p].text, e->arena->nodes[p].text2,
                                               e->arena->nodes[p].text3) != 0) return -1;
         } else {
-            snprintf(uname, sizeof uname, "__arg%d", ai);
+            uname = tool::sh::ct_scratch_fmt("__arg%d", ai);
             if (e->arena->nodes[p].aux == 2 || e->arena->nodes[p].aux == 3) {
                 /* S1a-0 C2n-3: `type + " *"` is generated text (`159 + 2`); a
                    160-byte row could drop the pointer. */
@@ -1602,7 +1602,7 @@ pub int emit_default_method(struct Emitter *e, int si, const char *stype, int ti
             if (!e->node_mentions(sig->body, e->arena->nodes[p].text2))
                 fprintf(e->out, "    (void)%s;\n", e->arena->nodes[p].text2);
         } else {
-            snprintf(uname, sizeof uname, "__arg%d", ai);
+            uname = tool::sh::ct_scratch_fmt("__arg%d", ai);
             fprintf(e->out, "    (void)%s;\n", uname);
         }
         ai++;
@@ -1890,13 +1890,13 @@ pub int preemit_insts_for(struct Emitter *self, const char *type)
 {
     int i, n;
     struct StructInst *insts;
-    char pat[MAX_TEXT + 16];
+    const char *pat;
 
     insts = frontend::sym::ct_insts(&n);
     if (!insts) return 0;
     for (i = 0; i < n; i++) {
         if (insts[i].emitted) continue;
-        snprintf(pat, sizeof pat, "struct %s", insts[i].name);
+        pat = tool::sh::ct_scratch_fmt("struct %s", insts[i].name);
         if (strstr(type, pat)) {
             if (inst_emit_one(self, i) != 0) return -1;
         }

@@ -1832,9 +1832,7 @@ int backend_emit_closure_var_lookup(struct backend_emit_Emitter * self, const ch
     return (-1);
 }
 int backend_emit_eb_int(struct backend_emit_EmitBuf * b, int v) {
-    char tmp[32];
-    snprintf(tmp, sizeof(tmp), "%d", v);
-    return backend_emit_eb_str(b, tmp);
+    return backend_emit_eb_str(b, tool_sh_ct_scratch_fmt("%d", v));
 }
 int backend_emit_eb_put(struct backend_emit_EmitBuf * b, const char * s, int n) {
     int need;
@@ -3031,7 +3029,7 @@ int backend_emit_em_expr_member(struct backend_emit_Emitter * self, int n, int n
 }
 int backend_emit_em_expr_newobj(struct backend_emit_Emitter * self, int n, int nk) {
     (void)(nk);
-    char tmp[MAX_TEXT];
+    const char * tmp;
     const char * ctype;
     int k;
     if ((!self->cur_ret[0])) {
@@ -3039,7 +3037,7 @@ int backend_emit_em_expr_newobj(struct backend_emit_Emitter * self, int n, int n
     }
     k = self->ntmp;
     self->ntmp++;
-    snprintf(tmp, sizeof(tmp), "__ct_new%d", k);
+    tmp = tool_sh_ct_scratch_fmt("__ct_new%d", k);
     ctype = runtime_text_ct_internf("struct %s", self->arena->nodes[n].text2);
     if ((!ctype)) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "out of memory");
@@ -3326,7 +3324,7 @@ int backend_emit_em_expr_try(struct backend_emit_Emitter * self, int n, int nk) 
     char * rerr;
     const char * vty;
     const char * ety;
-    char qt[MAX_TEXT];
+    const char * qt;
     int od = 0;
     int q;
     int si;
@@ -3378,7 +3376,7 @@ int backend_emit_em_expr_try(struct backend_emit_Emitter * self, int n, int nk) 
     }
     q = self->ntmp;
     self->ntmp++;
-    snprintf(qt, sizeof(qt), "__ct_q%d", q);
+    qt = tool_sh_ct_scratch_fmt("__ct_q%d", q);
     fprintf(self->out, "({ %s %s = ", opty, qt);
     save_disc = self->try_discard;
     self->try_discard = 0;
@@ -6020,9 +6018,7 @@ int backend_emit_match_expr_emit(struct backend_emit_Emitter * self, int n) {
             int asg = self->arena->nodes[arm].c;
             int tv = self->arena->nodes[asg].a;
             if (tv >= 0) {
-                char nm[32];
-                snprintf(nm, sizeof(nm), "__ct_mres%d", k);
-                self->arena->nodes[tv].text2 = runtime_text_ct_intern(nm);
+                self->arena->nodes[tv].text2 = runtime_text_ct_internf("__ct_mres%d", k);
                 if ((!self->arena->nodes[tv].text2)) {
                     return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
                 }
@@ -6881,7 +6877,7 @@ int backend_emit_sb_push_params(struct backend_emit_Emitter * self, int first, i
     int p;
     int ai;
     int ai2;
-    char uname[32];
+    const char * uname;
     backend_emit_g_sb.n = 0;
     backend_emit_g_sb.ln = 0;
     backend_emit_g_sb.nblk = 0;
@@ -6889,7 +6885,7 @@ int backend_emit_sb_push_params(struct backend_emit_Emitter * self, int first, i
     for (p = first; p >= 0; p = self->arena->nodes[p].next) {
         const char * nm = self->arena->nodes[p].text2;
         if (((!nm[0]) && anon)) {
-            snprintf(uname, sizeof(uname), "__arg%d", ai);
+            uname = tool_sh_ct_scratch_fmt("__arg%d", ai);
             nm = uname;
         }
         if ((nm[0] && (self->arena->nodes[p].text3[0] == 0))) {

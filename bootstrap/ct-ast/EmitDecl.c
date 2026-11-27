@@ -1974,7 +1974,7 @@ int backend_emit_emit_default_method(struct backend_emit_Emitter * e, int si, co
     int p;
     int k;
     int ai;
-    char uname[32];
+    const char * uname;
     const char * fld;
     const char * msg;
     sig = (&e->sym->traits[ti].m[mi]);
@@ -2003,7 +2003,7 @@ int backend_emit_emit_default_method(struct backend_emit_Emitter * e, int si, co
             }
         }
         else {
-            snprintf(uname, sizeof(uname), "__arg%d", ai);
+            uname = tool_sh_ct_scratch_fmt("__arg%d", ai);
             if (((e->arena->nodes[p].aux == 2) || (e->arena->nodes[p].aux == 3))) {
                 const char * pbuf;
                 pbuf = tool_sh_ct_scratch_fmt("%s *", e->arena->nodes[p].text);
@@ -2037,7 +2037,7 @@ int backend_emit_emit_default_method(struct backend_emit_Emitter * e, int si, co
             }
         }
         else {
-            snprintf(uname, sizeof(uname), "__arg%d", ai);
+            uname = tool_sh_ct_scratch_fmt("__arg%d", ai);
             fprintf(e->out, "    (void)%s;\n", uname);
         }
         ai++;
@@ -2378,7 +2378,7 @@ int backend_emit_preemit_insts_for(struct backend_emit_Emitter * self, const cha
     int i;
     int n;
     struct frontend_sym_StructInst * insts;
-    char pat[MAX_TEXT + 16];
+    const char * pat;
     insts = frontend_sym_ct_insts((&n));
     if ((!insts)) {
         return 0;
@@ -2387,7 +2387,7 @@ int backend_emit_preemit_insts_for(struct backend_emit_Emitter * self, const cha
         if (insts[i].emitted) {
             continue;
         }
-        snprintf(pat, sizeof(pat), "struct %s", insts[i].name);
+        pat = tool_sh_ct_scratch_fmt("struct %s", insts[i].name);
         if (strstr(type, pat)) {
             if (backend_emit_inst_emit_one(self, i) != 0) {
                 return (-1);
