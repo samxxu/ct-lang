@@ -279,4 +279,4 @@ $ diff -r -x .ctcache bootstrap/ct-ast <dir>   # 无差异 = 自举不动点
 | --- | --- | --- | --- |
 | DEV | S8 收尾：D-013 真 lowering（owning 局部/形参/结果/rebind/字段初始化/sret/跳转清理）+ S5 守卫与 or-pattern；自举 **1638/1638、78/78 ready**，语料 **498/498、80/80 ready**，0 字节差异；剩余 4 个 `test/ast` 探针差异见 §3e.3 | 2026-11-27 | 本文件 §1–§3e；`test/ir/run.sh` 15 checks OK；`check-seed OK`；`check-all` 8 门；`check-ast`、`check-sanitizers`、`check-docs`、`g1/g8` 见交付报告；源码 + seed 提交 `85f0f80f` |
 | DEV | S8 外壳收尾：实例闭包 / ADT/Box 胶水 / header include-dep-shim / 函数原型（含 inherent）改为 `LModulePlan` 行；三个产品入口删除 AST/符号表兜底；4 个 `test/ast` 探针差异清零（882 夹具 0 差异）；语料 498/498、自举 1638/1638 与 C 树逐字节不变；剩余 map JSON 与 §3b 末段列出的写者选择 | 2026-11-27 | 本文件 §3f；`test/ir/run.sh` 15 checks；`check-all` 8 门；`check-seed` 两轮；`check-sanitizers`；`check-docs`；`g0/g1/g8` |
-| REV | 待签字 | — | 逐条复核 §3 的回退类型、§3d 的剩余边界与“回退 ≠ 已降级”；外壳收尾的“行化 ≠ 只换读取位置”（§3f.1 表） |
+| REV | 复核通过：§3/§3e 回退类型、§3d 剩余边界、§3e.3 保留的 6 类函数级回退（另 >256 名为单元级）、§3f「行化 ≠ 只换读取位置」逐条核对；“回退 ≠ 已降级”成立；DOC-89 锚点豁免仅限已发生拆分的历史记录 | 2026-11-28 | 本文件 §3–§3f；`test/ir/run.sh` 15 checks、`check-goldens-ast` 25/25、`check-seed` 两轮、`check-docs` + `--selftest`、`g0/g1/g6/g8` OK |

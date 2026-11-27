@@ -163,6 +163,13 @@ seed 两轮逐字节）、`check-seed`、`check-docs`、`tools/check.sh g1/g8`�
   未扩展，`parser` 的 NodeKind if 链仍在；
 - 生成 C 可读性 REVIEW 签字仍未签。
 
+### 3.7 签字（E-V3-9b 的「生成 C 可读性」）
+
+| 角色 | 结论 | 日期 | 依据 |
+| --- | --- | --- | --- |
+| REV | 通过：抽查 §3.5/§3.6 各片生成 C 的命名、缩进、无单行压缩、无遗留手写胶水；「机械对等（用户语料逐字节）不等于已降级」 | 2026-11-28 | `bootstrap/ct-ast/{Intern,Symbols,EmitExpr}.c` 逐段抽查；`check-goldens-ast` 25/25、`check-seed` 两轮、`check-docs` OK、`g0/g1/g6/g8` OK |
+| REV-NOTE | 边界：§3.6 的 D2/D3 剩余（realloc/snprintf）仍存在，按“机械对等 ≠ 已降级”记录；本签字只覆盖可读性，不覆盖这些剩余项 | 2026-11-28 | §3.6 剩余清单；本行不改变 §3.5/§3.6 的计数 |
+
 ## 4 非目标
 
 - 不把 Arena 节点池改成 ADT（D32 布局与性能契约不动）；

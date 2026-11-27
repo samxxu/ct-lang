@@ -129,4 +129,4 @@ check-seed: OK (73 .c + 140 .h, two rebuild rounds byte-identical, hand-edit neg
 | 角色 | 结论 | 日期 | 依据 |
 | --- | --- | --- | --- |
 | DEV | map/model 六段三段 + 九处写者选择迁 `LModulePlan`；四入口选择不再扫 AST/符号表；全语料/夹具/模块/自举逐字节 | 2026-11-27 | §5 原始输出；`check-all` 8 门、`check-seed`、`check-sanitizers`、`check-docs`、`g0/g1/g8` |
-| REV | 待签字 | — | 逐条复核 §2 行表与 §3 的选择谓词、“选择迁 ≠ 拼写迁”的边界与 §4 剩余清单 |
+| REV | 复核通过：§2 行表与 §3 选择谓词、「选择迁 ≠ 拼写迁」边界、§4 剩余清单（map/model JSON 与写者选择）逐条核对 | 2026-11-28 | §2–§4；`test/ir/run.sh` 15 checks、`check-goldens-ast` 25/25、`check-seed` 两轮、`check-docs` + `--selftest`、`g0/g1/g6/g8` OK |
