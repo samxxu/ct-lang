@@ -467,6 +467,10 @@ impl DriverOps for Driver {
            sets the default before it parses the flag, so `--check-level=off`
            remains the silent escape hatch and restores the pre-SH-115 build. */
         self->m->types_level = 0;
+        /* S7 REQ-TYPE-1: the default-path class gate is per run. `build` and
+           `check --types` leave it at 0 and keep their own severity; the
+           compile branch below raises it. */
+        tool::diag::ct_diag_set_types_class(0, 0);
         /* Phase 32: `--types` is an opt-in gate on `ct check` only. The scan
            runs before the `build` dispatch so `ct build --types` names the
            rule instead of failing as an unknown option deeper in. */
@@ -480,13 +484,15 @@ impl DriverOps for Driver {
                 break;
             }
         }
-        /* PH-85 S85d: `--check-level=off|warn|error` is a build-only flag; the
-           B checker it wires into the build has no meaning for `check`
+        /* PH-85 S85d: `--check-level=off|warn|error` selects the severity of
+           the type-checker findings. v1-PH-2 S7 adds `ct compile` (and the
+           bare `ctc <file>` form) as a second host, whose default path now
+           runs the three §4.53 classes; `ct check` keeps its own opt-in
            (`--types` already makes every finding an error there). */
         for (i = 1; i < argc; i++) {
             if (strncmp(argv[i], "--check-level", 13) == 0) {
-                if (!(argc > 1 && strcmp(argv[1], "build") == 0)) {
-                    fprintf(stderr, "ctc: --check-level is only valid with 'ct build'\n");
+                if (argc > 1 && strcmp(argv[1], "check") == 0) {
+                    fprintf(stderr, "ctc: --check-level is only valid with 'ct build' or 'ct compile'\n");
                     return 1;
                 }
             }
@@ -631,6 +637,15 @@ impl DriverOps for Driver {
             argv++;
             argc--;
         }
+        /* S7 REQ-TYPE-1: the compile default path now runs the §4.53
+           judgement classes. The mask below names the classes this slice
+           enables (1 ordinary assignment / initializer; 2 return; 4 container
+           argument); the level is `error` and the CLI `--check-level` below
+           may downgrade it to `warn` or turn it `off`. `ct check` never
+           reaches here with `check_mode == 0`, so its `--types` opt-in is
+           untouched. */
+        if (self->m->check_mode == 0)
+            tool::diag::ct_diag_set_types_class(1, 2);
         self->m->build_mode = 0;
         self->m->line_mode = 0;
         self->m->line_force = -1;
@@ -639,6 +654,7 @@ impl DriverOps for Driver {
             if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
                 printf("usage: %s <input.ct> [-o <output.c>] [--line|--no-line]\n"
                        "              [--emit-map <file|->] [--emit-model <file|->] [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n"
+                       "              [--check-level=off|warn|error]\n"
                        "       %s check <input.ct> [--types] [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n"
                        "       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>] [--locked]\n"
                        "                 [--emit-c] [--outdir <dir>] [--cc <path>]\n"
@@ -768,6 +784,33 @@ impl DriverOps for Driver {
                unknown option in the loop; the flag itself is already set. */
             if (strcmp(argv[i], "--types") == 0) {
                 self->p->types_mode = 1;
+                continue;
+            }
+            /* S7 REQ-TYPE-1: the compile path's severity knob, same spellings
+               as `ct build`. `off` clears the class gate, so the run is the
+               silent pre-S7 compile again; `warn` reports and still writes
+               the `.c`; `error` is the default. */
+            if (strncmp(argv[i], "--check-level", 13) == 0) {
+                const char *v;
+                int lv;
+                if (strcmp(argv[i], "--check-level") == 0) {
+                    if (i + 1 >= argc) {
+                        fprintf(stderr, "ctc: --check-level needs an argument\n");
+                        return 1;
+                    }
+                    i++;
+                    v = argv[i];
+                } else {
+                    v = argv[i] + 14;
+                }
+                if (strcmp(v, "off") == 0) lv = 0;
+                else if (strcmp(v, "warn") == 0) lv = 1;
+                else if (strcmp(v, "error") == 0) lv = 2;
+                else {
+                    fprintf(stderr, "ctc: --check-level takes off, warn or error, not '%s'\n", v);
+                    return 1;
+                }
+                tool::diag::ct_diag_set_types_class(1, lv);
                 continue;
             }
             /* PH-70: flow/semantic findings share `ct check`; the flag is

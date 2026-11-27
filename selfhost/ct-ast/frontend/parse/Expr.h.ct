@@ -1926,7 +1926,11 @@ impl ExprOps for Expr {
                         return tool::diag::ct_sem_error(dl, dc,
                             "'$' needs a non-void result; this hop has none (PH-76)",
                             self->sup->mem->path);
-                    if (self->types_mode && *self->types_mode) {
+                    /* S7 REQ-TYPE-1: a `$` target is an assignment, so the
+                       compile default path judges it through the assignment
+                       class gate; `--types` / `build` are unchanged. */
+                    if ((self->types_mode && *self->types_mode)
+                        || tool::diag::ct_type_class_assign()) {
                         self->chk_line = dl;
                         self->chk_col = dc;
                         self->chk_arg = 0;

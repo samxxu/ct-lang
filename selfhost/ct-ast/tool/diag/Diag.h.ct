@@ -150,6 +150,10 @@ trait DiagStore {
        0 off (no gate runs), 1 warn (the finding prints but the build goes on),
        2 error (the finding is a hard error, the pre-PH-85 meaning). */
     void set_types_level(int on);
+    /* S7 REQ-TYPE-1: the class mask / level `ct compile` uses. The store only
+       keeps the values; the gates read them through the `ct_type_class_*`
+       primitives below, so both grammar layers agree on one policy. */
+    void set_types_class(int mask, int level);
     /* LANG-25: text mode appends the stable code only on request. */
     void set_codes(int on);
     int  type_fail(int line, int col, const char *msg, const char *path);
@@ -183,6 +187,15 @@ struct Diag {
        default and v1-PH-1 S3 moved it to 2 (`error`), so only an explicit
        `--check-level=off` (0) restores the exact pre-PH-85 build. */
     int  types_level;
+    /* S7 REQ-TYPE-1: the default-path class gate. `types_level` above is the
+       build path's whole-B knob, but `ct compile` has no build context, so the
+       three §4.53 judgement classes are enabled one slice at a time through a
+       mask (1 assignment / initializer, 2 return, 4 container argument) with a
+       level of its own (0 off, 1 warn, 2 error). `ct check --types` and
+       `ct build` leave the mask at 0 and keep their existing severity, so the
+       new gate cannot change either of them. */
+    int  types_class_mask;
+    int  types_class_level;
     /* LANG-25: `--diag-codes` appends `[E-...]` / `[W-...]` to text lines.
        Default text stays byte-identical; JSON carries the code either way. */
     int  codes;
@@ -852,6 +865,14 @@ impl DiagStore for Diag {
         self->types_level = on;
     }
 
+    /* S7 REQ-TYPE-1: set by the driver once per run (the compile/bare form);
+       `ct_diag_reset` runs once per unit and must not clear a run policy. */
+    void set_types_class(int mask, int level)
+    {
+        self->types_class_mask = mask;
+        self->types_class_level = level;
+    }
+
     void set_codes(int on)
     {
         self->codes = on ? 1 : 0;
@@ -1052,6 +1073,49 @@ pub void ct_diag_set_types_level(int on);
 void ct_diag_set_types_level(int on)
 {
     g_diag.set_types_level(on);
+}
+
+/* S7 REQ-TYPE-1: the three §4.53 classes on the default path. `ct compile`
+   sets the mask / level once; each judgement site asks its own class gate, so
+   a slice can be rolled back by clearing one bit. The gates answer 0 when the
+   level is off, which is the `--check-level=off` escape hatch. */
+pub void ct_diag_set_types_class(int mask, int level);
+void ct_diag_set_types_class(int mask, int level)
+{
+    g_diag.set_types_class(mask, level);
+}
+
+pub int ct_type_class_assign(void);
+int ct_type_class_assign(void)
+{
+    return g_diag.types_class_level > 0 && (g_diag.types_class_mask & 1) != 0;
+}
+
+pub int ct_type_class_return(void);
+int ct_type_class_return(void)
+{
+    return g_diag.types_class_level > 0 && (g_diag.types_class_mask & 2) != 0;
+}
+
+pub int ct_type_class_container(void);
+int ct_type_class_container(void)
+{
+    return g_diag.types_class_level > 0 && (g_diag.types_class_mask & 4) != 0;
+}
+
+/* S7 REQ-TYPE-1: one class finding's severity. With no class level set (build
+   and `ct check --types`) it falls back to `record_type_warn`, so both keep
+   the pre-S7 path byte for byte. On the default path level 2 is a hard error
+   (the build cannot turn a bad assignment into C) and level 1 is the
+   documented downgrade. */
+pub int ct_type_class_warn(int line, int col, const char *callee, const char *msg,
+                           const char *path);
+int ct_type_class_warn(int line, int col, const char *callee, const char *msg,
+                       const char *path)
+{
+    if (g_diag.types_class_level == 2)
+        return g_diag.sem_error(line, col, msg, path);
+    return g_diag.record_type_warn(line, col, callee, msg, path);
 }
 
 pub void ct_diag_set_codes(int on);

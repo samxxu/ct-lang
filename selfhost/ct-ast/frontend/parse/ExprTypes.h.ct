@@ -333,7 +333,11 @@ impl ExprTypes for Expr {
         int designated, is_zero, aline, acol;
         size_t bl;
 
-        if (!self->types_mode || !*self->types_mode) return 0;
+        /* S7 REQ-TYPE-1: a brace initializer belongs to the assignment /
+           initializer class, so the compile default path reaches it through
+           the class gate; `check --types` / `build` keep the whole-B switch. */
+        if (!(self->types_mode && *self->types_mode)
+            && !tool::diag::ct_type_class_assign()) return 0;
         if (!type || !raw) return 0;
         bt = type;
         if (strncmp(bt, "struct ", 7) == 0) bt += 7;
@@ -755,8 +759,12 @@ impl ExprTypes for Expr {
         if (diag == 7 || diag == 8)
             return tool::diag::ct_sem_error(self->chk_line, self->chk_col, msg,
                                             self->sup->mem->path);
-        return tool::diag::ct_type_warn(self->chk_line, self->chk_col, "", msg,
-                                        self->sup->mem->path);
+        /* S7 REQ-TYPE-1: on the compile default path a §4.53 class finding is
+           a hard error (level 2) or the explicit `warn` downgrade; with no
+           class level it is the same `record_type_warn` call as before, so
+           `ct build` and `ct check --types` are unchanged. */
+        return tool::diag::ct_type_class_warn(self->chk_line, self->chk_col, "", msg,
+                                              self->sup->mem->path);
     }
 
     /* PH-79 fix SH-100: an array value where a `T[]` is expected is a view.

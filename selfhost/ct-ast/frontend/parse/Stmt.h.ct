@@ -2759,8 +2759,11 @@ impl StmtOps for Stmt {
                     }
                     /* Phase 32 S3 (L32-1): the declared type against the
                        initialiser. The position is the initialiser's own
-                       start, and the whole check stays behind `--types`. */
-                    if (self->ex->types_mode && *self->ex->types_mode) {
+                       start. `--types` keeps its opt-in; v1-PH-2 S7 also
+                       enables it on the compile default path through the
+                       assignment class gate. */
+                    if ((self->ex->types_mode && *self->ex->types_mode)
+                        || tool::diag::ct_type_class_assign()) {
                         int is_zero = 0;
                         const char *out = self->ex->chk_type_text(e, &is_zero);
                         if (out) {
@@ -3225,8 +3228,10 @@ impl StmtOps for Stmt {
             /* Phase 32 S4 (L32-2): the target's declared type against the
                right-hand side, before an interface slot boxes it. This same
                branch carries an `into` block's `.field = expr`, whose type
-               `expr_type` derives from the receiver record. */
-            if (self->ex->types_mode && *self->ex->types_mode && tt[0]) {
+               `expr_type` derives from the receiver record. S7 adds the
+               compile default path through the assignment class gate. */
+            if (((self->ex->types_mode && *self->ex->types_mode)
+                 || tool::diag::ct_type_class_assign()) && tt[0]) {
                 int is_zero = 0;
                 const char *out = self->ex->chk_type_text(rhs, &is_zero);
                 if (out) {
