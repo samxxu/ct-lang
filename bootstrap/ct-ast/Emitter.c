@@ -21,6 +21,7 @@
 #include "EmitInvariant.h"
 #include "EmitHoist.h"
 #include "EmitInit.h"
+#include "EmitHeader.h"
 #include "LModule.h"
 #include "Vec.h"
 #include "Result.h"
@@ -314,7 +315,6 @@ static int sb_push_params(struct backend_emit_Emitter *, int, int);
 static int sb_retain_params(struct backend_emit_Emitter *, int);
 static int sb_end_body(struct backend_emit_Emitter *, int);
 static int unit_init_needed(struct backend_emit_Emitter *, int);
-static int adoption_default_only(struct backend_emit_Emitter *, int, const char *);
 static int emit_default_method(struct backend_emit_Emitter *, int, const char *, int, int, int);
 static int map_visible(struct backend_emit_Emitter *, int);
 static int emit_map_prologues(struct backend_emit_Emitter *, int);
@@ -372,7 +372,7 @@ static int inst_emit_elem_protos(struct backend_emit_Emitter *, int);
 static int inst_emit_elem_helpers(struct backend_emit_Emitter *, int);
 static int ensure_adt_layout_state(int);
 static int ensure_inst_layout_state(int);
-static int ensure_shell_emit_state(int);
+static int ensure_shell_emit_state(struct backend_emit_Emitter *, int);
 static int ensure_reach(struct backend_emit_Emitter *, int);
 static int adt_layout_closure(struct backend_emit_Emitter *, int, int);
 static int inst_layout_closure(struct backend_emit_Emitter *, int, int);
@@ -502,16 +502,12 @@ static struct backend_emit_StrRetain backend_emit_g_sb;
 static struct backend_lir_LModulePlan * backend_emit_g_plan;
 static int backend_emit_g_oc_bypass_node = (-1);
 static int (*backend_emit_g_body_hook)(const char *, void *, int, int, int *, int);
-static int backend_emit_g_shell_u = (-1);
-static int backend_emit_g_shell_header;
 static int * backend_emit_g_slice_used;
 static int * backend_emit_g_adt_layout_state;
 static int backend_emit_g_adt_layout_cap;
 static int * backend_emit_g_inst_layout_state;
 static int backend_emit_g_inst_layout_cap;
-static int * backend_emit_g_shell_emit_state;
-static int backend_emit_g_shell_emit_cap;
-static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable, .__backend_emit_emithoist_vptr = &backend_emit_Emitter_backend_emit_EmitHoist_vtable, .__backend_emit_emitinit_vptr = &backend_emit_Emitter_backend_emit_EmitInit_vtable };
+static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emitheader_vptr = &backend_emit_Emitter_backend_emit_EmitHeader_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable, .__backend_emit_emithoist_vptr = &backend_emit_Emitter_backend_emit_EmitHoist_vtable, .__backend_emit_emitinit_vptr = &backend_emit_Emitter_backend_emit_EmitInit_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_indent(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int i;
@@ -533,8 +529,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
     _self->errmsg = "";
     _self->failline = 0;
     _self->cur_unit = (-1);
-    backend_emit_g_shell_u = (-1);
-    backend_emit_g_shell_header = 0;
+    backend_lir_lmod_plan_set_shell((-1), 0);
     if (_self->__backend_emit_emitinvariant_vptr->invariant_check(_self, prog) != 0) {
         return (-1);
     }
@@ -560,13 +555,13 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
     if ((backend_emit_g_slice_used && (*backend_emit_g_slice_used))) {
         emit_slice_helpers(_self);
     }
-    if (_self->__backend_emit_emitops_vptr->emit_struct_fwd(_self) != 0) {
+    if (_self->__backend_emit_emitheader_vptr->emit_struct_fwd(_self) != 0) {
         return (-1);
     }
     if (_self->__backend_emit_emitops_vptr->emit_trait_decls(_self) != 0) {
         return (-1);
     }
-    if (_self->__backend_emit_emitops_vptr->emit_vtable_fwd(_self, prog) != 0) {
+    if (_self->__backend_emit_emitheader_vptr->emit_vtable_fwd(_self, prog) != 0) {
         return (-1);
     }
     for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
@@ -609,7 +604,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
         return (-1);
     }
     for (i = 0; i < _self->sym->nfunc; i++) {
-        if (_self->__backend_emit_emitops_vptr->emit_proto(_self, i) != 0) {
+        if (_self->__backend_emit_emitheader_vptr->emit_proto(_self, i) != 0) {
             return (-1);
         }
     }
@@ -660,43 +655,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, in
     return 0;
 }
 
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_proto(void *self, int i) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int k;
-    (void)(_self);
-    if (_self->sym->funcs[i].ntparams > 0) {
-        return 0;
-    }
-    if ((_self->sym->funcs[i].is_static || ((_self->abi_mode && (*_self->abi_mode)) && (!_self->sym->funcs[i].is_pub)))) {
-        fputs("static ", _self->out);
-    }
-    fprintf(_self->out, "%s %s(", _self->sym->funcs[i].ret, _self->sym->funcs[i].cname);
-    if (_self->sym->funcs[i].nparams == 0) {
-        fputs("void", _self->out);
-    }
-    else {
-        for (k = 0; k < _self->sym->funcs[i].nparams; k++) {
-            if (k > 0) {
-                fputs(", ", _self->out);
-            }
-            fputs(_self->sym->funcs[i].ptype[k], _self->out);
-            if (((_self->sym->funcs[i].pann[k] == 2) || (_self->sym->funcs[i].pann[k] == 3))) {
-                fputs(" *", _self->out);
-            }
-            fputs(_self->sym->funcs[i].pdim[k], _self->out);
-        }
-        if (_self->sym->funcs[i].variadic) {
-            fputs(", ...", _self->out);
-        }
-    }
-    fputs(")", _self->out);
-    if (_self->sym->funcs[i].attr >= 0) {
-        fprintf(_self->out, " %s", _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->sym->funcs[i].attr));
-    }
-    fputs(";\n", _self->out);
-    return 0;
-}
-
 static int backend_emit_Emitter_backend_emit_EmitOps_unit_has_drop_impl(void *self, int u, int si) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int n;
@@ -739,161 +697,10 @@ static int backend_emit_Emitter_backend_emit_EmitOps_drop_visible(void *self, in
     return _self->__backend_emit_emitops_vptr->unit_has_drop_impl(_self, owner, si);
 }
 
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_vtable_fwd(void *self, int prog) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int n;
-    int si;
-    const char * tname;
-    (void)(_self);
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        if (_self->arena->nodes[n].kind != N_IMPL) {
-            continue;
-        }
-        si = _self->arena->nodes[n].aux;
-        if (si < 0) {
-            continue;
-        }
-        if ((!_self->arena->nodes[n].text2[0])) {
-            continue;
-        }
-        tname = _self->arena->nodes[n].text2;
-        if (((strcmp(tname, "Drop") == 0) || (strcmp(tname, "Handback") == 0))) {
-            continue;
-        }
-        if (_self->__backend_emit_emitops_vptr->vtable_exported(_self, si, tname)) {
-            fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[si].name, tname);
-        }
-        else {
-            fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n", tname, _self->sym->structs[si].name, tname);
-        }
-    }
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        int ui;
-        const char * tname;
-        if (((_self->arena->nodes[n].kind != N_STRUCT) || (!_self->arena->nodes[n].text2[0]))) {
-            continue;
-        }
-        si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[n].text2);
-        if (si < 0) {
-            continue;
-        }
-        for (ui = 0; ui < _self->sym->structs[si].nuse; ui++) {
-            tname = _self->sym->structs[si].use[ui];
-            if ((!adoption_default_only(_self, si, tname))) {
-                continue;
-            }
-            if (_self->__backend_emit_emitops_vptr->vtable_exported(_self, si, tname)) {
-                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[si].name, tname);
-            }
-            else {
-                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n", tname, _self->sym->structs[si].name, tname);
-            }
-        }
-    }
-    for (si = 0; si < _self->sym->nstructs; si++) {
-        int owner;
-        int legacy;
-        if (((!_self->sym->structs[si].uses_drop) || _self->sym->structs[si].is_template)) {
-            continue;
-        }
-        owner = _self->sym->structs[si].owner;
-        legacy = ((_self->cur_unit < 0) || (owner < 0));
-        if (_self->cur_unit < 0) {
-            fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
-        }
-        else {
-            if (legacy) {
-                if (_self->sym->structs[si].is_inst) {
-                    continue;
-                }
-                fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
-            }
-            else {
-                if (owner == _self->cur_unit) {
-                    if ((_self->sym->structs[si].has_drop_impl && (!_self->__backend_emit_emitops_vptr->unit_has_drop_impl(_self, _self->cur_unit, si)))) {
-                        continue;
-                    }
-                    fprintf(_self->out, "void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
-                }
-                else {
-                    fprintf(_self->out, "extern void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
-                }
-            }
-        }
-    }
-    for (si = 0; si < _self->sym->nstructs; si++) {
-        if (_self->sym->structs[si].has_handback_impl) {
-            fprintf(_self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n", _self->sym->structs[si].name);
-        }
-    }
-    if (_self->sym->nstructs) {
-        fputs("\n", _self->out);
-    }
-    return 0;
-}
-
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_trait_decls(void *self) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     (void)(_self);
-    return _self->__backend_emit_emitops_vptr->emit_trait_range(_self, 0, _self->sym->ntraits, 0);
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_struct_fwd(void *self) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int i;
-    int ti;
-    (void)(_self);
-    for (i = 0; i < _self->sym->nstructs; i++) {
-        if (_self->sym->structs[i].is_template) {
-            continue;
-        }
-        ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->structs[i].name);
-        if (ti < 0) {
-            continue;
-        }
-        if (_self->sym->type_kind[ti] == 1) {
-            fprintf(_self->out, "struct %s;\n", _self->sym->structs[i].name);
-        }
-        else {
-            if (_self->sym->type_kind[ti] == 6) {
-                fprintf(_self->out, "union %s;\n", _self->sym->structs[i].name);
-            }
-        }
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_trait_range(void *self, int start, int end, int mode) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int t;
-    int m;
-    int k;
-    (void)(_self);
-    for (t = start; t < end; t++) {
-        if ((_self->sym->traits[t].is_static || (_self->sym->traits[t].ntparams > 0))) {
-            continue;
-        }
-        if (((mode == 1) && (!_self->sym->traits[t].is_pub))) {
-            continue;
-        }
-        if (((mode == 2) && _self->sym->traits[t].is_pub)) {
-            continue;
-        }
-        fprintf(_self->out, "struct %s_vtbl {\n", _self->sym->traits[t].name);
-        for (m = 0; m < _self->sym->traits[t].nm; m++) {
-            fprintf(_self->out, "    %s (*%s)(void *", _self->sym->traits[t].m[m].ret, _self->sym->traits[t].m[m].name);
-            for (k = 0; k < _self->sym->traits[t].m[m].nparams; k++) {
-                fprintf(_self->out, ", %s", _self->sym->traits[t].m[m].ptype[k]);
-                if (((_self->sym->traits[t].m[m].pann[k] == 2) || (_self->sym->traits[t].m[m].pann[k] == 3))) {
-                    fputs(" *", _self->out);
-                }
-            }
-            fputs(");\n", _self->out);
-        }
-        fputs("};\n", _self->out);
-        fprintf(_self->out, "struct %s_iface {\n    void *self;\n    const struct %s_vtbl *vt;\n};\n\n", _self->sym->traits[t].name, _self->sym->traits[t].name);
-    }
-    return 0;
+    return _self->__backend_emit_emitheader_vptr->emit_trait_range(_self, 0, _self->sym->ntraits, 0);
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_unit_init(void *self, int prog) {
@@ -2150,7 +1957,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_link_externs(void *sel
         }
         for (ui = 0; ui < _self->sym->structs[si].nuse; ui++) {
             tname = _self->sym->structs[si].use[ui];
-            if ((!adoption_default_only(_self, si, tname))) {
+            if ((!backend_emit_adoption_default_only(_self, si, tname))) {
                 continue;
             }
             if ((!_self->__backend_emit_emitops_vptr->vtable_exported(_self, si, tname))) {
@@ -3282,40 +3089,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_expr(void *self, int n
     }
 }
 
-static int backend_emit_Emitter_backend_emit_EmitOps_header_guard(void *self, const char * base, char * * out) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    size_t n;
-    size_t i;
-    size_t m;
-    char * buf;
-    (void)(_self);
-    n = strlen(base);
-    buf = tool_sh_ct_scratch_alloc(((int)(n) + 6));
-    m = 0;
-    if ((((n > 0) && (base[0] >= '0')) && (base[0] <= '9'))) {
-        buf[m] = '_';
-        m++;
-    }
-    for (i = 0; i < n; i++) {
-        char c = base[i];
-        if (((c >= 'a') && (c <= 'z'))) {
-            c = (char)(((c - 'a') + 'A'));
-        }
-        else {
-            if ((!(((c >= 'A') && (c <= 'Z')) || ((c >= '0') && (c <= '9'))))) {
-                c = '_';
-            }
-        }
-        buf[m] = c;
-        m++;
-    }
-    buf[m] = '_';
-    buf[(m + 1)] = 'H';
-    buf[(m + 2)] = 0;
-    (*out) = buf;
-    return 0;
-}
-
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_unit(void *self, int u) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     if (_self->no_write) {
@@ -3357,7 +3130,7 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_unit_header(void *sel
 {
         const char * hb = ((strcmp(_self->units[u].base, "String") == 0) ? "String_" : _self->units[u].base);
         path = tool_sh_ct_scratch_fmt("%s/%s.h", (*_self->outdir), hb);
-        if (_self->__backend_emit_emitops_vptr->header_guard(_self, hb, (&guard)) != 0) {
+        if (_self->__backend_emit_emitheader_vptr->header_guard(_self, hb, (&guard)) != 0) {
             return (-1);
         }
     }
@@ -3372,684 +3145,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_write_unit_header(void *sel
         rc = _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the header");
     }
     return rc;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_json_str(void *self, FILE * f, const char * s) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    (void)(_self);
-    for (; (*s); s++) {
-        if ((((*s) == '"') || ((*s) == '\\'))) {
-            fputc('\\', f);
-            fputc((*s), f);
-        }
-        else {
-            if ((*s) == '\n') {
-                fputs("\\n", f);
-            }
-            else {
-                if ((*s) == '\t') {
-                    fputs("\\t", f);
-                }
-                else {
-                    if ((unsigned char)((*s)) < 32) {
-                        fputc('?', f);
-                    }
-                    else {
-                        fputc((*s), f);
-                    }
-                }
-            }
-        }
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_write_model(void *self, const char * dest, int prog) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    if (_self->no_write) {
-        return 0;
-    }
-    FILE * f;
-    const char * path;
-    int n;
-    int i;
-    int j;
-    int first;
-    (void)(_self);
-    if (strcmp(dest, "-") == 0) {
-        f = stdout;
-    }
-    else {
-        f = fopen(dest, "w");
-        if ((!f)) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the model");
-        }
-    }
-    path = _self->path;
-    fputs("{\n  \"schema\": \"ct.model\",\n  \"schema_version\": 1,\n", f);
-    fputs("  \"compiler\": \"ct v", f);
-    _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->version);
-    fputs("\",\n  \"file\": \"", f);
-    _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-    fputs("\",\n  \"structs\": [", f);
-    first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        int si;
-        int bi;
-        int bn;
-        int skip = 0;
-        if (((_self->arena->nodes[n].kind != N_STRUCT) && (_self->arena->nodes[n].kind != N_UNION))) {
-            continue;
-        }
-        for (bi = 0; ((bi < _self->nbuiltin) && (!skip)); bi++) {
-            int bu = _self->builtins[bi];
-            if (((bu < 0) || (bu >= (*_self->nunits)))) {
-                continue;
-            }
-            for (bn = _self->arena->nodes[_self->units[bu].prog].a; bn >= 0; bn = _self->arena->nodes[bn].next) {
-                if (bn == n) {
-                    skip = 1;
-                    break;
-                }
-            }
-        }
-        if (skip) {
-            continue;
-        }
-        if ((((((((strcmp(_self->arena->nodes[n].text2, "ct_buf") == 0) || (strcmp(_self->arena->nodes[n].text2, "Vec") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Map") == 0)) || (strcmp(_self->arena->nodes[n].text2, "MapEntry") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Option") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Result") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Str") == 0))) {
-            continue;
-        }
-        if ((!first)) {
-            fputc(',', f);
-        }
-        fputs("{\"kind\":\"", f);
-        fputs(((_self->arena->nodes[n].kind == N_UNION) ? "union" : "struct"), f);
-        fputs("\",\"name\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text2);
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"fields\":[", _self->arena->nodes[n].line);
-        si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[n].text2);
-        if (si >= 0) {
-            for (i = 0; i < _self->sym->structs[si].nfields; i++) {
-                if (i > 0) {
-                    fputc(',', f);
-                }
-                fputs("{\"name\":\"", f);
-                _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->structs[si].fields[i].name);
-                fputs("\",\"type\":\"", f);
-                _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->structs[si].fields[i].type);
-                fputs("\",\"visibility\":\"unknown\",\"loc\":{\"file\":\"", f);
-                _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-                fprintf(f, "\",\"line\":%d,\"col\":%d}}", _self->sym->structs[si].fields[i].line, _self->sym->structs[si].fields[i].col);
-            }
-        }
-        fputs("]}", f);
-        first = 0;
-    }
-    fputs("],\n  \"enums\": [", f);
-    first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        int m;
-        int bi;
-        int bn;
-        int skip = 0;
-        if (_self->arena->nodes[n].kind != N_ENUM) {
-            continue;
-        }
-        if ((_self->arena->nodes[n].aux & 2)) {
-            continue;
-        }
-        for (bi = 0; ((bi < _self->nbuiltin) && (!skip)); bi++) {
-            int bu = _self->builtins[bi];
-            if (((bu < 0) || (bu >= (*_self->nunits)))) {
-                continue;
-            }
-            for (bn = _self->arena->nodes[_self->units[bu].prog].a; bn >= 0; bn = _self->arena->nodes[bn].next) {
-                if (bn == n) {
-                    skip = 1;
-                    break;
-                }
-            }
-        }
-        if (skip) {
-            continue;
-        }
-        if ((!first)) {
-            fputc(',', f);
-        }
-        fputs("{\"kind\":\"enum\",\"name\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text);
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"members\":[", _self->arena->nodes[n].line);
-        for ((m = _self->arena->nodes[n].a, i = 0); m >= 0; (m = _self->arena->nodes[m].next, i++)) {
-            int val = 0;
-            if (i > 0) {
-                fputc(',', f);
-            }
-            if (((_self->arena->nodes[m].a >= 0) && (_self->arena->nodes[_self->arena->nodes[m].a].kind == N_NUM))) {
-                val = (int)(_self->arena->nodes[_self->arena->nodes[m].a].num);
-            }
-            fputs("{\"name\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->arena->nodes[m].text2);
-            fprintf(f, "\",\"value\":%d}", val);
-        }
-        fputs("]}", f);
-        first = 0;
-    }
-    fputs("],\n  \"functions\": [", f);
-    first = 1;
-    for (i = 0; i < _self->sym->nfunc; i++) {
-        if ((((((strncmp(_self->sym->funcs[i].name, "str_", 4) == 0) || (strncmp(_self->sym->funcs[i].name, "vec_", 4) == 0)) || (strncmp(_self->sym->funcs[i].name, "map_", 4) == 0)) || (strncmp(_self->sym->funcs[i].name, "option_", 7) == 0)) || (strncmp(_self->sym->funcs[i].name, "result_", 7) == 0))) {
-            continue;
-        }
-        if ((!first)) {
-            fputc(',', f);
-        }
-        fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].name);
-        fputs("\",\"cname\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].cname);
-        fputs("\",\"visibility\":\"unknown\",\"returns\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ret);
-        fprintf(f, "\",\"line\":%d,\"params\":[", _self->sym->funcs[i].line);
-        for (j = 0; j < _self->sym->funcs[i].nparams; j++) {
-            if (j > 0) {
-                fputc(',', f);
-            }
-            fputs("{\"type\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ptype[j]);
-            fputs("\"}", f);
-        }
-        fputs("]}", f);
-        first = 0;
-    }
-    fputs("]\n}\n", f);
-    if (((f != stdout) && (fclose(f) != 0))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the model");
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_write_map(void *self, const char * dest, int prog, int u) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    if (_self->no_write) {
-        return 0;
-    }
-    FILE * f;
-    const char * path;
-    int trs;
-    int tre;
-    int fns;
-    int fne;
-    int cls;
-    int cle;
-    int i;
-    int j;
-    int m;
-    int n;
-    int first;
-    int si;
-    int count;
-    (void)(_self);
-    if (strcmp(dest, "-") == 0) {
-        f = stdout;
-    }
-    else {
-        f = fopen(dest, "w");
-        if ((!f)) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the map");
-        }
-    }
-    if (u >= 0) {
-        path = _self->units[u].path;
-        trs = _self->units[u].tr_start;
-        tre = _self->units[u].tr_end;
-        fns = _self->units[u].fn_start;
-        fne = _self->units[u].fn_end;
-        cls = _self->units[u].call_start;
-        cle = _self->units[u].call_end;
-    }
-    else {
-        path = _self->path;
-        trs = 0;
-        tre = _self->sym->ntraits;
-        fns = 0;
-        fne = _self->sym->nfunc;
-        cls = 0;
-        cle = (*_self->ncalls);
-    }
-    fputs("{\n", f);
-    fprintf(f, "  \"compiler\": \"ct v%s\",\n", _self->version);
-    fputs("  \"file\": \"", f);
-    _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-    fputs("\",\n", f);
-    fputs("  \"traits\": [", f);
-    first = 1;
-    for (i = trs; i < tre; i++) {
-        if ((!first)) {
-            fputc(',', f);
-        }
-        fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->traits[i].name);
-        fputs("\",\"cname\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->traits[i].name);
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"methods\":[", _self->sym->traits[i].line);
-        for (m = 0; m < _self->sym->traits[i].nm; m++) {
-            if (m > 0) {
-                fputc(',', f);
-            }
-            fputs("{\"name\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->traits[i].m[m].name);
-            fputs("\",\"ret\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->traits[i].m[m].ret);
-            fprintf(f, "\",\"params\":%d}", _self->sym->traits[i].m[m].nparams);
-        }
-        fputs("]}", f);
-        first = 0;
-    }
-    fputs("],\n", f);
-    fputs("  \"structs\": [", f);
-    first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        if (_self->arena->nodes[n].kind != N_STRUCT) {
-            continue;
-        }
-        if ((!first)) {
-            fputc(',', f);
-        }
-        fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text2);
-        fputs("\",\"cname\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text2);
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"uses\":[", _self->arena->nodes[n].line);
-        si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[n].text2);
-        if (si >= 0) {
-            for (i = 0; i < _self->sym->structs[si].nuse; i++) {
-                if (i > 0) {
-                    fputc(',', f);
-                }
-                fputc('"', f);
-                _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->structs[si].use[i]);
-                fputc('"', f);
-            }
-        }
-        fputs("]}", f);
-        first = 0;
-    }
-    fputs("],\n", f);
-    fputs("  \"functions\": [", f);
-    first = 1;
-    for (i = fns; i < fne; i++) {
-        if ((!first)) {
-            fputc(',', f);
-        }
-        fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].name);
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"ret\":\"", _self->sym->funcs[i].line);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ret);
-        fprintf(f, "\",\"params\":%d}", _self->sym->funcs[i].nparams);
-        first = 0;
-    }
-    fputs("],\n", f);
-    fputs("  \"impls\": [", f);
-    first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        const char * tname;
-        if (_self->arena->nodes[n].kind != N_IMPL) {
-            continue;
-        }
-        si = _self->arena->nodes[n].aux;
-        if (si < 0) {
-            continue;
-        }
-        if ((!_self->arena->nodes[n].text2[0])) {
-            continue;
-        }
-        tname = _self->arena->nodes[n].text2;
-        for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
-            if ((!first)) {
-                fputc(',', f);
-            }
-            fputs("{\"struct\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->sym->structs[si].name);
-            fputs("\",\"trait\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, tname);
-            fputs("\",\"method\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->arena->nodes[m].text2);
-            fputs("\",\"symbol\":\"", f);
-            fprintf(f, "%s_%s_%s", _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
-            fputs("\",\"ret\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->arena->nodes[m].text);
-            count = 0;
-            for (i = _self->arena->nodes[m].a; i > 0; i = _self->arena->nodes[i].next) {
-                count++;
-            }
-            fprintf(f, "\",\"params\":%d,\"file\":\"", count);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-            fprintf(f, "\",\"line\":%d}", _self->arena->nodes[n].line);
-            first = 0;
-        }
-    }
-    fputs("],\n", f);
-    fputs("  \"calls\": [", f);
-    for (i = cls; i < cle; i++) {
-        if (i > cls) {
-            fputc(',', f);
-        }
-        fputs("{\"caller\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->calls)[i].caller);
-        fputs("\",\"callee\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->calls)[i].callee);
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d}", (*_self->calls)[i].line);
-    }
-    fputs("],\n", f);
-    fputs("  \"maps\": [", f);
-    first = 1;
-    for (i = 0; i < (*_self->nmaps); i++) {
-        if ((*_self->maps)[i].is_binding) {
-            continue;
-        }
-        if ((!first)) {
-            fputc(',', f);
-        }
-        first = 0;
-        fputs("{\"trait\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->maps)[i].trait);
-        if ((*_self->maps)[i].is_static) {
-            int su = (*_self->maps)[i].unit;
-            fputs("\",\"static\":true", f);
-            if ((((_self->units && (su >= 0)) && (su < (*_self->nunits))) && _self->units[su].has_shim)) {
-                fputs(",\"shim\":{\"header\":\"", f);
-                _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->units[su].shim_h);
-                if (_self->units[su].shim_c) {
-                    fputs("\",\"source\":\"", f);
-                    _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, _self->units[su].shim_c);
-                }
-                fputs("\"}", f);
-            }
-            fputs(",\"instance\":\"", f);
-        }
-        else {
-            fputs("\",\"instance\":\"", f);
-        }
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->maps)[i].inst);
-        fputs("\",\"host\":\"", f);
-        if ((*_self->maps)[i].type_host) {
-            fputs("type", f);
-        }
-        else {
-            fputs(((*_self->maps)[i].ns_host ? "namespace" : "instance"), f);
-        }
-        if ((*_self->maps)[i].type_host) {
-            fputs("\",\"type\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->maps)[i].host_type);
-        }
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"bindings\":[", (*_self->maps)[i].line);
-        for (j = 0; j < (*_self->maps)[i].nb; j++) {
-            if (j > 0) {
-                fputc(',', f);
-            }
-            fputs("{\"method\":\"", f);
-            _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, (*_self->maps)[i].b[j].method);
-            fputs("\",\"symbol\":\"", f);
-            if ((*_self->maps)[i].is_static) {
-                const char * callee;
-                callee = backend_emit_map_recipe_callee_text((*_self->maps)[i].b[j].call);
-                if ((!callee)) {
-                    return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
-                }
-                _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, callee);
-            }
-            else {
-                _self->__backend_emit_emitops_vptr->emit_json_str(_self, f, ((*_self->maps)[i].b[j].direct ? (*_self->maps)[i].b[j].call : (*_self->maps)[i].b[j].wrapper));
-            }
-            if ((*_self->maps)[i].is_static) {
-                fputs("\",\"wrapper\":false,\"inline\":true}", f);
-            }
-            else {
-                fprintf(f, "\",\"wrapper\":%s}", ((*_self->maps)[i].b[j].direct ? "false" : "true"));
-            }
-        }
-        fputs("]}", f);
-    }
-    fputs("]\n", f);
-    fputs("}\n", f);
-    if (f != stdout) {
-        if (fclose(f) != 0) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the map");
-        }
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_write_abi_header(void *self, const char * path) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int i;
-    int j;
-    int k;
-    int n;
-    int ns;
-    int root;
-    int fi;
-    int order[256];
-    char * upper;
-    const char * fwd[64];
-    unsigned long h;
-    FILE * f;
-    (void)(_self);
-    if ((((!_self->abi_root) || (!_self->abi_exports)) || (!_self->abi_n))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "ABI tables are not bound");
-    }
-    root = (*_self->abi_root);
-    if (((root < 0) || (root >= (*_self->nunits)))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "bad ABI root unit");
-    }
-    upper = tool_sh_ct_scratch_alloc(((int)(strlen(_self->units[root].base)) + 1));
-{
-        const char * ub = _self->units[root].base;
-        size_t ul = strlen(ub);
-        for (i = 0; i < (int)(ul); i++) {
-            char c = ub[i];
-            if (((c >= 'a') && (c <= 'z'))) {
-                c = (char)(((c - 'a') + 'A'));
-            }
-            else {
-                if ((!(((c >= 'A') && (c <= 'Z')) || ((c >= '0') && (c <= '9'))))) {
-                    c = '_';
-                }
-            }
-            upper[i] = c;
-        }
-        upper[ul] = 0;
-    }
-    for (i = 0; upper[i]; i++) {
-        char c = upper[i];
-        if (((c >= 'a') && (c <= 'z'))) {
-            c = (char)(((c - 'a') + 'A'));
-        }
-        else {
-            if ((!(((c >= 'A') && (c <= 'Z')) || ((c >= '0') && (c <= '9'))))) {
-                c = '_';
-            }
-        }
-        upper[i] = c;
-    }
-    n = (*_self->abi_n);
-    if (n > 256) {
-        n = 256;
-    }
-    for (i = 0; i < n; i++) {
-        order[i] = _self->abi_exports[i];
-    }
-    for (i = 0; i < n; i++) {
-        for (j = (i + 1); j < n; j++) {
-            if (strcmp(_self->sym->funcs[order[i]].cname, _self->sym->funcs[order[j]].cname) > 0) {
-                k = order[i];
-                order[i] = order[j];
-                order[j] = k;
-            }
-        }
-    }
-    h = 2166136261UL;
-    for (i = 0; i < n; i++) {
-        const char * s = _self->sym->funcs[order[i]].cname;
-        while ((*s)) {
-            h = ((h ^ (unsigned char)((*s))) * 16777619UL);
-            h = (h & 4294967295UL);
-            s++;
-        }
-    }
-    f = fopen(path, "wb");
-    if ((!f)) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the ABI header");
-    }
-    fprintf(f, "/* Generated by ct v%s from %s -- ABI surface; do not edit. */\n", _self->version, _self->path);
-    fputs("/* Only the declarations in this file are ABI; the archive nm surface may be larger. */\n", f);
-    fprintf(f, "#ifndef %s_ABI_H\n#define %s_ABI_H\n\n", upper, upper);
-    fprintf(f, "#define %s_ABI_VERSION 1\n", upper);
-    fprintf(f, "#define %s_ABI_HASH 0x%08lx\n\n", upper, h);
-    ns = 0;
-    for (i = 0; i < n; i++) {
-        int p;
-        for (p = (-1); p < _self->sym->funcs[order[i]].nparams; p++) {
-            const char * tp = ((p < 0) ? _self->sym->funcs[order[i]].ret : _self->sym->funcs[order[i]].ptype[p]);
-            const char * nm;
-            int q = 0;
-            if (strncmp(tp, "struct ", 7) == 0) {
-                nm = runtime_text_ct_internf("struct %s", (tp + 7));
-            }
-            else {
-                if (strncmp(tp, "union ", 6) == 0) {
-                    nm = runtime_text_ct_internf("union %s", (tp + 6));
-                }
-                else {
-                    if (strncmp(tp, "enum ", 5) == 0) {
-                        nm = runtime_text_ct_internf("enum %s", (tp + 5));
-                    }
-                    else {
-                        continue;
-                    }
-                }
-            }
-            if ((!nm)) {
-                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
-            }
-            q = (int)(strlen(nm));
-            while (((q > 0) && (!(isalnum((unsigned char)(nm[(q - 1)])) || (nm[(q - 1)] == '_'))))) {
-                q--;
-            }
-            if ((!q)) {
-                continue;
-            }
-            nm = runtime_text_ct_intern_len(nm, q);
-            if ((!nm)) {
-                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
-            }
-            for (j = 0; j < ns; j++) {
-                if (strcmp(fwd[j], nm) == 0) {
-                    break;
-                }
-            }
-            if (((j == ns) && (ns < 64))) {
-                fwd[ns++] = nm;
-            }
-        }
-    }
-    for (i = 0; i < ns; i++) {
-        for (j = (i + 1); j < ns; j++) {
-            if (strcmp(fwd[i], fwd[j]) > 0) {
-                const char * tmp = fwd[i];
-                fwd[i] = fwd[j];
-                fwd[j] = tmp;
-            }
-        }
-    }
-    for (i = 0; i < ns; i++) {
-        fprintf(f, "%s;\n", fwd[i]);
-    }
-    if (ns > 0) {
-        fputs("\n", f);
-    }
-    for (i = 0; i < n; i++) {
-        fi = order[i];
-        fprintf(f, "%s %s(", _self->sym->funcs[fi].ret, _self->sym->funcs[fi].cname);
-        if (_self->sym->funcs[fi].nparams == 0) {
-            fputs("void", f);
-        }
-        for (j = 0; j < _self->sym->funcs[fi].nparams; j++) {
-            if (j > 0) {
-                fputs(", ", f);
-            }
-            fputs(_self->sym->funcs[fi].ptype[j], f);
-            if (((_self->sym->funcs[fi].pann[j] == 2) || (_self->sym->funcs[fi].pann[j] == 3))) {
-                fputs(" *", f);
-            }
-        }
-        fputs(");\n", f);
-    }
-    fputs("\n#endif\n", f);
-    if (fclose(f) != 0) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "cannot close the ABI header");
-    }
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_write_header(void *self, const char * outc) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    if (_self->no_write) {
-        return 0;
-    }
-    char * path;
-    if ((_self->abi_mode && (*_self->abi_mode))) {
-        return _self->__backend_emit_emitops_vptr->write_abi_header(_self, outc);
-    }
-    char * base;
-    char * guard;
-    const char * name;
-    FILE * f;
-    size_t n;
-    (void)(_self);
-    path = tool_sh_ct_scratch_dup(outc);
-    n = strlen(path);
-    if ((((n < 3) || (path[(n - 1)] != 'c')) || (path[(n - 2)] != '.'))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "output must end in .c");
-    }
-    path[(n - 1)] = 'h';
-    name = strrchr(path, '/');
-    name = (name ? (name + 1) : path);
-    base = tool_sh_ct_scratch_dup(name);
-    n = strlen(base);
-    if (n < 3) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "output name too short");
-    }
-    base[(n - 2)] = 0;
-    if (_self->__backend_emit_emitops_vptr->header_guard(_self, base, (&guard)) != 0) {
-        return (-1);
-    }
-    f = fopen(path, "w");
-    if ((!f)) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the header");
-    }
-    fprintf(f, "#ifndef %s\n", guard);
-    fprintf(f, "#define %s\n\n", guard);
-    fprintf(f, "/* Generated by ct v%s from %s (Phase 0: types only, the\n""   generated .c is self-contained).\n""   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n", _self->version, _self->path);
-    fputs("#endif\n", f);
-    if (fclose(f) != 0) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the header");
-    }
-    return 0;
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_fail(void *self, const char * msg) {
@@ -4076,13 +3171,9 @@ static int backend_emit_Emitter_backend_emit_EmitOps_fail_from(void *self, int n
 const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable = {
     .emit_indent = backend_emit_Emitter_backend_emit_EmitOps_emit_indent,
     .emit_program = backend_emit_Emitter_backend_emit_EmitOps_emit_program,
-    .emit_proto = backend_emit_Emitter_backend_emit_EmitOps_emit_proto,
     .unit_has_drop_impl = backend_emit_Emitter_backend_emit_EmitOps_unit_has_drop_impl,
     .drop_visible = backend_emit_Emitter_backend_emit_EmitOps_drop_visible,
-    .emit_vtable_fwd = backend_emit_Emitter_backend_emit_EmitOps_emit_vtable_fwd,
     .emit_trait_decls = backend_emit_Emitter_backend_emit_EmitOps_emit_trait_decls,
-    .emit_struct_fwd = backend_emit_Emitter_backend_emit_EmitOps_emit_struct_fwd,
-    .emit_trait_range = backend_emit_Emitter_backend_emit_EmitOps_emit_trait_range,
     .emit_unit_init = backend_emit_Emitter_backend_emit_EmitOps_emit_unit_init,
     .emit_impls = backend_emit_Emitter_backend_emit_EmitOps_emit_impls,
     .emit_maps = backend_emit_Emitter_backend_emit_EmitOps_emit_maps,
@@ -4105,14 +3196,8 @@ const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps
     .emit_value_for = backend_emit_Emitter_backend_emit_EmitOps_emit_value_for,
     .emit_outconv = backend_emit_Emitter_backend_emit_EmitOps_emit_outconv,
     .emit_expr = backend_emit_Emitter_backend_emit_EmitOps_emit_expr,
-    .header_guard = backend_emit_Emitter_backend_emit_EmitOps_header_guard,
     .emit_unit = backend_emit_Emitter_backend_emit_EmitOps_emit_unit,
     .write_unit_header = backend_emit_Emitter_backend_emit_EmitOps_write_unit_header,
-    .emit_json_str = backend_emit_Emitter_backend_emit_EmitOps_emit_json_str,
-    .write_model = backend_emit_Emitter_backend_emit_EmitOps_write_model,
-    .write_map = backend_emit_Emitter_backend_emit_EmitOps_write_map,
-    .write_abi_header = backend_emit_Emitter_backend_emit_EmitOps_write_abi_header,
-    .write_header = backend_emit_Emitter_backend_emit_EmitOps_write_header,
     .fail = backend_emit_Emitter_backend_emit_EmitOps_fail,
     .fail_from = backend_emit_Emitter_backend_emit_EmitOps_fail_from
 };
@@ -5253,26 +4338,6 @@ static const char * emit_gsub_type_text(struct backend_emit_Emitter * self, cons
         return pooled;
     }
     return cur;
-}
-static int adoption_default_only(struct backend_emit_Emitter * e, int si, const char * tname) {
-    int ti;
-    int mi;
-    ti = e->sym->__frontend_sym_symbolops_vptr->find_trait(e->sym, tname);
-    if (ti < 0) {
-        return 0;
-    }
-    if (backend_emit_impl_exists_anywhere(e->arena, si, tname)) {
-        return 0;
-    }
-    if (e->sym->traits[ti].nm == 0) {
-        return 0;
-    }
-    for (mi = 0; mi < e->sym->traits[ti].nm; mi++) {
-        if (e->sym->traits[ti].m[mi].body < 0) {
-            return 0;
-        }
-    }
-    return 1;
 }
 static int emit_default_method(struct backend_emit_Emitter * e, int si, const char * stype, int ti, int mi, int at) {
     struct frontend_sym_MethodSig * sig;
@@ -6661,8 +5726,7 @@ static int emit_adt_life_defs(struct backend_emit_Emitter * self, int u) {
 static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
     int n;
     int i;
-    backend_emit_g_shell_u = u;
-    backend_emit_g_shell_header = 0;
+    backend_lir_lmod_plan_set_shell(u, 0);
     if (self->__backend_emit_emitinvariant_vptr->invariant_check(self, self->units[u].prog) != 0) {
         return (-1);
     }
@@ -6762,13 +5826,13 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
     if ((backend_emit_g_slice_used && (*backend_emit_g_slice_used))) {
         emit_slice_helpers(self);
     }
-    if (self->__backend_emit_emitops_vptr->emit_struct_fwd(self) != 0) {
+    if (self->__backend_emit_emitheader_vptr->emit_struct_fwd(self) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->emit_trait_range(self, self->units[u].tr_start, self->units[u].tr_end, 2) != 0) {
+    if (self->__backend_emit_emitheader_vptr->emit_trait_range(self, self->units[u].tr_start, self->units[u].tr_end, 2) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->emit_vtable_fwd(self, self->units[u].prog) != 0) {
+    if (self->__backend_emit_emitheader_vptr->emit_vtable_fwd(self, self->units[u].prog) != 0) {
         return (-1);
     }
     for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
@@ -6803,7 +5867,7 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
         return (-1);
     }
     for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++) {
-        if (self->__backend_emit_emitops_vptr->emit_proto(self, i) != 0) {
+        if (self->__backend_emit_emitheader_vptr->emit_proto(self, i) != 0) {
             return (-1);
         }
     }
@@ -6851,8 +5915,7 @@ static int write_unit_header_body(struct backend_emit_Emitter * self, int u, con
     int n;
     int i;
     int pp;
-    backend_emit_g_shell_u = u;
-    backend_emit_g_shell_header = 1;
+    backend_lir_lmod_plan_set_shell(u, 1);
     fprintf(self->out, "#ifndef %s\n", guard);
     fprintf(self->out, "#define %s\n", guard);
     if (backend_emit_unit_has_adt(u, 1)) {
@@ -6920,10 +5983,10 @@ static int write_unit_header_body(struct backend_emit_Emitter * self, int u, con
     if (self->nbuiltin > 0) {
         fputs("\n", self->out);
     }
-    if (self->__backend_emit_emitops_vptr->emit_struct_fwd(self) != 0) {
+    if (self->__backend_emit_emitheader_vptr->emit_struct_fwd(self) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitops_vptr->emit_trait_range(self, self->units[u].tr_start, self->units[u].tr_end, 1) != 0) {
+    if (self->__backend_emit_emitheader_vptr->emit_trait_range(self, self->units[u].tr_start, self->units[u].tr_end, 1) != 0) {
         return (-1);
     }
     if (self->__backend_emit_emitops_vptr->emit_link_externs(self, self->units[u].prog, u) != 0) {
@@ -6971,7 +6034,7 @@ static int write_unit_header_body(struct backend_emit_Emitter * self, int u, con
         if (((!self->sym->funcs[i].is_pub) || self->sym->funcs[i].is_static)) {
             continue;
         }
-        if (self->__backend_emit_emitops_vptr->emit_proto(self, i) != 0) {
+        if (self->__backend_emit_emitheader_vptr->emit_proto(self, i) != 0) {
             return (-1);
         }
     }
@@ -7942,13 +7005,13 @@ static int ensure_inst_layout_state(int need) {
     backend_emit_g_inst_layout_cap = cap;
     return 0;
 }
-static int ensure_shell_emit_state(int need) {
+static int ensure_shell_emit_state(struct backend_emit_Emitter * self, int need) {
     int cap;
     int * grown;
-    if (need <= backend_emit_g_shell_emit_cap) {
+    if (need <= self->shell_emit_cap) {
         return 0;
     }
-    cap = ((backend_emit_g_shell_emit_cap > 0) ? backend_emit_g_shell_emit_cap : MAX_LAYOUT_INSTS);
+    cap = ((self->shell_emit_cap > 0) ? self->shell_emit_cap : MAX_LAYOUT_INSTS);
     while (((cap < need) && (cap < CAP_LIMIT))) {
         cap *= 2;
     }
@@ -7958,13 +7021,13 @@ static int ensure_shell_emit_state(int need) {
     if (need > cap) {
         return (-1);
     }
-    grown = (int *)(realloc(backend_emit_g_shell_emit_state, ((size_t)(cap) * sizeof((*grown)))));
+    grown = (int *)(realloc(self->shell_emit_state, ((size_t)(cap) * sizeof((*grown)))));
     if ((!grown)) {
         return (-1);
     }
-    memset((grown + backend_emit_g_shell_emit_cap), 0, ((size_t)((cap - backend_emit_g_shell_emit_cap)) * sizeof((*grown))));
-    backend_emit_g_shell_emit_state = grown;
-    backend_emit_g_shell_emit_cap = cap;
+    memset((grown + self->shell_emit_cap), 0, ((size_t)((cap - self->shell_emit_cap)) * sizeof((*grown))));
+    self->shell_emit_state = grown;
+    self->shell_emit_cap = cap;
     return 0;
 }
 static int ensure_reach(struct backend_emit_Emitter * self, int need) {
@@ -8087,16 +7150,16 @@ static int shell_owned_here(struct backend_emit_Emitter * self, int ii) {
         return 0;
     }
     already = (((tps[tmpl].is_pub && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr) && (!inst_elem_foreign(self, ii)));
-    if (((already && backend_emit_g_shell_header) && (tps[tmpl].owner == backend_emit_g_shell_u))) {
+    if (((already && backend_lir_lmod_plan_shell_header()) && (tps[tmpl].owner == backend_lir_lmod_plan_shell_u()))) {
         already = 0;
     }
     if (already) {
         return 0;
     }
-    if (backend_emit_g_shell_u < 0) {
+    if (backend_lir_lmod_plan_shell_u() < 0) {
         return 1;
     }
-    return (ins[ii].owner == backend_emit_g_shell_u);
+    return (ins[ii].owner == backend_lir_lmod_plan_shell_u());
 }
 static int shell_preemit(struct backend_emit_Emitter * self, int ii, int depth) {
     int ti;
@@ -8107,19 +7170,19 @@ static int shell_preemit(struct backend_emit_Emitter * self, int ii, int depth) 
     if ((((!ins) || (ii < 0)) || (ii >= n))) {
         return 0;
     }
-    if (((ensure_inst_layout_state(n) != 0) || (ensure_shell_emit_state(n) != 0))) {
+    if (((ensure_inst_layout_state(n) != 0) || (ensure_shell_emit_state(self, n) != 0))) {
         return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
     }
     if (depth > MAX_LAYOUT_DEPTH) {
         return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH));
     }
-    if (backend_emit_g_shell_emit_state[ii] == 2) {
+    if (self->shell_emit_state[ii] == 2) {
         return 0;
     }
-    if (backend_emit_g_shell_emit_state[ii] == 1) {
+    if (self->shell_emit_state[ii] == 1) {
         return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("generic instance '%s' is recursive by value; store a pointer instead", ins[ii].name));
     }
-    backend_emit_g_shell_emit_state[ii] = 1;
+    self->shell_emit_state[ii] = 1;
     ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ins[ii].name);
     if (ti >= 0) {
         for (j = 0; j < self->sym->structs[ti].nfields; j++) {
@@ -8134,7 +7197,7 @@ static int shell_preemit(struct backend_emit_Emitter * self, int ii, int depth) 
             return (-1);
         }
     }
-    backend_emit_g_shell_emit_state[ii] = 2;
+    self->shell_emit_state[ii] = 2;
     return 0;
 }
 static int preemit_adt_payload(struct backend_emit_Emitter * self, int adi) {
@@ -8150,11 +7213,11 @@ static int preemit_adt_payload(struct backend_emit_Emitter * self, int adi) {
     if (((((!adts) || (!ins)) || (adi < 0)) || (adi >= nadts))) {
         return 0;
     }
-    if (ensure_shell_emit_state(n) != 0) {
+    if (ensure_shell_emit_state(self, n) != 0) {
         return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
     }
     for (i = 0; i < n; i++) {
-        backend_emit_g_shell_emit_state[i] = 0;
+        self->shell_emit_state[i] = 0;
     }
     for (v = 0; v < adts[adi].nvariants; v++) {
         for (f = 0; f < adts[adi].variants[v].nfields; f++) {
@@ -8228,7 +7291,7 @@ static int emit_adt_layout_body(struct backend_emit_Emitter * self, int adi, int
     fprintf(self->out, "_Static_assert(offsetof(struct %s, u) >= offsetof(struct %s, tag) + sizeof(int), \"%s: the tag must end before the payload union\");\n", tag, tag, tag);
     fprintf(self->out, "_Static_assert(sizeof(struct %s) >= offsetof(struct %s, u) + sizeof(((struct %s *)0)->u), \"%s: the payload must fit\");\n", tag, tag, tag, tag);
     if (adt_owns(self, adi, 0)) {
-        int link = ((adts[adi].is_pub && (!backend_emit_g_shell_header)) ? 0 : 1);
+        int link = ((adts[adi].is_pub && (!backend_lir_lmod_plan_shell_header())) ? 0 : 1);
         fputs((link ? "static " : ""), self->out);
         fprintf(self->out, "struct %s %s_retain(struct %s *);\n", tag, tag, tag);
         fputs((link ? "static " : ""), self->out);
@@ -12373,13 +11436,13 @@ int backend_emit_ct_emit_unit_header(int u) {
     return backend_emit_g_emit.__backend_emit_emitops_vptr->write_unit_header(&backend_emit_g_emit, u);
 }
 int backend_emit_ct_emit_header(const char * outc) {
-    return backend_emit_g_emit.__backend_emit_emitops_vptr->write_header(&backend_emit_g_emit, outc);
+    return backend_emit_g_emit.__backend_emit_emitheader_vptr->write_header(&backend_emit_g_emit, outc);
 }
 int backend_emit_ct_emit_map(const char * dest, int prog, int u) {
-    return backend_emit_g_emit.__backend_emit_emitops_vptr->write_map(&backend_emit_g_emit, dest, prog, u);
+    return backend_emit_g_emit.__backend_emit_emitheader_vptr->write_map(&backend_emit_g_emit, dest, prog, u);
 }
 int backend_emit_ct_emit_model(const char * dest, int prog) {
-    return backend_emit_g_emit.__backend_emit_emitops_vptr->write_model(&backend_emit_g_emit, dest, prog);
+    return backend_emit_g_emit.__backend_emit_emitheader_vptr->write_model(&backend_emit_g_emit, dest, prog);
 }
 const char * backend_emit_ct_emit_last_error(void) {
     return backend_emit_g_emit.errmsg;

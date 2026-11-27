@@ -280,6 +280,9 @@ extern void U16String_Drop_drop(void *self);
 struct backend_lir_LModulePlan * backend_lir_lmod_plan_get(void);
 void backend_lir_lmod_plan_set_live(int *, int);
 void backend_lir_lmod_plan_set_builtin_headers(int *, const char * *, int);
+void backend_lir_lmod_plan_set_shell(int, int);
+int backend_lir_lmod_plan_shell_u(void);
+int backend_lir_lmod_plan_shell_header(void);
 struct backend_lir_LModule * backend_lir_lmod_get(void);
 void backend_lir_lmod_reset(struct backend_lir_LModule *);
 int backend_lir_lmod_type(struct backend_lir_LModule *, const char *);
@@ -324,6 +327,16 @@ static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
 
 struct backend_lir_LModulePlan * backend_lir_lmod_plan_get(void) {
     return (&backend_lir_g_plan);
+}
+void backend_lir_lmod_plan_set_shell(int u, int header) {
+    backend_lir_g_plan.shell_u = u;
+    backend_lir_g_plan.shell_header = header;
+}
+int backend_lir_lmod_plan_shell_u(void) {
+    return backend_lir_g_plan.shell_u;
+}
+int backend_lir_lmod_plan_shell_header(void) {
+    return backend_lir_g_plan.shell_header;
 }
 void backend_lir_lmod_plan_set_live(int * live, int n) {
     int i;

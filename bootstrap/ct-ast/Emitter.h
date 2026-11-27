@@ -27,6 +27,7 @@
 #include "EmitInvariant.h"
 #include "EmitHoist.h"
 #include "EmitInit.h"
+#include "EmitHeader.h"
 #include "LModule.h"
 
 #include "Vec.h"

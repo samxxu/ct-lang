@@ -335,10 +335,15 @@ struct backend_lir_LModulePlan {
     int bunit[8];
     const char * bhead[8];
     int nbhead;
+    int shell_u;
+    int shell_header;
 };
 struct backend_lir_LModulePlan * backend_lir_lmod_plan_get(void);
 void backend_lir_lmod_plan_set_live(int *, int);
 void backend_lir_lmod_plan_set_builtin_headers(int *, const char * *, int);
+void backend_lir_lmod_plan_set_shell(int, int);
+int backend_lir_lmod_plan_shell_u(void);
+int backend_lir_lmod_plan_shell_header(void);
 struct backend_lir_LModule * backend_lir_lmod_get(void);
 void backend_lir_lmod_reset(struct backend_lir_LModule *);
 int backend_lir_lmod_type(struct backend_lir_LModule *, const char *);

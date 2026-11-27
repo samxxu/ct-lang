@@ -148,14 +148,6 @@ struct backend_emit_EmitOps_vtbl {
     int (*emit_program)(void *, int);
     int (*emit_unit)(void *, int);
     int (*write_unit_header)(void *, int);
-    int (*emit_struct_fwd)(void *);
-    int (*emit_trait_range)(void *, int, int, int);
-    int (*emit_proto)(void *, int);
-    int (*emit_vtable_fwd)(void *, int);
-    int (*header_guard)(void *, const char *, char * *);
-    int (*write_map)(void *, const char *, int, int);
-    int (*write_model)(void *, const char *, int);
-    int (*emit_json_str)(void *, FILE *, const char *);
     int (*emit_node)(void *, int, int);
     int (*emit_field)(void *, int, int);
     int (*emit_inline)(void *, int);
@@ -182,14 +174,29 @@ struct backend_emit_EmitOps_vtbl {
     int (*emit_impls)(void *, int);
     int (*emit_maps)(void *, int);
     int (*emit_unit_init)(void *, int);
-    int (*write_header)(void *, const char *);
-    int (*write_abi_header)(void *, const char *);
     int (*fail)(void *, const char *);
     int (*fail_from)(void *, int, const char *);
 };
 struct backend_emit_EmitOps_iface {
     void *self;
     const struct backend_emit_EmitOps_vtbl *vt;
+};
+
+struct backend_emit_EmitHeader_vtbl {
+    int (*emit_struct_fwd)(void *);
+    int (*emit_trait_range)(void *, int, int, int);
+    int (*emit_proto)(void *, int);
+    int (*emit_vtable_fwd)(void *, int);
+    int (*header_guard)(void *, const char *, char * *);
+    int (*write_map)(void *, const char *, int, int);
+    int (*write_model)(void *, const char *, int);
+    int (*emit_json_str)(void *, FILE *, const char *);
+    int (*write_header)(void *, const char *);
+    int (*write_abi_header)(void *, const char *);
+};
+struct backend_emit_EmitHeader_iface {
+    void *self;
+    const struct backend_emit_EmitHeader_vtbl *vt;
 };
 
 struct backend_emit_EmitInit_vtbl {
@@ -278,6 +285,8 @@ struct backend_emit_Emitter {
     int nhoist;
     char * reach;
     int reachcap;
+    int * shell_emit_state;
+    int shell_emit_cap;
     int opt_nodes[8];
     int nopt;
     int opt_scan;
@@ -307,6 +316,7 @@ struct backend_emit_Emitter {
     const char * gtname;
     const char * ginst;
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
+    const struct backend_emit_EmitHeader_vtbl *__backend_emit_emitheader_vptr;
     const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;
     const struct backend_emit_EmitInvariant_vtbl *__backend_emit_emitinvariant_vptr;
     const struct backend_emit_EmitHoist_vtbl *__backend_emit_emithoist_vptr;
