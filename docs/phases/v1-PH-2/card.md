@@ -152,7 +152,7 @@ version-minor: 2
 | E-V3-9b | 狗粮化：D1–D6 各片用户语料生成 C 逐字节；源码 LOC/自由函数/realloc/snprintf/判别式前后报告入库；生成 C 可读性 REVIEW 签字 |
 | E-V3-9c | 样例与文档：矩阵无 missing；新特性各有 ≥1 样例；非 C 互操作用例指针清零（例外有理由）；**E3 类打印受阻的 26 个文件清零，依赖 LANG-30 在 v1.2 内落地**；README/tutorial/guide/idioms/snippets 同步；`check-ast` / `check-docs` 绿 |
 | E-V3-9d（S8a，**可砍**） | 常量键折叠：`p["x"]` → `p.x`；未知字段 / 非字面量键 / 非结构体接收者硬错；折叠后生成 C 无 `get` 调用、无临时量；`check-goldens-ast` 25/25；`check-docs` 绿。**本条不阻塞 S8b/S9/S10**：若 S8 收口后判定不可做，S8a 整体记为 deferred 并写进 S10 收口记录 |
-| E-V3-10 | 全局默认 strict：默认下 `check-all` 绿；**`selfhost/ct-ast` 用一处 manifest 显式 allow（`c-boundary = allow`），`lib/core/` 零 allow**（[CR-V3-1](#8-判据变更记录) 改写，2026-11-28）；普通无 include 的 `.ct` 逐字节不变；显式 allow（manifest / CLI / shim）正负例；`ct migrate` 旧包夹具通过 |
+| E-V3-10 | 全局默认 strict：默认下 `check-all` 绿；**`selfhost/ct-ast` 与 `lib/core` 各用一处 manifest 显式 allow（`c-boundary = allow`），仓库其它目录零 allow**（[CR-V3-1](#8-判据变更记录) 改写，2026-11-28）；普通无 include 的 `.ct` 逐字节不变；显式 allow（manifest / CLI / shim）正负例；`ct migrate` 旧包夹具通过 |
 | E-V3-11 | 收口：`CTC_VERSION 1.2.0`、dist 与发布流程同 v1.1；**不自动打 tag / 不自动发 release**——所有者手工验证后才创建 annotated tag；`check-all` 全绿、seed 两轮逐字节 |
 
 ## 4 风险与回滚
@@ -325,5 +325,5 @@ $ gh release create v1.2.0 \
 
 | ID | 对象 | 原判据 | 新判据 | 理由 | 批准 | 日期 | 关联 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CR-V3-1 | E-V3-10 | 「`selfhost/` 与 `lib/core/` 零 allow」 | 「**`selfhost/ct-ast` 用一处 manifest 显式 allow（`c-boundary = allow`）；`lib/core/` 零 allow**」；其余不变：默认 strict 下 `check-all` 绿、普通无 include 的 `.ct` 逐字节不变、显式 allow 正负例、`ct migrate` 夹具通过 | strict 的目的是防止**普通消费者**无留痕地直接调 C 库，不是约束编译器自身；selfhost 现在为了这条判据付出 63 个 include-only shim，且"自举也遵守 strict"无法由机器验证。改用显式 manifest 后，豁免可审计、可用删文件做负例；消费者默认不变 | 所有者 2026-11-28 | 2026-11-28 | [D-032](../../decisions/D-032.md)、[REQ-STD-COVER-1](../../planning/requirements-pool.md) |
+| CR-V3-1 | E-V3-10 | 「`selfhost/` 与 `lib/core/` 零 allow」 | 「**`selfhost/ct-ast` 与 `lib/core` 各用一处 manifest 显式 allow（`c-boundary = allow`）；仓库其它目录零 allow**」；其余不变：默认 strict 下 `check-all` 绿、普通无 include 的 `.ct` 逐字节不变、显式 allow 正负例、`ct migrate` 夹具通过 | strict 的目的是防止**普通消费者**无留痕地直接调 C 库，不是约束编译器自身与内置层；现状为这条判据付出 69 个 include-only shim（selfhost 63 + lib/core 6）。改用显式 manifest 后豁免可审计、可用删文件做负例；消费者默认不变。`lib/core` 需同批给 `c_boundary_for` 补"单元自身目录 manifest"回退（与 `leaks_for` 对齐） | 所有者 2026-11-28 | 2026-11-28 | [D-032](../../decisions/D-032.md)、[REQ-STD-COVER-1](../../planning/requirements-pool.md) |
 
