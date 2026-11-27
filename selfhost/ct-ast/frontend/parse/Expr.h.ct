@@ -2555,8 +2555,12 @@ impl ExprOps for Expr {
                                     self->arena->nodes[m].b = (args == 0) ? -1 : args;
                                 }
                             }
-                            /* Phase 32 S7 (L32-6): bind, substitute, judge. */
-                            if (self->types_mode && *self->types_mode) {
+                            /* Phase 32 S7 (L32-6): bind, substitute, judge.
+                               S7 REQ-TYPE-1 also enables it on the compile
+                               default path through the container class gate;
+                               `--types` / `build` keep the whole-B switch. */
+                            if ((self->types_mode && *self->types_mode)
+                                || tool::diag::ct_type_class_container()) {
                                 if (self->chk_mcall_args(ibase, fname, args) != 0)
                                     return -1;
                             }
