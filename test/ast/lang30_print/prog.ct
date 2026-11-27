@@ -1,0 +1,37 @@
+// lang30_print - the zero-allocation stdout entry points of `Str` / `String`
+// (LANG-30 / REQ-PRINT-1, v1.2).
+//
+// Every write below is a byte range: `Str` has no NUL guarantee, so `println`
+// must write exactly `len` bytes and then one '\n'. The empty view writes zero
+// bytes, the embedded NUL is a data byte (not a terminator), UTF-8 passes
+// through unchanged, and `String` forwards to `as_str()` on both an immortal
+// literal and an owned heap buffer (the latter is released here so ASAN can
+// prove the printing path itself allocates nothing).
+int main(void) {
+    Str empty = "";
+
+    empty.print();                /* zero bytes: nothing at all */
+    empty.println();              /* one byte: '\n' */
+
+    Str s = "hello";
+    s.print();
+    printf("|\n");                /* stdio ordering: print then printf */
+
+    Str utf = "héllo—世界";        /* UTF-8 is passed through byte for byte */
+    utf.println();
+
+    Str nul = "a\0b";              /* len is 3: all three bytes are written */
+    nul.print();
+    printf(" %d\n", nul.len());
+
+    String owned = str_dup("world");
+    owned.print();
+    owned.println();
+    owned.release();
+
+    Str view = nul.slice(0, 2);    /* "a\0": still two bytes, no NUL stop */
+    view.println();
+    /* The exit code is the live owning-buffer count: the printing path must
+       not leave an allocation behind (`owned` above was released). */
+    return ct_str_live_count();
+}

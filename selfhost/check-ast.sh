@@ -1159,6 +1159,16 @@ else
     bad "lang22/str-store" "$(cat "$work/lang22.out" "$work/lang22.err" | head -8)"
 fi
 
+# LANG-30: `Str.print` / `Str.println` and the `String` forwarding pair are
+# zero-allocation stdout exits: the emitted body is `fwrite` / `fputc` only,
+# empty views write zero bytes, embedded NUL bytes are data, and both `ct
+# compile` and `ct build` agree byte for byte.
+if bash test/ast/lang30_print.sh "$work/ct-ast" >"$work/lang30.out" 2>"$work/lang30.err"; then
+    ok "lang30/str-print"
+else
+    bad "lang30/str-print" "$(cat "$work/lang30.out" "$work/lang30.err" | head -8)"
+fi
+
 # SH-113: pin the built-in-unit liveness boundary (text scan + symbol scan);
 # group 6 records the known compile-mode lowercase-export miss rather than
 # hiding it. The liveness algorithm itself is unchanged.
