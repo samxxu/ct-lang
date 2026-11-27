@@ -1,0 +1,13 @@
+// S8 tail: `for (static int i = …)` lowers as a declaration block plus an
+// empty for-init (`LS_FOR.aux`), the shape C99 requires and the AST writer
+// already prints. The defer gives the fixture a cleanup entry.
+
+int main(void)
+{
+    int sum = 0;
+    for (static int i = 0; i < 3; i++) {
+        sum = sum + i;
+    }
+    defer { printf("static-for %d\n", sum); }
+    return 0;
+}

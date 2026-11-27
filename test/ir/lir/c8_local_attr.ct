@@ -1,0 +1,11 @@
+// S8 tail: an explicit GNU local attribute is a declaration row in LIR
+// (`LS_DECL.attr`), not a reason to keep the whole unit on the AST writer.
+// The defer gives the fixture a cleanup entry, like the S2 fixtures.
+
+int main(void)
+{
+    __attribute__((unused)) int spare = 7;
+    int r = spare + 1;
+    defer { printf("attr %d\n", r); }
+    return 0;
+}
