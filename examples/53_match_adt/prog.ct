@@ -12,7 +12,7 @@ int main(void)
 
     match (m) {
         Msg.Text(body) => {
-            printf("%s\n", body.cstr());
+            body.println();
             body.release();
         }
         Msg.Empty() => {
