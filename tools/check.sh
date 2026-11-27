@@ -15,6 +15,7 @@
 #       (acc_map.py; docs/design/acc-scope.tsv; CI-16)
 #   g4  docs executable/timeliness (reuses test/docs/check-docs.py) plus the
 #       S8c feature matrix assertion (warn by default, MATRIX_STRICT=1 hard)
+#       and the P-1.3 migration-lint selftest (S7-e)
 #   g5  criterion <-> case minimal subset (phase_card.py g5)
 #   g6  issue-ledger closure (issue_ledger.py; strict by default, 5 negative
 #       fixtures).  `g6 --ratchet` judges against issues/.g6-baseline.tsv
@@ -79,6 +80,10 @@ g4() {
   # S8c matrix consistency: warn by default, MATRIX_STRICT=1 at closeout.
   # The selftest carries the negative fixtures for this gate change.
   python3 "$root/tools/check-feature-matrix.py" --selftest >/dev/null
+  # P-1.3 migration lint: the selftest carries the positive/negative fixtures
+  # for the three tiers.  The dry-run itself is evidence (report-only), not a
+  # pass/fail gate.
+  python3 "$root/tools/migrate_lint.py" --selftest >/dev/null
   if [ "${MATRIX_STRICT:-0}" = 1 ]; then
     python3 "$root/tools/check-feature-matrix.py" --strict
   else
@@ -123,6 +128,7 @@ case "${1:-}" in
   g7) g7 ;;
   g8) g8 ;;
   g9) g9 ;;
+  lint) python3 "$root/tools/migrate_lint.py" --selftest && python3 "$root/tools/migrate_lint.py" ;;
   battle-selftest) battle_selftest ;;
-  *) echo "usage: tools/check.sh g0 | g1 | g2 | g4 | g5 | g6 [--ratchet|--write-baseline] | g7 | g8 | g9 | battle-selftest" >&2; exit 2 ;;
+  *) echo "usage: tools/check.sh g0 | g1 | g2 | g4 | g5 | g6 [--ratchet|--write-baseline] | g7 | g8 | g9 | lint | battle-selftest" >&2; exit 2 ;;
 esac
