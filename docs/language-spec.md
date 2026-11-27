@@ -61,6 +61,7 @@
 - [4.75 发射器的判别式切片与自举不动点轮数（v0-PH-88，实现内部）](#475-发射器的判别式切片与自举不动点轮数v0-ph-88实现内部)
 - [4.76 绑定点转换（LANG-26 / D-020，v1.1 切片）](#476-绑定点转换lang-26--d-020v11-切片)
 - [4.77 函子签名糖 `(A, B) => R`（v1-PH-2 S3，仅 ct-ast）](#477-函子签名糖-a-b--rv1-ph-2-s3仅-ct-ast)
+- [4.78 `Str` / `String` 的 stdout 出口：`print` / `println`（v1-PH-2 S8c，仅 ct-ast）](#478-str--string-的-stdout-出口print--printlnv1-ph-2-s8c仅-ct-ast)
 
 ---
 
@@ -3027,6 +3028,8 @@ strict 是**护栏**不是沙箱：shim 的内容、`--ldflags` 外链的 `.c` �
 - 只认**直接调用**；名字出现在字符串/注释里不算。取地址不是调用（但 Ct 目前不允许引用未声明函数）。
 - 用户自己定义了同名函数（或宏）时**不抢**：按用户的声明处理，不补头。
 - 集合外的名字（`syslog`、`open`、`fcntl`、`exec*`、`ioctl` …）**不补头**：走 `.m.ct`/shim 或显式声明。
+  例：v1-PH-2 S8c 的 `Str.print` / `println` 用 `fwrite` / `fputc`，由
+  `lib/core/Str.shim.h` 声明（§4.78），不加入上表。
 - `vprintf`/`vsnprintf` 等接收 `va_list`，不是可变参数函数，不因前缀补头。
 - 每个头只补一次，位置在 banner 之后、内置层 prologue 之前。
 - `--freestanding` 下**不补头**；调用未由 shim 声明时报错（`'printf' is not declared in a freestanding build`）。
@@ -3148,7 +3151,8 @@ parse("ab", n);  /* 调用点不写 out */
   UTF-16 没有隐式字面量（`U16String x = "abc"` 硬错：`a UTF-16 string literal is not implicit`）。
 - **方法**：UTF-8 用码点下标 + 字节 API：`len`（字节数）、`char_len`（码点数）、`byte_at(i)`（O(1)）、
   `codepoint_at(i)`（O(n)）、`get(i)`、`s[i]`、`char_at(i)`、`byte_slice(start,n)`、
-  `byte_index_of(_from)`、`slice`、`as_str`、`to_string`、`cstr`。UTF-16 只用 JS 核心子集并统一
+  `byte_index_of(_from)`、`slice`、`as_str`、`to_string`、`cstr`，以及 v1-PH-2 S8c 起的
+  零分配 stdout 出口 `print` / `println`（§4.78；`String` 同名转发）。UTF-16 只用 JS 核心子集并统一
   snake_case：`len`（code unit 数）、`char_code_at`、`char_at`、`get` / `at` / `u[i]`、
   `code_point_at`、`index_of(_from)`、`last_index_of`、`includes`、`starts_with`、`ends_with`、
   `slice` / `substring`、`concat`、`replace` / `replace_all`、`to_upper_case` / `to_lower_case`、
@@ -3798,3 +3802,60 @@ wrapper、vtable 或分配；`.h` / `.abi.h` 发射同一个抽象声明符。�
 签名帮助显示规范拼写 `R (*)(A, B)`，参数名不进入展开。插件在 `ct-vscode` 仓，
 其 `npm test` 覆盖两个 scope；本仓只保证编译器展开与本节一致
 （[editors/README.md](../editors/README.md)）。
+
+### 4.78 `Str` / `String` 的 stdout 出口：`print` / `println`（v1-PH-2 S8c，仅 ct-ast）
+
+> **状态：D-030 已起草、LANG-30 实现落地。** 本节是入口与字节语义的权威定义；
+> 方法 vs 内建函数的裁定与备选见 [D-030](decisions/D-030.md)。
+
+**签名。** `Str` 与 `String` 各有两个方法，返回 `void`：
+
+```ct
+impl Str {
+    pub void print();      /* write ptr[0..len) to stdout */
+    pub void println();    /* print() + one '\n' */
+}
+impl String {
+    pub void print();      /* forwards to as_str().print() */
+    pub void println();    /* forwards to as_str().println() */
+}
+```
+
+调用点在拿到 `Str` 或 `String` 的值之后写 `.print()` / `.println()`。字符串字面量的
+静态类型仍是 `char *`（§4.70），所以要先绑定到 `Str` 再调用：
+
+```ct
+Str name = "ct";
+name.println();                 /* prints "ct\n" */
+
+String owned = str_dup("hello");
+owned.print();                  /* prints "hello" with no newline */
+owned.release();
+```
+
+**字节语义。** `len` 是字节长度；方法写 `ptr[0..len)` 的全部字节，UTF-8 原样透传，
+不做编码转换，也不看 `\0`：`Str s = "a\0b"` 的 `s.print()` 写三个字节。
+`println` 在字节之后**总是**再写一个 `'\n'`；空视图（`len <= 0`，或 `ptr == 0`）的
+`print` 写 0 字节、`println` 只写 `'\n'`。越界与 `ptr` 为空都不读。
+
+**零分配。** 生成的 C 就是一次 `fwrite(self->ptr, 1, (size_t)self->len, stdout)`；
+`println` 追加 `fputc('\n', stdout)`。不调用 `cstr()`，不 `malloc`，不复制缓冲区；
+`String` 的两个方法只经 `as_str()` 借用自身，走同一段 `Str` 代码。写入结果被忽略，
+写失败不报错（与 `printf` 一致；错误出口不在本节）。
+
+**C 边界。** `fwrite` / `fputc` / `stdout` 由 `lib/core/Str.shim.h` 的
+`#include <stdio.h>` 声明（§4.66 的 shim 出口），调用方**不需要** `#include`，
+也**不需要** `--c-boundary=allow`。§4.67 的自动补头集合不因本节改变：`fwrite` 不在
+`printf` 一族的补头表里，本节不申请加入。`--freestanding` 下没有 stdout 概念，
+本 API 不适用。
+
+**与既有 API 的关系。** `cstr()` 保留原语义（分配一份 NUL 结尾的副本、调用方
+`free`，只用于 C 互操作）；`printf` 与 `%s` 的行为不变；`printf("%s", s.data)`
+仍是硬错（§4.70）。`print` / `println` 不替代格式化：需要数字、宽度或其它格式时，
+用 `printf` 打非字符串部分，字符串部分用 `print` 输出。
+
+**已知平台差异（非字节契约）。** Windows 文本模式可能把 `'\n'` 写成 `"\r\n"`；
+`println` 的规范字节契约只覆盖 `'\n'` 本身，不加平台分支。
+
+**IDE。** `print` / `println` 是普通方法名，不是关键字；编辑器不需要新增 scope，
+按既有「标识符 + `.` + 方法名」高亮即可（[editors/README.md](../editors/README.md)）。

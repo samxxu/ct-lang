@@ -24,3 +24,18 @@ VS Code 插件（语法高亮、snippets、跳转索引）已迁至独立仓库�
   本仓 gate 6 已随插件迁出退役（见 [check-all](../selfhost/check-all.sh)）。
 - 编译器侧语法与诊断的权威定义见 [language-spec §4.77](../docs/language-spec.md)
   与 [D-029](../docs/decisions/D-029.md)。
+
+## `Str.print` / `Str.println` 高亮契约（v1-PH-2 S8c / D-030）
+
+`print` / `println` 是 `lib/core` 的普通 `impl` 方法，**不是关键字**；语法高亮不需要
+新增 scope，按既有的「标识符 + `.` + 方法名」规则即可。
+
+| 片段 | 高亮 | 说明 |
+| --- | --- | --- |
+| `name.print()` / `name.println()` | 方法调用（与 `name.len()` 同档） | 接收者可以是 `Str` / `String` 的值；字面量需先绑定到 `Str` |
+| `String` 上的同名调用 | 同上 | 语义是转发到 `as_str()`，高亮不区分 |
+
+- **hover / 补全**：可选地显示一句话：「write `len` bytes to stdout, zero allocation」；
+  权威定义见 [language-spec §4.78](../docs/language-spec.md)，裁定见 [D-030](../docs/decisions/D-030.md)。
+- **测试**：`ct-vscode` 的 `npm test` 不需要新增断言（没有新关键字/新记号）；本仓
+  gate 6 仍随插件迁出而退役。

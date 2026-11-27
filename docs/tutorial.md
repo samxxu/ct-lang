@@ -2351,7 +2351,7 @@ int main(void)
 {
     String who = "ct";
     String msg = greet(who.as_str());
-    printf("%s\n", msg.cstr());
+    msg.println();
     msg.release();
     return 0;
 }
@@ -2371,7 +2371,33 @@ ct build greet.ct -o greet && ./greet
 - 释放分层：局部/参数自动；`String` 字段在宿主 `use Drop` 且无显式 impl 时有胶水；
   `Vec`/`Map` 字段、全局、ADT payload 由作者处理（[idioms §2](idioms.md)）。
 - `char *` 方法来自 std 包：`import std::str::CharStr;`（0.19.0 及以前 `std::str::String`）；
-  `printf` 前用 `cstr()`，`.data` 不保证 NUL。
+  `.data` 不保证 NUL。
+
+### 22.1 把字符串写到 stdout：`print()` / `println()`（LANG-30，v1.2 起可用）
+
+不用 `cstr()`，也不用 `printf("%s")`：`Str` / `String` 自己按字节写 stdout，零分配。
+
+```ct
+int main(void)
+{
+    Str tag = "net";
+    tag.print();                 // 写 3 字节，无换行
+    printf(" ");                 // 需要空格/数字等格式时仍用 printf
+    printf("%d\n", 3);           // 一行：net 3
+    String msg = str_concat("hello, ", "ct");
+    msg.println();               // 一行：hello, ct
+    msg.release();
+    return 0;
+}
+```
+
+- 语义是**字节**：`len` 是多少就写多少；`"a\0b"` 写三个字节，`\0` 不会截断（这与
+  `printf("%s")` 不同）。
+- `println()` = `print()` + 一个 `'\n'`；空视图 `print()` 写 0 字节。
+- 生成 C 只有 `fwrite` / `fputc`，没有 `malloc` / `cstr()`；`String` 经 `as_str()` 转发。
+- 需要数字或格式时仍用 `printf` 打非字符串部分；只有真正把 C 字符串交给 C 库
+  （例如 `%s`、C 函数参数）才用 `cstr()`，它**会分配**、调用方负责 `free`。
+- 完整规范见 [spec §4.78](language-spec.md)，裁定见 [D-030](decisions/D-030.md)。
 
 ## 23. 切片 `T[]`：长度跟着指针走（Phase 79，v0.79.0 起可用）
 
