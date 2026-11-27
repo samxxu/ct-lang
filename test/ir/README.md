@@ -117,35 +117,54 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
 defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，Drop 语句
 由 LIR 打印，逐字节不变。
 
-### 当前覆盖率（2026-11-27 S8 尾 shell 行 + LIR 回退收窄后实测）
+### 当前覆盖率（2026-11-27 S8 收尾 / D-013 真 lowering 后实测）
 
 - 82 语料 + 自举：`--ir=on` 生成 C 与 `--ir=off`（AST oracle）**全部逐字节相同**，
-  0 差异；`test/ast` 的 839 个可编译 `.ct` 夹具也逐字节相同；
-- 语料：**360/498 个会被发射的函数体**由 LIR 打印
-  （`bodies printed=360 skipped=0`），24 个 unit `ready=1`。分母包含 S8 起新纳入
-  的 10 个 owning/字段胶水样例；这些样例中需要 D-013 retain/release 胶水的函数
-  按下方“剩余构造”保守回退，其余函数仍由 LIR 打印；
-- 自举：78 个 unit 中 **74 个 `ready=1`**、**1618/1638 个函数体**由 LIR
-  打印，整棵 C 树与 AST oracle 逐字节相同。回退只剩 20 个函数：14 个
-  owning 字段写（`Lownfield`）与 6 个 owning 句柄局部（`Lglue`，runtime
-  字符串分配与 `Pkg` 的 `String` 局部）；
-- S8 尾的三项收窄把覆盖率从 1190/1622 提到 1618/1638：
-  1. 长文本预判只保护标识符/拼写行，字符串字面量与 `#ct-raw` 载荷不再
-     让整单元回退（9 个自举单元原被整单元跳过）；
-  2. 指针局部不再走 by-value owning/vptr 胶水判定，pointee 的 vptr 只按
-     分配分支写，与 AST writer 的别名初始化一致；
-  3. GNU 局部属性与 `for (static …)` 改为真行/真块打印（`LS_DECL.attr`、
-     `LS_FOR.aux`），`#56` / `#37` 夹具 `ready=1` 且逐字节；
-  4. owned 清理集按表内顺序（parser 的 `autodrop_append` 已按反声明序注入），
-     修正多个 `own` / `borrow` 局部同时退出时的释放顺序；`#62_borrow_handback`
-     与 AST oracle 逐字节。
+  0 差异；
+- 语料：**498/498 个会被发射的函数体**由 LIR 打印
+  （`bodies printed=498 skipped=0`），**80 个 unit `ready=1`**；不再有函数级回退。
+  分母包含 S8 起新纳入的 owning/字段胶水样例；
+- 自举：78 个 unit 中 **78 个 `ready=1`**、**1638/1638 个函数体**由 LIR
+  打印，整棵 C 树与 AST oracle 逐字节相同（`diff -r -x .ctcache`）。S8 尾的
+  20 个回退函数（14 个 `Lownfield` + 6 个 `Lglue`）已全部转真 lowering：
+  `lib/core` 的 `ct_str_alloc` / `ct_u16_alloc` / `str_concat` /
+  `u16_from_utf8`、`runtime/text` 的 `ct_intern(_len)` 的 owning 句柄局部与
+  `__ct_sretN`，以及 `Pkg` 的 14 个字段读写函数；
+- S8 收尾把 D-013 §3 的数据流搬进 LIR：
+  1. **owning 局部 / 形参 / 结果**：`struct String` / `U16String` / owning ADT
+     局部零初始化、块尾与出口释放；by-value owning 形参在入口
+     `name = P_retain(&name)`；结果物化 `__ct_sretN`，本地位移（move）不 retain，
+     非本地位（字段 / 全局 / 解引用）补 `__ct_sretN = P_retain(&__ct_sretN)`；
+  2. **rebind 与初始化**：`x = <place>` 写 `{ struct T __ct_soldN = x; ...;
+     P_release(&__ct_soldN); }`，`T y = <place>` 写 `P_retain(&(<place>))`；
+     借用的初始化/赋值（container `get` / `entry` 视图）不持有引用；
+  3. **struct 字段 retain**：raw brace initializer 中 owning `String` /
+     `U16String` 字段的字面量改写为 `str_dup_len(...)`、place 改写为
+     `P_retain(&(...))`（emitter 的 `sb_rewrite_init`）；
+  4. **跳转清理**：`break` / `continue` 在跳转前释放循环/switch 体内声明的句柄
+     （`sb_jump_release` 的顺序：defer 清理 → 句柄释放 → 跳转）；
+  5. **vptr / ADT 胶水**：`struct T x` 的 vptr items、`for (static …)`、
+     GNU 局部属性已是行/块数据；`match` 的 or-pattern（组条件 + 三元绑定）与
+     守卫（`__ct_matchedN` flag + `if (guard)` 包裹）进 LIR；
+- `test/ast` 的逐字节对照（DEV 探针，非门禁）：`--ir=off` 与默认 LIR 覆盖
+  882 个夹具，**4 个仍有差异**，全部是已知的 hoist 临时形状 / 箭头字段写
+  brace（`p106/ret_u16str`、`p80_literal`、`p80_methods`、`p80_retain/field_ptr`），
+  行为由 `check-ast` 覆盖；差异清单见
+  [S8 差异清单](../../docs/reviews/2026-11-27-s8-ir2-diff-list.md) §3e；
 - `build` 模式 `test/modules/split` 与 `test/modules/autodrop` 整树逐字节相同。
 
-### 剩余构造（S8 尾后仍未降级，函数级回退）
+### 剩余构造（S8 收尾后仍未降级，函数级回退）
 
-- D-013 owning 字段写与 owning 局部：`Lownfield`（14 个自举函数）与
-  `Lglue`（6 个句柄分配函数）。需要把 emitter 的 `sb_field_*` retain/release
-  数据流与 `__ct_sretN` 物化进 LIR；
+- **owning struct 的 `.` 字段写**（`Lownfield`）：`sb_field_*` 的字段初始化状态
+  机（初始化 / `if` 合并 / 循环不安全 / maybe 诊断）还没搬进 LIR；`h.tag = x`
+  这类函数整体回退到 AST，保留 emitter 的 “field may be undefined” 硬错；
+- **`ref` / `out` owning 句柄形参**（P-5.2 / SH-117）：`param_own` 的
+  “hold old → retain/move new → release old” 只做了本地 rebind，形参目标仍回退；
+- **typedef 别名的 vptr / owning-field struct 局部**：别名没有 `struct <tag>`
+  拼写，vptr items 的行写不进去，整函数回退；
+- **把 `Str` / `U16Str` 视图当作 owning 返回值**（SH-106 的 escape 诊断路径）：
+  仍由 emitter 报告；
+- **`Box` / `new T { … }` 的 raw brace init** 里 owning 字段改写：整函数回退；
 - 多段 `into` 链（`#157`）：lowerer 未物化每一段的接收者，单元级预判仍回退；
 - 超过 `LW_NAME_MAX=256` 的标识符/类型拼写（c2p 的 700–2000 字节探针）回退，
   因为打印器仍有少量有界 scratch 行（字符串/raw 载荷已不再误判）；

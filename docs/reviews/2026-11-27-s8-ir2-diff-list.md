@@ -31,8 +31,8 @@ ir: 400 mirrored defines agree across the TIR/LIR units
 ir: corpus 82 files, 0 byte-differences
 ir: module builds 2
 ir: self-host 78 units, TIR shadow C tree byte-identical
-ir: self-host LIR 73 units, 74 ready, C tree byte-identical
-ir: LIR corpus 82 files, 0 failures, 24 unit-ready, functions 360/498, bodies printed 360
+ir: self-host LIR 73 units, 78 ready, C tree byte-identical
+ir: LIR corpus 82 files, 0 failures, 80 unit-ready, functions 498/498, bodies printed 498
 ir: LIR 7 fixtures, 0 failures
 ir: LIR builds 2
 ir: build defaults to LIR (lir: bodies printed=7 skipped=0)
@@ -44,8 +44,9 @@ ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 7 LIR fixtur
   known-gap 清单已删除。
 - `test/ast/**`：839 个可编译 `.ct` 夹具逐个比较默认与 `CT_LIR=0`，0 差异；
   其余夹具的编译退出码相同。
-- 自举：78 个 unit 中 74 个 `ready=1`、1618/1638 个函数体由 LIR 打印；
-  回退函数见 §3d，整棵 C 树与 AST oracle 逐字节相同（`diff -r -x .ctcache`）。
+- 自举：78 个 unit **全部 `ready=1`**、**1638/1638 个函数体**由 LIR 打印；
+  整棵 C 树与 AST oracle 逐字节相同（`diff -r -x .ctcache`）。S8 尾的 20 个
+  回退函数已全部转真 lowering，见 §3e。
 - seed：`bootstrap/ct-ast` 由默认 LIR 路径重生成；`check-seed` 两轮逐字节 +
   手改负例（73 `.c` + 140 `.h`）。
 - 脚本探针（直接跑）：`p88_metrics` 9/9、`p122_types_default` 44/44、
@@ -53,11 +54,11 @@ ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 7 LIR fixtur
   `p81_box` OK、`l29b3`/`l29b5` OK、`p85_{spike,m0}` OK、`p88_emit` OK、
   `p69_fp` 30 units clean、`p86_errors` 342 诊断 0 differ、`c2p_limits` 58/58、
   `intern_pool` 11/11。
-- **S8 尾 shell 行 + 回退收窄后复跑（seed 已重生成）**：`test/ir/run.sh` 15
-  checks OK；82 语料 0 差异；自举 TIR shadow 78 units C 树逐字节；自举 LIR
-  **1618/1638 个函数体、74 个 ready 单元**；回退只剩 20 个函数（14
-  `Lownfield` + 6 `Lglue`，D-013 owning 字段/句柄局部）；`check-seed` 73 `.c`
-  + 140 `.h` 两轮逐字节；`p88_metrics` 9/9。
+- **S8 收尾（D-013 真 lowering 后复跑，seed 已重生成）**：`test/ir/run.sh` 15
+  checks OK；82 语料 **498/498** 函数体、**80/80** unit `ready=1`、0 差异；
+  自举 TIR shadow 78 units C 树逐字节；自举 LIR **1638/1638 个函数体、78/78
+  ready 单元**、0 回退；`check-seed` 73 `.c` + 140 `.h` 两轮逐字节；`p88_metrics`
+  9/9。
 
 ## 3 44 条失败的逐条分诊（清零）
 
@@ -147,15 +148,63 @@ fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used`
    的选择；这些仍读符号表/AST。
 2. **回退改真修复**（让覆盖率回到 100%）：D-013 owning 字段写
    （`Lownfield`，14 个自举函数）与 owning 句柄局部 / 参数 / 结果
-   （`Lglue` 等，6 个）、多段 `into` 链（`#157`）、超长名动态打印（c2p
-   700–2000 字节）。**已在本轮转真 lowering**：字符串字面量 / raw 载荷不再
-   触发整单元长文本回退；指针局部的 by-value owning/vptr 预判；GNU 局部
-   属性（`LS_DECL.attr`）；`for (static …)`（`LS_FOR.aux` 包裹块）。
+   （`Lglue` 等，6 个）**已在 S8 收尾转为真 lowering**（§3e）；仍保留的函数级
+   回退见 §3e.3（owning struct 的 `.` 字段写状态机、`ref`/`out` owning 形参、
+   typedef 别名的 vptr 局部、视图返回、Box raw init、多段 `into`、超长名）。
 3. `test/ir/README.md` 的覆盖率数字随本清单 §2 更新；REV 需签字确认“回退 ≠
    已降级”。
 4. DOC-89 的历史行锚点：Emitter 拆分使 26 个历史记录（battle / phase 卡 /
    issue / proposal / review）里的 `Emitter.h.ct#L…` 超出新行数；按 DOC-89
    的既有机制登记为**精确 (文件, 原始锚点)** 豁免，不改写历史记录正文。
+
+### 3e S8 收尾：D-013 真 lowering（2026-11-27）
+
+S8 尾仍有 20 个函数级回退（14 `Lownfield` + 6 `Lglue`）。收尾把 D-013 §3 的
+数据流搬进 LIR，**自举 1638/1638、语料 498/498**，0 回退、0 字节差异。
+
+| 片 | LIR 机制 | 判据 |
+| --- | --- | --- |
+| owning 局部 | `lw_own_kind` 只认 `String` / `U16String` / owning 用户 ADT（容器走容器胶水，不持有）；无初值 `= { 0 }`；块尾与出口按表内顺序 `P_release(&x)` | 6 个 `lib/core` / `runtime` 句柄函数逐字节 |
+| by-value owning 形参 | 入口 `name = P_retain(&name)`；impl 方法由 emitter 打 prologue、LIR 只登记释放；return / break / continue 的释放集一致 | `greet_name` / `person` / U16 工厂逐字节 |
+| owning 结果 | `__ct_sretN` 物化；本地 move（跳过自身释放）不 retain；字段 / 全局 / 解引用 place 补 `__ct_sretN = P_retain(&__ct_sretN)`；`sflags&2`（借用根）强制 retain | `p80_retain/retain`、`jump`、`out_ref_owning` 探针 |
+| 本地 rebind / 初始化 | `{ struct T __ct_soldN = x; x = [retain]rhs; P_release(&__ct_soldN); }`；`T y = <place>` 写 `P_retain(&(<place>))`；借用视图（container `get`）不持有 | `wordcount` / `map_literal` / `p80_retain` 逐字节 |
+| struct raw init 字段 retain | `lw_rewrite_struct_init`：owning `String` / `U16String` 字段的字面量 → `str_dup_len(...)`，place → `P_retain(&(...))`；之后再由 vptr items 追加（顺序与 `emit_raw_init` 一致） | `generic_trait` / `generic_trait_instances` 逐字节 |
+| 跳转清理 | `break` / `continue`：defer 清理 → 循环/switch 体内句柄释放 → 跳转（`sb_jump_release` 顺序） | `p80_retain/jump`、`c2_break` / `c3_continue` |
+| match S5 | or-pattern（组条件 `(a) || (b)` + 三元绑定）、守卫（`__ct_matchedN` flag + `if (guard) { … }`）；表达式 match 的 `__ct_mresN` 与 flag 同号 | `examples/68_adt_guards` 5/5 且逐字节 |
+| 修正 | 块表 `realloc` 后沿用旧指针导致 `ret_expr` 丢失（`return` 变 `return;`）；`lmod_temp_name` 的静态缓冲在嵌套打印中被覆盖；方法形参 retain 重复 | `nested_guard` / `68_adt_guards` |
+
+**3e.1 复查命令**
+
+```console
+$ bash test/ir/run.sh ./ct-ast
+ir: LIR corpus 82 files, 0 failures, 80 unit-ready, functions 498/498, bodies printed 498
+ir: self-host LIR 73 units, 78 ready, C tree byte-identical
+ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 9 LIR fixtures, 2 module builds, selfhost=1, 15 checks)
+$ bash selfhost/check-seed.sh
+check-seed: OK (73 .c + 140 .h, two rebuild rounds byte-identical, hand-edit negative red)
+```
+
+**3e.2 语料 / 自举**：82 语料 + 78 unit 自举树的 C 与 AST oracle 逐字节相同；
+`82 × 498` 个函数体全部由 LIR 打印（`printed == lowered`，`skipped=0`）。
+
+**3e.3 仍保留的函数级回退（默认静默回退到 AST，`--ir=on` 下不再出现）**
+
+| 形状 | 回退点 | 原因 |
+| --- | --- | --- |
+| owning struct 的 `.` 字段写 | `Lownfield` | `sb_field_*` 字段状态机（初始化 / `if` 合并 / 循环 unsafe / maybe 诊断）未搬入 LIR；保留 emitter 的 “field may be undefined” 硬错 |
+| `ref` / `out` owning 句柄形参 | `Lrefown`（形参入口） | `param_own` 的 hold-old / retain / release-old 契约只做了本地 rebind |
+| typedef 别名的 vptr / owning-field struct 局部 | `Lgluealias` | 别名没有 `struct <tag>` 拼写，vptr item 行写不进去 |
+| `Str` / `U16Str` 视图作为 owning 返回值 | `Lviewret` | SH-106 escape 诊断路径仍归 emitter |
+| `new T { … }` 的 owning 字段 raw init | `Lnewinit` | 与 decl raw init 同一改写未覆盖 `new` 载荷 |
+| 多段 `into` 链 | `Linto`（单元级预判） | 未物化每段接收者 |
+| >256 字节标识符 / 拼写 | `LW_NAME_MAX` | 打印器仍有有界 scratch 行 |
+
+DEV 的 `test/ast` 逐字节探针（非门禁，882 个夹具）：**4 个仍有差异**
+（`p106_str_escape/ret_u16str`、`p80_literal`、`p80_methods`、
+`p80_retain/field_ptr`）。前 3 个是 hoist 接收者临时与 AST 的内联参数形状
+不同（值语义相同，临时类型是 `U16Str` 视图，不持有引用）；`field_ptr` 只差
+箭头字段写的 `{ … }` brace。其余形状已全部回退到 AST（0 差异、0 退出码差异）。
+这些夹具的**行为**由 `check-ast` 兜底；本清单不把它们计作“已降级”。
 
 ## 4 回滚
 
@@ -170,5 +219,5 @@ fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used`
 
 | 角色 | 结论 | 日期 | 依据 |
 | --- | --- | --- | --- |
-| DEV | S8 尾：shell 行契约（type/global/assert/func/Drop/ABI）+ 四类回退收窄；自举 1618/1638、语料 360/498；剩余 20 个 D-013 函数与实例/ADT/map 外壳 | 2026-11-27 | 本文件 §1–§3d；`check-ast 1741/0/6`、`check-all OK (8 gates)`、`check-seed OK`、`check-sanitizers`、`check-docs OK`、`g1/g8 OK`；提交 `bff5074a` + seed `1023b754` |
+| DEV | S8 收尾：D-013 真 lowering（owning 局部/形参/结果/rebind/字段初始化/sret/跳转清理）+ S5 守卫与 or-pattern；自举 **1638/1638、78/78 ready**，语料 **498/498、80/80 ready**，0 字节差异；剩余 4 个 `test/ast` 探针差异见 §3e.3 | 2026-11-27 | 本文件 §1–§3e；`test/ir/run.sh` 15 checks OK；`check-seed OK`；`check-all` 8 门；`check-ast`、`check-sanitizers`、`check-docs`、`g1/g8` 见交付报告；源码 + seed 提交 `85f0f80f` |
 | REV | 待签字 | — | 逐条复核 §3 的回退类型、§3d 的剩余边界与“回退 ≠ 已降级” |
