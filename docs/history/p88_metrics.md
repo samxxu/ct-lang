@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=11085 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=10358 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=90652 io_cap=2048
+     emitted_before=48223 emitted_after=90830 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -275,6 +275,13 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
     错误路径改 Result）。
   - D2 `tool/pkg` 容器化：`Pkg.owned` 的 `char **` + count + capacity 三件套
     改 `Vec<char *>`，发射 C 90663 → 90652（-11：注册表增长代码收进容器）。
+- **v1-PH-2 S8 剩余子集（外壳 LModule 第一步 + D4）后的 live 校准**：
+  `Emitter.h.ct` 11085 → 10358 行（-727：D4 的 10 个写者方法纯搬移到新单元
+  `backend/emit/EmitHeader.h.ct`；同片先把 `g_shell_u` / `g_shell_header` 移入
+  `LModulePlan`、`g_shell_emit_state` 移入 `struct Emitter`，不增删方法），
+  发射 C 90652 → 90830（+178：新增 EmitHeader 单元与它的 vtable/初始化形状；
+  82 语料与自举 C 树逐字节相同）。切片清单仍为 76（D4 搬的是外壳方法，不是
+  `em_*` kind 切片）。
 - **v1-PH-2 S7-c（REQ-MEM-2 写入摘要）后的 live 校准**：`Emitter.h.ct` 仍为
   11065 行；新增 `frontend/parse/Mem2Writes.h.ct` 一个单元，发射 C 87080 → 87839
   （+759：定义出口的直接写扫描、一层组合与调用点判定）。发射器与切片清单不变。
