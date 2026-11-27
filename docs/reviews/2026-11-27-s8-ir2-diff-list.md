@@ -27,12 +27,12 @@
 
 ```console
 $ bash test/ir/run.sh ./ct-ast
-ir: 399 mirrored defines agree across the TIR/LIR units
+ir: 400 mirrored defines agree across the TIR/LIR units
 ir: corpus 82 files, 0 byte-differences
 ir: module builds 2
-ir: self-host 77 units, TIR shadow C tree byte-identical
-ir: self-host LIR 72 units, 58 ready, C tree byte-identical
-ir: LIR corpus 82 files, 0 failures, 23 unit-ready, functions 355/498, bodies printed 355
+ir: self-host 78 units, TIR shadow C tree byte-identical
+ir: self-host LIR 73 units, 74 ready, C tree byte-identical
+ir: LIR corpus 82 files, 0 failures, 24 unit-ready, functions 360/498, bodies printed 360
 ir: LIR 7 fixtures, 0 failures
 ir: LIR builds 2
 ir: build defaults to LIR (lir: bodies printed=7 skipped=0)
@@ -44,20 +44,20 @@ ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 7 LIR fixtur
   known-gap 清单已删除。
 - `test/ast/**`：839 个可编译 `.ct` 夹具逐个比较默认与 `CT_LIR=0`，0 差异；
   其余夹具的编译退出码相同。
-- 自举：72 个 `.c` unit 中 58 个 `ready=1`；回退函数见 §3d，整棵 C 树与 AST
-  oracle 逐字节相同（`diff -r -x .ctcache`）。
+- 自举：78 个 unit 中 74 个 `ready=1`、1618/1638 个函数体由 LIR 打印；
+  回退函数见 §3d，整棵 C 树与 AST oracle 逐字节相同（`diff -r -x .ctcache`）。
 - seed：`bootstrap/ct-ast` 由默认 LIR 路径重生成；`check-seed` 两轮逐字节 +
-  手改负例（72 `.c` + 138 `.h`）。
+  手改负例（73 `.c` + 140 `.h`）。
 - 脚本探针（直接跑）：`p88_metrics` 9/9、`p122_types_default` 44/44、
   `p111_invariants` 0 failure、`p64_alloc` OK、`p80_{layout,methods,retain}` OK、
   `p81_box` OK、`l29b3`/`l29b5` OK、`p85_{spike,m0}` OK、`p88_emit` OK、
   `p69_fp` 30 units clean、`p86_errors` 342 诊断 0 differ、`c2p_limits` 58/58、
   `intern_pool` 11/11。
-- **S8 尾复跑（D5/D6/外壳拆分后，seed 已重生成）**：`test/ir/run.sh` 15 checks
-  OK；82 语料 0 差异；自举 TIR shadow 78 units C 树逐字节；自举 LIR
-  **1190/1622 个函数体、57 个 ready 单元**，与拆分前逐项相同（拆分只改单元
-  边界：73 个 `.c` unit）；`check-ast` 1741/0/6；`check-seed` 73 `.c` + 140 `.h`
-  两轮逐字节。
+- **S8 尾 shell 行 + 回退收窄后复跑（seed 已重生成）**：`test/ir/run.sh` 15
+  checks OK；82 语料 0 差异；自举 TIR shadow 78 units C 树逐字节；自举 LIR
+  **1618/1638 个函数体、74 个 ready 单元**；回退只剩 20 个函数（14
+  `Lownfield` + 6 `Lglue`，D-013 owning 字段/句柄局部）；`check-seed` 73 `.c`
+  + 140 `.h` 两轮逐字节；`p88_metrics` 9/9。
 
 ## 3 44 条失败的逐条分诊（清零）
 
@@ -112,7 +112,7 @@ $ bash selfhost/check-ast.sh
 | `emit_type_decl` / `emit_impls` / `em_decl_*` | emitter | `EmitDecl.h.ct`（D5 尾，已移） |
 | `emit_expr` / `emit_node` / `emit_field` / `emit_inline` / `emit_outconv` / `em_*` | emitter | `EmitExpr.h.ct`（D6 尾，已移） |
 
-`Emitter.h.ct` 现在 1545 行（原 9872 行），只剩 `emit_program` / `emit_unit` /
+`Emitter.h.ct` 现在 1623 行（原 9872 行），只剩 `emit_program` / `emit_unit` /
 fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used` 的
 定义都在子单元，宿主只按名读写。**仍未做到**四个入口“只消费 LModule”：编译
 模式的 `emit_program` 体、类型/全局节点的遍历仍在宿主读 AST 与符号表。
@@ -130,19 +130,27 @@ fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used`
 | **S8 尾 D6** | `emit_expr`/`emit_node`/`emit_field`/`emit_inline`/`emit_outconv` + 147 个 `em_*`/`sb_*`/`match_*`/`eb_*` 自由函数 → `EmitExpr.h.ct`；`StrRetain`/`FldSnap`/`EmitBuf`/`g_sb`/`g_body_hook`/`g_oc_bypass_node` 随走；`emit_gsub_type_text`/`emit_overload_suffix` 从 Decl 下调 | body 多重集不变（tool 仅 skeleton 差异）；82 语料逐字节；自举 2 轮 |
 | **S8 尾 D5** | `emit_type_decl` + 六个 `em_decl_*` + `emit_impls` + 27 个实例/闭包/ADT 胶水函数 → `EmitDecl.h.ct`；`g_adt_layout_state`/`g_inst_layout_state` 随走 | body 多重集不变（仅 3 条宏 skeleton）；82 语料逐字节；自举 2 轮 |
 | **S8 尾外壳** | `write_unit_header(_body)`、`emit_unit_body` 与 28 个外壳胶水函数 → 新单元 `EmitShell.h.ct`；`write_unit_header` 移入新 `EmitShell` trait；`g_plan`/`g_slice_used` 随走并导出 | 82 语料逐字节；自举 2 轮；`Emitter.h.ct` 9872 → 1545 行 |
+| **S8 尾回退收窄** | 长文本预判跳过字符串字面量与 `#ct-raw` 载荷（9 个整单元回退消失）；指针局部不再走 by-value owning/vptr 预判；GNU 局部属性入 `LS_DECL.attr`；`for (static …)` 入 `LS_FOR.aux` 包裹块；owned 清理集改为表内顺序（parser 已反声明序注入），修正多个 `own`/`borrow` 的退出顺序 | 自举 1190/1622 → 1618/1638；82 语料 + `#56`/`#37`/`#62` 逐字节；新增 `c8`/`c9` LIR 夹具 |
+| **S8 尾 shell 行** | `LModulePlan` 增 `ct_lshellrow` 行（PP / INCLUDE / TYPE / GLOBAL / SASSERT / FUNC / DROP / RAW）与 ABI 导出表；`emit_program`、`emit_unit_body`、`write_unit_header_body` 的类型/全局/断言/函数/ Drop 面改读行；`write_abi_header` 读 plan 的导出表 | 82 语料 + 自举 LIR/AST 逐字节；`test/ir` 15 checks；ABI 夹具 |
 
 每片后 `gen-seed.sh` 重生成；本分支**未 push、未打 tag、未改版本号**。
 
 ### 3d 仍未做（剩余清单）
 
-1. **外壳完整 LModule 化**（S8 原目标，未完成）：`write_unit_header(_body)` /
-   `.abi.h` / map 已移出宿主，但四个入口仍读 AST/符号表；编译模式的
-   `emit_program` 体、类型/全局节点遍历、实例/ADT 胶水的数据来源尚未换成
-   `LModule` 数据契约（当前只消费 `LModulePlan` 的写者身份与内建头清单）。
-2. **回退改真修复**（让覆盖率回到 100%）：D-013 retain/release 与 struct
-   sret、vptr 数组/嵌套/匿名成员胶水、多段 `into` 链、静态 `for` init、
-   GNU 局部属性、超长名动态打印、命名空间 host 预检。这些函数当前**字节
-   等价**但不计入 LIR 覆盖率，是本清单的主要技术债。
+1. **外壳部分 LModule 化**（S8 原目标，本轮推进、未完成）：`LModulePlan`
+   已增 `ct_lshellrow` 行与 ABI 导出表；`emit_program` / `emit_unit_body` /
+   `write_unit_header_body` 的 **PP / 类型 / 全局 / `_Static_assert` / 函数 /
+   Drop 面**改为读行，`write_abi_header` 读 plan 的导出表，写者身份与内建头
+   清单早已在 plan。**仍未迁**：实例闭包（`emit_struct_insts` /
+   `emit_struct_impls` / `inst_*` 判定）、ADT 胶水（`emit_adt_life_defs` /
+   `adt_*`）、Box 胶水、header 的 include/dep/shim 组装、map JSON、函数原型
+   的选择；这些仍读符号表/AST。
+2. **回退改真修复**（让覆盖率回到 100%）：D-013 owning 字段写
+   （`Lownfield`，14 个自举函数）与 owning 句柄局部 / 参数 / 结果
+   （`Lglue` 等，6 个）、多段 `into` 链（`#157`）、超长名动态打印（c2p
+   700–2000 字节）。**已在本轮转真 lowering**：字符串字面量 / raw 载荷不再
+   触发整单元长文本回退；指针局部的 by-value owning/vptr 预判；GNU 局部
+   属性（`LS_DECL.attr`）；`for (static …)`（`LS_FOR.aux` 包裹块）。
 3. `test/ir/README.md` 的覆盖率数字随本清单 §2 更新；REV 需签字确认“回退 ≠
    已降级”。
 4. DOC-89 的历史行锚点：Emitter 拆分使 26 个历史记录（battle / phase 卡 /
@@ -162,5 +170,5 @@ fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used`
 
 | 角色 | 结论 | 日期 | 依据 |
 | --- | --- | --- | --- |
-| DEV | 单文件默认 LIR + 44 条失败清零（含 13 类分诊）；外壳/D5/D6 尾部明确留作剩余 | 2026-11-27 | 本文件 §1–§3d；`check-ast 1740/0/7`、`check-all OK (8 gates)`、`check-seed OK`、`check-sanitizers 662 checks`、`check-docs OK`、`g0/g1/g8 OK` |
-| REV | 待签字 | — | 逐条复核 §3 的回退类型与 §3d 的剩余边界 |
+| DEV | S8 尾：shell 行契约（type/global/assert/func/Drop/ABI）+ 四类回退收窄；自举 1618/1638、语料 360/498；剩余 20 个 D-013 函数与实例/ADT/map 外壳 | 2026-11-27 | 本文件 §1–§3d；`check-ast 1741/0/6`、`check-all OK (8 gates)`、`check-seed OK`、`check-sanitizers`、`check-docs OK`、`g1/g8 OK`；提交 `bff5074a` + seed `1023b754` |
+| REV | 待签字 | — | 逐条复核 §3 的回退类型、§3d 的剩余边界与“回退 ≠ 已降级” |

@@ -117,35 +117,43 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
 defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，Drop 语句
 由 LIR 打印，逐字节不变。
 
-### 当前覆盖率（2026-11-27 S8r2 + S8 尾实测）
+### 当前覆盖率（2026-11-27 S8 尾 shell 行 + LIR 回退收窄后实测）
 
 - 82 语料 + 自举：`--ir=on` 生成 C 与 `--ir=off`（AST oracle）**全部逐字节相同**，
   0 差异；`test/ast` 的 839 个可编译 `.ct` 夹具也逐字节相同；
-- 语料：**355/498 个会被发射的函数体**由 LIR 打印
-  （`bodies printed=355 skipped=0`），23 个 unit `ready=1`。分母包含 S8 起新纳入
+- 语料：**360/498 个会被发射的函数体**由 LIR 打印
+  （`bodies printed=360 skipped=0`），24 个 unit `ready=1`。分母包含 S8 起新纳入
   的 10 个 owning/字段胶水样例；这些样例中需要 D-013 retain/release 胶水的函数
   按下方“剩余构造”保守回退，其余函数仍由 LIR 打印；
-- 自举：73 个 `.c` unit 中 **57 个 `ready=1`**、**1190/1622 个函数体**由 LIR
-  打印，整棵 C 树与 AST oracle 逐字节相同（回退函数集中在 `Emitter` /
-  `Tool` 的 owning 字段与句柄路径）。S8 尾把 `em_*` / 外壳写者拆到
-  `EmitExpr` / `EmitDecl` / `EmitShell` 后，**函数级覆盖率逐项不变**
-  （拆分前后同为 1190/1622、57 个 ready 单元，只改单元边界）；
+- 自举：78 个 unit 中 **74 个 `ready=1`**、**1618/1638 个函数体**由 LIR
+  打印，整棵 C 树与 AST oracle 逐字节相同。回退只剩 20 个函数：14 个
+  owning 字段写（`Lownfield`）与 6 个 owning 句柄局部（`Lglue`，runtime
+  字符串分配与 `Pkg` 的 `String` 局部）；
+- S8 尾的三项收窄把覆盖率从 1190/1622 提到 1618/1638：
+  1. 长文本预判只保护标识符/拼写行，字符串字面量与 `#ct-raw` 载荷不再
+     让整单元回退（9 个自举单元原被整单元跳过）；
+  2. 指针局部不再走 by-value owning/vptr 胶水判定，pointee 的 vptr 只按
+     分配分支写，与 AST writer 的别名初始化一致；
+  3. GNU 局部属性与 `for (static …)` 改为真行/真块打印（`LS_DECL.attr`、
+     `LS_FOR.aux`），`#56` / `#37` 夹具 `ready=1` 且逐字节；
+  4. owned 清理集按表内顺序（parser 的 `autodrop_append` 已按反声明序注入），
+     修正多个 `own` / `borrow` 局部同时退出时的释放顺序；`#62_borrow_handback`
+     与 AST oracle 逐字节。
 - `build` 模式 `test/modules/split` 与 `test/modules/autodrop` 整树逐字节相同。
 
-### 剩余构造（S8r2 后仍未降级，函数级回退）
+### 剩余构造（S8 尾后仍未降级，函数级回退）
 
-- D-013 胶水：by-value owning 形参（`String` / owning ADT / 含 owning 字段的
-  struct）、owning 结果、owning 字段的赋值/初始化，需要 emitter 的
-  retain/release 与 `__ct_sretN`；这些函数回退（`Lglue*` / `Lownfield`）；
-- struct 局部的 vptr / Handback / 嵌套数组胶水（`#18/#34/#59/#62`）回退；
-- 多段 `into` 链（`#157`）回退：lowerer 未物化每一段的接收者；
-- `for (static int i = …; …)`（`#37`）回退：静态局部要外包一层块；
+- D-013 owning 字段写与 owning 局部：`Lownfield`（14 个自举函数）与
+  `Lglue`（6 个句柄分配函数）。需要把 emitter 的 `sb_field_*` retain/release
+  数据流与 `__ct_sretN` 物化进 LIR；
+- 多段 `into` 链（`#157`）：lowerer 未物化每一段的接收者，单元级预判仍回退；
 - 超过 `LW_NAME_MAX=256` 的标识符/类型拼写（c2p 的 700–2000 字节探针）回退，
-  因为打印器仍有少量有界 scratch 行；
-- 显式 GNU 局部属性（`__attribute__((…))`，`#56`）回退；
+  因为打印器仍有少量有界 scratch 行（字符串/raw 载荷已不再误判）；
 - 默认路径上 LIR 验证器报错时静默回退到 AST（`--ir=on` / `CT_LIR_STRICT=1`
   仍是致命，供负例使用）；
-- 顶层声明仍由 emitter 打印（S8 的 emitter 契约阶段迁走；本轮未完成）。
+- 外壳：PP / INCLUDE / 类型 / 全局 / 断言 / 函数 / Drop 面 / ABI 导出表已是
+  `LModulePlan` 行数据；**实例闭包、ADT 胶水、map JSON 与 header 的
+  include/dep 组装仍读符号表/AST**，见 S8 差异清单 §3d。
 
 ## S8：语义判活（TGraph）与自举切换
 

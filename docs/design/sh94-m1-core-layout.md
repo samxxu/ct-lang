@@ -165,11 +165,12 @@ A1 是 spike：先验证“子单元只 import Core、宿主 import 子单元、
 `em_*` / `sb_*` / `match_*` / `eb_*` 切片）到 `EmitExpr.h.ct`。
 `write_unit_header(_body)`、`emit_unit_body` 与外壳胶水（Box / ADT
 生命周期 / 字面量 / 实例方法）落到新单元 `EmitShell.h.ct`；
-`Emitter.h.ct` 从 9872 行降到 1545 行，只剩 `emit_program` / `emit_unit` /
-fail 与 `ct_emit_*` 绑定。写者身份由 `LModulePlan.shell_u` / `shell_header`
+`Emitter.h.ct` 从 9872 行降到 1623 行，只剩 `emit_program` / `emit_unit` /
+fail、shell 行的消费与 `ct_emit_*` 绑定。写者身份由 `LModulePlan.shell_u` / `shell_header`
 提供；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used` 的定义已移入子单元，
-宿主只按名读写，不再自己判定。四个入口仍读 AST / 符号表（编译模式的
-`emit_program` 体尚在宿主），“只消费 LModule”未完成，见
+宿主只按名读写，不再自己判定。S8 尾把 PP / 类型 / 全局 / 断言 / 函数的顶层判定搬进 `LModulePlan` 的 shell 行，
+`emit_program` / `write_unit_header_body` / `write_abi_header` 读行渲染；实例闭包、
+ADT 胶水与 map JSON 仍读符号表，“只消费 LModule”未完成，见
 [S8 差异清单 §3d](../reviews/2026-11-27-s8-ir2-diff-list.md)。
 
 ### 4.5.1 D1–D3 施工单（S1a-1 内，IR 之前）
