@@ -13,8 +13,8 @@
 int main(void)
 {
     Vec<int> sq = 4..8 { $ * $ };
-    Vec<char *> words;
-    char *names[3];
+    Vec<Str> words;
+    Str names[3];
     int i;
 
     /* `i` is the read-only index, `item` the value copy (D27-7) */
@@ -27,9 +27,11 @@ int main(void)
     names[0] = "a";
     names[1] = "b";
     names[2] = "c";
-    words = Vec<char *>::from(names, 3);
+    words = Vec<Str>::from(names, 3);
     for (i = 0; i < words.len(); i++) {
-        printf("%s%s", words.get(i), i + 1 == words.len() ? "\n" : " ");
+        Str w = words.get(i);
+        w.print();
+        printf("%s", i + 1 == words.len() ? "\n" : " ");
     }
 
     printf("release sq = %d\n", sq.release());

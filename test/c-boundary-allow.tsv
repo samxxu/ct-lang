@@ -2,10 +2,8 @@
 # Consumed by test/c-boundary-wrap.sh, which adds --c-boundary=allow for these paths only.
 # Default is strict; every row names the C interop the fixture exercises. .m.ct units need no row.
 docs/snippets/README/0.11_map_binding.ct	C stdio include retained because README renders this snippet verbatim
-examples/01_greeter/greeter.ct	C heap interop fixture kept byte-identical with the corpus pin
 examples/21_generic_bound/generic_bound.ct	C string interop (strlen/memcpy/strcmp/... are the behaviour under test)
 examples/23_generic_stack/generic_stack.ct	C string interop (strlen/memcpy/strcmp/... are the behaviour under test)
-examples/25_wordcount/wordcount.ct	C heap interop (malloc/free/qsort/... are the behaviour under test)
 examples/40_str_ownership/str_ownership.ct	C heap interop (malloc/free/qsort/... are the behaviour under test)
 examples/54_freestanding_alloc/src/main.ct	C heap interop (malloc/free/qsort/... are the behaviour under test)
 examples/c-superset/s04_enum/neg_offsetof.ct	C type-name interop (size_t/offsetof; the stddef builtin decision is still open)

@@ -25,14 +25,16 @@ PY
 | --- | --- | --- | --- |
 | E1 | C 互操作 / 边界：`.m.ct`、`*.shim.h`、板级头、`c-superset`、type host | 41 | **保留**，显式 allow + 理由（§3） |
 | E2 | 生命周期与句柄语义演示：`own` / `delete` / Drop / 构造位置 | 11 | **保留**，指针是课题本身（§3） |
-| E3 | 字符串打印受阻：`char *` 只用于 `%s` / `cstr()` | 26 | **阻塞**：等 print API 决策（§4） |
+| E3 | 字符串打印受阻：`char *` 只用于 `%s` / `cstr()` | 26 | **已解锁**：LANG-30 落地后迁 21，保留 5（§2.1） |
 | E4 | 结构体 / 接口值指针：只有 `p->f`，没有 `char *` | 15 | **保留**：语言暂无等价引用形态（§3） |
 | M | 可迁移 | 8 | 已迁 2 个，其余 6 个各有结构理由（§5） |
 
 ## 2 E3：打印受阻（26 个）
 
-这些文件的 `char *` 全部来自「字符串字段 / 字符串形参 → `printf("%s", …)`」。
-语言目前**没有** `Str` / `String` 的直接打印入口：
+这些文件的 `char *` 原本都来自「字符串字段 / 字符串形参 → `printf("%s", …)`」。
+LANG-30（`Str.print()` / `println()`，[spec §4.78](../language-spec.md)、[D-030](../decisions/D-030.md)）
+落地后，E3 的 26 个文件里 **21 个已迁**，**5 个保留**（理由见 §2.1）。
+下表是迁移前的判断依据，保留作历史记录：
 
 | 事实 | 位置 |
 | --- | --- |
@@ -49,6 +51,30 @@ PY
 `34_map_literal`、`35_type_safety`、`39_generic_trait`、`45_error_return_contract`、`46_result_try`、
 `62_try_cleanup`、`65_generic_trait_instances`、`tour/01_vtable/two_impls`、`tour/02_iface_value/param`、
 `tour/02_iface_value/return_pick`、`tour/11_variadic/forward`。
+
+### 2.1 迁移结果（2026-11-27，LANG-30 收口）
+
+**已迁 21 个**（`char *` / `cstr()` / `free` 清零，输出逐字节不变；字符串字段改
+`String`、借用位置改 `Str`，打印走 `print()` / `println()`）：
+`01_greeter`、`02_market`、`03_receivers`、`04_rvalue`、`22_foreach_map`、`25_wordcount`、
+`26_range_vec`、`27_map_keys`、`29_into_block`、`30_iface_container`、`32_container_subscript`、
+`34_map_literal`、`35_type_safety`、`39_generic_trait`、`45_error_return_contract`、
+`46_result_try`、`62_try_cleanup`、`65_generic_trait_instances`、`tour/01_vtable/two_impls`、
+`tour/02_iface_value/param`、`tour/02_iface_value/return_pick`。
+
+**保留 5 个（不是拒绝迁移，是当前语言/用例边界）**：
+
+| 文件 | 为什么保留 | 触发条件 / 关联 |
+| --- | --- | --- |
+| `18_generic_string_table` | 课题就是「泛型模板以 `char *` 显式实例化」；`Str` 是 struct，`T=Str` 的 `T *items` 实例化当前编译不过（`cannot convert 'Str' to 'struct Str *'`），改成具体类型会删掉泛型教学点 | 结构体类型参数可用后重判（`nth<Str>` / `count_if<Str>`） |
+| `19_container_each_generic` | 同上：`walk<char *>` 的实例化与 `(fn, env)` 回调是课题；`T=Str` 实例化同样不可用 | 同上 |
+| `21_generic_bound` | `Word` 的 `char *s` 用 `strcmp` 比较，`strcmp` 是「约束泛型调用 C 函数」的行为本体；`Str` 不能作 struct 字段（§4.70 硬错） | `test/c-boundary-allow.tsv` 已登记；保留 |
+| `23_generic_stack` | 课题是 `Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段；`Stack<Str>` 的数组字段与 `T *` 字段同样卡在结构体泛型实例化 | 同上 |
+| `tour/11_variadic/forward` | `va_list` 转 `vprintf` / `vsnprintf`：`char *fmt` 就是 C 变参 ABI 的一部分，换成 `Str` 会丢掉 NUL 结尾的格式串契约 | E1 C 互操作；保留 |
+
+> `21` / `23` 同时登记在 [test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv)：
+> 它们的 `#include <string.h>` 是 `strcmp` / `memset` 行为本体，不是打印阻碍。
+> `18` / `19` 的 `char *` 是样例主题；`tour/11_variadic/forward` 的 `char *` 是变参 ABI。
 
 ## 3 保留类：E1 / E2 / E4（67 个）
 
@@ -105,13 +131,12 @@ Ct 目前没有「结构体引用」这一形态，`ref struct` 只在形参位�
 | `48_string_steps` 标注「为什么必须指针」 | ✅ 2026-11-27（C 类型宿主 + shim，代码不动） |
 | `67_adt_patterns` / `68_adt_guards` / `69_generic_adt` | ✅ 2026-11-27（S4/S5/S6 样例，零 `char *` / `->` / `malloc`） |
 | E1/E2/E4 的 C 边界显式 allow | ✅ S9 M4 起登记在 `test/c-boundary-allow.tsv`（逐路径 + 理由），不再用文件内注释；`--c-boundary=allow` 只对这些路径生效 |
-| E3 的 26 个文件 | ⬜ 等 [LANG-30](../../issues/lang/lang-30-str-print-api.md)（`Str.print()` / `println()`，v1.2 必做） |
+| E3 的 26 个文件 | ✅ 2026-11-27：迁 21（`print()` / `println()`），保留 5（§2.1 逐条理由） |
 
 ## 6 建议的下一步
 
-1. **落地 print API**（方案 A 已批准，见 [LANG-30 施工卡](../design/lang30-str-print-construction.md)），
-   否则 E3 的 26 个文件无法真正去指针；已立 [REQ-PRINT-1](requirements-pool.md) /
-   [LANG-30](../../issues/lang/lang-30-str-print-api.md)；
+1. **print API 已落地**（[LANG-30 施工卡](../design/lang30-str-print-construction.md) / D-030）；
+   E3 的 21 个文件已迁，5 个保留项按 §2.1 的触发条件重判；
 2. E1/E2/E4 的 C 边界 allow 已在 `test/c-boundary-allow.tsv` 登记，不再逐文件加注释；
 3. E4 的长期解是「结构体引用」形态；在那之前不要为去指针而把样例改成 `self` 方法（会改变教学点）。
 

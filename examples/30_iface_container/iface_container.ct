@@ -1,7 +1,7 @@
 // 30_iface_container - interface values in containers (Phase 31 O1)
 //
 // A `Show` value is a two-word non-owning copy (the object plus its vtable), so
-// `Vec<Show>` and `Map<char *, Show>` store it directly. A concrete struct boxes
+// `Vec<Show>` and `Map<String, Show>` store it directly. A concrete struct boxes
 // on the way into `push` / `put`; the container never retains or releases the
 // object it points at. Reads are borrowed views: `get` answers a copy and
 // `foreach item` is a view, so the objects must outlive the containers.
@@ -37,7 +37,10 @@ impl Show for Square {
 int main(void)
 {
     Vec<Show> v;
-    Map<char *, Show> m;
+    Map<String, Show> m;
+    Str k_circle = "circle";
+    Str k_square = "square";
+    Str k_nope = "nope";
     struct Circle ci;
     struct Circle other;
     struct Square sq;
@@ -66,15 +69,16 @@ int main(void)
     }
 
     m.h = 0;
-    m.put("circle", ci);
-    m.put("square", sq);
-    picked = m.get("circle");
+    m.put(k_circle, ci);
+    m.put(k_square, sq);
+    picked = m.get(k_circle);
     printf("map: len = %d, circle = %d\n", m.len(), picked->show());
     foreach (m) {
-        printf("%s -> %d\n", item.key, item.value.show());
+        item.key.print();
+        printf(" -> %d\n", item.value.show());
     }
-    printf("missing key is a null view: %d\n", m.get("nope") == 0);
-    m.remove("square");
+    printf("missing key is a null view: %d\n", m.get(k_nope) == 0);
+    m.remove(k_square);
     printf("after remove: len = %d\n", m.len());
 
     /* the generic key block serves the same interface values */

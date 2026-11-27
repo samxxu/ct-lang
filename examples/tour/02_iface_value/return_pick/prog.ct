@@ -8,7 +8,7 @@
 
 
 trait Sink {
-    void put(char *line);
+    void put(Str line);
     int count();
 }
 
@@ -22,9 +22,10 @@ struct Memory {
 } use Sink;
 
 impl Sink for Console {
-    void put(char *line) {
+    void put(Str line) {
         self->n = self->n + 1;
-        printf("console: %s\n", line);
+        printf("console: ");
+        line.println();
     }
 
     int count() {
@@ -33,7 +34,7 @@ impl Sink for Console {
 }
 
 impl Sink for Memory {
-    void put(char *line) {
+    void put(Str line) {
         (void)line;
         // 内存后端只记条数，模拟“容量有限的缓冲区”。
         if (self->n < self->limit) {
@@ -63,12 +64,18 @@ int main(void) {
     Sink out = pick(0);
     Sink buf = pick(1);
 
-    out.put("hello");
-    out.put("world");
+    Str hello = "hello";
+    Str world = "world";
+    Str a = "a";
+    Str b = "b";
+    Str c = "c";
 
-    buf.put("a");
-    buf.put("b");
-    buf.put("c");   // 超过 limit，被内存后端静默丢弃
+    out.put(hello);
+    out.put(world);
+
+    buf.put(a);
+    buf.put(b);
+    buf.put(c);   // 超过 limit，被内存后端静默丢弃
 
     printf("console %d\n", out.count());
     printf("memory  %d\n", buf.count());

@@ -45,7 +45,11 @@ int main(void)
     Vec<Vec<int>> g;
     Vec<int> row0 = {1, 2};
     Vec<int> row1 = {3};
-    Map<char *, int> m = {"k": 7};
+    String k_key = "k";
+    String k_missing_key = "missing";
+    Str k = k_key.as_str();
+    Str k_missing = k_missing_key.as_str();
+    Map<String, int> m = {k_key: 7};
 
     arr[0] = v;
     h.v = v;
@@ -77,15 +81,22 @@ int main(void)
 
     /* out-of-bounds and missing key answer zero / null, never abort. */
     int oob = v[9];
-    int mkval = *m["k"];
-    void *missing = m["missing"];
+    int mkval = *m[k];
+    void *missing = m[k_missing];
     printf("v[9] = %d\n", oob);
     printf("*m[\"k\"] = %d\n", mkval);
-    printf("m[\"missing\"] = %s\n", missing == 0 ? "null" : "non-null");
+    printf("m[\"missing\"] = ");
+    if (missing == 0) {
+        Str w = "null";
+        w.println();
+    } else {
+        Str w = "non-null";
+        w.println();
+    }
 
     /* writing through the Map get pointer is the existing get() semantics. */
-    *m["k"] = 42;
-    printf("after *m[k] = 42: %d\n", *m["k"]);
+    *m[k] = 42;
+    printf("after *m[k] = 42: %d\n", *m[k]);
 
     g.release();
     row1.release();

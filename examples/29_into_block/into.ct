@@ -6,7 +6,7 @@
 
 
 struct ServerConfig {
-    char *host;
+    String host;
     int port;
     int backlog;
 };
@@ -23,7 +23,9 @@ struct ServerConfig *config_new(void)
 
 void report(struct ServerConfig *c)
 {
-    printf("report %s:%d/%d\n", c->host, c->port, c->backlog);
+    printf("report ");
+    c->host.print();
+    printf(":%d/%d\n", c->port, c->backlog);
 }
 
 int main(void)
@@ -37,7 +39,9 @@ int main(void)
         .port = 8080;
         report($);
     };
-    printf("cfg %s:%d/%d\n", live.host, live.port, live.backlog);
+    printf("cfg ");
+    live.host.print();
+    printf(":%d/%d\n", live.port, live.backlog);
 
     struct ServerConfig copy = live into {
         .port = 9090;

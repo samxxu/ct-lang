@@ -9,18 +9,15 @@
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
 
-#include <stdlib.h>
-#include <string.h>
-
 trait WordReport {
-    void add(char *word);
+    void add(Str word);
     void show_insertion_order();
     void show_by_count();
     void dispose();
 }
 
 struct WordCounter {
-    Map<char *, int> counts;
+    Map<String, int> counts;
 } use WordReport;
 
 /* 唯一的构造入口：空表的初始化方式属于实现细节。 */
@@ -31,7 +28,7 @@ static WordCounter word_counter(void) {
 }
 
 impl WordReport for WordCounter {
-    void add(char *word) {
+    void add(Str word) {
         int *slot = self->counts.get(word);
 
         if (slot != 0) {
@@ -44,28 +41,35 @@ impl WordReport for WordCounter {
     void show_insertion_order() {
         /* foreach 只接受普通变量，不接受成员表达式；这里复制的是句柄，
            别名不释放、也不改变 map 的引用计数。 */
-        Map<char *, int> entries = self->counts;
+        Map<String, int> entries = self->counts;
 
         printf("in insertion order:\n");
         foreach (entries) {
-            printf("  %s %d\n", item.key, item.value);
+            printf("  ");
+            item.key.print();
+            printf(" %d\n", item.value);
         }
     }
 
     void show_by_count() {
+        /* The demo word list is short; a fixed pair of arrays keeps the sort
+           allocation-free. Each key is a borrowed view of the map's own key. */
+        String keys[32];
+        int values[32];
+        MapEntry<String, int> e;
         int n = self->counts.len();
-        char **keys = malloc(sizeof(char *) * n);
-        int *values = malloc(sizeof(int) * n);
         int a;
         int b;
         int k;
         int swap;
-        char *tk;
+        String tk;
         int tv;
 
+        if (n > 32) n = 32;
         for (k = 0; k < n; k++) {
-            keys[k] = self->counts.entry(k).key;
-            values[k] = self->counts.entry(k).value;
+            e = self->counts.entry(k);
+            keys[k] = e.key;
+            values[k] = e.value;
         }
 
         for (a = 1; a < n; a++) {
@@ -74,7 +78,8 @@ impl WordReport for WordCounter {
                 swap = 0;
                 if (values[b - 1] < values[b]) {
                     swap = 1;
-                } else if (values[b - 1] == values[b] && strcmp(keys[b - 1], keys[b]) > 0) {
+                } else if (values[b - 1] == values[b]
+                           && str_compare(keys[b - 1].as_str(), keys[b].as_str()) > 0) {
                     swap = 1;
                 }
                 if (swap == 0) break;
@@ -90,10 +95,10 @@ impl WordReport for WordCounter {
 
         printf("by count:\n");
         for (a = 0; a < n; a++) {
-            printf("  %s %d\n", keys[a], values[a]);
+            printf("  ");
+            keys[a].print();
+            printf(" %d\n", values[a]);
         }
-        free(keys);
-        free(values);
     }
 
     void dispose() {
@@ -103,8 +108,18 @@ impl WordReport for WordCounter {
 
 int main(void)
 {
-    char *words[9] = {"the", "cat", "sat", "on", "the", "mat", "the", "dog", "sat"};
+    Str words[9];
     WordCounter tally = word_counter();
+
+    words[0] = "the";
+    words[1] = "cat";
+    words[2] = "sat";
+    words[3] = "on";
+    words[4] = "the";
+    words[5] = "mat";
+    words[6] = "the";
+    words[7] = "dog";
+    words[8] = "sat";
 
     foreach (words) {
         tally.add(item);

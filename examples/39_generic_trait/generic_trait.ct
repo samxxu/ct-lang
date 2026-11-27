@@ -1,6 +1,6 @@
 //@ct-requires: ct-ast
 // Phase 35 S9: a parameterised trait covers the three axes the phase ships.
-// `Iter<T>` monomorphises per argument, so `Iter<int>` and `Iter<char *>` are
+// `Iter<T>` monomorphises per argument, so `Iter<int>` and `Iter<Str>` are
 // two ordinary traits with their own vtables; `T: Iter<int>` names the int
 // instance as a bound, and the bounded body dispatches through that same slot.
 
@@ -23,11 +23,11 @@ impl Iter<int> for Countdown {
 }
 
 struct Word {
-    char *s;
-} use Iter<char *>;
+    String s;
+} use Iter<Str>;
 
-impl Iter<char *> for Word {
-    char *next(void) { return self->s; }
+impl Iter<Str> for Word {
+    Str next(void) { return self->s.as_str(); }
 }
 
 struct Pair<T> {
@@ -52,7 +52,8 @@ int main(void)
 
     printf("%d\n", step<Countdown>(c));
     printf("%d\n", c.next());
-    printf("%s\n", w.next());
+    Str word = w.next();
+    word.println();
     printf("%d\n", p.next());
     return 0;
 }

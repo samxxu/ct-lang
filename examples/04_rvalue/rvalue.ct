@@ -26,20 +26,22 @@ trait Greeter {
 }
 
 struct Person {
-    char *name;
+    String name;
     int age;
 } use Greeter;
 
 impl Greeter for Person {
     void greet() {
-        printf("Hi %s (%d)\n", self->name, self->age);
+        printf("Hi ");
+        self->name.print();
+        printf(" (%d)\n", self->age);
     }
     int bumps(int n) {
         return self->age + n;
     }
 }
 
-Person make_person(char *name, int age) {
+Person make_person(String name, int age) {
     Person p = { .name = name, .age = age };
     return p;
 }

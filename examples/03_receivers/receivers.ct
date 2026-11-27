@@ -12,12 +12,13 @@ trait Greeter {
 }
 
 struct Person {
-    char *name;
+    String name;
 } use Greeter;
 
 impl Greeter for Person {
     void greet() {
-        printf("hello %s\n", self->name);
+        printf("hello ");
+        self->name.println();
     }
 }
 
@@ -25,7 +26,7 @@ struct Box {
     Person *who;
 };
 
-static Person person(char *name) {
+static Person person(String name) {
     Person p = { .name = name };
     return p;
 }

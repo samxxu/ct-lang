@@ -19,7 +19,10 @@ int main(void)
 {
     Vec<int> nums;
     Vec<struct Point> path;
-    Map<char *, int> ages;
+    Map<String, int> ages;
+    Str bo = "bo";
+    Str amy = "amy";
+    Str cy = "cy";
     struct Point p;
     int sum;
     int n;
@@ -50,12 +53,13 @@ int main(void)
 
     /* Map: insertion order, key and value through `item` */
     ages.h = 0;
-    ages.put("bo", 31);
-    ages.put("amy", 24);
-    ages.put("cy", 45);
-    ages.put("amy", 25);            /* an existing key is rewritten in place */
+    ages.put(bo, 31);
+    ages.put(amy, 24);
+    ages.put(cy, 45);
+    ages.put(amy, 25);              /* an existing key is rewritten in place */
     foreach (ages) {
-        printf("%s is %d\n", item.key, item.value);
+        item.key.print();
+        printf(" is %d\n", item.value);
     }
 
     /* `item` is a copy: writing it never reaches the container */

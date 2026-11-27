@@ -4,37 +4,41 @@
 // 「拿到一个 Greeter 能做什么」，不描述对象长什么样。
 // 展开规则见 docs/language-spec.md；运行方式见 examples/README.md
 // License: MIT; see LICENSE.EXCEPTION (free to copy into your own project)
-#include <stdio.h>
-#include <stdlib.h>
-
 trait Greeter {
     void greet();
-    void greet_name(char *name);
+    void greet_name(String name);
 }
 
 struct Person {
-    char *name;
+    String name;
     int age;
 } use Greeter;
 
 impl Greeter for Person {
     void greet() {
-        printf("Hello, I'm %s, age %d\n", self->name, self->age);
+        printf("Hello, I'm ");
+        self->name.print();
+        printf(", age %d\n", self->age);
     }
-    void greet_name(char *name) {
-        printf("Hello %s, I'm %s\n", name, self->name);
+    void greet_name(String name) {
+        printf("Hello ");
+        name.print();
+        printf(", I'm ");
+        self->name.print();
+        printf("\n");
     }
 }
 
 /* 工厂：调用点只给业务参数。以后 Person 加字段，只改这里。 */
-static Person person(char *name, int age) {
+static Person person(String name, int age) {
     Person p = { .name = name, .age = age };
     return p;
 }
 
 int main() {
     Person p = person("Tom", 36);
+    String jerry = "Jerry";
     p.greet();
-    p.greet_name("Jerry");
+    p.greet_name(jerry);
     return 0;
 }

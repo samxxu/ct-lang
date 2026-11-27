@@ -37,24 +37,24 @@ trait Reporter {
 }
 
 struct Trader {
-    char *name;
+    String name;
     int coins;
 } use Purse, Reporter;
 
 struct Shop {
-    char *name;
+    String name;
     int price;
     int units;
     int coins;
 } use Shelf, Purse, Reporter;
 
 /* 构造入口：字段布局与初始值属于实现，调用点只给业务参数。 */
-static Trader trader(char *name, int coins) {
+static Trader trader(String name, int coins) {
     Trader t = { .name = name, .coins = coins };
     return t;
 }
 
-static Shop shop(char *name, int price, int units) {
+static Shop shop(String name, int price, int units) {
     Shop s = { .name = name, .price = price, .units = units, .coins = 0 };
     return s;
 }
@@ -65,7 +65,9 @@ impl Purse for Trader {
     }
     int spend(int amount) {
         if (amount > self->coins) {
-            printf("trader %s is short by %d\n", self->name, amount - self->coins);
+            printf("trader ");
+            self->name.print();
+            printf(" is short by %d\n", amount - self->coins);
             return 0;
         }
         self->coins -= amount;
@@ -78,7 +80,9 @@ impl Purse for Trader {
 
 impl Reporter for Trader {
     void report() {
-        printf("trader %s: coins=%d\n", self->name, self->coins);
+        printf("trader ");
+        self->name.print();
+        printf(": coins=%d\n", self->coins);
     }
 }
 
@@ -94,7 +98,9 @@ impl Shelf for Shop {
             n = self->units;
         }
         self->units -= n;
-        printf("shop %s sells %d\n", self->name, n);
+        printf("shop ");
+        self->name.print();
+        printf(" sells %d\n", n);
         return n;
     }
     /* 交易归货架：先向买家收款（失败就整笔取消），再出货、入账。
@@ -115,19 +121,25 @@ impl Purse for Shop {
         return self->coins;
     }
     int spend(int amount) {
-        printf("shop %s never spends %d\n", self->name, amount);
+        printf("shop ");
+        self->name.print();
+        printf(" never spends %d\n", amount);
         return 0;
     }
     void earn(int amount) {
         self->coins += amount;
-        printf("shop %s receives %d\n", self->name, amount);
+        printf("shop ");
+        self->name.print();
+        printf(" receives %d\n", amount);
     }
 }
 
 impl Reporter for Shop {
     void report() {
-        printf("shop %s: units=%d price=%d coins=%d\n",
-               self->name, self->units, self->price, self->coins);
+        printf("shop ");
+        self->name.print();
+        printf(": units=%d price=%d coins=%d\n",
+               self->units, self->price, self->coins);
     }
 }
 

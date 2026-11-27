@@ -1,10 +1,10 @@
 // 65_generic_trait_instances - one generic trait, two independent instances.
 //
-// Normal path: `Next<int>` and `Next<char *>` are two ordinary traits, each with
+// Normal path: `Next<int>` and `Next<Str>` are two ordinary traits, each with
 // its own vtable; a `T: Next<int>` bound names the int instance only.
-// Counterintuitive point: the bound is per instance, so the char-pointer
+// Counterintuitive point: the bound is per instance, so the borrowed-string
 // implementation is not covered by it, and monomorphised names carry the
-// argument spelling (`Next_int_*` vs `Next_char_p_*`).
+// argument spelling (`Next_int_*` vs `Next_Str_*`).
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
@@ -28,13 +28,13 @@ impl Next<int> for Countdown {
 }
 
 struct Word {
-    char *text;
-} use Next<char *>;
+    String text;
+} use Next<Str>;
 
-impl Next<char *> for Word {
-    char *next(void)
+impl Next<Str> for Word {
+    Str next(void)
     {
-        return self->text;
+        return self->text.as_str();
     }
 }
 
@@ -49,7 +49,9 @@ int main(void)
     Word w = { .text = "only" };
 
     printf("drain=%d\n", drain<Countdown>(c));
-    printf("word=%s\n", w.next());
+    printf("word=");
+    Str word = w.next();
+    word.println();
     printf("left=%d\n", c.next());
     return 0;
 }

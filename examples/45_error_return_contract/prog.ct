@@ -1,15 +1,18 @@
 //@ct-requires: ct-ast
 
-Result<int, char *> load(int n)
+Result<int, Str> load(int n)
 {
+    Str e = "negative";
+    Str z = "";
     errdefer { printf("rollback\n"); }
-    if (n < 0) return err: (Result<int, char *>){ 0, 0, "negative" };
-    return (Result<int, char *>){ 1, n, 0 };
+    if (n < 0) return err: (Result<int, Str>){ 0, 0, e };
+    return (Result<int, Str>){ 1, n, z };
 }
 int main(void)
 {
-    Result<int, char *> ok = load(7);
-    Result<int, char *> bad = load(-1);
-    printf("%d %s\n", ok.ok ? ok.value : -1, bad.ok ? "ok" : bad.err);
+    Result<int, Str> ok = load(7);
+    Result<int, Str> bad = load(-1);
+    printf("%d ", ok.ok ? ok.value : -1);
+    if (bad.ok) { printf("ok\n"); } else { bad.err.println(); }
     return 0;
 }

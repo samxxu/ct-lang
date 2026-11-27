@@ -7,12 +7,12 @@
 
 
 trait Speaker {
-    char *sound();
+    Str sound();
     int volume();
 }
 
 struct Dog {
-    char *name;
+    String name;
 } use Speaker;
 
 struct Radio {
@@ -20,8 +20,9 @@ struct Radio {
 } use Speaker;
 
 impl Speaker for Dog {
-    char *sound() {
-        return "woof";
+    Str sound() {
+        Str s = "woof";
+        return s;
     }
 
     int volume() {
@@ -30,8 +31,9 @@ impl Speaker for Dog {
 }
 
 impl Speaker for Radio {
-    char *sound() {
-        return "hiss";
+    Str sound() {
+        Str s = "hiss";
+        return s;
     }
 
     int volume() {
@@ -45,7 +47,9 @@ static void play(Speaker s, int times) {
     int k = 0;
 
     while (k < times) {
-        printf("%s@%d\n", s.sound(), s.volume());
+        Str sound = s.sound();
+        sound.print();
+        printf("@%d\n", s.volume());
         k = k + 1;
     }
 }

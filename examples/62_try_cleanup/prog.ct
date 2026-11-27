@@ -11,31 +11,35 @@
 //@ct-requires: ct-ast
 
 
-static Result<int, char *> inner(int n)
+static Result<int, Str> inner(int n)
 {
     int guard = n errdefer { printf("inner errdefer $=%d\n", $); };
     int trace = n defer { printf("inner defer $=%d\n", $); };
 
+    Str e = "negative";
+    Str z = "";
     if (n < 0) {
-        return err: (Result<int, char *>){ 0, 0, "negative" };
+        return err: (Result<int, Str>){ 0, 0, e };
     }
-    return (Result<int, char *>){ 1, guard + trace, 0 };
+    return (Result<int, Str>){ 1, guard + trace, z };
 }
 
-static Result<int, char *> outer(int n)
+static Result<int, Str> outer(int n)
 {
+    Str z = "";
     int v = inner(n)?;
-    return (Result<int, char *>){ 1, v * 10, 0 };
+    return (Result<int, Str>){ 1, v * 10, z };
 }
 
 int main(void)
 {
-    Result<int, char *> ok = outer(3);
-    Result<int, char *> bad = outer(-2);
+    Result<int, Str> ok = outer(3);
+    Result<int, Str> bad = outer(-2);
     int pick = 1 ? 7 : 9;
 
     printf("ok=%d v=%d\n", ok.ok, ok.ok ? ok.value : -1);
-    printf("bad=%d err=%s\n", bad.ok, bad.ok ? "ok" : bad.err);
+    printf("bad=%d err=", bad.ok);
+    if (bad.ok) { printf("ok\n"); } else { bad.err.println(); }
     printf("ternary=%d\n", pick);
     return 0;
 }

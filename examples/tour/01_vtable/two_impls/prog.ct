@@ -9,7 +9,7 @@
 
 trait Shape {
     int area();
-    char *label();
+    Str label();
 }
 
 struct Rect {
@@ -26,8 +26,9 @@ impl Shape for Rect {
         return self->w * self->h;
     }
 
-    char *label() {
-        return "rect";
+    Str label() {
+        Str s = "rect";
+        return s;
     }
 }
 
@@ -36,15 +37,18 @@ impl Shape for Square {
         return self->side * self->side;
     }
 
-    char *label() {
-        return "square";
+    Str label() {
+        Str s = "square";
+        return s;
     }
 }
 
 // 参数写成 Shape（不是 struct Rect *）：函数体里看不到任何具体类型，
 // 却能在同一次调用里落到不同的 area 实现上。
 static void report(Shape s) {
-    printf("%s %d\n", s.label(), s.area());
+    Str label = s.label();
+    label.print();
+    printf(" %d\n", s.area());
 }
 
 int main(void) {

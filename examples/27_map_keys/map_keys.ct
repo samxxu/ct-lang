@@ -1,11 +1,12 @@
 // 27_map_keys - the integer and pointer key types of the built-in `Map`
 // (Phase 29, V29-1; `Str` joins the roster in Phase 47)
 //
-// A key is compared by content: `int` and `long` by their bytes, `char *` by
-// `strcmp`. The two paths are separate `impl` blocks, so a 64-bit `long` can
+// A key is compared by content: `int` and `long` by their bytes, `String` by
+// its byte range. The paths are separate `impl` blocks, so a 64-bit `long` can
 // never fall into the string comparison just because it is as wide as a
-// pointer. A key outside the whitelist (`int`, `long`, `char *`, `Str`) is
-// rejected at compile time (L29-8 / L47-1).
+// pointer. A key outside the supported set (`int`, `long`, `String`; the
+// C-interop char-pointer form is unchanged) is rejected at compile time
+// (L29-8 / L47-1).
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
@@ -14,10 +15,15 @@
 int main(void)
 {
     Map<long, int> calls;
-    Map<int, char *> names;
-    Map<char *, int> ages;
+    Map<int, String> names;
+    Map<String, int> ages;
     long big;
     int *slot;
+    String seven = "seven";
+    String eight = "eight";
+    Str ada = "ada";
+    Str bob = "bob";
+    Str cid = "cid";
 
     calls.h = 0;
     big = 9000000000L;
@@ -39,17 +45,22 @@ int main(void)
     }
 
     names.h = 0;
-    names.put(7, "seven");
-    names.put(8, "eight");
-    printf("names: %s %s\n", *names.get(7), *names.get(8));
+    names.put(7, seven);
+    names.put(8, eight);
+    printf("names: ");
+    String n7 = *names.get(7);
+    n7.print();
+    printf(" ");
+    String n8 = *names.get(8);
+    n8.println();
     printf("names missing: %d\n", names.get(9) == 0);
 
     ages.h = 0;
-    ages.put("ada", 36);
-    ages.put("bob", 41);
-    printf("ages: %d %d\n", *ages.get("ada"), *ages.get("bob"));
-    printf("ages missing: %d\n", ages.get("cid") == 0);
-    printf("ages remove: %d\n", ages.remove("ada"));
+    ages.put(ada, 36);
+    ages.put(bob, 41);
+    printf("ages: %d %d\n", *ages.get(ada), *ages.get(bob));
+    printf("ages missing: %d\n", ages.get(cid) == 0);
+    printf("ages remove: %d\n", ages.remove(ada));
     printf("ages len = %d\n", ages.len());
 
     printf("release calls = %d\n", calls.release());

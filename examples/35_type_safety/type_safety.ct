@@ -39,13 +39,16 @@ int main(void)
     int n = 3;
     int m;
     double d = 1.5;
-    char *s = "ok";
-    char *p = 0;
+    Str s = "ok";
+    int *p = 0;
     int *np = &n;
     Square sq;
     Pair pr;
     Vec<int> v = {1, 2};
-    Map<char *, int> tab = {"a": 1};
+    String a_key = "a";
+    String b_key = "b";
+    Str b = b_key.as_str();
+    Map<String, int> tab = {a_key: 1};
 
     m = n;
     *np = 5;
@@ -57,10 +60,12 @@ int main(void)
     {
         Shape sh = sq;
         v.push(3);
-        tab.put("b", 2);
+        tab.put(b, 2);
         noop();
-        printf("%d %d %d %d %s %d %d %d %d %d\n", n, m, add(n, m), (int)d, s,
-               v.len(), tab.len(), pr.a + pr.b, sh.area(), p == 0);
+        printf("%d %d %d %d ", n, m, add(n, m), (int)d);
+        s.print();
+        printf(" %d %d %d %d %d\n", v.len(), tab.len(), pr.a + pr.b,
+               sh.area(), p == 0);
     }
     return 0;
 }

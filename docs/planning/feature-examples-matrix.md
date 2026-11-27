@@ -63,7 +63,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | B-1b | 自定义下标（§4.64）无样例 | `examples/59_custom_subscript`；S2 按键分派的并存形态由 `test/ast/index_overload_both` / `jsaccess_overload_both` 钉住 | 已补 |
 | B-2 | `match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例 | `60`–`65`；defer / errdefer 升「有」，其余按需补反例 | 已补 |
 | B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 去 `cstr` + `free`，改 `as_str()`；`48_string_steps` 判为 C 类型宿主例外并注明理由 | 已补 |
-| B-4 | 非 C 互操作用例的指针 | 逐文件判定见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写，E3 的 26 个文件卡 [LANG-30](../../issues/lang/lang-30-str-print-api.md)（v1.2 必做） | 部分 |
+| B-4 | 非 C 互操作用例的指针 | 逐文件判定见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写；2026-11-27 LANG-30 落地后 E3 迁 21、保留 5（逐条理由见该文件 §2.1） | 部分 |
 | B-5 | 文档可执行片段偏少 | README 现有 13 个 `// source:` 片段（`0.1`–`0.12`；`check-docs` 实测）；H1–H4 见 [TEST-27 §8](../../issues/testing/test27-feature-examples-pointer-free.md) | 部分 |
 | B-6 | S2 下标协议、S3 函子、S4–S6 模式 | `59`（S2）、`66`（S3）、`67`（S4）、`68`（S5）、`69`（S6）各 ≥1 个 example | 已补 |
 | B-7 | 文档去指针 | README / tutorial / guide / idioms / snippets 的 C 互操作段保留并标注；非互操作段优先 `String` / `Str` / `Vec` / `Map` / `Box` / 切片 / `ref`·`out` | 进行中 |
@@ -83,8 +83,10 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 含非 `self->` 的 `->` | 56 |
 | 含 `malloc` | 12 |
 
-新增的 `67`–`69` 三个样例零 `char *` / `->` / `malloc`。E3 类 26 个文件的剩余量由
-[LANG-30](../../issues/lang/lang-30-str-print-api.md) 解锁；未落地前不得用 `cstr()` + `free` 假删。
+新增的 `67`–`69` 三个样例零 `char *` / `->` / `malloc`。E3 类 26 个文件已由
+[LANG-30](../../issues/lang/lang-30-str-print-api.md) 解锁：21 个改成 `print()` / `println()`，
+5 个（`18` / `19` / `21` / `23` / `tour/11_variadic/forward`）因泛型 struct 实例化或 C 互操作
+保留，理由见 [pointer-free-exemptions](pointer-free-exemptions.md) §2.1；不得用 `cstr()` + `free` 假删。
 
 ## 5 关联
 

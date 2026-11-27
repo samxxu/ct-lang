@@ -13,17 +13,28 @@
 
 int main(void)
 {
-    char *again = "a";
-    Map<char *, int> letters = {"a": 1, "b": 2, again: 9};
-    Map<char *, int> empty = {};
-    Map<int, char *> names = {1: "one", 2: "two"};
+    String a_key = "a";
+    String b_key = "b";
+    String again = a_key;          /* same buffer: the literal dedupe is by handle */
+    String one = "one";
+    String two = "two";
+    Str a = a_key.as_str();
+    Str b = b_key.as_str();
+    Map<String, int> letters = {a_key: 1, b_key: 2, again: 9};
+    Map<String, int> empty = {};
+    Map<int, String> names = {1: one, 2: two};
 
-    printf("letters: len = %d, first = %s, a = %d, b = %d\n",
-           letters.len(), letters.entry(0).key,
-           *letters.get("a"), *letters.get("b"));
+    printf("letters: len = %d, first = ", letters.len());
+    MapEntry<String, int> first = letters.entry(0);
+    first.key.print();
+    printf(", a = %d, b = %d\n", *letters.get(a), *letters.get(b));
     printf("empty: len = %d\n", empty.len());
-    printf("names: len = %d, %s %s\n", names.len(),
-           *names.get(1), *names.get(2));
+    printf("names: len = %d, ", names.len());
+    String n1 = *names.get(1);
+    n1.print();
+    printf(" ");
+    String n2 = *names.get(2);
+    n2.println();
 
     letters.release();
     empty.release();
