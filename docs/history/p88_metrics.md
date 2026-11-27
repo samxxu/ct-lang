@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=9978 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=9872 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=91006 io_cap=2048
+     emitted_before=48223 emitted_after=91182 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -275,6 +275,10 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
     错误路径改 Result）。
   - D2 `tool/pkg` 容器化：`Pkg.owned` 的 `char **` + count + capacity 三件套
     改 `Vec<char *>`，发射 C 90663 → 90652（-11：注册表增长代码收进容器）。
+- **v1-PH-2 S8 剩余子集 D6（EmitExpr）后的 live 校准**：`Emitter.h.ct`
+  9978 → 9872 行（-106：D6 的 6 个无 kind 依赖 helper 纯搬到新单元
+  `backend/emit/EmitExpr.h.ct`），发射 C 91006 → 91182（+176：新增单元与
+  vtable/初始化形状；82 语料与自举 C 树逐字节相同）。切片清单仍为 76。
 - **v1-PH-2 S8 剩余子集 D5（EmitDecl）后的 live 校准**：`Emitter.h.ct`
   10358 → 9978 行（-380：D5 的 13 个方法 + 3 个自由函数纯搬到新单元
   `backend/emit/EmitDecl.h.ct`），发射 C 90830 → 91006（+176：新增单元与
