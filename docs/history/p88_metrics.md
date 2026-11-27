@@ -6,15 +6,19 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=1623 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=93703 io_cap=2048
+     emitted_before=48223 emitted_after=94195 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
      (v1-PH-2 S8 尾外壳 LModule 契约后复测：`emit_program` / `write_unit_header_body`
       的 PP / 类型 / 全局 / 断言 / 函数遍历改读 `LModulePlan` 的 shell 行；
       `Emitter.h.ct` 1545 -> 1623，发射 C 91853 -> 92473 行。)
+     (v1-PH-2 S8 外壳收尾后复测：include / 原型 / 实例闭包 / ADT-Box 胶水改读
+      shell 行并删除宿主与外壳的 AST/符号表兜底；`Emitter.h.ct` 1623 -> 1590，
+      `EmitShell.h.ct` 1726 -> 1557，Module.h.ct 3575 -> 4099，发射 C
+      93703 -> 94195 行（新源码行数增长，用户语料不变）。)
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
