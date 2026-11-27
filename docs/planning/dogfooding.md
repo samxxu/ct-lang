@@ -72,6 +72,45 @@ S8b 原来整段排在 S8（IR-2）之后，理由是源码大改会与 IR 重�
 - 收官：`selfhost/**` 源码 LOC 与上述计数汇总，写入本文件“结果”节；
 - 生成 C 抽查：命名、缩进、无单行压缩；可读性由 REVIEW 签字。
 
+## 3.5 结果（2026-11-27 施工记录，S8b 独立子集）
+
+> 分支 `issue/s8b`（起点 `9906dfdd`），只改本工作树；**未 push、未打 tag、未改版本号**。
+> 每片独立提交、独立 seed 重生成；用户语料生成 C 由 `check-goldens-ast` 的 25 份
+> 静态 golden 逐字节兜底（25/25），其余语料按 D34 比行为（check-ast 全绿）。
+
+| 片 | 提交 | 域 | 交付 | LOC（前→后） | 计数（前→后） |
+| --- | --- | --- | --- | --- | --- |
+| D1 | `696b3b02` | `runtime/arena` | 两个池增长器进入 `ArenaOps` | 325 → 330 | `struct X *self` 自由函数 2 → 0；realloc 1 → 1 |
+| D1 | `503d8aef` | `tool/diag`+`tool/pkg` | `grow_warns` + 17 个文本/池 helper 进 trait | 8884 → 8903 | 自由函数 23 → 3（3 个变参 builder，语言限制）；realloc 19 → 19 |
+| D1 | `a2984878` | `frontend/sym` | `symbols_grow` 进入 `SymbolOps` | 4436 → 4439 | 自由函数 1 → 0；realloc 36 → 36 |
+| D2 | `64f980b5` | `tool/sh` | scratch pool 三件套 → `Vec<char *>` | 8903 → 8893 | realloc 19 → 18；`Vec` 使用 0 → 1 |
+| D5 | `fd6b958e` | `runtime/text` | Intern 内部错误路径 → `Result`/`?`/`errdefer` | 221 → 242 | `return err:` 3、`?` 1、`errdefer` 1；公共 NULL 契约不变 |
+| D2 | `329a3b1d` | `tool/pkg` | `Pkg.owned` 注册表 → `Vec<char *>` | 5668 → 5657 | realloc 18 → 17；`Vec` 使用 1 → 2 |
+
+**收官汇总**（`selfhost/ct-ast/**/*.ct`）：
+
+| 指标 | 起点 `9906dfdd` | 本子集 HEAD |
+| --- | --- | --- |
+| 源码 LOC | 77,103 | 77,130（+27） |
+| `struct X *self` 自由函数（三域） | 26 | 3（仅 `Pkg` 变参 builder） |
+| `realloc(`（三域） | 56 | 54 |
+| `snprintf(`（三域） | 110 | 110（D3 未开工） |
+| `Vec` / `Result` 使用 | 0 / 0 | 2 / 1（编译器自身首次） |
+| 发射 C 行数（p88 live pin） | 88,919 | 90,652（允许变化，仅记录） |
+
+**每片门禁**：`check-all` 8 门（含 `check-goldens-ast` 25/25、fixpoint 2 轮、gate 13
+seed 两轮逐字节）、`check-seed`、`check-docs`、`tools/check.sh g1/g8`；末树另跑
+`check-sanitizers`（662 项，无报告）。`p88_metrics` 的 live pin 随每片发射 C 校准。
+
+**剩余（未做，独立可选）**：
+- D2 符号表大表（34 处 realloc、并行数组）；本子集只做包侧与 Sh；
+- D3 命名构建（`snprintf` → `String`，110 处）、D4 判别式、D6 函子：0 起；
+- `backend/emit`、`backend/mem`、`frontend/parse` 域按 §2.1 等 S8 / S1a-1 窗口，不在本子集；
+- 生成 C 可读性由 REVIEW 签字（本子集只做机械对等与门禁，不代签）。
+
+**sharp edge（已登记）**：1.1 发射器不会给 `return` 复合字面量中的文件作用域名加
+单元前缀（`(Result<...>){ 1, g_iset[idx], 0 }`）；D5 先绑定局部变量绕开，行为等价。
+
 ## 4 非目标
 
 - 不把 Arena 节点池改成 ADT（D32 布局与性能契约不动）；
