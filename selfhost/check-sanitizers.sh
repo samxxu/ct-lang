@@ -55,6 +55,12 @@ chmod +x "$work/cc-san"
 SANCC="$work/cc-san"
 CC="$SANCC"
 export CC
+# v1-PH-2 S9: the fixtures under test/ and examples/ are C-interop corpora
+# that predate the strict default; they get the explicit harness allow, the
+# same one check-ast.sh / check-warnings.sh / test/pkg/run.sh set. The compiler
+# under test is built from the frozen seed (plain C), so this does not relax
+# the selfhost/lib zero-allow migration.
+export CT_C_BOUNDARY=allow
 
 pass=0
 fail=0
