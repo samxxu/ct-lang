@@ -156,6 +156,11 @@ pub struct Node {
 }
 
 pub trait ArenaOps {
+    /* S8b D1: the two pool growers were the unit's last `struct Arena *self`
+       free functions; as methods they take their receiver implicitly, like
+       the rest of the class. */
+    int  grow_nodes(void);
+    int  grow_strpool(void);
     int  alloc(int kind, int line);
     int  str_begin(void);
     int  str_put(int c);
@@ -201,44 +206,44 @@ pub struct Arena {
 
 pub struct Arena *arena_get(void);
 
-/* Lazily give the pools their backing store. calloc keeps the zero-filled
-   semantics the static arrays had; a failure is reported as -1 (nodes) or a
-   skipped byte (strings) so the caller's existing diagnostics still fire. */
-static int arena_grow_nodes(struct Arena *self)
-{
-    int cap;
-    struct Node *grown;
-
-    if (self->nodes && self->nnode < self->nodecap) return 0;
-    if (self->nodecap > 0) {
-        cap = self->nodecap * 2;
-    } else {
-        const char *e = getenv("CT_ARENA_INIT");
-        cap = e && atoi(e) > 0 ? atoi(e) : MAX_NODES;
-    }
-    if (cap < 8) cap = 8;
-    if (cap > NODE_LIMIT) {
-        if (self->nodecap >= NODE_LIMIT) return -1;
-        cap = NODE_LIMIT;
-    }
-    grown = (struct Node *)realloc(self->nodes, (size_t)cap * sizeof(*self->nodes));
-    if (!grown) return -1;
-    /* calloc used to zero every slot; realloc only preserves the old ones. */
-    memset((char *)grown + (size_t)self->nodecap * sizeof(*self->nodes), 0,
-           (size_t)(cap - self->nodecap) * sizeof(*self->nodes));
-    self->nodes = grown;
-    self->nodecap = cap;
-    return 0;
-}
-
-static int arena_grow_strpool(struct Arena *self)
-{
-    if (self->strpool) return 0;
-    self->strpool = calloc(262144, 1);
-    return self->strpool ? 0 : -1;
-}
-
 impl ArenaOps for Arena {
+    /* Lazily give the pools their backing store. calloc keeps the zero-filled
+       semantics the static arrays had; a failure is reported as -1 (nodes) or a
+       skipped byte (strings) so the caller's existing diagnostics still fire. */
+    int grow_nodes(void)
+    {
+        int cap;
+        struct Node *grown;
+
+        if (self->nodes && self->nnode < self->nodecap) return 0;
+        if (self->nodecap > 0) {
+            cap = self->nodecap * 2;
+        } else {
+            const char *e = getenv("CT_ARENA_INIT");
+            cap = e && atoi(e) > 0 ? atoi(e) : MAX_NODES;
+        }
+        if (cap < 8) cap = 8;
+        if (cap > NODE_LIMIT) {
+            if (self->nodecap >= NODE_LIMIT) return -1;
+            cap = NODE_LIMIT;
+        }
+        grown = (struct Node *)realloc(self->nodes, (size_t)cap * sizeof(*self->nodes));
+        if (!grown) return -1;
+        /* calloc used to zero every slot; realloc only preserves the old ones. */
+        memset((char *)grown + (size_t)self->nodecap * sizeof(*self->nodes), 0,
+               (size_t)(cap - self->nodecap) * sizeof(*self->nodes));
+        self->nodes = grown;
+        self->nodecap = cap;
+        return 0;
+    }
+
+    int grow_strpool(void)
+    {
+        if (self->strpool) return 0;
+        self->strpool = calloc(262144, 1);
+        return self->strpool ? 0 : -1;
+    }
+
     /* A fresh node with every child slot cleared and every text row on the
        interned empty string. The rows are pointers now: `text3` used to be
        left uninitialised (the parser wrote it before the emitter read it), but
@@ -250,7 +255,7 @@ impl ArenaOps for Arena {
         int n;
         const char *empty;
         if (self->nnode >= NODE_LIMIT) return -1;
-        if (arena_grow_nodes(self) != 0) return -1;
+        if (self->grow_nodes() != 0) return -1;
         n = self->nnode;
         empty = runtime::text::ct_intern("");
         if (!empty) return -1;
@@ -285,7 +290,7 @@ impl ArenaOps for Arena {
     int str_put(int c)
     {
         if (self->nstrpool + 2 >= 262144) return -1;   /* room for this byte and the NUL */
-        if (arena_grow_strpool(self) != 0) return -1;
+        if (self->grow_strpool() != 0) return -1;
         self->strpool[self->nstrpool] = (char)c;
         self->nstrpool++;
         return 0;
@@ -293,7 +298,7 @@ impl ArenaOps for Arena {
 
     void str_end(void)
     {
-        if (arena_grow_strpool(self) != 0) return;
+        if (self->grow_strpool() != 0) return;
         self->strpool[self->nstrpool] = 0;
         self->nstrpool++;
     }

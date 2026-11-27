@@ -135,6 +135,8 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct runtime_arena_ArenaOps_vtbl {
+    int (*grow_nodes)(void *);
+    int (*grow_strpool)(void *);
     int (*alloc)(void *, int, int);
     int (*str_begin)(void *);
     int (*str_put)(void *, int);

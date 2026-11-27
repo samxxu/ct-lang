@@ -136,9 +136,49 @@ extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
 struct runtime_arena_Arena * runtime_arena_arena_get(void);
-static int arena_grow_nodes(struct runtime_arena_Arena *);
-static int arena_grow_strpool(struct runtime_arena_Arena *);
 static struct runtime_arena_Arena runtime_arena_g_arena = { .__runtime_arena_arenaops_vptr = &runtime_arena_Arena_runtime_arena_ArenaOps_vtable };
+static int runtime_arena_Arena_runtime_arena_ArenaOps_grow_nodes(void *self) {
+    struct runtime_arena_Arena *_self = (struct runtime_arena_Arena *)self;
+    int cap;
+    struct runtime_arena_Node * grown;
+    if ((_self->nodes && (_self->nnode < _self->nodecap))) {
+        return 0;
+    }
+    if (_self->nodecap > 0) {
+        cap = (_self->nodecap * 2);
+    }
+    else {
+        const char * e = getenv("CT_ARENA_INIT");
+        cap = ((e && (atoi(e) > 0)) ? atoi(e) : MAX_NODES);
+    }
+    if (cap < 8) {
+        cap = 8;
+    }
+    if (cap > NODE_LIMIT) {
+        if (_self->nodecap >= NODE_LIMIT) {
+            return (-1);
+        }
+        cap = NODE_LIMIT;
+    }
+    grown = (struct runtime_arena_Node *)(realloc(_self->nodes, ((size_t)(cap) * sizeof((*_self->nodes)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset(((char *)(grown) + ((size_t)(_self->nodecap) * sizeof((*_self->nodes)))), 0, ((size_t)((cap - _self->nodecap)) * sizeof((*_self->nodes))));
+    _self->nodes = grown;
+    _self->nodecap = cap;
+    return 0;
+}
+
+static int runtime_arena_Arena_runtime_arena_ArenaOps_grow_strpool(void *self) {
+    struct runtime_arena_Arena *_self = (struct runtime_arena_Arena *)self;
+    if (_self->strpool) {
+        return 0;
+    }
+    _self->strpool = calloc(262144, 1);
+    return (_self->strpool ? 0 : (-1));
+}
+
 static int runtime_arena_Arena_runtime_arena_ArenaOps_alloc(void *self, int kind, int line) {
     struct runtime_arena_Arena *_self = (struct runtime_arena_Arena *)self;
     int n;
@@ -146,7 +186,7 @@ static int runtime_arena_Arena_runtime_arena_ArenaOps_alloc(void *self, int kind
     if (_self->nnode >= NODE_LIMIT) {
         return (-1);
     }
-    if (arena_grow_nodes(_self) != 0) {
+    if (_self->__runtime_arena_arenaops_vptr->grow_nodes(_self) != 0) {
         return (-1);
     }
     n = _self->nnode;
@@ -183,7 +223,7 @@ static int runtime_arena_Arena_runtime_arena_ArenaOps_str_put(void *self, int c)
     if ((_self->nstrpool + 2) >= 262144) {
         return (-1);
     }
-    if (arena_grow_strpool(_self) != 0) {
+    if (_self->__runtime_arena_arenaops_vptr->grow_strpool(_self) != 0) {
         return (-1);
     }
     _self->strpool[_self->nstrpool] = (char)(c);
@@ -193,7 +233,7 @@ static int runtime_arena_Arena_runtime_arena_ArenaOps_str_put(void *self, int c)
 
 static void runtime_arena_Arena_runtime_arena_ArenaOps_str_end(void *self) {
     struct runtime_arena_Arena *_self = (struct runtime_arena_Arena *)self;
-    if (arena_grow_strpool(_self) != 0) {
+    if (_self->__runtime_arena_arenaops_vptr->grow_strpool(_self) != 0) {
         return;
     }
     _self->strpool[_self->nstrpool] = 0;
@@ -215,6 +255,8 @@ static void runtime_arena_Arena_runtime_arena_ArenaOps_reset(void *self) {
 }
 
 const struct runtime_arena_ArenaOps_vtbl runtime_arena_Arena_runtime_arena_ArenaOps_vtable = {
+    .grow_nodes = runtime_arena_Arena_runtime_arena_ArenaOps_grow_nodes,
+    .grow_strpool = runtime_arena_Arena_runtime_arena_ArenaOps_grow_strpool,
     .alloc = runtime_arena_Arena_runtime_arena_ArenaOps_alloc,
     .str_begin = runtime_arena_Arena_runtime_arena_ArenaOps_str_begin,
     .str_put = runtime_arena_Arena_runtime_arena_ArenaOps_str_put,
@@ -223,44 +265,6 @@ const struct runtime_arena_ArenaOps_vtbl runtime_arena_Arena_runtime_arena_Arena
     .reset = runtime_arena_Arena_runtime_arena_ArenaOps_reset
 };
 
-static int arena_grow_nodes(struct runtime_arena_Arena * self) {
-    int cap;
-    struct runtime_arena_Node * grown;
-    if ((self->nodes && (self->nnode < self->nodecap))) {
-        return 0;
-    }
-    if (self->nodecap > 0) {
-        cap = (self->nodecap * 2);
-    }
-    else {
-        const char * e = getenv("CT_ARENA_INIT");
-        cap = ((e && (atoi(e) > 0)) ? atoi(e) : MAX_NODES);
-    }
-    if (cap < 8) {
-        cap = 8;
-    }
-    if (cap > NODE_LIMIT) {
-        if (self->nodecap >= NODE_LIMIT) {
-            return (-1);
-        }
-        cap = NODE_LIMIT;
-    }
-    grown = (struct runtime_arena_Node *)(realloc(self->nodes, ((size_t)(cap) * sizeof((*self->nodes)))));
-    if ((!grown)) {
-        return (-1);
-    }
-    memset(((char *)(grown) + ((size_t)(self->nodecap) * sizeof((*self->nodes)))), 0, ((size_t)((cap - self->nodecap)) * sizeof((*self->nodes))));
-    self->nodes = grown;
-    self->nodecap = cap;
-    return 0;
-}
-static int arena_grow_strpool(struct runtime_arena_Arena * self) {
-    if (self->strpool) {
-        return 0;
-    }
-    self->strpool = calloc(262144, 1);
-    return (self->strpool ? 0 : (-1));
-}
 struct runtime_arena_Arena * runtime_arena_arena_get(void) {
     return (&runtime_arena_g_arena);
 }
