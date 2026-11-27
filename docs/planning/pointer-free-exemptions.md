@@ -103,15 +103,16 @@ Ct 目前没有「结构体引用」这一形态，`ref struct` 只在形参位�
 | `40_str_ownership` 去掉 `char *` + `free` | ✅ 2026-11-27（输出改为 `u len=5 view len=5 (source released)`） |
 | `59_custom_subscript` 改 int 键（S2 能力） | ✅ 2026-11-27（输出改为 `zero=7 one=8`） |
 | `48_string_steps` 标注「为什么必须指针」 | ✅ 2026-11-27（C 类型宿主 + shim，代码不动） |
-| E3 的 26 个文件 | ⬜ 等 print API 决策（§2） |
-| E1/E2/E4 的显式 allow 注解 | ⬜ S8c 逐文件加注释（不改行为） |
+| `67_adt_patterns` / `68_adt_guards` / `69_generic_adt` | ✅ 2026-11-27（S4/S5/S6 样例，零 `char *` / `->` / `malloc`） |
+| E1/E2/E4 的 C 边界显式 allow | ✅ S9 M4 起登记在 `test/c-boundary-allow.tsv`（逐路径 + 理由），不再用文件内注释；`--c-boundary=allow` 只对这些路径生效 |
+| E3 的 26 个文件 | ⬜ 等 [LANG-30](../../issues/lang/lang-30-str-print-api.md)（`Str.print()` / `println()`，v1.2 必做） |
 
 ## 6 建议的下一步
 
-1. **先定 print API**（`Str.print()` / `ct_print(Str)` 之类），否则 E3 的 26 个文件无法真正去指针；
-   已立 [REQ-PRINT-1](requirements-pool.md) / [LANG-30](../../issues/lang/lang-30-str-print-api.md)，提案见
-   [str-print-api](../proposals/str-print-api.md)；
-2. E1/E2/E4 的 64 个文件在 S8c 只需加「为什么必须指针」注释，不改代码——成本低、可一次提交；
+1. **落地 print API**（方案 A 已批准，见 [LANG-30 施工卡](../design/lang30-str-print-construction.md)），
+   否则 E3 的 26 个文件无法真正去指针；已立 [REQ-PRINT-1](requirements-pool.md) /
+   [LANG-30](../../issues/lang/lang-30-str-print-api.md)；
+2. E1/E2/E4 的 C 边界 allow 已在 `test/c-boundary-allow.tsv` 登记，不再逐文件加注释；
 3. E4 的长期解是「结构体引用」形态；在那之前不要为去指针而把样例改成 `self` 方法（会改变教学点）。
 
 ## 7 关联

@@ -1,31 +1,25 @@
 # 语言特性样例矩阵（特性 × example × test × docs）
 
-> 状态：**首版矩阵（2026-11-26）**，对应 [TEST-27](../../issues/testing/test27-feature-examples-pointer-free.md) 的 A 轨道交付。
-> 用法：每一行代表一个语言特性；`缺` / `薄` 行就是 S8c 的施工清单。新特性（S2–S6）在实现落地时补行、补样例。
-> 本文件只记录现状与缺口，不改样例、不改文档；改写动作在 S8c 分片执行。
+> 状态：**S8c 收口版（2026-11-27）**，对应 [TEST-27](../../issues/testing/test27-feature-examples-pointer-free.md)
+> 的 A 轨道交付。每一行是一个语言特性；`状态` 只有 `有` / `薄` 两档，**不允许 `缺` / `待实现`**
+> （S2–S6 落地后已全部补样例）。
+> 一致性由 `python3 tools/check-feature-matrix.py` 断言（先 `warn`，`--strict` 转硬）：
+> 每行四列非空、example/test 代表路径存在、状态合法、S2–S6 行各有 ≥1 个 example。
 
 ## 0 口径
 
-```sh
-# 某个特性在 examples / test 里的覆盖（示例：泛型函数）
-grep -rlE '^[A-Za-z_][A-Za-z0-9_ \*]*[A-Za-z_][A-Za-z0-9_]*<[A-Za-z_][A-Za-z0-9_]*>[ \t]*\(' examples --include='*.ct' | wc -l
-# 指针用量
-grep -rl 'char \*' examples --include='*.ct' | wc -l
-```
+- 一行的 `example` 给**代表目录**（完整清单见 [examples/README](../../examples/README.md)），
+  `test` 给**代表夹具**（`test/ast/<name>`，脚本夹具写 `.sh`）；
+- `doc` 给规范节号与 README 小节；README 的代码块带 `// source:`，由 `check-docs` 校验；
+- `有` = example ≥ 3 且 test ≥ 5；`薄` = example 1–2 或 test < 5；两者都算**有覆盖**；
+- 计数的复现口径（文件数）：
+  ```sh
+  grep -rlE '^[A-Za-z_][A-Za-z0-9_ \*]*[A-Za-z_][A-Za-z0-9_]*<[A-Za-z_][A-Za-z0-9_]*>[ \t]*\(' examples --include='*.ct' | wc -l
+  grep -rl 'char \*' examples --include='*.ct' | wc -l
+  ```
 
-计数单位是**文件数**（一个 example 目录可能有多份 `.ct`）；`test` 列含 `test/ast/**`、`test/probes/**`、
-`test/docs/tutorial_cases/**`、`test/cases/**`。判档：
-
-| 档 | 含义 |
-| --- | --- |
-| 有 | example ≥ 3 且 test ≥ 5 |
-| 薄 | example 1–2 或 test < 5 |
-| 缺 | example = 0 |
-| 待实现 | 语言侧还没落地（S2–S6） |
-
-**新增样例会改变语料 pin（2026-11-26 实测踩坑）**：`p85/m0` 与 `p88/emit` 用
-`test/probes/p85_corpus_sha.tsv` 钉住 `examples/*/*.ct` 的清单与 sha256。新增或改写 example 必须在
-**同一提交**里重生成该文件，否则两段门禁会红：
+**新增样例会改变语料 pin**：`p85/m0` 与 `p88/emit` 用 `test/probes/p85_corpus_sha.tsv`
+钉住 `examples/*/*.ct` 的清单与 sha256。新增或改写 example 必须在**同一提交**里重生成：
 
 ```sh
 python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> > test/probes/p85_corpus_sha.tsv
@@ -33,61 +27,64 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 
 ## 1 矩阵
 
-| # | 特性 | example（数 / 代表） | test（数） | docs | 档 |
+| # | 特性 | example（代表） | test（代表） | doc | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `trait` / `impl` | 76 / `examples/01_greeter` | 334 | spec §4.1、§4.8、§4.39；README §0.3 | 有 |
-| 2 | 泛型函数 | 4 / `examples/16_generic_min` | 28 | spec §4.48；README §0.7 | 有 |
-| 3 | 泛型 struct | 5 / `examples/23_generic_stack` | 48 | spec §4.51；README §0.10 | 有 |
-| 4 | 有界泛型（`T: Trait`） | 3 / `examples/21_generic_bound` | 29 | spec §4.50、§4.54；README §0.7/§0.10 | 有 |
-| 5 | 泛型 trait | 2 / `examples/39_generic_trait`、`65_generic_trait_instances` | 13 | spec §4.55；README §0.10 | 薄 |
-| 6 | ADT `enum` | 7 / `examples/53_match_adt` | 29 | spec §4.73；README §0.9 | 有 |
-| 7 | `match` | 2 / `examples/53_match_adt`、`64_match_expr` | 12 | spec §4.73；README §0.9 | 薄 |
-| 8 | 模式扩展（字面量 / 嵌套 / 结构体 / or / 守卫 / 泛型 ADT） | 0 | 0 | 无 | 待实现（S4–S6） |
-| 9 | `String`（owning） | 2 / `examples/48_string_steps` | 81 | spec §4.70；README §0.5 | 薄 |
-| 10 | `Str`（借用视图） | 3 / `examples/40_str_ownership` | 72 | spec §4.56、§4.70；README §0.5 | 薄 |
-| 11 | 切片 `T[]` | 9 / `examples/51_slice` | 35 | spec §4.69；README §0.10 | 有 |
-| 12 | `ref` | 2 / `examples/50_ref_out`、`63_ref_out_places` | 7 | spec §4.68；README §0.10 | 薄 |
-| 13 | `out` | 5 / `examples/50_ref_out` | 16 | spec §4.68；README §0.10 | 有 |
-| 14 | `Box<T>` / `new` | 4 / `examples/52_box_new` | 53 | spec §4.71；README §0.10 | 有 |
-| 15 | 可选链 `?.` | 1 / `examples/58_optional_chain`（2026-11-26 补） | 10（`test/ast/p53_eval_once`） | spec §4.65；README §0.8 | 薄 |
-| 16 | `Map` / map 构造 | 7 / `examples/34_map_literal` | 49 | spec §4.51.1；README §0.10 | 有 |
-| 17 | `map` 绑定 | 20（含 `.m.ct`）/ `examples/08_map_binding` | 52 | spec §4.10；README §0.11 | 有 |
-| 18 | `foreach` | 7 / `examples/20_foreach_statement` | 29 | spec §4.49；README §0.3 | 有 |
-| 19 | `defer` | 5 / `examples/42_defer`、`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup` | 23 | spec §4.9.1；README §0.6 | 有 |
-| 20 | `errdefer` | 4 / `examples/43_errdefer`、`45_error_return_contract`、`61_errdefer_vs_return`、`62_try_cleanup` | 22 | spec §4.58；README §0.6 | 有 |
-| 21 | 后缀 `?` | 2 / `examples/46_result_try`、`62_try_cleanup` | 10 | spec §4.62；README §0.6 | 薄 |
-| 22 | 自定义下标（§4.64） | 1 / `examples/59_custom_subscript`（2026-11-26 补；`28_subscript_forms` 是 C 数组 / 容器下标形态，不算） | 6（`test/ast/p52_read`、`p52_write`、`p52_generic`、`p52_private`、`p52_str_only`、`p52_c_passthrough`） | spec §4.64；README §0.8 | 薄 |
-| 23 | 函子 `(A,B) => R` | 1 / `examples/66_functor`（2026-11-27 补） | 2 夹具 + 13 断言（`test/ast/p3_functor*`） | spec §4.77；README §0.10 | 薄 |
+| 1 | `trait` / `impl` | [01_greeter](../../examples/01_greeter) | [01_hello](../../test/ast/01_hello) | spec §4.1、§4.8；README §0.3 | 有 |
+| 2 | 泛型函数 | [16_generic_min](../../examples/16_generic_min) | [123_generic_identity](../../test/ast/123_generic_identity) | spec §4.48；README §0.7 | 有 |
+| 3 | 泛型 struct | [23_generic_stack](../../examples/23_generic_stack) | [124_generic_struct](../../test/ast/124_generic_struct) | spec §4.51；README §0.10 | 有 |
+| 4 | 有界泛型（`T: Trait`） | [21_generic_bound](../../examples/21_generic_bound) | [136_generic_bound](../../test/ast/136_generic_bound) | spec §4.50；README §0.7 | 有 |
+| 5 | 泛型 trait | [39_generic_trait](../../examples/39_generic_trait)、[65_generic_trait_instances](../../examples/65_generic_trait_instances) | [219_generic_trait](../../test/ast/219_generic_trait) | spec §4.55；README §0.10 | 薄 |
+| 6 | ADT `enum` | [53_match_adt](../../examples/53_match_adt) | [290_adt_match](../../test/ast/290_adt_match) | spec §4.73；README §0.5.1 | 有 |
+| 7 | `match` | [64_match_expr](../../examples/64_match_expr)、[67_adt_patterns](../../examples/67_adt_patterns) | [302_adt_match_expr](../../test/ast/302_adt_match_expr) | spec §4.73；README §0.5.1 | 有 |
+| 8 | 模式扩展 A：字面量 / 嵌套 / 结构体（S4） | [67_adt_patterns](../../examples/67_adt_patterns) | [303_adt_literal_pattern](../../test/ast/303_adt_literal_pattern)、[304_adt_nested_pattern](../../test/ast/304_adt_nested_pattern)、[305_adt_struct_pattern](../../test/ast/305_adt_struct_pattern) | spec §4.73「S4 模式扩展」；README §0.12 | 薄 |
+| 9 | 模式扩展 B：or / 守卫（S5） | [68_adt_guards](../../examples/68_adt_guards) | [306_adt_or_pattern](../../test/ast/306_adt_or_pattern)、[307_adt_guard](../../test/ast/307_adt_guard) | spec §4.73「S5 模式扩展」；README §0.12 | 薄 |
+| 10 | 泛型 ADT（S6） | [69_generic_adt](../../examples/69_generic_adt) | [308_adt_generic_option](../../test/ast/308_adt_generic_option)…[314_adt_shadow_result](../../test/ast/314_adt_shadow_result) | spec §4.73「S6 泛型 ADT」；README §0.12 | 薄 |
+| 11 | `String`（owning） | [48_string_steps](../../examples/48_string_steps) | [231_str_ops](../../test/ast/231_str_ops) | spec §4.70；README §0.5 | 薄 |
+| 12 | `Str`（借用视图） | [40_str_ownership](../../examples/40_str_ownership) | [230_str_embedded_nul](../../test/ast/230_str_embedded_nul) | spec §4.70；README §0.5 | 薄 |
+| 13 | 切片 `T[]` | [51_slice](../../examples/51_slice) | [p79_basic.sh](../../test/ast/p79_basic.sh) | spec §4.69；README §0.10 | 有 |
+| 14 | `ref` | [50_ref_out](../../examples/50_ref_out)、[63_ref_out_places](../../examples/63_ref_out_places) | [p78_basic.sh](../../test/ast/p78_basic.sh) | spec §4.68；README §0.5 | 薄 |
+| 15 | `out` | [50_ref_out](../../examples/50_ref_out) | [p78_basic.sh](../../test/ast/p78_basic.sh) | spec §4.68；README §0.10 | 有 |
+| 16 | `Box<T>` / `new` | [52_box_new](../../examples/52_box_new) | [p81_box.sh](../../test/ast/p81_box.sh) | spec §4.71；README §0.5 | 有 |
+| 17 | 可选链 `?.` | [58_optional_chain](../../examples/58_optional_chain) | [p53_chain](../../test/ast/p53_chain) | spec §4.65；README §0.8 | 薄 |
+| 18 | `Map` / map 构造 | [34_map_literal](../../examples/34_map_literal) | [180_map_brace_init](../../test/ast/180_map_brace_init) | spec §4.51；README §0.10 | 有 |
+| 19 | `map` 绑定 | [08_map_binding](../../examples/08_map_binding) | [14_map_dispatch](../../test/ast/14_map_dispatch) | spec §4.10；README §0.11 | 有 |
+| 20 | `foreach` | [20_foreach_statement](../../examples/20_foreach_statement) | [141_foreach_map](../../test/ast/141_foreach_map) | spec §4.49；README §0.3 | 有 |
+| 21 | `defer` | [42_defer](../../examples/42_defer)、[60_defer_snapshot](../../examples/60_defer_snapshot)、[61_errdefer_vs_return](../../examples/61_errdefer_vs_return)、[62_try_cleanup](../../examples/62_try_cleanup) | [220_defer_order](../../test/ast/220_defer_order) | spec §4.9.1；README §0.6 | 有 |
+| 22 | `errdefer` | [43_errdefer](../../examples/43_errdefer)、[45_error_return_contract](../../examples/45_error_return_contract)、[61_errdefer_vs_return](../../examples/61_errdefer_vs_return)、[62_try_cleanup](../../examples/62_try_cleanup) | [234_err_return_contract](../../test/ast/234_err_return_contract) | spec §4.58；README §0.6 | 有 |
+| 23 | 后缀 `?` | [46_result_try](../../examples/46_result_try)、[62_try_cleanup](../../examples/62_try_cleanup) | [235_result_try](../../test/ast/235_result_try) | spec §4.62；README §0.6 | 薄 |
+| 24 | 自定义下标（S2，§4.64） | [59_custom_subscript](../../examples/59_custom_subscript) | [index_overload_both](../../test/ast/index_overload_both)、[jsaccess_overload_both](../../test/ast/jsaccess_overload_both) | spec §4.64；README §0.8 | 薄 |
+| 25 | 函子 `(A,B) => R`（S3） | [66_functor](../../examples/66_functor) | [p3_functor_forms](../../test/ast/p3_functor_forms) | spec §4.77；README §0.10 | 薄 |
 
-## 2 缺口清单（按 S8c 分片顺序）
+## 2 缺口清单（S8c 收口）
 
-| 片 | 缺口 | 动作 | 依赖 |
+| 片 | 缺口 | 动作 | 状态 |
 | --- | --- | --- | --- |
-| B-1 | ~~可选链 `?.` 无样例~~ | **已补** `examples/58_optional_chain`（2026-11-26，compile + 运行）；S8c 复核是否需要补 `?[` 与 `m?["k"]` 形态 | 无（语言已实现） |
-| B-1b | ~~自定义下标（§4.64）无样例~~ | **已补** `examples/59_custom_subscript`（2026-11-26，读 + 写一对）；S8c 待补「只读报错、`+=` / `&x[k]` 拒绝」的说明段与 S2 的按键分派样例 | 无（语言已实现） |
-| B-2 | ~~`match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例~~ | **已补**（2026-11-26）：`60_defer_snapshot`、`61_errdefer_vs_return`、`62_try_cleanup`、`63_ref_out_places`、`64_match_expr`、`65_generic_trait_instances`；defer / errdefer 升「有」，其余仍「薄」，S8c 再按需加反例 | 无 |
-| B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 已改（去 `cstr`+`free`，改 `as_str()`）；`48_string_steps` 判定为 C 类型宿主例外并注明理由；其余见 B-4 | 无 |
-| B-4 | 非 C 互操作用例的指针 | **判定已完成**（2026-11-27）：101 个文件分五类，见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写，E3 的 26 个文件等 print API（[LANG-30](../../issues/lang/lang-30-str-print-api.md)，**v1.2 必做**） | B-3 |
-| B-5 | 文档可执行片段偏少 | **已补 0.7 泛型 / 0.8 可选链+自定义下标**（2026-11-27），README 现有 7 个 `// source:` 片段；tutorial / guide / idioms 与其余片段的改写**已交接 TEST/REVIEW**（[TEST-27 §8](../../issues/testing/test27-feature-examples-pointer-free.md) 的 H1–H4） | 无 |
-| B-6 | S2 下标协议、S3 函子、S4–S6 模式 | S3 函子已有 `examples/66_functor`（2026-11-27）；S2 按键分派已进 `examples/59_custom_subscript`；S4–S6 模式在实现落地时同批补样例（先负例后正例） | S4–S6 |
+| B-1 | 可选链 `?.` 无样例 | `examples/58_optional_chain`（compile + 运行） | 已补 |
+| B-1b | 自定义下标（§4.64）无样例 | `examples/59_custom_subscript`；S2 按键分派的并存形态由 `test/ast/index_overload_both` / `jsaccess_overload_both` 钉住 | 已补 |
+| B-2 | `match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例 | `60`–`65`；defer / errdefer 升「有」，其余按需补反例 | 已补 |
+| B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 去 `cstr` + `free`，改 `as_str()`；`48_string_steps` 判为 C 类型宿主例外并注明理由 | 已补 |
+| B-4 | 非 C 互操作用例的指针 | 逐文件判定见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写，E3 的 26 个文件卡 [LANG-30](../../issues/lang/lang-30-str-print-api.md)（v1.2 必做） | 部分 |
+| B-5 | 文档可执行片段偏少 | README 现有 13 个 `// source:` 片段（`0.1`–`0.12`；`check-docs` 实测）；H1–H4 见 [TEST-27 §8](../../issues/testing/test27-feature-examples-pointer-free.md) | 部分 |
+| B-6 | S2 下标协议、S3 函子、S4–S6 模式 | `59`（S2）、`66`（S3）、`67`（S4）、`68`（S5）、`69`（S6）各 ≥1 个 example | 已补 |
+| B-7 | 文档去指针 | README / tutorial / guide / idioms / snippets 的 C 互操作段保留并标注；非互操作段优先 `String` / `Str` / `Vec` / `Map` / `Box` / 切片 / `ref`·`out` | 进行中 |
 
 ## 3 保留的 C 互操作例外（不要求去指针）
 
 `examples/55_c_boundary_shim`、`examples/c-superset/**`、`examples/54_freestanding_alloc`、
-`examples/tour/**` 的 shim 段、`.m.ct` / `.shim.*` / `#ct-raw` 相关夹具——每条例外都要在 S8c 的
-改写提交里写明「为什么必须指针」。完整清单在 S8c 首片落盘。
+`examples/tour/**` 的 shim 段、`.m.ct` / `.shim.*` / `#ct-raw` 相关夹具——每条例外都要在
+改写提交里写明「为什么必须指针」。逐文件分类与理由见 [pointer-free-exemptions](pointer-free-exemptions.md)。
 
-## 4 指针现数（2026-11-26）
+## 4 指针现数（S8c 收口实测）
 
 | 指标 | 数值 |
 | --- | --- |
-| `examples/**/*.ct` | 225 个文件 / 59 个目录 |
-| 含 `char *` | 59 |
-| 含 `->` | 83 |
-| 含 `malloc` | 14 |
+| `examples/**/*.ct` | 237 个文件 / 71 个目录 |
+| 含 `char *` | 60 |
+| 含非 `self->` 的 `->` | 56 |
+| 含 `malloc` | 12 |
 
-与 [TEST-27](../../issues/testing/test27-feature-examples-pointer-free.md) §1.1 的 2026-11-26 快照一致；
-指针清零的目标与例外规则见该 issue §3。
+新增的 `67`–`69` 三个样例零 `char *` / `->` / `malloc`。E3 类 26 个文件的剩余量由
+[LANG-30](../../issues/lang/lang-30-str-print-api.md) 解锁；未落地前不得用 `cstr()` + `free` 假删。
 
 ## 5 关联
 
