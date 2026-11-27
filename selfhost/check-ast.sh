@@ -1004,6 +1004,17 @@ else
     bad "p115/b-plus" "$(cat "$work/p115.out" "$work/p115.err" | head -8)"
 fi
 
+# v1-PH-2 S7 / REQ-TYPE-1: the three §4.53 judgement classes on the default
+# compile path, enabled one slice at a time (assignment -> return -> container).
+# The default severity is `error`; `--check-level=warn/off` is the CLI knob and
+# `ct check --types` keeps its own opt-in. A class that has not landed yet must
+# stay silent, so the probe also pins the slice boundary.
+if sh test/ast/p122_types_default.sh "$work/ct-ast" >"$work/p122td.out" 2>"$work/p122td.err"; then
+    ok "p122/types-default (S7: compile default classes, sliced)"
+else
+    bad "p122/types-default" "$(cat "$work/p122td.out" "$work/p122td.err" | head -8)"
+fi
+
 # PH-86 S86a (E86-1): the current token is a zero-copy view of the source
 # buffer (`TokView { ptr, len }`), not a 160-byte copy; the view is bounded by
 # the buffer length, and the old buffer boundaries still produce the frozen
