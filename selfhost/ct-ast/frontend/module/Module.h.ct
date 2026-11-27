@@ -902,11 +902,11 @@ static int ct_shell_plan_add_surface(struct Module *self, int prog, int unit,
         if (self->sym->structs[i].is_template) continue;
         ti = self->sym->find_type(self->sym->structs[i].name);
         if (ti < 0) continue;
-        if (self->sym->type_kind[ti] != 1 && self->sym->type_kind[ti] != 6)
+        if (self->sym->types[ti].kind != 1 && self->sym->types[ti].kind != 6)
             continue;
         if (backend::lir::lmod_plan_shell_add_stage(
                 LPS_STRUCTFWD, unit, i,
-                self->sym->type_kind[ti] == 6 ? 1 : 0, 0, 0) != 0)
+                self->sym->types[ti].kind == 6 ? 1 : 0, 0, 0) != 0)
             return 1;
     }
     /* trait vtables: compile mode prints all; a unit's `.c` the private ones

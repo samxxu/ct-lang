@@ -64,6 +64,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -279,16 +282,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_grow(void *self) {
         _self->gtaliascap = MAX_GLOBAL_TYPE_ALIASES;
     }
     if ((!_self->types)) {
-        _self->types = (const char * *)(calloc(MAX_TYPES, sizeof((*_self->types))));
+        _self->types = (struct frontend_sym_TypeRow *)(calloc(MAX_TYPES, sizeof((*_self->types))));
         if ((!_self->types)) {
-            return (-1);
-        }
-        _self->type_kind = calloc(MAX_TYPES, sizeof((*_self->type_kind)));
-        if ((!_self->type_kind)) {
-            return (-1);
-        }
-        _self->type_target = (const char * *)(calloc(MAX_TYPES, sizeof((*_self->type_target))));
-        if ((!_self->type_target)) {
             return (-1);
         }
         _self->typecap = MAX_TYPES;
@@ -439,9 +434,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity(voi
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity(void *self, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int cap;
-    const char * * names;
-    int * kinds;
-    const char * * targets;
+    struct frontend_sym_TypeRow * grown;
     (void)(_self);
     if (need <= _self->typecap) {
         return 0;
@@ -456,24 +449,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_type_capacity(void
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    names = (const char * *)(realloc(_self->types, ((size_t)(cap) * sizeof((*names)))));
-    if ((!names)) {
+    grown = (struct frontend_sym_TypeRow *)(realloc(_self->types, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    memset((names + _self->typecap), 0, ((size_t)((cap - _self->typecap)) * sizeof((*names))));
-    _self->types = names;
-    kinds = (int *)(realloc(_self->type_kind, ((size_t)(cap) * sizeof((*kinds)))));
-    if ((!kinds)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
-    }
-    memset((kinds + _self->typecap), 0, ((size_t)((cap - _self->typecap)) * sizeof((*kinds))));
-    _self->type_kind = kinds;
-    targets = (const char * *)(realloc(_self->type_target, ((size_t)(cap) * sizeof((*targets)))));
-    if ((!targets)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
-    }
-    memset((targets + _self->typecap), 0, ((size_t)((cap - _self->typecap)) * sizeof((*targets))));
-    _self->type_target = targets;
+    memset((grown + _self->typecap), 0, ((size_t)((cap - _self->typecap)) * sizeof((*grown))));
+    _self->types = grown;
     _self->typecap = cap;
     return 0;
 }
@@ -1012,7 +993,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_type(void *self, con
     int i;
     (void)(_self);
     for (i = 0; i < _self->ntype; i++) {
-        if ((_self->types[i] && (strcmp(_self->types[i], name) == 0))) {
+        if ((_self->types[i].name && (strcmp(_self->types[i].name, name) == 0))) {
             return i;
         }
     }
@@ -1028,8 +1009,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_type(void *self, cons
     }
     i = _self->__frontend_sym_symbolops_vptr->find_type(_self, name);
     if (i >= 0) {
-        if (_self->type_kind[i] == 0) {
-            _self->type_kind[i] = kind;
+        if (_self->types[i].kind == 0) {
+            _self->types[i].kind = kind;
         }
         return 0;
     }
@@ -1048,11 +1029,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_type(void *self, cons
     if (_self->__frontend_sym_symbolops_vptr->ensure_type_capacity(_self, (_self->ntype + 1)) != 0) {
         return (-1);
     }
-    _self->types[_self->ntype] = runtime_text_ct_intern(name);
-    if ((!_self->types[_self->ntype])) {
+    _self->types[_self->ntype].name = runtime_text_ct_intern(name);
+    if ((!_self->types[_self->ntype].name)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    _self->type_kind[_self->ntype] = kind;
+    _self->types[_self->ntype].kind = kind;
     _self->ntype++;
     return 0;
 }
@@ -1064,8 +1045,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_set_type_target(void *sel
     if (i < 0) {
         return 0;
     }
-    _self->type_target[i] = runtime_text_ct_intern(target);
-    if ((!_self->type_target[i])) {
+    _self->types[i].target = runtime_text_ct_intern(target);
+    if ((!_self->types[i].target)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
     return 1;
@@ -1075,10 +1056,10 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of(void *self
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     i = _self->__frontend_sym_symbolops_vptr->find_type(_self, name);
-    if ((((i < 0) || (!_self->type_target[i])) || (!_self->type_target[i][0]))) {
+    if ((((i < 0) || (!_self->types[i].target)) || (!_self->types[i].target[0]))) {
         return 0;
     }
-    snprintf(out, (size_t)(cap), "%s", _self->type_target[i]);
+    snprintf(out, (size_t)(cap), "%s", _self->types[i].target);
     return 1;
 }
 
@@ -1086,10 +1067,10 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_text
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     i = _self->__frontend_sym_symbolops_vptr->find_type(_self, name);
-    if ((((i < 0) || (!_self->type_target[i])) || (!_self->type_target[i][0]))) {
+    if ((((i < 0) || (!_self->types[i].target)) || (!_self->types[i].target[0]))) {
         return (const char *)(0);
     }
-    return _self->type_target[i];
+    return _self->types[i].target;
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity(void *self, int need) {
@@ -1783,8 +1764,7 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_ns_decl_text(voi
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_alias_capacity(void *self, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int cap;
-    const char * * names;
-    const char * * fulls;
+    struct frontend_sym_AliasRow * grown;
     (void)(_self);
     if (need <= _self->aliascap) {
         return 0;
@@ -1799,18 +1779,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_alias_capacity(voi
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    names = (const char * *)(realloc(_self->alias_name, ((size_t)(cap) * sizeof((*names)))));
-    if ((!names)) {
+    grown = (struct frontend_sym_AliasRow *)(realloc(_self->aliases, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    memset((names + _self->aliascap), 0, ((size_t)((cap - _self->aliascap)) * sizeof((*names))));
-    _self->alias_name = names;
-    fulls = (const char * *)(realloc(_self->alias_full, ((size_t)(cap) * sizeof((*fulls)))));
-    if ((!fulls)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
-    }
-    memset((fulls + _self->aliascap), 0, ((size_t)((cap - _self->aliascap)) * sizeof((*fulls))));
-    _self->alias_full = fulls;
+    memset((grown + _self->aliascap), 0, ((size_t)((cap - _self->aliascap)) * sizeof((*grown))));
+    _self->aliases = grown;
     _self->aliascap = cap;
     return 0;
 }
@@ -1820,10 +1794,10 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_alias(void *self, con
     int i;
     (void)(_self);
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) != 0) {
+        if (strcmp(_self->aliases[i].name, name) != 0) {
             continue;
         }
-        if (strcmp(_self->alias_full[i], full) == 0) {
+        if (strcmp(_self->aliases[i].full, full) == 0) {
             return 0;
         }
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "one alias names two imports");
@@ -1831,12 +1805,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_alias(void *self, con
     if (_self->__frontend_sym_symbolops_vptr->ensure_alias_capacity(_self, (_self->nalias + 1)) != 0) {
         return (-1);
     }
-    _self->alias_name[_self->nalias] = runtime_text_ct_intern(name);
-    if ((!_self->alias_name[_self->nalias])) {
+    _self->aliases[_self->nalias].name = runtime_text_ct_intern(name);
+    if ((!_self->aliases[_self->nalias].name)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    _self->alias_full[_self->nalias] = runtime_text_ct_intern(full);
-    if ((!_self->alias_full[_self->nalias])) {
+    _self->aliases[_self->nalias].full = runtime_text_ct_intern(full);
+    if ((!_self->aliases[_self->nalias].full)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
     _self->nalias++;
@@ -1846,9 +1820,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_alias(void *self, con
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_bare_capacity(void *self, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int cap;
-    const char * * names;
-    const char * * fulls;
-    int * ambig;
+    struct frontend_sym_BareTypeRow * grown;
     (void)(_self);
     if (need <= _self->tbcap) {
         return 0;
@@ -1863,24 +1835,12 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_bare_capacity(void
     if (need > cap) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    names = (const char * *)(realloc(_self->tbare, ((size_t)(cap) * sizeof((*names)))));
-    if ((!names)) {
+    grown = (struct frontend_sym_BareTypeRow *)(realloc(_self->bares, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    _self->tbare = names;
-    fulls = (const char * *)(realloc(_self->tfull, ((size_t)(cap) * sizeof((*fulls)))));
-    if ((!fulls)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
-    }
-    _self->tfull = fulls;
-    ambig = (int *)(realloc(_self->tbambig, ((size_t)(cap) * sizeof((*ambig)))));
-    if ((!ambig)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
-    }
-    _self->tbambig = ambig;
-    memset((names + _self->tbcap), 0, ((size_t)((cap - _self->tbcap)) * sizeof((*names))));
-    memset((fulls + _self->tbcap), 0, ((size_t)((cap - _self->tbcap)) * sizeof((*fulls))));
-    memset((ambig + _self->tbcap), 0, ((size_t)((cap - _self->tbcap)) * sizeof((*ambig))));
+    memset((grown + _self->tbcap), 0, ((size_t)((cap - _self->tbcap)) * sizeof((*grown))));
+    _self->bares = grown;
     _self->tbcap = cap;
     return 0;
 }
@@ -1890,27 +1850,27 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_bare_type(void *self,
     int i;
     (void)(_self);
     for (i = 0; i < _self->ntb; i++) {
-        if (strcmp(_self->tbare[i], name) != 0) {
+        if (strcmp(_self->bares[i].name, name) != 0) {
             continue;
         }
-        if (strcmp(_self->tfull[i], full) == 0) {
+        if (strcmp(_self->bares[i].full, full) == 0) {
             return 0;
         }
-        _self->tbambig[i] = 1;
+        _self->bares[i].ambiguous = 1;
         return 0;
     }
     if (_self->__frontend_sym_symbolops_vptr->ensure_bare_capacity(_self, (_self->ntb + 1)) != 0) {
         return (-1);
     }
-    _self->tbare[_self->ntb] = runtime_text_ct_intern(name);
-    if ((!_self->tbare[_self->ntb])) {
+    _self->bares[_self->ntb].name = runtime_text_ct_intern(name);
+    if ((!_self->bares[_self->ntb].name)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    _self->tfull[_self->ntb] = runtime_text_ct_intern(full);
-    if ((!_self->tfull[_self->ntb])) {
+    _self->bares[_self->ntb].full = runtime_text_ct_intern(full);
+    if ((!_self->bares[_self->ntb].full)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    _self->tbambig[_self->ntb] = 0;
+    _self->bares[_self->ntb].ambiguous = 0;
     _self->ntb++;
     return 0;
 }
@@ -1921,10 +1881,10 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type(void *self, 
     int i;
     (void)(_self);
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) != 0) {
+        if (strcmp(_self->aliases[i].name, name) != 0) {
             continue;
         }
-        w = snprintf(out, (size_t)(cap), "%s", _self->alias_full[i]);
+        w = snprintf(out, (size_t)(cap), "%s", _self->aliases[i].full);
         if (((w < 0) || (w >= cap))) {
             return _self->__frontend_sym_symbolops_vptr->fail(_self, "name is too long");
         }
@@ -1944,13 +1904,13 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type(void *self, 
         }
     }
     for (i = 0; i < _self->ntb; i++) {
-        if (strcmp(_self->tbare[i], name) != 0) {
+        if (strcmp(_self->bares[i].name, name) != 0) {
             continue;
         }
-        if (_self->tbambig[i]) {
+        if (_self->bares[i].ambiguous) {
             return _self->__frontend_sym_symbolops_vptr->fail(_self, "that type is exported by more than one namespace; import it as an alias");
         }
-        w = snprintf(out, (size_t)(cap), "%s", _self->tfull[i]);
+        w = snprintf(out, (size_t)(cap), "%s", _self->bares[i].full);
         if (((w < 0) || (w >= cap))) {
             return _self->__frontend_sym_symbolops_vptr->fail(_self, "name is too long");
         }
@@ -1971,8 +1931,8 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type_tex
         name = "";
     }
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) == 0) {
-            return _self->alias_full[i];
+        if (strcmp(_self->aliases[i].name, name) == 0) {
+            return _self->aliases[i].full;
         }
     }
     if ((_self->ns && _self->ns[0])) {
@@ -1985,13 +1945,13 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_type_tex
         }
     }
     for (i = 0; i < _self->ntb; i++) {
-        if (strcmp(_self->tbare[i], name) != 0) {
+        if (strcmp(_self->bares[i].name, name) != 0) {
             continue;
         }
-        if (_self->tbambig[i]) {
+        if (_self->bares[i].ambiguous) {
             return runtime_text_ct_intern(name);
         }
-        return _self->tfull[i];
+        return _self->bares[i].full;
     }
     return runtime_text_ct_intern(name);
 }
@@ -2145,7 +2105,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
         return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
     }
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) == 0) {
+        if (strcmp(_self->aliases[i].name, name) == 0) {
             snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
             return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
         }
@@ -2265,7 +2225,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_visible_type_alias
         return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
     }
     for (i = 0; i < _self->nalias; i++) {
-        if (strcmp(_self->alias_name[i], name) == 0) {
+        if (strcmp(_self->aliases[i].name, name) == 0) {
             snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
             return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
         }
@@ -2620,11 +2580,11 @@ int frontend_sym_ct_tmpl_find(const char * name, int unit) {
     if (unit >= 0) {
         ntb = sym->ntb;
         for (b = (ntb - 1); b >= 0; b--) {
-            if (((!sym->tbare[b]) || (strcmp(sym->tbare[b], name) != 0))) {
+            if (((!sym->bares[b].name) || (strcmp(sym->bares[b].name, name) != 0))) {
                 continue;
             }
             for (i = (n - 1); i >= 0; i--) {
-                if (((t[i].full && sym->tfull[b]) && (strcmp(t[i].full, sym->tfull[b]) == 0))) {
+                if (((t[i].full && sym->bares[b].full) && (strcmp(t[i].full, sym->bares[b].full) == 0))) {
                     return i;
                 }
             }

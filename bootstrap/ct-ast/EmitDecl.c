@@ -79,6 +79,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -1207,7 +1210,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                 }
             }
             type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->structs[si].name);
-            if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
+            if (((type_index >= 0) && (_self->sym->types[type_index].kind == 1))) {
                 stype = tool_sh_ct_scratch_fmt("struct %s", _self->sym->structs[si].name);
             }
             else {

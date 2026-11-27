@@ -135,6 +135,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -698,7 +701,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_fnptr_field(void *s
             return 1;
         }
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->structs[s].fields[fi].type);
-        return ((ti >= 0) && (_self->sym->type_kind[ti] == 4));
+        return ((ti >= 0) && (_self->sym->types[ti].kind == 4));
     }
     return 0;
 }

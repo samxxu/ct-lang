@@ -43,6 +43,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -477,6 +480,20 @@ struct frontend_sym_Adt {
     int tmpl;
     int emitted;
 };
+struct frontend_sym_TypeRow {
+    const char * name;
+    int kind;
+    const char * target;
+};
+struct frontend_sym_AliasRow {
+    const char * name;
+    const char * full;
+};
+struct frontend_sym_BareTypeRow {
+    const char * name;
+    const char * full;
+    int ambiguous;
+};
 struct frontend_sym_Symbols {
     struct frontend_sym_Fn * funcs;
     int nfunc;
@@ -492,9 +509,7 @@ struct frontend_sym_Symbols {
     int * scope;
     int nscope;
     int scopecap;
-    const char * * types;
-    int * type_kind;
-    const char * * type_target;
+    struct frontend_sym_TypeRow * types;
     int ntype;
     int typecap;
     int builtin_tmpl_hi;
@@ -511,15 +526,12 @@ struct frontend_sym_Symbols {
     struct frontend_sym_MethAnn * meth;
     int methcap;
     int nmeth;
-    const char * * tbare;
-    const char * * tfull;
-    int * tbambig;
+    struct frontend_sym_BareTypeRow * bares;
     int ntb;
     int tbcap;
     const char * ns;
     const char * path;
-    const char * * alias_name;
-    const char * * alias_full;
+    struct frontend_sym_AliasRow * aliases;
     int nalias;
     int aliascap;
     struct frontend_sym_TypeAlias * taliases;

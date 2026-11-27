@@ -137,6 +137,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -3259,7 +3262,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                     const char * etn;
                     int eti;
                     etn = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, qv);
-                    if (((etn && ((eti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, etn)) >= 0)) && (_self->sym->type_kind[eti] == 5))) {
+                    if (((etn && ((eti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, etn)) >= 0)) && (_self->sym->types[eti].kind == 5))) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("'%s' has no member '%s'", qv, _self->arena->nodes[n].text2));
                     }
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "no variable of that name in that namespace"" (qualified type names are not supported;"" use the bare name or an alias import)");

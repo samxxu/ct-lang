@@ -745,6 +745,35 @@ pub int ct_adt_add_tparam(int adt, const char *name);
    generic branch. -1 on a cap overflow or a malformed argument list. */
 pub int ct_adt_inst_add(int tmpl, const char *full, int nargs, char **cargs);
 
+/* S8b D2: the type table used to be three parallel heap blocks
+   (`types` / `type_kind` / `type_target`) grown by three separate reallocs, so
+   a failure in the second or third left the blocks out of step. One row block
+   grows atomically and names the three columns once. */
+pub struct TypeRow {
+    const char *name;      /* interned spelling, owned by runtime::text::Intern */
+    /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
+       5 = enum tag, 6 = union tag, 7 = ADT tag */
+    int  kind;
+    /* V29-4: the spelling a C typedef stands for (`typedef Vec<int> (*VecFn)(void)`
+       keeps `struct Vec_int (*)(void)`), empty for an opaque header type. */
+    const char *target;
+}
+
+/* S8b D2: the import-alias pairs were two parallel pointer rows; one row block
+   keeps a name and its mangled C spelling together. */
+pub struct AliasRow {
+    const char *name;
+    const char *full;
+}
+
+/* S8b D2: the exported-type triple (`bare` / `full` / `ambiguous`) became one
+   row block; `ambiguous` is the same flag the old `tbambig` block held. */
+pub struct BareTypeRow {
+    const char *name;      /* the name the source wrote */
+    const char *full;      /* its qualified C name (`hal_Writer`) */
+    int  ambiguous;        /* two namespaces export the same bare name */
+}
+
 pub struct Symbols {
     /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
        as inline arrays in the file-scope instance they put ~21 MB of zeroes
@@ -769,17 +798,11 @@ pub struct Symbols {
     int  *scope;
     int  nscope;
     int  scopecap;
-    /* S1a-0 C1: three parallel blocks grown together by
-       `ensure_type_capacity`. S1a-0 C2p-3: `types`/`type_target` are pointer
-       rows (each an interned text), so a 2000-byte struct name is not cut at
+    /* S8b D2: one row block replaces the old three parallel blocks
+       (`types` / `type_kind` / `type_target`). S1a-0 C2p-3 keeps the name and
+       target columns as pointer rows, so a 2000-byte struct name is not cut at
        the old MAX_TEXT stride. */
-    const char **types;
-    int  *type_kind;            /* 1 = struct tag, 2 = typedef, 3 = trait, 4 = function-pointer typedef,
-                                   5 = enum tag, 6 = union tag */
-    /* V29-4: the spelling a C typedef stands for (`typedef Vec<int> (*VecFn)(void)`
-       keeps `struct Vec_int (*)(void)`), so the subscript checker resolves the
-       alias by name instead of inferring it from the use site. */
-    const char **type_target;
+    struct TypeRow *types;
     int  ntype;
     int  typecap;
     /* v1-PH-2 S6b: every template row below this index was declared by the
@@ -811,12 +834,10 @@ pub struct Symbols {
        name, so a consumer need not alias-import it. A second unit exporting the
        same bare name from another namespace marks it ambiguous: the alias
        import remains the escape hatch. */
-    /* S1a-0 C2o: exported type names are pointer rows (each a pool text) and
-       grow on demand; the old `char[128][160]` cut both the count and one
-       exported name's length. */
-    const char **tbare;         /* the name the source wrote */
-    const char **tfull;         /* its qualified C name (`hal_Writer`) */
-    int  *tbambig;
+    /* S1a-0 C2o: exported type names are pool texts and grow on demand; the
+       old `char[128][160]` cut both the count and one exported name's length.
+       S8b D2: one row block instead of the three parallel blocks. */
+    struct BareTypeRow *bares;
     int  ntb;
     int  tbcap;
     /* S1a-0 C2o: the current namespace prefix is a pool text (`A_B_`), so a
@@ -829,13 +850,11 @@ pub struct Symbols {
     const char *path;
     /* `import a::b::C as D;` brings one exported name in under `D` for this unit
        only (the table resets per unit); `alias_full` is the mangled C name. */
-    /* S1a-0 C1/C2n-1: the import-alias rows grow on demand from 24. They are
-       two pointer rows now (each entry an interned text owned by
-       runtime::text::Intern); `ensure_alias_capacity` grows them together.
-       (Before C1 they were fixed `char [24][160]` arrays, which S1a-1's
-       one-unit-per-method-group split immediately outgrew.) */
-    const char **alias_name;
-    const char **alias_full;
+    /* S1a-0 C1/C2n-1: the import-alias rows grow on demand from 24. Each
+       entry names an interned text owned by runtime::text::Intern. S8b D2:
+       one row block holds both columns (`ensure_alias_capacity` grows it in
+       one realloc); before C1 these were fixed `char [24][160]` arrays. */
+    struct AliasRow *aliases;
     int  nalias;
     int  aliascap;
     /* Type aliases (`pub type X = T;`): a per-unit visible table plus a global
@@ -928,12 +947,8 @@ impl SymbolOps for Symbols {
             self->gtaliascap = MAX_GLOBAL_TYPE_ALIASES;
         }
         if (!self->types) {
-            self->types = (const char **)calloc(MAX_TYPES, sizeof(*self->types));
+            self->types = (struct TypeRow *)calloc(MAX_TYPES, sizeof(*self->types));
             if (!self->types) return -1;
-            self->type_kind = calloc(MAX_TYPES, sizeof(*self->type_kind));
-            if (!self->type_kind) return -1;
-            self->type_target = (const char **)calloc(MAX_TYPES, sizeof(*self->type_target));
-            if (!self->type_target) return -1;
             self->typecap = MAX_TYPES;
         }
         return 0;
@@ -1052,38 +1067,24 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
-    /* S1a-0 C1: the type table and its two parallel arrays move together.
-       A failed later realloc leaves the earlier blocks larger than `typecap`;
-       that is harmless (capacity is a lower bound), so no partial state is
-       visible to a reader. */
+    /* S8b D2: one row block, one realloc. The old three-block version could
+       leave the columns at different capacities when a later realloc failed;
+       a row block either grows or stays put. */
     int ensure_type_capacity(int need)
     {
         int cap;
-        const char **names;
-        int *kinds;
-        const char **targets;
+        struct TypeRow *grown;
         (void)self;
         if (need <= self->typecap) return 0;
         cap = self->typecap > 0 ? self->typecap : MAX_TYPES;
         while (cap < need && cap < CAP_LIMIT) cap *= 2;
         if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
-        names = (const char **)realloc(self->types, (size_t)cap * sizeof(*names));
-        if (!names) return self->fail("out of memory");
-        memset(names + self->typecap, 0,
-               (size_t)(cap - self->typecap) * sizeof(*names));
-        self->types = names;
-        kinds = (int *)realloc(self->type_kind, (size_t)cap * sizeof(*kinds));
-        if (!kinds) return self->fail("out of memory");
-        memset(kinds + self->typecap, 0,
-               (size_t)(cap - self->typecap) * sizeof(*kinds));
-        self->type_kind = kinds;
-        targets = (const char **)realloc(self->type_target,
-                                         (size_t)cap * sizeof(*targets));
-        if (!targets) return self->fail("out of memory");
-        memset(targets + self->typecap, 0,
-               (size_t)(cap - self->typecap) * sizeof(*targets));
-        self->type_target = targets;
+        grown = (struct TypeRow *)realloc(self->types, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->typecap, 0,
+               (size_t)(cap - self->typecap) * sizeof(*grown));
+        self->types = grown;
         self->typecap = cap;
         return 0;
     }
@@ -1544,7 +1545,7 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         for (i = 0; i < self->ntype; i++)
-            if (self->types[i] && strcmp(self->types[i], name) == 0) return i;
+            if (self->types[i].name && strcmp(self->types[i].name, name) == 0) return i;
         return -1;
     }
 
@@ -1557,7 +1558,7 @@ impl SymbolOps for Symbols {
         i = self->find_type(name);
         if (i >= 0) {
             /* a struct tag discovered while parsing a type keeps its kind */
-            if (self->type_kind[i] == 0) self->type_kind[i] = kind;
+            if (self->types[i].kind == 0) self->types[i].kind = kind;
             return 0;
         }
         /* A finished alias already owns this spelling; the two would disagree
@@ -1575,9 +1576,9 @@ impl SymbolOps for Symbols {
             return self->fail(msg);
         }
         if (self->ensure_type_capacity(self->ntype + 1) != 0) return -1;
-        self->types[self->ntype] = runtime::text::ct_intern(name);
-        if (!self->types[self->ntype]) return self->fail("out of memory");
-        self->type_kind[self->ntype] = kind;
+        self->types[self->ntype].name = runtime::text::ct_intern(name);
+        if (!self->types[self->ntype].name) return self->fail("out of memory");
+        self->types[self->ntype].kind = kind;
         self->ntype++;
         return 0;
     }
@@ -1590,8 +1591,8 @@ impl SymbolOps for Symbols {
         int i;
         i = self->find_type(name);
         if (i < 0) return 0;
-        self->type_target[i] = runtime::text::ct_intern(target);
-        if (!self->type_target[i]) return self->fail("out of memory");
+        self->types[i].target = runtime::text::ct_intern(target);
+        if (!self->types[i].target) return self->fail("out of memory");
         return 1;
     }
 
@@ -1599,8 +1600,8 @@ impl SymbolOps for Symbols {
     {
         int i;
         i = self->find_type(name);
-        if (i < 0 || !self->type_target[i] || !self->type_target[i][0]) return 0;
-        snprintf(out, (size_t)cap, "%s", self->type_target[i]);
+        if (i < 0 || !self->types[i].target || !self->types[i].target[0]) return 0;
+        snprintf(out, (size_t)cap, "%s", self->types[i].target);
         return 1;
     }
 
@@ -1608,9 +1609,9 @@ impl SymbolOps for Symbols {
     {
         int i;
         i = self->find_type(name);
-        if (i < 0 || !self->type_target[i] || !self->type_target[i][0])
+        if (i < 0 || !self->types[i].target || !self->types[i].target[0])
             return (const char *)0;
-        return self->type_target[i];
+        return self->types[i].target;
     }
 
     /* S1a-0 C1: the per-unit struct block is one array for plain rows and
@@ -2178,24 +2179,18 @@ impl SymbolOps for Symbols {
     int ensure_alias_capacity(int need)
     {
         int cap;
-        const char **names;
-        const char **fulls;
+        struct AliasRow *grown;
         (void)self;
         if (need <= self->aliascap) return 0;
         cap = self->aliascap > 0 ? self->aliascap : MAX_IMPORT_ALIASES;
         while (cap < need && cap < CAP_LIMIT) cap *= 2;
         if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
-        names = (const char **)realloc(self->alias_name, (size_t)cap * sizeof(*names));
-        if (!names) return self->fail("out of memory");
-        memset(names + self->aliascap, 0,
-               (size_t)(cap - self->aliascap) * sizeof(*names));
-        self->alias_name = names;
-        fulls = (const char **)realloc(self->alias_full, (size_t)cap * sizeof(*fulls));
-        if (!fulls) return self->fail("out of memory");
-        memset(fulls + self->aliascap, 0,
-               (size_t)(cap - self->aliascap) * sizeof(*fulls));
-        self->alias_full = fulls;
+        grown = (struct AliasRow *)realloc(self->aliases, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->aliascap, 0,
+               (size_t)(cap - self->aliascap) * sizeof(*grown));
+        self->aliases = grown;
         self->aliascap = cap;
         return 0;
     }
@@ -2209,15 +2204,15 @@ impl SymbolOps for Symbols {
         (void)self;
 
         for (i = 0; i < self->nalias; i++) {
-            if (strcmp(self->alias_name[i], name) != 0) continue;
-            if (strcmp(self->alias_full[i], full) == 0) return 0;
+            if (strcmp(self->aliases[i].name, name) != 0) continue;
+            if (strcmp(self->aliases[i].full, full) == 0) return 0;
             return self->fail("one alias names two imports");
         }
         if (self->ensure_alias_capacity(self->nalias + 1) != 0) return -1;
-        self->alias_name[self->nalias] = runtime::text::ct_intern(name);
-        if (!self->alias_name[self->nalias]) return self->fail("out of memory");
-        self->alias_full[self->nalias] = runtime::text::ct_intern(full);
-        if (!self->alias_full[self->nalias]) return self->fail("out of memory");
+        self->aliases[self->nalias].name = runtime::text::ct_intern(name);
+        if (!self->aliases[self->nalias].name) return self->fail("out of memory");
+        self->aliases[self->nalias].full = runtime::text::ct_intern(full);
+        if (!self->aliases[self->nalias].full) return self->fail("out of memory");
         self->nalias++;
         return 0;
     }
@@ -2227,27 +2222,17 @@ impl SymbolOps for Symbols {
     int ensure_bare_capacity(int need)
     {
         int cap;
-        const char **names;
-        const char **fulls;
-        int *ambig;
+        struct BareTypeRow *grown;
         (void)self;
         if (need <= self->tbcap) return 0;
         cap = self->tbcap > 0 ? self->tbcap : MAX_EXPORTED_TYPES;
         while (cap < need && cap < CAP_LIMIT) cap *= 2;
         if (cap > CAP_LIMIT) cap = CAP_LIMIT;
         if (need > cap) return self->fail("out of memory");
-        names = (const char **)realloc(self->tbare, (size_t)cap * sizeof(*names));
-        if (!names) return self->fail("out of memory");
-        self->tbare = names;
-        fulls = (const char **)realloc(self->tfull, (size_t)cap * sizeof(*fulls));
-        if (!fulls) return self->fail("out of memory");
-        self->tfull = fulls;
-        ambig = (int *)realloc(self->tbambig, (size_t)cap * sizeof(*ambig));
-        if (!ambig) return self->fail("out of memory");
-        self->tbambig = ambig;
-        memset(names + self->tbcap, 0, (size_t)(cap - self->tbcap) * sizeof(*names));
-        memset(fulls + self->tbcap, 0, (size_t)(cap - self->tbcap) * sizeof(*fulls));
-        memset(ambig + self->tbcap, 0, (size_t)(cap - self->tbcap) * sizeof(*ambig));
+        grown = (struct BareTypeRow *)realloc(self->bares, (size_t)cap * sizeof(*grown));
+        if (!grown) return self->fail("out of memory");
+        memset(grown + self->tbcap, 0, (size_t)(cap - self->tbcap) * sizeof(*grown));
+        self->bares = grown;
         self->tbcap = cap;
         return 0;
     }
@@ -2261,17 +2246,17 @@ impl SymbolOps for Symbols {
         (void)self;
 
         for (i = 0; i < self->ntb; i++) {
-            if (strcmp(self->tbare[i], name) != 0) continue;
-            if (strcmp(self->tfull[i], full) == 0) return 0;
-            self->tbambig[i] = 1;
+            if (strcmp(self->bares[i].name, name) != 0) continue;
+            if (strcmp(self->bares[i].full, full) == 0) return 0;
+            self->bares[i].ambiguous = 1;
             return 0;
         }
         if (self->ensure_bare_capacity(self->ntb + 1) != 0) return -1;
-        self->tbare[self->ntb] = runtime::text::ct_intern(name);
-        if (!self->tbare[self->ntb]) return self->fail("out of memory");
-        self->tfull[self->ntb] = runtime::text::ct_intern(full);
-        if (!self->tfull[self->ntb]) return self->fail("out of memory");
-        self->tbambig[self->ntb] = 0;
+        self->bares[self->ntb].name = runtime::text::ct_intern(name);
+        if (!self->bares[self->ntb].name) return self->fail("out of memory");
+        self->bares[self->ntb].full = runtime::text::ct_intern(full);
+        if (!self->bares[self->ntb].full) return self->fail("out of memory");
+        self->bares[self->ntb].ambiguous = 0;
         self->ntb++;
         return 0;
     }
@@ -2284,8 +2269,8 @@ impl SymbolOps for Symbols {
         (void)self;
 
         for (i = 0; i < self->nalias; i++) {
-            if (strcmp(self->alias_name[i], name) != 0) continue;
-            w = snprintf(out, (size_t)cap, "%s", self->alias_full[i]);
+            if (strcmp(self->aliases[i].name, name) != 0) continue;
+            w = snprintf(out, (size_t)cap, "%s", self->aliases[i].full);
             if (w < 0 || w >= cap) return self->fail("name is too long");
             return 0;
         }
@@ -2307,10 +2292,10 @@ impl SymbolOps for Symbols {
         }
         /* an exported type from another namespace, reachable by its bare name */
         for (i = 0; i < self->ntb; i++) {
-            if (strcmp(self->tbare[i], name) != 0) continue;
-            if (self->tbambig[i])
+            if (strcmp(self->bares[i].name, name) != 0) continue;
+            if (self->bares[i].ambiguous)
                 return self->fail("that type is exported by more than one namespace; import it as an alias");
-            w = snprintf(out, (size_t)cap, "%s", self->tfull[i]);
+            w = snprintf(out, (size_t)cap, "%s", self->bares[i].full);
             if (w < 0 || w >= cap) return self->fail("name is too long");
             return 0;
         }
@@ -2325,8 +2310,8 @@ impl SymbolOps for Symbols {
         (void)self;
         if (!name) name = "";
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->alias_name[i], name) == 0)
-                return self->alias_full[i];
+            if (strcmp(self->aliases[i].name, name) == 0)
+                return self->aliases[i].full;
         if (self->ns && self->ns[0]) {
             const char *qn = runtime::text::ct_intern_join(self->ns, name);
             if (!qn) return (const char *)0;
@@ -2335,12 +2320,12 @@ impl SymbolOps for Symbols {
                 return qn;
         }
         for (i = 0; i < self->ntb; i++) {
-            if (strcmp(self->tbare[i], name) != 0) continue;
+            if (strcmp(self->bares[i].name, name) != 0) continue;
             /* an ambiguous export has no single spelling; hand back the bare
                name and let the caller's table lookup decide, as the buffer
                version's failure did */
-            if (self->tbambig[i]) return runtime::text::ct_intern(name);
-            return self->tfull[i];
+            if (self->bares[i].ambiguous) return runtime::text::ct_intern(name);
+            return self->bares[i].full;
         }
         return runtime::text::ct_intern(name);
     }
@@ -2426,7 +2411,7 @@ impl TypeAliasOps for Symbols {
             return self->fail(msg);
         }
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->alias_name[i], name) == 0) {
+            if (strcmp(self->aliases[i].name, name) == 0) {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
@@ -2522,7 +2507,7 @@ impl TypeAliasOps for Symbols {
             return self->fail(msg);
         }
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->alias_name[i], name) == 0) {
+            if (strcmp(self->aliases[i].name, name) == 0) {
                 snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
                 return self->fail(msg);
             }
@@ -2810,10 +2795,10 @@ int ct_tmpl_find(const char *name, int unit)
     if (unit >= 0) {
         ntb = sym->ntb;
         for (b = ntb - 1; b >= 0; b--) {
-            if (!sym->tbare[b] || strcmp(sym->tbare[b], name) != 0) continue;
+            if (!sym->bares[b].name || strcmp(sym->bares[b].name, name) != 0) continue;
             for (i = n - 1; i >= 0; i--)
-                if (t[i].full && sym->tfull[b]
-                    && strcmp(t[i].full, sym->tfull[b]) == 0) return i;
+                if (t[i].full && sym->bares[b].full
+                    && strcmp(t[i].full, sym->bares[b].full) == 0) return i;
         }
     }
     /* 3. The built-in layer, for every unit that does not shadow it. */

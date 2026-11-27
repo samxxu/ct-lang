@@ -877,7 +877,7 @@ impl EmitDecl for Emitter {
                         return self->fail_from(n, emsg);
                     }
                 type_index = self->sym->find_type(self->sym->structs[si].name);
-                if (type_index >= 0 && self->sym->type_kind[type_index] == 1)
+                if (type_index >= 0 && self->sym->types[type_index].kind == 1)
                     stype = tool::sh::ct_scratch_fmt("struct %s", self->sym->structs[si].name);
                 else
                     stype = tool::sh::ct_scratch_dup(self->sym->structs[si].name);

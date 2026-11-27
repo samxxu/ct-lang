@@ -3261,12 +3261,12 @@ impl ParseOps for Parser {
             qname = self->sup->ns_decl_text(name);
             if (!qname) return self->sup->fail("out of memory");
             ti = self->sym->find_type(qname);
-            if (ti >= 0 && self->sym->type_kind[ti] == 5)
+            if (ti >= 0 && self->sym->types[ti].kind == 5)
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
                     tool::sh::ct_scratch_fmt("duplicate enum '%s'", name),
                     self->mem->path);
-            if (ti >= 0 && self->sym->type_kind[ti] == 7)
+            if (ti >= 0 && self->sym->types[ti].kind == 7)
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
                     tool::sh::ct_scratch_fmt("duplicate ADT '%s'", name),
@@ -3485,8 +3485,8 @@ impl ParseOps for Parser {
             /* the pre-scan and the real member list must agree; if they ever
                do not, the parsed form wins and the table follows it */
             ti = self->sym->find_type(qname);
-            if (ti >= 0 && self->sym->type_kind[ti] != (is_adt ? 7 : 5))
-                self->sym->type_kind[ti] = is_adt ? 7 : 5;
+            if (ti >= 0 && self->sym->types[ti].kind != (is_adt ? 7 : 5))
+                self->sym->types[ti].kind = is_adt ? 7 : 5;
         }
         if (is_adt) {
             if (has_value)
@@ -4421,7 +4421,7 @@ impl ParseOps for Parser {
             return NO_NODE;
         }
         type_index = self->sym->find_type(rstruct);
-        if (type_index >= 0 && self->sym->type_kind[type_index] == 1) {
+        if (type_index >= 0 && self->sym->types[type_index].kind == 1) {
             stype = runtime::text::ct_internf("struct %s", rstruct);
             if (!stype) return self->sup->fail("out of memory");
         } else {
@@ -4708,7 +4708,7 @@ impl ParseOps for Parser {
             type_is_pub = adts[adt].is_pub;
         } else {
             type_index = self->sym->find_type(rname);
-            if (type_index >= 0 && self->sym->type_kind[type_index] == 1) {
+            if (type_index >= 0 && self->sym->types[type_index].kind == 1) {
                 stype = runtime::text::ct_internf("struct %s", rname);
                 if (!stype) return self->sup->fail("out of memory");
             } else {

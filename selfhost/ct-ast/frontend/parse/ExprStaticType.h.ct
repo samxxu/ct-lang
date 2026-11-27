@@ -840,7 +840,7 @@ impl ExprStaticType for Expr {
             if (strcmp(self->sym->structs[s].fields[fi].name, field) != 0) continue;
             if (strstr(self->sym->structs[s].fields[fi].type, "(*")) return 1;
             ti = self->sym->find_type(self->sym->structs[s].fields[fi].type);
-            return (ti >= 0 && self->sym->type_kind[ti] == 4);
+            return (ti >= 0 && self->sym->types[ti].kind == 4);
         }
         return 0;
     }

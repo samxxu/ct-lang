@@ -136,6 +136,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -548,25 +551,25 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     if (qti < 0) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown qualified type name");
                     }
-                    if (_self->sym->type_kind[qti] == 1) {
+                    if (_self->sym->types[qti].kind == 1) {
                         if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                             return (-1);
                         }
                     }
                     else {
-                        if (_self->sym->type_kind[qti] == 5) {
+                        if (_self->sym->types[qti].kind == 5) {
                             if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
                                 return (-1);
                             }
                         }
                         else {
-                            if (_self->sym->type_kind[qti] == 6) {
+                            if (_self->sym->types[qti].kind == 6) {
                                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
                                     return (-1);
                                 }
                             }
                             else {
-                                if (_self->sym->type_kind[qti] == 7) {
+                                if (_self->sym->types[qti].kind == 7) {
                                     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                                         return (-1);
                                     }
@@ -577,7 +580,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
                         return (-1);
                     }
-                    _self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, rname, _self->sym->type_kind[qti]);
+                    _self->sup->__frontend_parse_supportops_vptr->add_type(_self->sup, rname, _self->sym->types[qti].kind);
                     continue;
                 }
             }
@@ -708,7 +711,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 }
                 break;
             }
-            if (_self->sym->type_kind[ti] == 1) {
+            if (_self->sym->types[ti].kind == 1) {
                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                     return (-1);
                 }
@@ -718,7 +721,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 }
             }
             else {
-                if (_self->sym->type_kind[ti] == 5) {
+                if (_self->sym->types[ti].kind == 5) {
                     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
                         return (-1);
                     }
@@ -728,7 +731,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     }
                 }
                 else {
-                    if (_self->sym->type_kind[ti] == 6) {
+                    if (_self->sym->types[ti].kind == 6) {
                         if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
                             return (-1);
                         }
@@ -738,7 +741,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                         }
                     }
                     else {
-                        if (_self->sym->type_kind[ti] == 7) {
+                        if (_self->sym->types[ti].kind == 7) {
                             if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                                 return (-1);
                             }
@@ -748,7 +751,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                             }
                         }
                         else {
-                            if (_self->sym->type_kind[ti] == 3) {
+                            if (_self->sym->types[ti].kind == 3) {
                                 int sti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rname);
                                 _self->saw_trait = 1;
                                 if (((sti >= 0) && _self->sym->traits[sti].is_static)) {

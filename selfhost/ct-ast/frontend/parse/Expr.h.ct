@@ -3984,7 +3984,7 @@ impl ExprOps for Expr {
                         etn = self->sym->resolve_type_text(qv);
                         if (etn
                             && (eti = self->sym->find_type(etn)) >= 0
-                            && self->sym->type_kind[eti] == 5) {
+                            && self->sym->types[eti].kind == 5) {
                             return self->sup->fail(runtime::text::ct_internf(
                                      "'%s' has no member '%s'",
                                      qv, self->arena->nodes[n].text2));

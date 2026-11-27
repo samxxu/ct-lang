@@ -141,6 +141,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -4010,10 +4013,10 @@ static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int p
         if (ti < 0) {
             continue;
         }
-        if (((self->sym->type_kind[ti] != 1) && (self->sym->type_kind[ti] != 6))) {
+        if (((self->sym->types[ti].kind != 1) && (self->sym->types[ti].kind != 6))) {
             continue;
         }
-        if (backend_lir_lmod_plan_shell_add_stage(LPS_STRUCTFWD, unit, i, ((self->sym->type_kind[ti] == 6) ? 1 : 0), 0, 0) != 0) {
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_STRUCTFWD, unit, i, ((self->sym->types[ti].kind == 6) ? 1 : 0), 0, 0) != 0) {
             return 1;
         }
     }

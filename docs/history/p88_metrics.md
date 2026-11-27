@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=94951 io_cap=2048
+     emitted_before=48223 emitted_after=95127 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -242,6 +242,11 @@
       `Arena.NodeKind` 的 `match`（节点池仍保留 int tag）；Emitter.h.ct 不变
       （1590），发射 C 94941 -> 94951 行（+10：match 临时量与真 lowering 的
       语句形状；用户语料生成物逐字节不变），切片清单仍为 76)
+     (v1-PH-2 S8b D2 后复测：`Symbols` 的三组并行数组改行块
+      （`TypeRow` / `AliasRow` / `BareTypeRow`），8 处 realloc 并为 3 处；
+      新增三个行类型进头文件。Emitter.h.ct 不变（1590），发射 C
+      94951 -> 95127 行（+176：行类型定义与列名展开；用户语料生成物逐字节
+      不变），切片清单仍为 76)
 -->
 
 ## 1 切片清单

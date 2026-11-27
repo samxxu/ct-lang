@@ -111,6 +111,9 @@ struct frontend_sym_StructImpl;
 struct frontend_sym_AdtField;
 struct frontend_sym_AdtVariant;
 struct frontend_sym_Adt;
+struct frontend_sym_TypeRow;
+struct frontend_sym_AliasRow;
+struct frontend_sym_BareTypeRow;
 struct frontend_sym_Symbols;
 struct backend_emit_Init;
 struct frontend_lex_TokView;
@@ -2981,10 +2984,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, qname);
-        if (((ti >= 0) && (_self->sym->type_kind[ti] == 5))) {
+        if (((ti >= 0) && (_self->sym->types[ti].kind == 5))) {
             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate enum '%s'", name), _self->mem->path);
         }
-        if (((ti >= 0) && (_self->sym->type_kind[ti] == 7))) {
+        if (((ti >= 0) && (_self->sym->types[ti].kind == 7))) {
             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate ADT '%s'", name), _self->mem->path);
         }
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -3224,8 +3227,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_enum_def(void *se
     _self->arena->nodes[s].d = is_pub;
     if (name[0]) {
         ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, qname);
-        if (((ti >= 0) && (_self->sym->type_kind[ti] != (is_adt ? 7 : 5)))) {
-            _self->sym->type_kind[ti] = (is_adt ? 7 : 5);
+        if (((ti >= 0) && (_self->sym->types[ti].kind != (is_adt ? 7 : 5)))) {
+            _self->sym->types[ti].kind = (is_adt ? 7 : 5);
         }
     }
     if (is_adt) {
@@ -4244,7 +4247,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         return NO_NODE;
     }
     type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rstruct);
-    if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
+    if (((type_index >= 0) && (_self->sym->types[type_index].kind == 1))) {
         stype = runtime_text_ct_internf("struct %s", rstruct);
         if ((!stype)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4522,7 +4525,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
     }
     else {
         type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, rname);
-        if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
+        if (((type_index >= 0) && (_self->sym->types[type_index].kind == 1))) {
             stype = runtime_text_ct_internf("struct %s", rname);
             if ((!stype)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
