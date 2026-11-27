@@ -212,6 +212,7 @@
 #define LTK_Q               7
 #define LTK_MATCH           8
 #define LX_MAX_CHAIN 256
+#define LW_NAME_MAX 256
 #define PW_EXPR   1
 #define PW_COND   2
 #define PW_INLINE 3
@@ -344,12 +345,17 @@ struct tool_driver_Driver;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+static int lw_spelling_owns(struct backend_lir_Lower *, const char *, int);
+static int lw_spelling_glue(struct backend_lir_Lower *, const char *, int);
+static int lw_spelling_by_value(const char *);
 int backend_lir_ct_lir_on(void);
 int backend_lir_ct_lir_emit_on(void);
 void backend_lir_ct_lir_set_switch(int);
 void backend_lir_ct_lir_default_build(void);
+void backend_lir_ct_lir_default_compile(void);
 void backend_lir_ct_lir_disable_bodies(void);
 int backend_lir_ct_lir_forced(void);
+int backend_lir_ct_lir_quiet_fallback(void);
 int backend_lir_ct_lir_build_program(int, const char *, const char *, const char *, int, int);
 int backend_lir_ct_lir_build_unit(void *, int, int);
 int backend_lir_ct_lir_ready(void);
@@ -388,6 +394,7 @@ static int lw_hoist_add(struct backend_lir_Lower *, int, int);
 static int lw_hoist_entry(struct backend_lir_Lower *, int, int, int, int, int, int);
 static int lw_is_name_kind(int);
 static int lw_hoist_type(struct backend_lir_Lower *, int);
+static int lw_hoist_scan_body(struct backend_lir_Lower *, int, int);
 static int lw_hoist_scan(struct backend_lir_Lower *, int, int);
 static int lw_expr(struct backend_lir_Lower *, int);
 static int lw_closure_var(struct backend_lir_Lower *, const char *);
@@ -396,6 +403,7 @@ static int lw_closure_arg(struct backend_lir_Lower *, struct backend_tir_ct_texp
 static int lw_expr_actual(struct backend_lir_Lower *, int);
 static int lw_expr_kid(struct backend_lir_Lower *, int, int);
 static int lw_call_name(struct backend_lir_Lower *, struct backend_tir_ct_texpr *);
+static int lw_expr_body(struct backend_lir_Lower *, int);
 static int lw_block_stmt(struct backend_lir_Lower *, int, int, int);
 static int lw_push_loop(struct backend_lir_Lower *, int);
 static int lw_loop_id(struct backend_lir_Lower *);
@@ -412,12 +420,18 @@ static int lw_is_string_value(const char *);
 static int lw_adt_owns(struct backend_lir_Lower *, const char *, int);
 static int lw_own_kind(struct backend_lir_Lower *, const char *);
 static const char * lw_own_prefix(struct backend_lir_Lower *, const char *, int);
+static int lw_spelling_tag(const char *, char *, int);
+static int lw_text_long(const char *);
+static int lw_tables_have_into(struct backend_lir_Lower *, struct backend_tir_ct_tmark *);
+static int lw_tables_have_long_text(struct backend_lir_Lower *, struct backend_tir_ct_tmark *);
+static int lw_spelling_struct_row(struct backend_lir_Lower *, const char *, struct backend_tir_ct_tstruct * *);
 static int lw_sb_add(struct backend_lir_Lower *, const char *, int, int, const char *);
 static int lw_block_within(struct backend_lir_Lower *, int, int);
 static int lw_sb_release_stmt(struct backend_lir_Lower *, int, int, int);
 static int lw_one_stmt(struct backend_lir_Lower *, int, int, int *);
 static int lw_match_bind_stmt(struct backend_lir_Lower *, const char *, const char *, const char *, int);
 static int lw_conds_put(char * *, int *, int *, const char *);
+static int lw_is_match_yield(struct backend_lir_Lower *, int);
 static int lw_match_arm_block(struct backend_lir_Lower *, int, int, int, int);
 static int lw_jump_cleanups(struct backend_lir_Lower *, int, int, int, int, int, int *, int *);
 static int lw_return_cleanups(struct backend_lir_Lower *, int, int, int, int, int *, int *);
@@ -503,6 +517,22 @@ void backend_lir_ct_lir_default_build(void) {
     backend_lir_g_lower.mode = 1;
     backend_lir_g_lower.defaulted = 1;
     backend_lir_lmod_get()->enabled = 1;
+}
+void backend_lir_ct_lir_default_compile(void) {
+    const char * e;
+    if (backend_lir_g_lower.forced) {
+        return;
+    }
+    e = getenv("CT_LIR");
+    if ((e && e[0])) {
+        return;
+    }
+    backend_lir_g_lower.mode = 1;
+    backend_lir_g_lower.defaulted = 1;
+    backend_lir_lmod_get()->enabled = 1;
+}
+int backend_lir_ct_lir_quiet_fallback(void) {
+    return ((backend_lir_g_lower.defaulted && (!backend_lir_g_lower.forced)) && (!getenv("CT_LIR_STRICT")));
 }
 void backend_lir_ct_lir_disable_bodies(void) {
     backend_lir_g_lower.global_no_bodies = 1;
@@ -1137,12 +1167,30 @@ static int lw_hoist_type(struct backend_lir_Lower * w, int teid) {
     return lw_type(w, w->m->exprs[(teid - 1)].type);
 }
 static int lw_hoist_scan(struct backend_lir_Lower * w, int teid, int top) {
+    int r;
+    if (w->hoist_depth > 400) {
+        lw_abort(w, "Lhoistdepth");
+        return (-1);
+    }
+    w->hoist_depth++;
+    r = lw_hoist_scan_body(w, teid, top);
+    w->hoist_depth--;
+    return r;
+}
+static int lw_hoist_scan_body(struct backend_lir_Lower * w, int teid, int top) {
     struct backend_tir_ct_texpr * t;
     int i;
     if (((teid <= 0) || (teid > w->m->nexprs))) {
         return 0;
     }
     t = (&w->m->exprs[(teid - 1)]);
+    if (getenv("CT_LIR_DEBUG")) {
+        fprintf(stderr, "lir: hscan teid=%d kind=%d nkids=%d kids=%p top=%d\n", teid, t->kind, t->nkids, (void *)(t->kids), top);
+    }
+    if (((t->nkids > 0) && (!t->kids))) {
+        lw_abort(w, "Lkids");
+        return (-1);
+    }
     if (t->kind == TK_OPTIONAL_CHAIN) {
         if (((t->nkids >= 1) && (!lw_is_name_kind(w->m->exprs[(t->kids[0] - 1)].kind)))) {
             int temp = backend_lir_lmod_new_temp(w->l, LTK_OPT, lw_hoist_type(w, t->kids[0]), w->hoist_block);
@@ -1192,9 +1240,19 @@ static int lw_hoist_scan(struct backend_lir_Lower * w, int teid, int top) {
             if (((lvl <= 0) || (lvl > w->m->nexprs))) {
                 break;
             }
+            if (((w->m->exprs[(lvl - 1)].nkids < 1) || (!w->m->exprs[(lvl - 1)].kids))) {
+                break;
+            }
             root = w->m->exprs[(lvl - 1)].kids[0];
             while ((((root > 0) && (root <= w->m->nexprs)) && (w->m->exprs[(root - 1)].kind == TK_FIELD))) {
+                if (((w->m->exprs[(root - 1)].nkids < 1) || (!w->m->exprs[(root - 1)].kids))) {
+                    root = 0;
+                    break;
+                }
                 root = w->m->exprs[(root - 1)].kids[0];
+            }
+            if (getenv("CT_LIR_DEBUG")) {
+                fprintf(stderr, "lir: chain lvl=%d root=%d\n", lvl, root);
             }
             if (((root <= 0) || (root > w->m->nexprs))) {
                 break;
@@ -1329,6 +1387,17 @@ static int lw_call_name(struct backend_lir_Lower * w, struct backend_tir_ct_texp
     return 0;
 }
 static int lw_expr(struct backend_lir_Lower * w, int teid) {
+    int r;
+    if (w->expr_depth > 400) {
+        lw_abort(w, "Ldepth");
+        return 0;
+    }
+    w->expr_depth++;
+    r = lw_expr_body(w, teid);
+    w->expr_depth--;
+    return r;
+}
+static int lw_expr_body(struct backend_lir_Lower * w, int teid) {
     struct backend_tir_ct_texpr * t;
     int e;
     int i;
@@ -1337,6 +1406,14 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
         return 0;
     }
     t = (&w->m->exprs[(teid - 1)]);
+    if (((t->nkids > 0) && (!t->kids))) {
+        lw_abort(w, "Lkids");
+        return 0;
+    }
+    if (((t->kind == TK_INTO_TARGET) || (t->kind == TK_INTO_SELF))) {
+        lw_abort(w, "Linto");
+        return 0;
+    }
     if (((teid != w->bypass_te) && (t->kind != TK_INTO_TARGET))) {
         int ht = lw_hoist_lookup(w, teid);
         if (ht > 0) {
@@ -1420,6 +1497,10 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
         case TK_FIELD:
             if ((((!t->text) || (!t->text[0])) || (t->nkids < 1))) {
                 lw_abort(w, "L394");
+                return 0;
+            }
+            if ((((t->kids[0] > 0) && (t->kids[0] <= w->m->nexprs)) && lw_spelling_owns(w, backend_tir_tmod_cspell(w->m, w->m->exprs[(t->kids[0] - 1)].type), 0))) {
+                lw_abort(w, "Lownfield");
                 return 0;
             }
 {
@@ -1817,6 +1898,10 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
         case TK_INIT_MBRACE:
 {
                 int kind = ((t->kind == TK_INIT_RANGE) ? LE_INIT_RANGE : ((t->kind == TK_INIT_BRACE) ? LE_INIT_BRACE : LE_INIT_MBRACE));
+                if ((lw_spelling_by_value(backend_tir_tmod_cspell(w->m, t->type)) && lw_spelling_glue(w, backend_tir_tmod_cspell(w->m, t->type), 0))) {
+                    lw_abort(w, "Lglueinit");
+                    return 0;
+                }
                 e = backend_lir_lmod_new_expr(w->l, kind, t->span.file, t->span.line, t->span.col);
                 if (e <= 0) {
                     w->hard = 1;
@@ -1835,6 +1920,10 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                 return e;
             }
         case TK_BOX:
+            if ((t->aux & 4)) {
+                lw_abort(w, "Lnsmap");
+                return 0;
+            }
             e = backend_lir_lmod_new_expr(w->l, LE_BOX, t->span.file, t->span.line, t->span.col);
             if (e <= 0) {
                 w->hard = 1;
@@ -2146,6 +2235,10 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
             }
         case TK_COMPOUND:
 {
+                if ((lw_spelling_by_value(backend_tir_tmod_cspell(w->m, t->type)) && lw_spelling_glue(w, backend_tir_tmod_cspell(w->m, t->type), 0))) {
+                    lw_abort(w, "Lgluecompound");
+                    return 0;
+                }
                 e = backend_lir_lmod_new_expr(w->l, LE_COMPOUND, t->span.file, t->span.line, t->span.col);
                 if (e <= 0) {
                     w->hard = 1;
@@ -2534,6 +2627,184 @@ static const char * lw_own_prefix(struct backend_lir_Lower * w, const char * sp,
         return (a ? a->full : buf);
     }
 }
+static int lw_spelling_tag(const char * sp, char * out, int cap) {
+    const char * b;
+    int n;
+    if ((((!sp) || (!sp[0])) || (cap <= 1))) {
+        return (-1);
+    }
+    b = sp;
+    if (strncmp(b, "struct ", 7) == 0) {
+        b += 7;
+    }
+    else {
+        if (strncmp(b, "union ", 6) == 0) {
+            b += 6;
+        }
+    }
+    while ((((*b) == ' ') || ((*b) == '\t'))) {
+        b++;
+    }
+    n = (int)(strlen(b));
+{
+        int i;
+        for (i = 0; i < n; i++) {
+            if (b[i] == '[') {
+                n = i;
+                break;
+            }
+        }
+    }
+    while (((n > 0) && (((b[(n - 1)] == ' ') || (b[(n - 1)] == '\t')) || (b[(n - 1)] == '*')))) {
+        n--;
+    }
+    if (((n <= 0) || (n >= cap))) {
+        return (-1);
+    }
+    memcpy(out, b, (size_t)(n));
+    out[n] = 0;
+    return 0;
+}
+static int lw_spelling_by_value(const char * sp) {
+    return ((sp && sp[0]) && (strchr(sp, '*') == 0));
+}
+static int lw_text_long(const char * t) {
+    return (t && (strlen(t) > (size_t)(LW_NAME_MAX)));
+}
+static int lw_tables_have_into(struct backend_lir_Lower * w, struct backend_tir_ct_tmark * mark) {
+    int i;
+    for (i = mark->nexprs; i < w->m->nexprs; i++) {
+        if (((w->m->exprs[i].kind == TK_INTO_TARGET) || (w->m->exprs[i].kind == TK_INTO_SELF))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int lw_tables_have_long_text(struct backend_lir_Lower * w, struct backend_tir_ct_tmark * mark) {
+    struct backend_tir_TModule * m = w->m;
+    int i;
+    int j;
+    int k;
+    for (i = mark->ndecls; i < m->ndecls; i++) {
+        if ((lw_text_long(m->decls[i].name) || lw_text_long(m->decls[i].cname))) {
+            return 1;
+        }
+    }
+    for (i = mark->nexprs; i < m->nexprs; i++) {
+        if (((lw_text_long(m->exprs[i].text) || lw_text_long(m->exprs[i].member)) || lw_text_long(m->exprs[i].target_key))) {
+            return 1;
+        }
+    }
+    for (i = mark->nstmts; i < m->nstmts; i++) {
+        if ((lw_text_long(m->stmts[i].text) || lw_text_long(m->stmts[i].text2))) {
+            return 1;
+        }
+    }
+    for (i = mark->nvars; i < m->nvars; i++) {
+        if (((lw_text_long(m->vars[i].name) || lw_text_long(m->vars[i].spelling)) || lw_text_long(m->vars[i].dims))) {
+            return 1;
+        }
+    }
+    for (i = mark->ntypes; i < m->ntypes; i++) {
+        if ((lw_text_long(m->types[i].key) || lw_text_long(m->types[i].cspell))) {
+            return 1;
+        }
+    }
+    for (i = 0; i < m->nstructs; i++) {
+        struct backend_tir_ct_tstruct * s = (&m->structs[i]);
+        if (lw_text_long(s->name)) {
+            return 1;
+        }
+        for (j = 0; j < s->nuses; j++) {
+            if (lw_text_long(s->uses[j])) {
+                return 1;
+            }
+        }
+        for (j = 0; j < s->nfields; j++) {
+            if (((lw_text_long(s->fields[j].name) || lw_text_long(s->fields[j].type)) || lw_text_long(s->fields[j].dims))) {
+                return 1;
+            }
+        }
+    }
+    for (i = 0; i < m->nadts; i++) {
+        struct backend_tir_ct_tadt * a = (&m->adts[i]);
+        if ((lw_text_long(a->name) || lw_text_long(a->full))) {
+            return 1;
+        }
+        for (j = 0; j < a->nvariants; j++) {
+            if ((lw_text_long(a->variants[j].name) || lw_text_long(a->variants[j].cname))) {
+                return 1;
+            }
+            for (k = 0; k < a->variants[j].nfields; k++) {
+                if ((lw_text_long(a->variants[j].fields[k].name) || lw_text_long(a->variants[j].fields[k].type))) {
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+static int lw_spelling_struct_row(struct backend_lir_Lower * w, const char * sp, struct backend_tir_ct_tstruct * * out) {
+    char tag[512];
+    int id;
+    (*out) = 0;
+    if (lw_spelling_tag(sp, tag, (int)(sizeof(tag))) != 0) {
+        return 0;
+    }
+    id = backend_tir_tmod_find_struct(w->m, tag);
+    if (id <= 0) {
+        return 0;
+    }
+    (*out) = (&w->m->structs[(id - 1)]);
+    return 1;
+}
+static int lw_spelling_owns(struct backend_lir_Lower * w, const char * sp, int depth) {
+    struct backend_tir_ct_tstruct * s;
+    int i;
+    if ((((!sp) || (!sp[0])) || (depth > 4))) {
+        return 0;
+    }
+    if (lw_is_string_value(sp)) {
+        return 1;
+    }
+    if (((((strstr(sp, "Vec_") || strstr(sp, "Map_")) || strstr(sp, "Option_")) || strstr(sp, "Result_")) || strstr(sp, "Box_"))) {
+        return 1;
+    }
+{
+        char atag[512];
+        if (((lw_spelling_tag(sp, atag, (int)(sizeof(atag))) == 0) && lw_adt_owns(w, atag, 0))) {
+            return 1;
+        }
+    }
+    if ((!lw_spelling_struct_row(w, sp, (&s)))) {
+        return 0;
+    }
+    for (i = 0; i < s->nfields; i++) {
+        if (lw_spelling_owns(w, s->fields[i].type, (depth + 1))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int lw_spelling_glue(struct backend_lir_Lower * w, const char * sp, int depth) {
+    struct backend_tir_ct_tstruct * s;
+    int i;
+    if ((((!sp) || (!sp[0])) || (depth > 4))) {
+        return 0;
+    }
+    if ((!lw_spelling_struct_row(w, sp, (&s)))) {
+        return 0;
+    }
+    if (((s->nuses > 0) || s->uses_handback)) {
+        return 1;
+    }
+    for (i = 0; i < s->nfields; i++) {
+        if (lw_spelling_glue(w, s->fields[i].type, (depth + 1))) {
+            return 1;
+        }
+    }
+    return 0;
+}
 static int lw_sb_add(struct backend_lir_Lower * w, const char * name, int block, int kind, const char * prefix) {
     if (w->sb_n >= 64) {
         return (-1);
@@ -2618,6 +2889,30 @@ static int lw_conds_put(char * * buf, int * len, int * cap, const char * s) {
     (*buf)[(*len)++] = '\n';
     (*buf)[(*len)] = 0;
     return 0;
+}
+static int lw_is_match_yield(struct backend_lir_Lower * w, int tsid) {
+    struct backend_tir_ct_tstmt * st;
+    struct backend_tir_ct_texpr * a;
+    struct backend_tir_ct_texpr * l;
+    if (((tsid <= 0) || (tsid > w->m->nstmts))) {
+        return 0;
+    }
+    st = (&w->m->stmts[(tsid - 1)]);
+    if (((st->kind != TS_EXPR) || (st->nkids < 1))) {
+        return 0;
+    }
+    if (((st->kids[0] <= 0) || (st->kids[0] > w->m->nexprs))) {
+        return 0;
+    }
+    a = (&w->m->exprs[(st->kids[0] - 1)]);
+    if (((a->kind != TK_ASSIGN) || (a->nkids < 2))) {
+        return 0;
+    }
+    if (((a->kids[0] <= 0) || (a->kids[0] > w->m->nexprs))) {
+        return 0;
+    }
+    l = (&w->m->exprs[(a->kids[0] - 1)]);
+    return (((l->kind == TK_NAME_LOCAL) && l->text) && (strcmp(l->text, "__ct_mres") == 0));
 }
 static int lw_match_arm_block(struct backend_lir_Lower * w, int arm_tsid, int match_temp, int is_expr, int parent) {
     struct backend_tir_ct_tstmt * arm;
@@ -2723,7 +3018,7 @@ static int lw_match_arm_block(struct backend_lir_Lower * w, int arm_tsid, int ma
     }
     for (i = 0; i < body->nkids; i++) {
         int sid = 0;
-        if (((((is_expr && (i == 0)) && (w->m->stmts[(body->kids[i] - 1)].kind == TS_EXPR)) && (w->m->stmts[(body->kids[i] - 1)].nkids >= 1)) && (w->m->exprs[(w->m->stmts[(body->kids[i] - 1)].kids[0] - 1)].kind == TK_ASSIGN))) {
+        if (((is_expr && (body->kids[i] > 0)) && lw_is_match_yield(w, body->kids[i]))) {
             struct backend_tir_ct_texpr * yt = (&w->m->exprs[(w->m->stmts[(body->kids[i] - 1)].kids[0] - 1)]);
             int re;
             if (((yt->kind != TK_ASSIGN) || (yt->nkids < 2))) {
@@ -2951,6 +3246,9 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
         return 0;
     }
     s = (&w->m->stmts[(tsid - 1)]);
+    if (getenv("CT_LIR_DEBUG")) {
+        fprintf(stderr, "lir: stmt %d kind=%d kids=%d\n", tsid, s->kind, s->nkids);
+    }
     switch (s->kind) {
         case TS_EMPTY:
             sid = backend_lir_lmod_new_stmt(w->l, LS_EMPTY, s->span.file, s->span.line, s->span.col);
@@ -2969,6 +3267,9 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     return 0;
                 }
                 v = (&w->m->vars[(s->aux - 1)]);
+                if (getenv("CT_LIR_DEBUG")) {
+                    fprintf(stderr, "lir: decl var '%s' type='%s' kids=%d\n", (v->name ? v->name : ""), backend_tir_tmod_cspell(w->m, v->type), s->nkids);
+                }
                 if (v->is_ref) {
                     lw_abort(w, "L740");
                     return 0;
@@ -2996,7 +3297,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     struct backend_tir_ct_texpr * ct = (&w->m->exprs[(s->kids[0] - 1)]);
                     if (ct->kind == TK_CLOSURE) {
                         if (lw_closure_register(w, v->name, (int)(ct->num)) != 0) {
-                            w->hard = 1;
+                            lw_abort(w, "Lclosurebind");
                             return 0;
                         }
                         w->l->stmts[(sid - 1)].kind = LS_CLOSURE_DECL;
@@ -3006,7 +3307,15 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                         return 0;
                     }
                 }
+                if (v->has_attr) {
+                    lw_abort(w, "Lattr");
+                    return 0;
+                }
                 sp = backend_tir_tmod_cspell(w->m, v->type);
+                if ((lw_spelling_owns(w, sp, 0) || lw_spelling_glue(w, sp, 0))) {
+                    lw_abort(w, "Lglue");
+                    return 0;
+                }
                 if ((sp && ((strncmp(sp, "struct ", 7) == 0) || (strncmp(sp, "union ", 6) == 0)))) {
                     const char * tag = ((strncmp(sp, "struct ", 7) == 0) ? (sp + 7) : (sp + 6));
                     if (strchr(tag, '*')) {
@@ -3460,6 +3769,13 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     if (k <= 0) {
                         lw_abort(w, "L854");
                         return 0;
+                    }
+                    if (((k <= w->m->nstmts) && (w->m->stmts[(k - 1)].kind == TS_DECL))) {
+                        int vi = w->m->stmts[(k - 1)].aux;
+                        if ((((vi > 0) && (vi <= w->m->nvars)) && w->m->vars[(vi - 1)].is_static)) {
+                            lw_abort(w, "Lstaticfor");
+                            return 0;
+                        }
                     }
                     if (lw_one_stmt(w, k, block, (&init)) != 0) {
                         return 0;
@@ -4074,6 +4390,12 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
     w->h_nmap = 0;
     w->h_into_n = 0;
     w->ret_type = w->l->funcs[(f - 1)].ret;
+    if (((strstr(rs, "_iface") != 0) || (lw_spelling_by_value(rs) && lw_spelling_owns(w, rs, 0)))) {
+        if (getenv("CT_LIR_DEBUG")) {
+            fprintf(stderr, "lir: return type '%s' needs owning glue\n", rs);
+        }
+        w->aborted = 1;
+    }
     w->l->tmp_next = 0;
     w->l->funcs[(f - 1)].temp_start = w->l->tmp_next;
 {
@@ -4082,6 +4404,8 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
     }
     w->aborted = 0;
     w->drop_seen = 0;
+    w->expr_depth = 0;
+    w->hoist_depth = 0;
     w->nloops = 0;
     start_blocks = w->l->nblocks;
     if (((d->scope > 0) && (d->scope <= w->m->nscopes))) {
@@ -4097,6 +4421,13 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
                 continue;
             }
             if (backend_tir_tmod_has_free_param(w->m, v->type)) {
+                w->aborted = 1;
+                break;
+            }
+            if ((lw_spelling_by_value(backend_tir_tmod_cspell(w->m, v->type)) && lw_spelling_owns(w, backend_tir_tmod_cspell(w->m, v->type), 0))) {
+                if (getenv("CT_LIR_DEBUG")) {
+                    fprintf(stderr, "lir: param '%s' needs owning glue\n", (v->name ? v->name : ""));
+                }
                 w->aborted = 1;
                 break;
             }
@@ -4232,13 +4563,30 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
     w->loopcap = 0;
     backend_tir_tmod_mark(m, (&mark));
     start = mark.ndecls;
-    if (backend_tir_ct_tir_build_program(prog, path, base, ns, is_hdr, is_map) != 0) {
-        return 1;
+{
+        int quiet = backend_lir_ct_lir_quiet_fallback();
+        int trc;
+        backend_verify_ct_verifier_set_quiet(quiet);
+        trc = backend_tir_ct_tir_build_program(prog, path, base, ns, is_hdr, is_map);
+        backend_verify_ct_verifier_set_quiet(0);
+        if (trc != 0) {
+            return (quiet ? 2 : 1);
+        }
     }
     unit = m->nunits;
     w->unit = unit;
     l->path = path;
+    if (lw_tables_have_into(w, (&mark))) {
+        backend_lir_ct_lir_set_switch(0);
+        return 0;
+    }
     if (runtime_arena_arena_get()->noutconv > 0) {
+        w->no_bodies = 1;
+    }
+    if (lw_tables_have_long_text(w, (&mark))) {
+        if (getenv("CT_LIR_DEBUG")) {
+            fprintf(stderr, "lir: a >%d-byte name keeps this unit on AST\n", LW_NAME_MAX);
+        }
         w->no_bodies = 1;
     }
     l->ready = 1;
@@ -4255,8 +4603,15 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
     if (lw_lower_slice(w, unit, start) != 0) {
         return 1;
     }
-    if (backend_verify_ct_lir_verify(l) != 0) {
-        return 1;
+{
+        int quiet = backend_lir_ct_lir_quiet_fallback();
+        int vrc;
+        backend_verify_ct_lir_verify_set_quiet(quiet);
+        vrc = backend_verify_ct_lir_verify(l);
+        backend_verify_ct_lir_verify_set_quiet(0);
+        if (vrc != 0) {
+            return (quiet ? 2 : 1);
+        }
     }
     backend_lir_lmod_report(l, (base ? base : path));
     free(w->loops);
@@ -4306,11 +4661,18 @@ int backend_lir_ct_lir_build_unit(void * up, int mod_unit, int tmp_base) {
         }
     }
     (void)(tmp_base);
+    if (lw_tables_have_into(w, (&mark))) {
+        l->ready = 0;
+        return 0;
+    }
 {
         struct frontend_module_Unit * uu = (struct frontend_module_Unit *)(up);
         if ((uu && (uu->has_outconv || uu->has_anon_typedef))) {
             w->no_bodies = 1;
         }
+    }
+    if (lw_tables_have_long_text(w, (&mark))) {
+        w->no_bodies = 1;
     }
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
@@ -4900,12 +5262,13 @@ static int lw_pw_expr(struct backend_lir_Lower * w, int eid, int ctx) {
             return lw_pw_kid(w, e, 0, PW_EXPR);
         case LE_BINARY:
             if (e->op == LB_COMMA) {
+                int kctx = ((ctx == PW_INLINE) ? PW_INLINE : PW_EXPR);
                 fputs("(", backend_lir_g_lir_out);
-                if (lw_pw_kid(w, e, 0, PW_INLINE) != 0) {
+                if (lw_pw_kid(w, e, 0, kctx) != 0) {
                     return (-1);
                 }
                 fputs(", ", backend_lir_g_lir_out);
-                if (lw_pw_kid(w, e, 1, PW_INLINE) != 0) {
+                if (lw_pw_kid(w, e, 1, kctx) != 0) {
                     return (-1);
                 }
                 fputs(")", backend_lir_g_lir_out);

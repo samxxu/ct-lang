@@ -194,6 +194,8 @@ extern void U16String_Drop_drop(void *self);
 
 int backend_verify_ct_verifier_run(struct backend_tir_TModule *, int, struct backend_tir_ct_tmark *);
 int backend_verify_ct_verifier_errors(void);
+void backend_verify_ct_verifier_set_quiet(int);
+void backend_verify_ct_lir_verify_set_quiet(int);
 static void vfail(struct backend_tir_TModule *, int, int, int, const char *, const char *);
 static int v_decl_kind(struct backend_tir_TModule *, int);
 static int v_check_types(struct backend_tir_TModule *, struct backend_tir_ct_tmark *);
@@ -221,6 +223,8 @@ static void lver_fault(struct backend_lir_LModule *, const char *);
 static void lver_block(struct backend_lir_LModule *, struct backend_lir_ct_lfunc *, int);
 int backend_verify_ct_lir_verify(struct backend_lir_LModule *);
 static struct backend_verify_Verifier backend_verify_g_verifier;
+static int backend_verify_g_verifier_quiet;
+static int backend_verify_g_lir_quiet;
 static int backend_verify_g_lir_errors;
 static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
     struct Result_int_int *_self = (struct Result_int_int *)self;
@@ -232,13 +236,21 @@ static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
     (void)_self;
 }
 
+void backend_verify_ct_verifier_set_quiet(int quiet) {
+    backend_verify_g_verifier_quiet = (quiet ? 1 : 0);
+}
+void backend_verify_ct_lir_verify_set_quiet(int quiet) {
+    backend_verify_g_lir_quiet = (quiet ? 1 : 0);
+}
 static void vfail(struct backend_tir_TModule * m, int file, int line, int col, const char * code, const char * msg) {
     const char * path;
     path = "?";
     if (((file > 0) && (file <= m->nfiles))) {
         path = m->files[(file - 1)];
     }
-    fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+    if ((!backend_verify_g_verifier_quiet)) {
+        fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+    }
     backend_verify_g_verifier.errors++;
 }
 static int v_decl_kind(struct backend_tir_TModule * m, int decl) {
@@ -387,7 +399,9 @@ int backend_verify_ct_verifier_run(struct backend_tir_TModule * m, int unit, str
     v_check_targets(m, mark);
     v_check_instances(m, mark);
     if (backend_verify_g_verifier.errors > 0) {
-        fprintf(stderr, "tir: verifier: %d TIR invariant failure(s) in this unit\n", backend_verify_g_verifier.errors);
+        if ((!backend_verify_g_verifier_quiet)) {
+            fprintf(stderr, "tir: verifier: %d TIR invariant failure(s) in this unit\n", backend_verify_g_verifier.errors);
+        }
         return (-1);
     }
     return 0;
@@ -401,7 +415,9 @@ static void lfail(struct backend_lir_LModule * l, int file, int line, int col, c
     if (((m && (file > 0)) && (file <= m->nfiles))) {
         path = m->files[(file - 1)];
     }
-    fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+    if ((!backend_verify_g_lir_quiet)) {
+        fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+    }
     backend_verify_g_lir_errors++;
 }
 static int lver_scope_kind(struct backend_lir_LModule * l, int scope) {
@@ -1065,7 +1081,9 @@ int backend_verify_ct_lir_verify(struct backend_lir_LModule * l) {
         }
     }
     if (backend_verify_g_lir_errors > 0) {
-        fprintf(stderr, "lir: verifier: %d LIR invariant failure(s) in this unit\n", backend_verify_g_lir_errors);
+        if ((!backend_verify_g_lir_quiet)) {
+            fprintf(stderr, "lir: verifier: %d LIR invariant failure(s) in this unit\n", backend_verify_g_lir_errors);
+        }
         return (-1);
     }
     return 0;

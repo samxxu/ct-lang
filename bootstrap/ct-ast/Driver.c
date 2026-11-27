@@ -1054,9 +1054,18 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         }
         return 0;
     }
+    if ((((((((((!_self->m->line_mode) && (!_self->m->have_map)) && (!_self->m->have_model)) && (!_self->m->abi_mode)) && (!_self->p->unit_is_hdr)) && (!_self->p->unit_is_map)) && (!_self->m->freestanding)) && (!_self->m->alloc_map[0])) && (!_self->m->runtime_checks))) {
+        backend_lir_ct_lir_default_compile();
+    }
     if (backend_lir_ct_lir_on()) {
-        if (backend_lir_ct_lir_build_program(prog, in, _self->p->c_base, "", _self->p->unit_is_hdr, _self->p->unit_is_map) != 0) {
-            return 1;
+        int lrc = backend_lir_ct_lir_build_program(prog, in, _self->p->c_base, "", _self->p->unit_is_hdr, _self->p->unit_is_map);
+        if (((lrc == 2) && backend_lir_ct_lir_quiet_fallback())) {
+            backend_lir_ct_lir_set_switch(0);
+        }
+        else {
+            if (lrc != 0) {
+                return 1;
+            }
         }
     }
     else {

@@ -150,6 +150,8 @@ struct backend_verify_lir_expect {
 };
 int backend_verify_ct_verifier_run(struct backend_tir_TModule *, int, struct backend_tir_ct_tmark *);
 int backend_verify_ct_verifier_errors(void);
+void backend_verify_ct_verifier_set_quiet(int);
+void backend_verify_ct_lir_verify_set_quiet(int);
 int backend_verify_ct_lir_verify(struct backend_lir_LModule *);
 
 #endif

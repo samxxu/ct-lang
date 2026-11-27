@@ -254,6 +254,7 @@ struct backend_tir_ct_tvar {
     const char * spelling;
     int is_static;
     int is_unused;
+    int has_attr;
 };
 struct backend_tir_ct_tcleanup {
     int id;
