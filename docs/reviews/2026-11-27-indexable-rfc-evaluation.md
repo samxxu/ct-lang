@@ -1,0 +1,102 @@
+# 评审记录：RFC-0000「结构化数据下标访问协议（Indexable）」评估
+
+| 项 | 值 |
+| --- | --- |
+| 被评审对象 | 外部来稿《RFC-0000：结构化数据下标访问协议（Indexable Trait）》，2026-11-27 |
+| 评审人 | REQ（主张人） |
+| 结论 | **有条件接受为设计输入；不按原文立项**（约 55% 是现状、25% 与 Ct 取舍冲突、20% 是真增量） |
+| 处置去向 | 语言侧增量拆为 I1/I2（v1.3 候选）；多格式统一层转为包提案，见 [ct-pkg-structured-data-access](../proposals/ct-pkg-structured-data-access.md) |
+| 证据 | [spec §4.64](../language-spec.md)、[D-028](../decisions/D-028.md)、[D-029](../decisions/D-029.md)、[D-013](../decisions/D-013.md)、本文件 §6 的实机探针 |
+
+## 1 事实核对：已有能力（不必重做）
+
+| 来稿诉求 | Ct 现状（v1.2 S2 之后） |
+| --- | --- |
+| `o["k"]` → `get(k)`；`o["k"] = v` → `set(k,v)` | 已实现：固有 `impl` 的 `get` / `set`，见 [spec §4.64](../language-spec.md) |
+| 链式 `o["a"]["b"]` | 已实现；`x[k].field`、`x[k].m()` 亦可（LANG-29 S3） |
+| 键类型灵活 | 已实现：键=参数类型；同类型可并存 `get(int)` 与 `get(char *)`，C 符号自动去歧义 |
+| 动态键 `o[var]` | 已实现（见 §6 探针：`int k` 与 `char *s` 两种变量键同时成立） |
+| 无匹配时的候选诊断 | 已实现：`type 'X' has no subscript matching 'get(int)': candidates are 'char *get(char *)'` |
+| 读写/借写三形态 | 已实现：`set` 缺失但 `get` 返回 `V *` 时走 `*get(k) = v` |
+| `+=` / `++` / `&x[k]` | 已明确拒绝（二值化），包层写法是读回再 `set` |
+
+来稿 P1（“定义 trait 与只读语法 + 1–2 个参考实现”）约 80% 已在 v1.2 落地。
+
+## 2 与 Ct 取舍冲突（必须改）
+
+| 来稿写法 | 冲突 | 建议 |
+| --- | --- | --- |
+| `trait Indexable { type Key; type Value; }` | Ct 明确不做关联类型 / `Self`（§4.55 边界） | 去掉关联类型；协议即固有 `get(K) -> V` / `set(K,V)` |
+| 新增 `Indexable` / `IndexableMut` trait 名 | D-028 定死“只认固有 impl，trait 提供的 `get` 不算” | 不新增 trait 名；否则 `o[k]` 是否走 vtable 立刻变成 ABI 问题 |
+| `obj.map(f)` 称“函子” | ① Ct 的“函子”指 D-029 的 `(A,B) => R` 签名糖；② `map` 是 Ct 关键字（`map trait … for type/instance`） | 必须换词，避免长期混淆 |
+| “C 无原生 sum type，需三态” | Ct 有 ADT（S4）+ 内置 `Option<T>` / `Result<T,E>` | 缺失键返回 `Option`，不用 `NULL`/`0`/三态 flag |
+| §7 要求 vtable 版本化 / ABI 标签 | 当前下标是固有方法直调，不经 vtable | 只有“接口值下标”（I2）才需要 vtable 契约 |
+| “裸结构体自动实现 Indexable” | 与显式原则冲突，且字段名变字符串后重命名不报错 | 常量键必须在编译期解析到真实字段或显式映射；未知键硬错 |
+| §5.6 要求规定 get 返回视图还是副本 | 已有答案：签名决定（`V` 值 / `V *` 视图）；字符串用 `Str` / `String`（D-013） | 引用现规范 |
+| §9 要求“生成汇编与字段访问一致” | Ct 门禁是生成 C 逐字节 + 零告警 + goldens，无汇编基准设施 | 判据改为可验证的 C 形态：折叠后无 `get` 调用、无临时量 |
+
+## 3 语言侧真增量（拆分）
+
+| # | 增量 | 价值 | 风险 / 门槛 | 建议 |
+| --- | --- | --- | --- | --- |
+| I1 | **常量键折叠**：`p["x"]` → `p.x` | 来稿的核心卖点；Ct 确实没有 | 只认字符串**字面量**键；必须在编译期解析到字段或显式映射，未知键硬错（保住“改名即报错”）；动态键一律走 `get` | v1.3 候选，需 ADR |
+| I2 | **接口值下标**：`o[k]` 走 trait 对象 | 来稿 §7 的 ABI 讨论这时才成立 | 要定义 vtable 槽与跨单元 ABI；Ct 现为“只认固有 impl” | v1.3+，单独立项 |
+| I3 | 多格式统一访问层 | 来稿主要动机 | **不进语言**：包层工作，语言只提供 `get`/`set` + `Option`/`Result` + `Str` | 立即交 CTPKG，见包提案 |
+
+## 4 来稿 §13 八问的 Ct 侧答复
+
+| 问题 | 答复 |
+| --- | --- |
+| Q1 拆分 | 已分离；但“函子/`map`”两个词已被占用，来稿需换名 |
+| Q2 键类型 | 已定：键=参数类型，整数/字符串/枚举可并存，不做隐式转换 |
+| Q3 动态键 | 已支持；静态折叠只认字面量键，动态表达式走运行期 `get` |
+| Q4 缺失语义 | 不用三态；返回 `Option<T>`（S6 后可升级为泛型 ADT）或 `Result` |
+| Q5 所有权默认 | 签名决定；字符串视图 `Str`、拥有 `String`（D-013） |
+| Q6 ABI | 当前设计不需要；I2 落地前不承诺跨版本 ABI |
+| Q7 约束交集 | Ct 只支持单 bound；表达“可索引且可映射”需先扩多 bound，另立特性 |
+| Q8 命名 | 不新增 trait 名，沿用固有 `get`/`set`；若必须命名，避开 `map` / `Functor` |
+
+## 5 处置建议
+
+1. **不按原文立项**；作者按 §2–§3 改写为「Indexable 增量提案 v2」，只保留 I1/I2；
+2. **优先级**：I3（包，立即）> I1（v1.3，小）> I2（v1.3+，大）；
+3. 术语与拼写：`Functor`/`map` 让开；全文用 **Ct**（DOC-94）；
+4. 正式流程改用本仓 `issues/` + `docs/proposals/` + ADR，不用自带 `RFC-` 编号体系。
+
+## 6 证据：动态键与重载探针（2026-11-27）
+
+```ct
+struct Bag { int n; }
+impl Bag {
+    int get(int k) { return k + self->n; }
+    void set(int k, int v) { self->n = v; }
+    int get(char *k) { return k[0] + self->n; }
+}
+int main(void) {
+    Bag b = { 1 };
+    int k = 2;
+    char *s = "A";
+    b[k] = 5;
+    printf("%d %d %d\n", b[k], b["Z"], b[s]);
+    return 0;
+}
+```
+
+实测输出 `7 95 70`：变量整数键、字面量字符串键、变量字符串键同时可用，且按静态类型选中各自的重载。
+（种子编译器构建方式见 [selfhost/README](../../selfhost/README.md)。）
+
+## 7 风险补充（来稿 §14 之外）
+
+| 风险 | 说明 | 缓解 |
+| --- | --- | --- |
+| R5 字段重命名失效 | 字符串键把字段名变成“数据”，重命名不再报错 | I1 的常量键必须在编译期解析到字段，未知键硬错 |
+| R6 动态路径成本 | 走 vtable 后 `o[k]` 变成间接调用，“零开销”只对 I1 成立 | I2 单独立项时重写性能预算 |
+| R7 与 `Option`/ADT 时序 | I3 先落地会把 `Option` 用户面固定；S6 若改 ADT 需同步 | 包接口按“`Option` 或显式查询”写，不假设底层布局 |
+
+## 8 关联
+
+- [ct-pkg-structured-data-access](../proposals/ct-pkg-structured-data-access.md)（I3 的包提案，交 CTPKG）
+- [spec §4.64](../language-spec.md)（自定义下标协议）
+- [D-028](../decisions/D-028.md)（下标协议 ADR）、[D-029](../decisions/D-029.md)（函子签名糖）
+- [adt-patterns §10.5](../design/adt-patterns.md)（`Option` / `Result` 的命名未决）
+- [feature-examples-matrix §1](../planning/feature-examples-matrix.md)（下标与函子的样例现状）
