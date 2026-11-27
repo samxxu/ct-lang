@@ -1368,7 +1368,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_git_run(void *self, const char * cmd, co
     int qocap;
     int qecap;
     char cap[16];
-    char pre[32];
+    const char * pre;
     const char * limit;
     const char * rest;
     const char * ef;
@@ -1402,12 +1402,13 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_git_run(void *self, const char * cmd, co
         limit = "180";
     }
     if (system("command -v timeout >/dev/null 2>&1") == 0) {
-        if (snprintf(pre, sizeof(pre), "timeout %s ", limit) >= (int)(sizeof(pre))) {
+        pre = tool_sh_ct_scratch_fmt("timeout %s ", limit);
+        if ((!pre)) {
             return (-1);
         }
     }
     else {
-        pre[0] = 0;
+        pre = "";
     }
     ef = _self->giterr;
     if (((ef != 0) && (ef[0] != 0))) {
@@ -3788,17 +3789,18 @@ static int pkg_pin_lookup(const char * name, const char * range, char * ver, siz
     return 1;
 }
 static int pkg_official_resolve(const char * name, char * * url, int * ucap, char * tag, size_t tcap, char * sha, size_t scap) {
-    char * full = tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->row(&tool_pkg_g_pkg);
+    const char * full;
     char ver[32];
     char * ipub = tool_pkg_g_pkg.__tool_pkg_pkgops_vptr->row(&tool_pkg_g_pkg);
     const char * ix;
     int rc;
-    if (((!full) || (!ipub))) {
+    if ((!ipub)) {
         return (-1);
     }
     ix = (tool_pkg_g_pkg.have_index ? tool_pkg_g_pkg.index : getenv("CT_INDEX"));
     if ((ix && ix[0])) {
-        if (snprintf(full, TEXT_LIMIT, "ct/%s", name) >= TEXT_LIMIT) {
+        full = tool_sh_ct_scratch_fmt("ct/%s", name);
+        if ((!full)) {
             return (-1);
         }
         rc = pkg_index_lookup(full, "", url, ucap, tag, tcap, sha, scap, ipub, TEXT_LIMIT);

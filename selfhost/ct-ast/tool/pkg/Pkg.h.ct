@@ -1589,7 +1589,8 @@ impl PkgOps for Pkg {
     {
         char *full, *qo, *qe;
         int fullcap, qocap, qecap;
-        char cap[16], pre[32];
+        char cap[16];
+        const char *pre;
         const char *limit, *rest, *ef;
         size_t i;
         int rc;
@@ -1619,9 +1620,10 @@ impl PkgOps for Pkg {
             limit = "180";
         }
         if (system("command -v timeout >/dev/null 2>&1") == 0) {
-            if (snprintf(pre, sizeof pre, "timeout %s ", limit) >= (int)sizeof pre) return -1;
+            pre = tool::sh::ct_scratch_fmt("timeout %s ", limit);
+            if (!pre) return -1;
         } else {
-            pre[0] = 0;
+            pre = "";
         }
         /* PKG-23: fetch_git asks for the git stderr. `umask 077` keeps the
            temporary capture private (it can contain a rewritten URL), and the
@@ -3258,16 +3260,17 @@ static int pkg_pin_lookup(const char *name, const char *range,
 static int pkg_official_resolve(const char *name, char **url, int *ucap,
                                 char *tag, size_t tcap, char *sha, size_t scap)
 {
-    char *full = g_pkg.row();
+    const char *full;
     char ver[32];
     char *ipub = g_pkg.row();
     const char *ix;
     int rc;
 
-    if (!full || !ipub) return -1;
+    if (!ipub) return -1;
     ix = g_pkg.have_index ? g_pkg.index : getenv("CT_INDEX");
     if (ix && ix[0]) {
-        if (snprintf(full, TEXT_LIMIT, "ct/%s", name) >= TEXT_LIMIT) return -1;
+        full = tool::sh::ct_scratch_fmt("ct/%s", name);
+        if (!full) return -1;
         rc = pkg_index_lookup(full, "", url, ucap, tag, tcap, sha, scap,
                               ipub, TEXT_LIMIT);
         if (rc == 0) return 0;

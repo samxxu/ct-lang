@@ -1,0 +1,75 @@
+# S8B-REM-1 R1 审计（baseline 68235dc6）：Pkg.h.ct 53 处
+file:line	function	bucket	action
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:284	fetch_git	vsnprintf/keep	动态增长，保留
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:309	fetch_git	vsnprintf/keep	动态增长，保留
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:319	fetch_git	vsnprintf/keep	动态增长，保留
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:328	fetch_git	vsnprintf/keep	动态增长，保留
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:337	fetch_git	vsnprintf/keep	动态增长，保留
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:1477	dir_digest	c	sha256 写调用方 out；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:1622	git_run	a	改 ct_scratch_fmt
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2132	fetch_git	d	ct.lock/记录字段；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2156	fetch_git	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2162	fetch_git	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2163	fetch_git	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2164	fetch_git	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2390	get_one	d	ct.lock/记录字段；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2413	get_one	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2419	get_one	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2420	get_one	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2421	get_one	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2567	dep_name	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3082	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3083	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3084	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3085	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3248	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3249	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3250	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3270	install_main	a	改 ct_scratch_fmt
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3613	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3618	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3623	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3629	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3636	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3641	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3646	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3756	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3781	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3782	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3791	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3792	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:3821	install_main	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4248	pkg_index_refresh	d	ct.lock/记录字段；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4380	pkg_index_refresh	d	ct.lock/记录字段；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4615	pkg_index_refresh	d	ct.lock/记录字段；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4622	pkg_index_refresh	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4900	pkg_index_refresh	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5145	pkg_index_refresh	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5146	pkg_index_refresh	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5147	pkg_index_refresh	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5149	pkg_index_refresh	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5150	pkg_index_refresh	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5191	pkg_index_refresh	d	ct.lock/记录字段；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5410	ct_pkg_lock_roots	d	ct.lock/记录字段；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5416	ct_pkg_lock_roots	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5419	ct_pkg_lock_roots	bounded	snprintf(dst,cap,"%s",src) 带界拷贝；登记不改
+
+# S8B-REM-1 R2 审计（baseline 68235dc6）：Symbols.h.ct 17 处 b 类
+file:line	function	bucket	action
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1575	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1895	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1899	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1903	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1922	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2354	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2364	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2372	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2410	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2415	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2500	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2506	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2511	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2563	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2575	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2577	(method)	b	改 ct_internf；逐字链改 scratch+intern
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2578	(method)	b	改 ct_internf；逐字链改 scratch+intern
