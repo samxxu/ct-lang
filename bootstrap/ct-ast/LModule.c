@@ -158,6 +158,22 @@
 #define LPS_FUNC        6   /* node: function definition/prototype          */
 #define LPS_DROP        7   /* node: struct row index, Drop surface         */
 #define LPS_RAW         8   /* node: raw C block (`#ct-raw`)                */
+#define LPS_INC         9   /* text: one include-block line ("" = blank)     */
+#define LPS_PROTO      10   /* node: symbol-table function row               */
+#define LPS_INPROTO    11   /* node: N_IMPL node of a pub inherent block     */
+#define LPS_INST       12   /* node: instance row, struct shell               */
+#define LPS_INSTPROTO  13   /* node: instance row, element prototypes        */
+#define LPS_INSTHELP   14   /* node: instance row, element helpers           */
+#define LPS_IMPL       15   /* node: impl row; aux: instance row             */
+#define LPS_BOXPROTO   16   /* node: instance row, Box prototypes            */
+#define LPS_BOXHELP    17   /* node: instance row, Box helpers               */
+#define LPS_ADTLIFE    18   /* node: ADT row, retain/release glue            */
+#define LPS_STRPROTO   19   /* text: the compile-mode String entry prototypes */
+#define LINC_C_IO      0    /* `.c`: after the banner, before stddef       */
+#define LINC_C_PRE     1    /* `.c`: before the allocator / map prologues  */
+#define LINC_C_POST    2    /* `.c`: own header, deps, layer headers       */
+#define LINC_H_PRE     3    /* `.h`: before the banner (stddef)            */
+#define LINC_H_POST    4    /* `.h`: includes, shim, deps, layer headers   */
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -293,6 +309,7 @@ struct backend_lir_ct_lshellrow {
     int unit;
     int node;
     int aux;
+    int hdr;
     const char * text;
 };
 struct backend_lir_LModulePlan * backend_lir_lmod_plan_get(void);
@@ -303,11 +320,13 @@ int backend_lir_lmod_plan_shell_u(void);
 int backend_lir_lmod_plan_shell_header(void);
 void backend_lir_lmod_plan_shell_reset(void);
 int backend_lir_lmod_plan_shell_add(int, int, int, int, const char *);
+int backend_lir_lmod_plan_shell_add_stage(int, int, int, int, int, const char *);
 int backend_lir_lmod_plan_row_count(void);
 int backend_lir_lmod_plan_row_kind(int);
 int backend_lir_lmod_plan_row_unit(int);
 int backend_lir_lmod_plan_row_node(int);
 int backend_lir_lmod_plan_row_aux(int);
+int backend_lir_lmod_plan_row_hdr(int);
 const char * backend_lir_lmod_plan_row_text(int);
 void backend_lir_lmod_plan_set_prog(int);
 int backend_lir_lmod_plan_prog(void);
@@ -447,6 +466,9 @@ void backend_lir_lmod_plan_shell_reset(void) {
     backend_lir_g_plan.prog = 0;
 }
 int backend_lir_lmod_plan_shell_add(int kind, int unit, int node, int aux, const char * text) {
+    return backend_lir_lmod_plan_shell_add_stage(kind, unit, node, aux, 0, text);
+}
+int backend_lir_lmod_plan_shell_add_stage(int kind, int unit, int node, int aux, int hdr, const char * text) {
     struct backend_lir_ct_lshellrow * r;
     if (lir_reserve((&backend_lir_g_plan.srows), (&backend_lir_g_plan.srowcap), (backend_lir_g_plan.nsrows + 1), (int)(sizeof(struct backend_lir_ct_lshellrow))) != 0) {
         return (-1);
@@ -456,6 +478,7 @@ int backend_lir_lmod_plan_shell_add(int kind, int unit, int node, int aux, const
     r->unit = unit;
     r->node = node;
     r->aux = aux;
+    r->hdr = hdr;
     r->text = (text ? runtime_text_ct_intern(text) : "");
     backend_lir_g_plan.nsrows++;
     return 0;
@@ -484,6 +507,10 @@ int backend_lir_lmod_plan_row_node(int i) {
 int backend_lir_lmod_plan_row_aux(int i) {
     struct backend_lir_ct_lshellrow * r = lmod_row(i);
     return (r ? r->aux : 0);
+}
+int backend_lir_lmod_plan_row_hdr(int i) {
+    struct backend_lir_ct_lshellrow * r = lmod_row(i);
+    return (r ? r->hdr : 0);
 }
 const char * backend_lir_lmod_plan_row_text(int i) {
     struct backend_lir_ct_lshellrow * r = lmod_row(i);

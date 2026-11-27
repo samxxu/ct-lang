@@ -103,7 +103,7 @@ pub trait EmitDecl {
 
     int  emit_link_externs(int prog, int u);
 
-    int  emit_inherent_protos(int prog);
+    int  emit_inherent_protos(int u);
 
     int  unit_has_drop_impl(int u, int si);
 

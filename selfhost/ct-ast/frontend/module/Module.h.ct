@@ -27,7 +27,9 @@ import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Unit;
 import frontend::parse::Parser;
+import frontend::parse::Expr;
 import frontend::parse::Mem2Writes;
+import backend::emit::EmitterQuery;
 import frontend::sym::Symbols;
 import frontend::sym::Symbols::Adt as Adt;
 import frontend::sym::Symbols::StructTmpl as StructTmpl;
@@ -50,6 +52,22 @@ import frontend::module::ModuleBoundary;
 #define LPS_FUNC        6
 #define LPS_DROP        7
 #define LPS_RAW         8
+#define LPS_INC         9
+#define LPS_PROTO       10
+#define LPS_INPROTO     11
+#define LPS_INST        12
+#define LPS_INSTPROTO   13
+#define LPS_INSTHELP    14
+#define LPS_IMPL        15
+#define LPS_BOXPROTO    16
+#define LPS_BOXHELP     17
+#define LPS_ADTLIFE     18
+#define LPS_STRPROTO    19
+#define LINC_C_IO       0
+#define LINC_C_PRE      1
+#define LINC_C_POST     2
+#define LINC_H_PRE      3
+#define LINC_H_POST     4
 #define MAX_UNITS  64
 #define CAP_LIMIT 65536
 #define MAX_IMPORTS 32
@@ -277,12 +295,487 @@ static int ct_shim_ambiguity(struct Module *m, const struct Unit *units, int n)
     return 0;
 }
 
+/* S8 shell finishing: the include block is a module decision. One row per
+   printed line, `pos` says where the shell prints it and "" is a blank line,
+   so the blank-line grouping stays with the decision, not the renderer. */
+static int ct_shell_inc(int unit, int pos, const char *line)
+{
+    return backend::lir::lmod_plan_shell_add_stage(LPS_INC, unit, 0, pos, 0,
+                                                   line);
+}
+
+/* 1 when unit `u` writes an ADT layout (body) / publishes one (header). */
+static int ct_unit_has_adt(struct Module *self, int u, int pub_only)
+{
+    int i, n;
+    struct Adt *adts = frontend::sym::ct_adts(&n);
+
+    (void)self;
+
+    for (i = 0; adts && i < n; i++) {
+        if (adts[i].owner != u) continue;
+        if (pub_only && !adts[i].is_pub) continue;
+        return 1;
+    }
+    return 0;
+}
+
+/* 1 when unit `u` defines a struct with both pub and private fields, so its
+   header needs the `CT_UNIT_PRIVATE` guard. */
+static int ct_unit_mixed_private(struct Module *self, int u)
+{
+    int si, fi;
+
+    for (si = 0; si < self->sym->nstructs; si++) {
+        int hp = 0, hv = 0;
+        if (self->sym->structs[si].owner != u) continue;
+        if (self->sym->structs[si].nuse > 0) continue;
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            if (self->sym->structs[si].fields[fi].is_pub) hp = 1;
+            else hv = 1;
+        }
+        if (hp && hv) return 1;
+    }
+    return 0;
+}
+
+/* The layer headers a unit includes. A normal build uses the liveness set the
+   semantic graph computed; `--lib` runs before that decision, so it lists every
+   loaded layer unit exactly as the pre-plan fallback did. */
+static int ct_shell_add_layer_headers(struct Module *self, int unit, int pos)
+{
+    int i;
+
+    if (self->computed_live) {
+        for (i = 0; i < self->nbuiltin; i++) {
+            const char *base;
+            if (!self->builtin_live[i]) continue;
+            if (self->builtin_units[i] == unit) continue;
+            base = self->units[self->builtin_units[i]].base;
+            if (ct_shell_inc(unit, pos, tool::sh::ct_scratch_fmt(
+                                 "#include \"%s.h\"",
+                                 strcmp(base, "String") == 0 ? "String_" : base)) != 0)
+                return 1;
+        }
+    } else {
+        for (i = 0; i < self->nbuiltin; i++) {
+            const char *base;
+            int bu = self->builtin_units[i];
+            if (bu < 0 || bu >= self->nunits || bu == unit) continue;
+            base = self->units[bu].base;
+            if (ct_shell_inc(unit, pos, tool::sh::ct_scratch_fmt(
+                                 "#include \"%s.h\"",
+                                 strcmp(base, "String") == 0 ? "String_" : base)) != 0)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+/* One unit's include rows, for its `.c` and (when it publishes one) its `.h`.
+   Mirrors the exact order and blank-line grouping the shell used to assemble
+   from the AST and the unit table. */
+static int ct_shell_plan_add_includes(struct Module *self, int prog, int unit,
+                                      int is_header)
+{
+    int i, pp;
+    int n;
+    struct Arena *ar = self->arena;
+    const struct Unit *uu = &self->units[unit];
+
+    if (!is_header) {
+        int mask = self->io_header_mask(unit);
+        if ((mask & 1) && ct_shell_inc(unit, LINC_C_IO, "#include <stdio.h>") != 0)
+            return 1;
+        if ((mask & 2) && ct_shell_inc(unit, LINC_C_IO, "#include <wchar.h>") != 0)
+            return 1;
+        if (ct_unit_has_adt(self, unit, 0)
+            && ct_shell_inc(unit, LINC_C_PRE, "#include <stddef.h>") != 0)
+            return 1;
+        if (ct_unit_mixed_private(self, unit)
+            && ct_shell_inc(unit, LINC_C_POST, "#define CT_UNIT_PRIVATE 1") != 0)
+            return 1;
+        if (uu->is_hdr) {
+            if (ct_shell_inc(unit, LINC_C_POST, tool::sh::ct_scratch_fmt(
+                                 "#include \"%s.h\"",
+                                 strcmp(uu->base, "String") == 0
+                                     ? "String_" : uu->base)) != 0)
+                return 1;
+        }
+        for (i = 0; i < uu->ndep; i++) {
+            if (self->units[uu->depu[i]].is_map) continue;
+            if (ct_shell_inc(unit, LINC_C_POST, tool::sh::ct_scratch_fmt(
+                                 "#include \"%s.h\"",
+                                 uu->dep + (size_t)i * MAX_TEXT)) != 0)
+                return 1;
+        }
+        if (ct_shell_add_layer_headers(self, unit, LINC_C_POST) != 0) return 1;
+        if (ct_shell_inc(unit, LINC_C_POST, "") != 0) return 1;
+        return 0;
+    }
+    /* `.h`: the author's C includes lead the header, then the published shim
+       (unless the author already included it), then deps and layer headers. */
+    if (ct_unit_has_adt(self, unit, 1)
+        && ct_shell_inc(unit, LINC_H_PRE, "#include <stddef.h>") != 0)
+        return 1;
+    pp = 0;
+    for (n = (prog >= 0) ? ar->nodes[prog].a : -1; n >= 0;
+         n = ar->nodes[n].next) {
+        if (ar->nodes[n].kind != N_PP) continue;
+        if (strncmp(ar->nodes[n].text, "#include", 8) != 0) continue;
+        if (ct_shell_inc(unit, LINC_H_POST, ar->nodes[n].text) != 0) return 1;
+        pp++;
+    }
+    if (uu->has_shim) {
+        int dup = 0;
+        const char *shimline = tool::sh::ct_scratch_fmt(
+            "#include \"%s.shim.h\"", uu->base);
+        for (n = (prog >= 0) ? ar->nodes[prog].a : -1; n >= 0;
+             n = ar->nodes[n].next) {
+            if (ar->nodes[n].kind != N_PP) continue;
+            if (strcmp(ar->nodes[n].text, shimline) == 0) { dup = 1; break; }
+        }
+        if (!dup && ct_shell_inc(unit, LINC_H_POST, shimline) != 0) return 1;
+    }
+    if (pp > 0 && ct_shell_inc(unit, LINC_H_POST, "") != 0) return 1;
+    for (i = 0; i < uu->ndep; i++) {
+        if (self->units[uu->depu[i]].is_map) continue;
+        if (ct_shell_inc(unit, LINC_H_POST, tool::sh::ct_scratch_fmt(
+                             "#include \"%s.h\"",
+                             uu->dep + (size_t)i * MAX_TEXT)) != 0)
+            return 1;
+    }
+    if (uu->ndep > 0 && ct_shell_inc(unit, LINC_H_POST, "") != 0) return 1;
+    if (ct_shell_add_layer_headers(self, unit, LINC_H_POST) != 0) return 1;
+    if (self->nbuiltin > 0 && ct_shell_inc(unit, LINC_H_POST, "") != 0) return 1;
+    return 0;
+}
+
+/* S8 shell finishing: the glue tables the emitter used to walk are selected
+   here as well. These predicates are the module layer's copy of the ones in
+   `EmitDecl` / `EmitExpr`; they answer "which row does this product write",
+   which is exactly the decision the plan carries. */
+static const char *ct_norm_type_text(const char *type)
+{
+    char *res;
+    const char *pooled;
+
+    if (!type || !type[0]) return type;
+    if (!strchr(type, '<')) return type;
+    res = (char *)malloc(CAP_LIMIT);
+    if (!res) return type;
+    if (frontend::sym::ct_inst_resolve(type, res, CAP_LIMIT) != 0) {
+        free(res);
+        return type;
+    }
+    pooled = runtime::text::ct_intern(res);
+    free(res);
+    return pooled ? pooled : type;
+}
+
+static const char *ct_base_type_text(const char *type)
+{
+    const char *b;
+    size_t n;
+
+    b = type ? type : "";
+    if (strncmp(b, "struct ", 7) == 0) b += 7;
+    else if (strncmp(b, "union ", 6) == 0) b += 6;
+    else if (strncmp(b, "enum ", 5) == 0) b += 5;
+    while (*b == ' ' || *b == '\t') b++;
+    n = strlen(b);
+    while (n > 0 && (b[n - 1] == ' ' || b[n - 1] == '\t')) n--;
+    return runtime::text::ct_intern_len(b, (int)n);
+}
+
+static int ct_adt_owns(struct Module *self, int adi, int depth);
+static int ct_adt_own_kind(struct Module *self, const char *type, int depth)
+{
+    const char *base;
+    int ai;
+
+    if (!type || !type[0] || depth > 16) return 0;
+    if (strchr(type, '*') || strchr(type, '[')) return 0;
+    if (frontend::sym::ct_is_string_value_type(type)) return 1;
+    base = ct_base_type_text(ct_norm_type_text(type));
+    if (base && (strncmp(base, "Vec_", 4) == 0
+                 || strncmp(base, "Map_", 4) == 0)) return 1;
+    if (base && backend::emit::inst_is_builtin_Box(base)) return 1;
+    ai = frontend::sym::ct_adt_from_type(type);
+    if (ai >= 0 && ct_adt_owns(self, ai, depth + 1)) return 1;
+    return 0;
+}
+
+static int ct_adt_owns(struct Module *self, int adi, int depth)
+{
+    int v, f, n;
+    struct Adt *adts = frontend::sym::ct_adts(&n);
+
+    (void)self;
+    if (!adts || adi < 0 || adi >= n || depth > 16) return 0;
+    if (adts[adi].is_template) return 0;
+    for (v = 0; v < adts[adi].nvariants; v++)
+        for (f = 0; f < adts[adi].variants[v].nfields; f++)
+            if (ct_adt_own_kind(self, adts[adi].variants[v].fields[f].type, depth))
+                return 1;
+    return 0;
+}
+
+static int ct_elem_plain_owner(struct Module *self, const char *ctype)
+{
+    const char *base;
+    int si;
+
+    if (strncmp(ctype, "struct ", 7) != 0) return -1;
+    base = ctype + 7;
+    if (frontend::sym::ct_inst_find(base) >= 0) return -1;
+    si = self->sym->find_struct(base);
+    if (si < 0) return -1;
+    return self->sym->structs[si].owner;
+}
+
+/* 1 when instance `ii`'s element (or Map value) belongs to another unit, so
+   the instance body must move to the consumer. Mirrors
+   `backend::emit::inst_elem_foreign`. */
+static int ct_inst_elem_foreign(struct Module *self, int ii)
+{
+    int n, tn, tmpl, o1, o2;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+    struct Expr *ex;
+    const char *e1, *e2;
+
+    ins = frontend::sym::ct_insts(&n);
+    tps = frontend::sym::ct_tmpls(&tn);
+    if (!ins || !tps || ii < 0 || ii >= n) return 0;
+    if (backend::emit::inst_is_builtin_Box(ins[ii].name)) return 1;
+    if (strcmp(ins[ii].tmpl, "Vec") != 0 && strcmp(ins[ii].tmpl, "Map") != 0
+        && strcmp(ins[ii].tmpl, "MapEntry") != 0
+        && strcmp(ins[ii].tmpl, "Option") != 0 && strcmp(ins[ii].tmpl, "Result") != 0)
+        return 0;
+    tmpl = ins[ii].tmpl_row;
+    if (tmpl < 0 || tmpl >= tn || tps[tmpl].owner < 0) return 0;
+    e1 = ins[ii].ctype[0];
+    e2 = ((strcmp(ins[ii].tmpl, "Map") == 0 || strcmp(ins[ii].tmpl, "MapEntry") == 0)
+          && ins[ii].nargs > 1) ? ins[ii].ctype[1] : 0;
+    ex = frontend::parse::expr_get();
+    if (ex->container_elem_foreign(e1, tmpl)) return 1;
+    if (e2 != 0 && ex->container_elem_foreign(e2, tmpl)) return 1;
+    o1 = ct_elem_plain_owner(self, e1);
+    if (o1 >= 0 && o1 != tps[tmpl].owner) return 1;
+    o2 = (e2 != 0) ? ct_elem_plain_owner(self, e2) : -1;
+    return o2 >= 0 && o2 != tps[tmpl].owner;
+}
+
+/* 1 when an impl of unit `u` matches instance `ii` (the helper-ownership
+   rule). Mirrors `backend::emit::inst_touched_by_unit`. */
+static int ct_inst_touched(struct Module *self, int u, int ii)
+{
+    int k, n;
+    struct StructImpl *im;
+
+    (void)self;
+    if (u < 0) return 1;
+    im = frontend::sym::ct_impls(&n);
+    for (k = 0; im && k < n; k++) {
+        if (im[k].owner != u) continue;
+        if (frontend::sym::ct_impl_matches(k, ii)) return 1;
+    }
+    return 0;
+}
+
+/* 1 when unit `u` writes instance `ii`'s per-instance element helpers.
+   Mirrors `backend::emit::inst_writes_helpers`. */
+static int ct_inst_writes_helpers(struct Module *self, int u, int ii)
+{
+    int n;
+    struct StructInst *ins;
+
+    ins = frontend::sym::ct_insts(&n);
+    if (!ins || ii < 0 || ii >= n) return 0;
+    if (!ct_inst_elem_foreign(self, ii)) return ct_inst_touched(self, u, ii);
+    if (u < 0) return 1;
+    return ins[ii].owner == u;
+}
+
+/* One unit's instance / impl / Box / ADT glue rows. `is_header` adds the
+   exports a `.h` publishes; the `.c` call adds the body rows. */
+static int ct_shell_plan_add_glue(struct Module *self, int unit, int is_header)
+{
+    int i, ki, n, tn, ninst, ninst2, tmpl, via_hdr, foreign;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+    struct StructImpl *im;
+
+    im = frontend::sym::ct_impls(&n);
+    ins = frontend::sym::ct_insts(&ninst);
+    tps = frontend::sym::ct_tmpls(&tn);
+    (void)ninst2;
+    if (!ins || !tps) return 0;
+    for (i = 0; i < ninst; i++) {
+        if (ins[i].tmpl_row < 0 || ins[i].tmpl_row >= tn) continue;
+        tmpl = ins[i].tmpl_row;
+        via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
+                  && self->units[tps[tmpl].owner].is_hdr;
+        foreign = ct_inst_elem_foreign(self, i);
+        if (is_header) {
+            if (via_hdr && tps[tmpl].owner == unit && !foreign)
+                if (backend::lir::lmod_plan_shell_add_stage(
+                        LPS_INST, unit, i, 0, 1, 0) != 0)
+                    return 1;
+            continue;
+        }
+        if (foreign) {
+            if (unit >= 0 && ins[i].owner != unit) continue;
+        } else {
+            if (via_hdr) continue;
+            if (unit >= 0 && ins[i].owner != unit) continue;
+        }
+        if (backend::lir::lmod_plan_shell_add_stage(LPS_INST, unit, i, 0, 0, 0) != 0)
+            return 1;
+    }
+    if (im) {
+        for (ki = 0; ki < n; ki++) {
+            tmpl = im[ki].tmpl_row;
+            if (is_header) {
+                if (tmpl < 0 || (unit >= 0 && im[ki].owner != unit)) continue;
+                via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
+                          && self->units[tps[tmpl].owner].is_hdr;
+                if (!via_hdr || tps[tmpl].owner != unit) continue;
+                for (i = 0; i < ninst; i++) {
+                    if (!frontend::sym::ct_impl_matches(ki, i)) continue;
+                    if (ct_inst_elem_foreign(self, i)) continue;
+                    if (backend::lir::lmod_plan_shell_add_stage(
+                            LPS_IMPL, unit, ki, i, 1, 0) != 0)
+                        return 1;
+                }
+                continue;
+            }
+            for (i = 0; i < ninst; i++) {
+                if (!frontend::sym::ct_impl_matches(ki, i)) continue;
+                if (ct_inst_elem_foreign(self, i)) {
+                    if (unit >= 0 && ins[i].owner != unit) continue;
+                } else if (unit >= 0 && im[ki].owner != unit) {
+                    continue;
+                }
+                if (backend::lir::lmod_plan_shell_add_stage(
+                        LPS_IMPL, unit, ki, i, 0, 0) != 0)
+                    return 1;
+            }
+        }
+    }
+    if (is_header) return 0;
+    /* the per-instance element prototypes / helpers (body only) */
+    for (i = 0; i < ninst; i++) {
+        if (!ct_inst_writes_helpers(self, unit, i)) continue;
+        if (backend::lir::lmod_plan_shell_add_stage(
+                LPS_INSTPROTO, unit, i, 0, 0, 0) != 0)
+            return 1;
+        if (backend::lir::lmod_plan_shell_add_stage(
+                LPS_INSTHELP, unit, i, 0, 0, 0) != 0)
+            return 1;
+    }
+    /* PH-81: the per-instance Box helpers are written by the unit that named
+       the instance. */
+    for (i = 0; i < ninst; i++) {
+        if (!backend::emit::inst_is_builtin_Box(ins[i].name)) continue;
+        if (unit >= 0 && ins[i].owner != unit) continue;
+        if (backend::lir::lmod_plan_shell_add_stage(
+                LPS_BOXPROTO, unit, i, 0, 0, 0) != 0)
+            return 1;
+        if (backend::lir::lmod_plan_shell_add_stage(
+                LPS_BOXHELP, unit, i, 0, 0, 0) != 0)
+            return 1;
+    }
+    /* LANG-29 S2 / B3: the per-ADT retain / release definitions. */
+    {
+        int adi, nadts;
+        struct Adt *adts = frontend::sym::ct_adts(&nadts);
+        for (adi = 0; adts && adi < nadts; adi++) {
+            if (unit >= 0 && adts[adi].owner != unit) continue;
+            if (adts[adi].is_template) continue;
+            if (!ct_adt_owns(self, adi, 0)) continue;
+            if (backend::lir::lmod_plan_shell_add_stage(
+                    LPS_ADTLIFE, unit, adi, 0, 0, 0) != 0)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+static int ct_decl_is_pub(struct Module *self, int kind, const char *name)
+{
+    int n;
+
+    for (n = 0; n < self->arena->nnode; n++)
+        if (self->arena->nodes[n].kind == kind && self->arena->nodes[n].d == 1
+            && strcmp(self->arena->nodes[n].text2, name) == 0) return 1;
+    return 0;
+}
+
+/* The inherent-method prototypes a product publishes: one row per pub,
+   non-template inherent impl block of the unit. */
+static int ct_shell_plan_add_inprots(struct Module *self, int prog, int unit)
+{
+    int n, si, adi, nadts;
+    struct Adt *adts = frontend::sym::ct_adts(&nadts);
+
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        if (self->arena->nodes[n].kind != N_IMPL) continue;
+        if (self->arena->nodes[n].text2[0]) continue;   /* trait impl */
+        si = self->arena->nodes[n].aux;
+        if (si == -1) continue;   /* template impl */
+        if (si <= -2) {
+            adi = -2 - si;
+            if (!adts || adi < 0 || adi >= nadts) continue;
+            if (!adts[adi].is_pub) continue;
+        } else {
+            if (si < 0 || si >= self->sym->nstructs) continue;
+            if (!ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name))
+                continue;
+        }
+        if (backend::lir::lmod_plan_shell_add_stage(LPS_INPROTO, unit, n,
+                                                    0, 0, 0) != 0)
+            return 1;
+    }
+    return 0;
+}
+
+/* The function prototypes the writer prints: every function of the unit for
+   the `.c`, the exported (pub, non-static) ones for the `.h`. Compile mode has
+   one merged unit, so every symbol-table function is a body prototype. */
+static int ct_shell_plan_add_protos(struct Module *self, int unit)
+{
+    int i, lo, hi;
+
+    if (unit < 0) {
+        lo = 0;
+        hi = self->sym->nfunc;
+    } else {
+        lo = self->units[unit].fn_start;
+        hi = self->units[unit].fn_end;
+    }
+    for (i = lo; i < hi; i++) {
+        if (backend::lir::lmod_plan_shell_add_stage(LPS_PROTO, unit, i, 0, 0,
+                                                    0) != 0)
+            return 1;
+        if (unit >= 0 && self->sym->funcs[i].is_pub
+            && !self->sym->funcs[i].is_static)
+            if (backend::lir::lmod_plan_shell_add_stage(LPS_PROTO, unit, i, 0,
+                                                        1, 0) != 0)
+                return 1;
+    }
+    return 0;
+}
+
 /* S8 emitter contract: fill the shell plan for one program (compile mode:
    `unit < 0`; build mode: the unit whose `.c`/`.h` is next). The rows carry
    the decisions the shell used to make by scanning the AST and the symbol
    table: preprocessor lines, raw blocks, type / global / assert / function
-   order, and (for a `.h.ct` unit) the exported surface and its includes.
-   `is_header` also asks for the header rows; a plain `.c` unit has none. */
+   order, includes and the function prototypes, and (for a `.h.ct` unit) the
+   exported surface. `is_header` also asks for the header rows; a plain `.c`
+   unit has none. */
 static int ct_shell_plan_add_program(struct Module *self, int prog, int unit,
                                      int is_header)
 {
@@ -290,8 +783,10 @@ static int ct_shell_plan_add_program(struct Module *self, int prog, int unit,
     int n;
     const struct Unit *uu = unit >= 0 ? &self->units[unit] : 0;
 
-    if (prog < 0) return 0;   /* node ids are 0-based: 0 is a valid root */
-    for (n = ar->nodes[prog].a; n >= 0; n = ar->nodes[n].next) {
+    /* node ids are 0-based: 0 is a valid root. A unit without a program still
+       gets its include block and prototypes (both are empty by construction). */
+    for (n = (prog >= 0) ? ar->nodes[prog].a : -1; n >= 0;
+         n = ar->nodes[n].next) {
         int k = ar->nodes[n].kind;
         if (k == N_PP) {
             const char *t = ar->nodes[n].text;
@@ -330,10 +825,45 @@ static int ct_shell_plan_add_program(struct Module *self, int prog, int unit,
                 return 1;
         }
     }
+    if (ct_shell_plan_add_glue(self, unit, 0) != 0) return 1;
+    if (is_header && ct_shell_plan_add_glue(self, unit, 1) != 0) return 1;
+    if (ct_shell_plan_add_protos(self, unit) != 0) return 1;
+    if (ct_shell_plan_add_inprots(self, prog, unit) != 0) return 1;
+    if (unit >= 0) {
+        /* a `.h.ct` unit emits both products: the `.c` rows always, the `.h`
+           rows only when the unit publishes a header. */
+        if (ct_shell_plan_add_includes(self, prog, unit, 0) != 0) return 1;
+        if (is_header && ct_shell_plan_add_includes(self, prog, unit, 1) != 0)
+            return 1;
+    }
+    if (unit < 0) {
+        /* SH-120: compile mode merges the layer into one file, so the owning
+           handle entry points are declared before the instance glue. */
+        if (self->sym->find_struct("String") >= 0
+            && backend::lir::lmod_plan_shell_add_stage(
+                   LPS_STRPROTO, -1, 0, 0, 0,
+                   "struct String String_retain(struct String *);\n"
+                   "void String_release(struct String *);\n") != 0)
+            return 1;
+        if (self->sym->find_struct("U16String") >= 0
+            && backend::lir::lmod_plan_shell_add_stage(
+                   LPS_STRPROTO, -1, 0, 0, 0,
+                   "struct U16String U16String_retain(struct U16String *);\n"
+                   "void U16String_release(struct U16String *);\n") != 0)
+            return 1;
+        /* the instance-glue writer repeats the four declarations adjacent to
+           the merged program's container impls (same text, harmless C) */
+        if (self->sym->find_struct("String") >= 0
+            && self->sym->find_struct("U16String") >= 0
+            && backend::lir::lmod_plan_shell_add_stage(
+                   LPS_STRPROTO, -1, 0, 1, 0,
+                   "struct String String_retain(struct String *);\n"
+                   "void String_release(struct String *);\n"
+                   "struct U16String U16String_retain(struct U16String *);\n"
+                   "void U16String_release(struct U16String *);\n") != 0)
+            return 1;
+    }
     if (!is_header || !uu) return 0;
-    /* The header include block (PP lines, shim, dependencies, built-in layer
-       headers) is still assembled by the writer; its blank-line grouping is a
-       printing detail, recorded in §3d as remaining. */
     /* Exported types and globals are the same rows filtered by the pub bit;
        the Drop surface is its own row because its predicate (a `pub` struct
        whose real body this unit emits) is a lifetime decision. */

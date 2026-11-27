@@ -259,6 +259,7 @@ pub struct ct_lstmt {
     const char *retain_pfx; /* LS_DECL/LS_ASSIGN: retain/release prefix */
     int sold_temp;      /* LS_ASSIGN: `__ct_soldN` materialisation, 0 = none */
     const char *value_type; /* LS_ASSIGN: the owning C type for `__ct_sold` */
+    int brace;          /* LS_ASSIGN: wrap in `{ … }` like the owning-handle writer */
     int expr;           /* init / lhs / value / condition / subject */
     int rhs;            /* assignment rhs */
     int cond;
@@ -436,13 +437,36 @@ pub struct LModule {
 #define LPS_FUNC        6   /* node: function definition/prototype          */
 #define LPS_DROP        7   /* node: struct row index, Drop surface         */
 #define LPS_RAW         8   /* node: raw C block (`#ct-raw`)                */
+/* S8 shell finishing: the module layer also selects the include block, the
+   function prototypes and the instance / glue rows, so the shell only renders
+   them. `hdr` says which product consumes the row: 0 the `.c`, 1 the `.h`. */
+#define LPS_INC         9   /* text: one include-block line ("" = blank)     */
+#define LPS_PROTO      10   /* node: symbol-table function row               */
+#define LPS_INPROTO    11   /* node: N_IMPL node of a pub inherent block     */
+#define LPS_INST       12   /* node: instance row, struct shell               */
+#define LPS_INSTPROTO  13   /* node: instance row, element prototypes        */
+#define LPS_INSTHELP   14   /* node: instance row, element helpers           */
+#define LPS_IMPL       15   /* node: impl row; aux: instance row             */
+#define LPS_BOXPROTO   16   /* node: instance row, Box prototypes            */
+#define LPS_BOXHELP    17   /* node: instance row, Box helpers               */
+#define LPS_ADTLIFE    18   /* node: ADT row, retain/release glue            */
+#define LPS_STRPROTO   19   /* text: the compile-mode String entry prototypes */
+/* LPS_INC positions inside the product (the shell prints the rows at the
+   matching point, so the blank-line grouping stays a module decision). */
+#define LINC_C_IO      0    /* `.c`: after the banner, before stddef       */
+#define LINC_C_PRE     1    /* `.c`: before the allocator / map prologues  */
+#define LINC_C_POST    2    /* `.c`: own header, deps, layer headers       */
+#define LINC_H_PRE     3    /* `.h`: before the banner (stddef)            */
+#define LINC_H_POST    4    /* `.h`: includes, shim, deps, layer headers   */
 
 struct ct_lshellrow {
     int kind;
     int unit;           /* -1 = compile mode; else the product's unit */
     int node;           /* AST node id (or symbol row for LPS_DROP) */
-    int aux;            /* LPS_TYPE/GLOBAL: pub bit; LPS_FUNC: template bit */
-    const char *text;   /* LPS_PP: the preprocessor line */
+    int aux;            /* LPS_TYPE/GLOBAL: pub bit; LPS_FUNC: template bit;
+                           LPS_IMPL: instance row; LPS_INC: position */
+    int hdr;            /* 1 = the `.h` writer consumes the row, 0 = `.c` */
+    const char *text;   /* LPS_PP / LPS_INC: the preprocessor line */
 }
 
 /* S8 emitter contract: the module-level facts the emitter consumes as input
@@ -495,11 +519,14 @@ pub int lmod_plan_shell_header(void);
 pub void lmod_plan_shell_reset(void);
 pub int lmod_plan_shell_add(int kind, int unit, int node, int aux,
                             const char *text);
+pub int lmod_plan_shell_add_stage(int kind, int unit, int node, int aux,
+                                  int hdr, const char *text);
 pub int lmod_plan_row_count(void);
 pub int lmod_plan_row_kind(int i);
 pub int lmod_plan_row_unit(int i);
 pub int lmod_plan_row_node(int i);
 pub int lmod_plan_row_aux(int i);
+pub int lmod_plan_row_hdr(int i);
 pub const char *lmod_plan_row_text(int i);
 pub void lmod_plan_set_prog(int prog);
 pub int lmod_plan_prog(void);
@@ -643,6 +670,12 @@ pub void lmod_plan_shell_reset(void)
 pub int lmod_plan_shell_add(int kind, int unit, int node, int aux,
                             const char *text)
 {
+    return lmod_plan_shell_add_stage(kind, unit, node, aux, 0, text);
+}
+
+pub int lmod_plan_shell_add_stage(int kind, int unit, int node, int aux,
+                                  int hdr, const char *text)
+{
     struct ct_lshellrow *r;
 
     if (lir_reserve(&g_plan.srows, &g_plan.srowcap,
@@ -653,6 +686,7 @@ pub int lmod_plan_shell_add(int kind, int unit, int node, int aux,
     r->unit = unit;
     r->node = node;
     r->aux = aux;
+    r->hdr = hdr;
     r->text = text ? runtime::text::ct_intern(text) : "";
     g_plan.nsrows++;
     return 0;
@@ -691,6 +725,12 @@ pub int lmod_plan_row_aux(int i)
 {
     struct ct_lshellrow *r = lmod_row(i);
     return r ? r->aux : 0;
+}
+
+pub int lmod_plan_row_hdr(int i)
+{
+    struct ct_lshellrow *r = lmod_row(i);
+    return r ? r->hdr : 0;
 }
 
 pub const char *lmod_plan_row_text(int i)

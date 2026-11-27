@@ -11,7 +11,9 @@
 #include "Lexer.h"
 #include "Unit.h"
 #include "Parser.h"
+#include "Expr.h"
 #include "Mem2Writes.h"
+#include "EmitterQuery.h"
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
@@ -33,6 +35,22 @@
 #define LPS_FUNC        6
 #define LPS_DROP        7
 #define LPS_RAW         8
+#define LPS_INC         9
+#define LPS_PROTO       10
+#define LPS_INPROTO     11
+#define LPS_INST        12
+#define LPS_INSTPROTO   13
+#define LPS_INSTHELP    14
+#define LPS_IMPL        15
+#define LPS_BOXPROTO    16
+#define LPS_BOXHELP     17
+#define LPS_ADTLIFE     18
+#define LPS_STRPROTO    19
+#define LINC_C_IO       0
+#define LINC_C_PRE      1
+#define LINC_C_POST     2
+#define LINC_H_PRE      3
+#define LINC_H_POST     4
 #define MAX_UNITS  64
 #define CAP_LIMIT 65536
 #define MAX_IMPORTS 32
@@ -190,6 +208,23 @@ extern void U16String_Drop_drop(void *self);
 static int mod_lir_body(const char *, void *, int, int, int *, int);
 static int ct_pkg_ns_clash(struct frontend_module_Module *, char * *, char * *);
 static int ct_shim_ambiguity(struct frontend_module_Module *, const struct frontend_module_Unit *, int);
+static int ct_shell_inc(int, int, const char *);
+static int ct_unit_has_adt(struct frontend_module_Module *, int, int);
+static int ct_unit_mixed_private(struct frontend_module_Module *, int);
+static int ct_shell_add_layer_headers(struct frontend_module_Module *, int, int);
+static int ct_shell_plan_add_includes(struct frontend_module_Module *, int, int, int);
+static const char * ct_norm_type_text(const char *);
+static const char * ct_base_type_text(const char *);
+static int ct_adt_owns(struct frontend_module_Module *, int, int);
+static int ct_adt_own_kind(struct frontend_module_Module *, const char *, int);
+static int ct_elem_plain_owner(struct frontend_module_Module *, const char *);
+static int ct_inst_elem_foreign(struct frontend_module_Module *, int);
+static int ct_inst_touched(struct frontend_module_Module *, int, int);
+static int ct_inst_writes_helpers(struct frontend_module_Module *, int, int);
+static int ct_shell_plan_add_glue(struct frontend_module_Module *, int, int);
+static int ct_decl_is_pub(struct frontend_module_Module *, int, const char *);
+static int ct_shell_plan_add_inprots(struct frontend_module_Module *, int, int);
+static int ct_shell_plan_add_protos(struct frontend_module_Module *, int);
 static int ct_shell_plan_add_program(struct frontend_module_Module *, int, int, int);
 static const char * cycle_file(struct frontend_module_Module *, int);
 static int cycle_is_builtin_Box(struct frontend_module_Module *, const char *);
@@ -3253,14 +3288,586 @@ static int ct_shim_ambiguity(struct frontend_module_Module * m, const struct fro
     (void)(m);
     return 0;
 }
+static int ct_shell_inc(int unit, int pos, const char * line) {
+    return backend_lir_lmod_plan_shell_add_stage(LPS_INC, unit, 0, pos, 0, line);
+}
+static int ct_unit_has_adt(struct frontend_module_Module * self, int u, int pub_only) {
+    int i;
+    int n;
+    struct frontend_sym_Adt * adts = frontend_sym_ct_adts((&n));
+    (void)(self);
+    for (i = 0; (adts && (i < n)); i++) {
+        if (adts[i].owner != u) {
+            continue;
+        }
+        if ((pub_only && (!adts[i].is_pub))) {
+            continue;
+        }
+        return 1;
+    }
+    return 0;
+}
+static int ct_unit_mixed_private(struct frontend_module_Module * self, int u) {
+    int si;
+    int fi;
+    for (si = 0; si < self->sym->nstructs; si++) {
+        int hp = 0;
+        int hv = 0;
+        if (self->sym->structs[si].owner != u) {
+            continue;
+        }
+        if (self->sym->structs[si].nuse > 0) {
+            continue;
+        }
+        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            if (self->sym->structs[si].fields[fi].is_pub) {
+                hp = 1;
+            }
+            else {
+                hv = 1;
+            }
+        }
+        if ((hp && hv)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int ct_shell_add_layer_headers(struct frontend_module_Module * self, int unit, int pos) {
+    int i;
+    if (self->computed_live) {
+        for (i = 0; i < self->nbuiltin; i++) {
+            const char * base;
+            if ((!self->builtin_live[i])) {
+                continue;
+            }
+            if (self->builtin_units[i] == unit) {
+                continue;
+            }
+            base = self->units[self->builtin_units[i]].base;
+            if (ct_shell_inc(unit, pos, tool_sh_ct_scratch_fmt("#include \"%s.h\"", ((strcmp(base, "String") == 0) ? "String_" : base))) != 0) {
+                return 1;
+            }
+        }
+    }
+    else {
+        for (i = 0; i < self->nbuiltin; i++) {
+            const char * base;
+            int bu = self->builtin_units[i];
+            if ((((bu < 0) || (bu >= self->nunits)) || (bu == unit))) {
+                continue;
+            }
+            base = self->units[bu].base;
+            if (ct_shell_inc(unit, pos, tool_sh_ct_scratch_fmt("#include \"%s.h\"", ((strcmp(base, "String") == 0) ? "String_" : base))) != 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int ct_shell_plan_add_includes(struct frontend_module_Module * self, int prog, int unit, int is_header) {
+    int i;
+    int pp;
+    int n;
+    struct runtime_arena_Arena * ar = self->arena;
+    const struct frontend_module_Unit * uu = (&self->units[unit]);
+    if ((!is_header)) {
+        int mask = self->__frontend_module_moduleops_vptr->io_header_mask(self, unit);
+        if (((mask & 1) && (ct_shell_inc(unit, LINC_C_IO, "#include <stdio.h>") != 0))) {
+            return 1;
+        }
+        if (((mask & 2) && (ct_shell_inc(unit, LINC_C_IO, "#include <wchar.h>") != 0))) {
+            return 1;
+        }
+        if ((ct_unit_has_adt(self, unit, 0) && (ct_shell_inc(unit, LINC_C_PRE, "#include <stddef.h>") != 0))) {
+            return 1;
+        }
+        if ((ct_unit_mixed_private(self, unit) && (ct_shell_inc(unit, LINC_C_POST, "#define CT_UNIT_PRIVATE 1") != 0))) {
+            return 1;
+        }
+        if (uu->is_hdr) {
+            if (ct_shell_inc(unit, LINC_C_POST, tool_sh_ct_scratch_fmt("#include \"%s.h\"", ((strcmp(uu->base, "String") == 0) ? "String_" : uu->base))) != 0) {
+                return 1;
+            }
+        }
+        for (i = 0; i < uu->ndep; i++) {
+            if (self->units[uu->depu[i]].is_map) {
+                continue;
+            }
+            if (ct_shell_inc(unit, LINC_C_POST, tool_sh_ct_scratch_fmt("#include \"%s.h\"", (uu->dep + ((size_t)(i) * MAX_TEXT)))) != 0) {
+                return 1;
+            }
+        }
+        if (ct_shell_add_layer_headers(self, unit, LINC_C_POST) != 0) {
+            return 1;
+        }
+        if (ct_shell_inc(unit, LINC_C_POST, "") != 0) {
+            return 1;
+        }
+        return 0;
+    }
+    if ((ct_unit_has_adt(self, unit, 1) && (ct_shell_inc(unit, LINC_H_PRE, "#include <stddef.h>") != 0))) {
+        return 1;
+    }
+    pp = 0;
+    for (n = ((prog >= 0) ? ar->nodes[prog].a : (-1)); n >= 0; n = ar->nodes[n].next) {
+        if (ar->nodes[n].kind != N_PP) {
+            continue;
+        }
+        if (strncmp(ar->nodes[n].text, "#include", 8) != 0) {
+            continue;
+        }
+        if (ct_shell_inc(unit, LINC_H_POST, ar->nodes[n].text) != 0) {
+            return 1;
+        }
+        pp++;
+    }
+    if (uu->has_shim) {
+        int dup = 0;
+        const char * shimline = tool_sh_ct_scratch_fmt("#include \"%s.shim.h\"", uu->base);
+        for (n = ((prog >= 0) ? ar->nodes[prog].a : (-1)); n >= 0; n = ar->nodes[n].next) {
+            if (ar->nodes[n].kind != N_PP) {
+                continue;
+            }
+            if (strcmp(ar->nodes[n].text, shimline) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (((!dup) && (ct_shell_inc(unit, LINC_H_POST, shimline) != 0))) {
+            return 1;
+        }
+    }
+    if (((pp > 0) && (ct_shell_inc(unit, LINC_H_POST, "") != 0))) {
+        return 1;
+    }
+    for (i = 0; i < uu->ndep; i++) {
+        if (self->units[uu->depu[i]].is_map) {
+            continue;
+        }
+        if (ct_shell_inc(unit, LINC_H_POST, tool_sh_ct_scratch_fmt("#include \"%s.h\"", (uu->dep + ((size_t)(i) * MAX_TEXT)))) != 0) {
+            return 1;
+        }
+    }
+    if (((uu->ndep > 0) && (ct_shell_inc(unit, LINC_H_POST, "") != 0))) {
+        return 1;
+    }
+    if (ct_shell_add_layer_headers(self, unit, LINC_H_POST) != 0) {
+        return 1;
+    }
+    if (((self->nbuiltin > 0) && (ct_shell_inc(unit, LINC_H_POST, "") != 0))) {
+        return 1;
+    }
+    return 0;
+}
+static const char * ct_norm_type_text(const char * type) {
+    char * res;
+    const char * pooled;
+    if (((!type) || (!type[0]))) {
+        return type;
+    }
+    if ((!strchr(type, '<'))) {
+        return type;
+    }
+    res = (char *)(malloc(CAP_LIMIT));
+    if ((!res)) {
+        return type;
+    }
+    if (frontend_sym_ct_inst_resolve(type, res, CAP_LIMIT) != 0) {
+        free(res);
+        return type;
+    }
+    pooled = runtime_text_ct_intern(res);
+    free(res);
+    return (pooled ? pooled : type);
+}
+static const char * ct_base_type_text(const char * type) {
+    const char * b;
+    size_t n;
+    b = (type ? type : "");
+    if (strncmp(b, "struct ", 7) == 0) {
+        b += 7;
+    }
+    else {
+        if (strncmp(b, "union ", 6) == 0) {
+            b += 6;
+        }
+        else {
+            if (strncmp(b, "enum ", 5) == 0) {
+                b += 5;
+            }
+        }
+    }
+    while ((((*b) == ' ') || ((*b) == '\t'))) {
+        b++;
+    }
+    n = strlen(b);
+    while (((n > 0) && ((b[(n - 1)] == ' ') || (b[(n - 1)] == '\t')))) {
+        n--;
+    }
+    return runtime_text_ct_intern_len(b, (int)(n));
+}
+static int ct_adt_own_kind(struct frontend_module_Module * self, const char * type, int depth) {
+    const char * base;
+    int ai;
+    if ((((!type) || (!type[0])) || (depth > 16))) {
+        return 0;
+    }
+    if ((strchr(type, '*') || strchr(type, '['))) {
+        return 0;
+    }
+    if (frontend_sym_ct_is_string_value_type(type)) {
+        return 1;
+    }
+    base = ct_base_type_text(ct_norm_type_text(type));
+    if ((base && ((strncmp(base, "Vec_", 4) == 0) || (strncmp(base, "Map_", 4) == 0)))) {
+        return 1;
+    }
+    if ((base && backend_emit_inst_is_builtin_Box(base))) {
+        return 1;
+    }
+    ai = frontend_sym_ct_adt_from_type(type);
+    if (((ai >= 0) && ct_adt_owns(self, ai, (depth + 1)))) {
+        return 1;
+    }
+    return 0;
+}
+static int ct_adt_owns(struct frontend_module_Module * self, int adi, int depth) {
+    int v;
+    int f;
+    int n;
+    struct frontend_sym_Adt * adts = frontend_sym_ct_adts((&n));
+    (void)(self);
+    if (((((!adts) || (adi < 0)) || (adi >= n)) || (depth > 16))) {
+        return 0;
+    }
+    if (adts[adi].is_template) {
+        return 0;
+    }
+    for (v = 0; v < adts[adi].nvariants; v++) {
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            if (ct_adt_own_kind(self, adts[adi].variants[v].fields[f].type, depth)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int ct_elem_plain_owner(struct frontend_module_Module * self, const char * ctype) {
+    const char * base;
+    int si;
+    if (strncmp(ctype, "struct ", 7) != 0) {
+        return (-1);
+    }
+    base = (ctype + 7);
+    if (frontend_sym_ct_inst_find(base) >= 0) {
+        return (-1);
+    }
+    si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
+    if (si < 0) {
+        return (-1);
+    }
+    return self->sym->structs[si].owner;
+}
+static int ct_inst_elem_foreign(struct frontend_module_Module * self, int ii) {
+    int n;
+    int tn;
+    int tmpl;
+    int o1;
+    int o2;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tps;
+    struct frontend_parse_Expr * ex;
+    const char * e1;
+    const char * e2;
+    ins = frontend_sym_ct_insts((&n));
+    tps = frontend_sym_ct_tmpls((&tn));
+    if (((((!ins) || (!tps)) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    if (backend_emit_inst_is_builtin_Box(ins[ii].name)) {
+        return 1;
+    }
+    if ((((((strcmp(ins[ii].tmpl, "Vec") != 0) && (strcmp(ins[ii].tmpl, "Map") != 0)) && (strcmp(ins[ii].tmpl, "MapEntry") != 0)) && (strcmp(ins[ii].tmpl, "Option") != 0)) && (strcmp(ins[ii].tmpl, "Result") != 0))) {
+        return 0;
+    }
+    tmpl = ins[ii].tmpl_row;
+    if ((((tmpl < 0) || (tmpl >= tn)) || (tps[tmpl].owner < 0))) {
+        return 0;
+    }
+    e1 = ins[ii].ctype[0];
+    e2 = ((((strcmp(ins[ii].tmpl, "Map") == 0) || (strcmp(ins[ii].tmpl, "MapEntry") == 0)) && (ins[ii].nargs > 1)) ? ins[ii].ctype[1] : 0);
+    ex = frontend_parse_expr_get();
+    if (ex->__frontend_parse_exprinstantiate_vptr->container_elem_foreign(ex, e1, tmpl)) {
+        return 1;
+    }
+    if (((e2 != 0) && ex->__frontend_parse_exprinstantiate_vptr->container_elem_foreign(ex, e2, tmpl))) {
+        return 1;
+    }
+    o1 = ct_elem_plain_owner(self, e1);
+    if (((o1 >= 0) && (o1 != tps[tmpl].owner))) {
+        return 1;
+    }
+    o2 = ((e2 != 0) ? ct_elem_plain_owner(self, e2) : (-1));
+    return ((o2 >= 0) && (o2 != tps[tmpl].owner));
+}
+static int ct_inst_touched(struct frontend_module_Module * self, int u, int ii) {
+    int k;
+    int n;
+    struct frontend_sym_StructImpl * im;
+    (void)(self);
+    if (u < 0) {
+        return 1;
+    }
+    im = frontend_sym_ct_impls((&n));
+    for (k = 0; (im && (k < n)); k++) {
+        if (im[k].owner != u) {
+            continue;
+        }
+        if (frontend_sym_ct_impl_matches(k, ii)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int ct_inst_writes_helpers(struct frontend_module_Module * self, int u, int ii) {
+    int n;
+    struct frontend_sym_StructInst * ins;
+    ins = frontend_sym_ct_insts((&n));
+    if ((((!ins) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    if ((!ct_inst_elem_foreign(self, ii))) {
+        return ct_inst_touched(self, u, ii);
+    }
+    if (u < 0) {
+        return 1;
+    }
+    return (ins[ii].owner == u);
+}
+static int ct_shell_plan_add_glue(struct frontend_module_Module * self, int unit, int is_header) {
+    int i;
+    int ki;
+    int n;
+    int tn;
+    int ninst;
+    int ninst2;
+    int tmpl;
+    int via_hdr;
+    int foreign;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tps;
+    struct frontend_sym_StructImpl * im;
+    im = frontend_sym_ct_impls((&n));
+    ins = frontend_sym_ct_insts((&ninst));
+    tps = frontend_sym_ct_tmpls((&tn));
+    (void)(ninst2);
+    if (((!ins) || (!tps))) {
+        return 0;
+    }
+    for (i = 0; i < ninst; i++) {
+        if (((ins[i].tmpl_row < 0) || (ins[i].tmpl_row >= tn))) {
+            continue;
+        }
+        tmpl = ins[i].tmpl_row;
+        via_hdr = ((tps[tmpl].is_pub && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr);
+        foreign = ct_inst_elem_foreign(self, i);
+        if (is_header) {
+            if (((via_hdr && (tps[tmpl].owner == unit)) && (!foreign))) {
+                if (backend_lir_lmod_plan_shell_add_stage(LPS_INST, unit, i, 0, 1, 0) != 0) {
+                    return 1;
+                }
+            }
+            continue;
+        }
+        if (foreign) {
+            if (((unit >= 0) && (ins[i].owner != unit))) {
+                continue;
+            }
+        }
+        else {
+            if (via_hdr) {
+                continue;
+            }
+            if (((unit >= 0) && (ins[i].owner != unit))) {
+                continue;
+            }
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_INST, unit, i, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    if (im) {
+        for (ki = 0; ki < n; ki++) {
+            tmpl = im[ki].tmpl_row;
+            if (is_header) {
+                if (((tmpl < 0) || ((unit >= 0) && (im[ki].owner != unit)))) {
+                    continue;
+                }
+                via_hdr = ((tps[tmpl].is_pub && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr);
+                if (((!via_hdr) || (tps[tmpl].owner != unit))) {
+                    continue;
+                }
+                for (i = 0; i < ninst; i++) {
+                    if ((!frontend_sym_ct_impl_matches(ki, i))) {
+                        continue;
+                    }
+                    if (ct_inst_elem_foreign(self, i)) {
+                        continue;
+                    }
+                    if (backend_lir_lmod_plan_shell_add_stage(LPS_IMPL, unit, ki, i, 1, 0) != 0) {
+                        return 1;
+                    }
+                }
+                continue;
+            }
+            for (i = 0; i < ninst; i++) {
+                if ((!frontend_sym_ct_impl_matches(ki, i))) {
+                    continue;
+                }
+                if (ct_inst_elem_foreign(self, i)) {
+                    if (((unit >= 0) && (ins[i].owner != unit))) {
+                        continue;
+                    }
+                }
+                else {
+                    if (((unit >= 0) && (im[ki].owner != unit))) {
+                        continue;
+                    }
+                }
+                if (backend_lir_lmod_plan_shell_add_stage(LPS_IMPL, unit, ki, i, 0, 0) != 0) {
+                    return 1;
+                }
+            }
+        }
+    }
+    if (is_header) {
+        return 0;
+    }
+    for (i = 0; i < ninst; i++) {
+        if ((!ct_inst_writes_helpers(self, unit, i))) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_INSTPROTO, unit, i, 0, 0, 0) != 0) {
+            return 1;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_INSTHELP, unit, i, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    for (i = 0; i < ninst; i++) {
+        if ((!backend_emit_inst_is_builtin_Box(ins[i].name))) {
+            continue;
+        }
+        if (((unit >= 0) && (ins[i].owner != unit))) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_BOXPROTO, unit, i, 0, 0, 0) != 0) {
+            return 1;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_BOXHELP, unit, i, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+{
+        int adi;
+        int nadts;
+        struct frontend_sym_Adt * adts = frontend_sym_ct_adts((&nadts));
+        for (adi = 0; (adts && (adi < nadts)); adi++) {
+            if (((unit >= 0) && (adts[adi].owner != unit))) {
+                continue;
+            }
+            if (adts[adi].is_template) {
+                continue;
+            }
+            if ((!ct_adt_owns(self, adi, 0))) {
+                continue;
+            }
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_ADTLIFE, unit, adi, 0, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int ct_decl_is_pub(struct frontend_module_Module * self, int kind, const char * name) {
+    int n;
+    for (n = 0; n < self->arena->nnode; n++) {
+        if ((((self->arena->nodes[n].kind == kind) && (self->arena->nodes[n].d == 1)) && (strcmp(self->arena->nodes[n].text2, name) == 0))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int ct_shell_plan_add_inprots(struct frontend_module_Module * self, int prog, int unit) {
+    int n;
+    int si;
+    int adi;
+    int nadts;
+    struct frontend_sym_Adt * adts = frontend_sym_ct_adts((&nadts));
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        if (self->arena->nodes[n].kind != N_IMPL) {
+            continue;
+        }
+        if (self->arena->nodes[n].text2[0]) {
+            continue;
+        }
+        si = self->arena->nodes[n].aux;
+        if (si == (-1)) {
+            continue;
+        }
+        if (si <= (-2)) {
+            adi = ((-2) - si);
+            if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
+                continue;
+            }
+            if ((!adts[adi].is_pub)) {
+                continue;
+            }
+        }
+        else {
+            if (((si < 0) || (si >= self->sym->nstructs))) {
+                continue;
+            }
+            if ((!ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name))) {
+                continue;
+            }
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_INPROTO, unit, n, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int ct_shell_plan_add_protos(struct frontend_module_Module * self, int unit) {
+    int i;
+    int lo;
+    int hi;
+    if (unit < 0) {
+        lo = 0;
+        hi = self->sym->nfunc;
+    }
+    else {
+        lo = self->units[unit].fn_start;
+        hi = self->units[unit].fn_end;
+    }
+    for (i = lo; i < hi; i++) {
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_PROTO, unit, i, 0, 0, 0) != 0) {
+            return 1;
+        }
+        if ((((unit >= 0) && self->sym->funcs[i].is_pub) && (!self->sym->funcs[i].is_static))) {
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_PROTO, unit, i, 0, 1, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
 static int ct_shell_plan_add_program(struct frontend_module_Module * self, int prog, int unit, int is_header) {
     struct runtime_arena_Arena * ar = self->arena;
     int n;
     const struct frontend_module_Unit * uu = ((unit >= 0) ? (&self->units[unit]) : 0);
-    if (prog < 0) {
-        return 0;
-    }
-    for (n = ar->nodes[prog].a; n >= 0; n = ar->nodes[n].next) {
+    for (n = ((prog >= 0) ? ar->nodes[prog].a : (-1)); n >= 0; n = ar->nodes[n].next) {
         int k = ar->nodes[n].kind;
         if (k == N_PP) {
             const char * t = ar->nodes[n].text;
@@ -3306,6 +3913,37 @@ static int ct_shell_plan_add_program(struct frontend_module_Module * self, int p
                     }
                 }
             }
+        }
+    }
+    if (ct_shell_plan_add_glue(self, unit, 0) != 0) {
+        return 1;
+    }
+    if ((is_header && (ct_shell_plan_add_glue(self, unit, 1) != 0))) {
+        return 1;
+    }
+    if (ct_shell_plan_add_protos(self, unit) != 0) {
+        return 1;
+    }
+    if (ct_shell_plan_add_inprots(self, prog, unit) != 0) {
+        return 1;
+    }
+    if (unit >= 0) {
+        if (ct_shell_plan_add_includes(self, prog, unit, 0) != 0) {
+            return 1;
+        }
+        if ((is_header && (ct_shell_plan_add_includes(self, prog, unit, 1) != 0))) {
+            return 1;
+        }
+    }
+    if (unit < 0) {
+        if (((self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, "String") >= 0) && (backend_lir_lmod_plan_shell_add_stage(LPS_STRPROTO, (-1), 0, 0, 0, "struct String String_retain(struct String *);\n""void String_release(struct String *);\n") != 0))) {
+            return 1;
+        }
+        if (((self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, "U16String") >= 0) && (backend_lir_lmod_plan_shell_add_stage(LPS_STRPROTO, (-1), 0, 0, 0, "struct U16String U16String_retain(struct U16String *);\n""void U16String_release(struct U16String *);\n") != 0))) {
+            return 1;
+        }
+        if ((((self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, "String") >= 0) && (self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, "U16String") >= 0)) && (backend_lir_lmod_plan_shell_add_stage(LPS_STRPROTO, (-1), 0, 1, 0, "struct String String_retain(struct String *);\n""void String_release(struct String *);\n""struct U16String U16String_retain(struct U16String *);\n""void U16String_release(struct U16String *);\n") != 0))) {
+            return 1;
         }
     }
     if (((!is_header) || (!uu))) {

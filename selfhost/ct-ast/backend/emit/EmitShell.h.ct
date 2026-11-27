@@ -59,6 +59,22 @@ import backend::lir::LModule::LModulePlan as LModulePlan;
 #define LPS_FUNC        6
 #define LPS_DROP        7
 #define LPS_RAW         8
+#define LPS_INC         9
+#define LPS_PROTO       10
+#define LPS_INPROTO     11
+#define LPS_INST        12
+#define LPS_INSTPROTO   13
+#define LPS_INSTHELP    14
+#define LPS_IMPL        15
+#define LPS_BOXPROTO    16
+#define LPS_BOXHELP     17
+#define LPS_ADTLIFE     18
+#define LPS_STRPROTO    19
+#define LINC_C_IO       0
+#define LINC_C_PRE      1
+#define LINC_C_POST     2
+#define LINC_H_PRE      3
+#define LINC_H_POST     4
 /* S8 shell rows: the row table is internal to LModule, so the shell reads it
    through getters. */
 
@@ -122,6 +138,21 @@ pub int inst_touched_by_unit(struct Emitter *self, int u, int ii);
 pub int inst_writes_helpers(struct Emitter *self, int u, int ii);
 pub void sync_alloc(struct Emitter *e);
 pub int write_unit_header_body(struct Emitter *self, int u, const char *guard);
+
+/* S8 shell finishing: the module layer owns the include block. One row per
+   printed line, `pos` picks the point in the product; "" is a blank line. */
+static int shell_inc_rows(struct Emitter *self, int u, int pos)
+{
+    int nr = backend::lir::lmod_plan_row_count(), r;
+
+    for (r = 0; r < nr; r++) {
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_INC) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        if (backend::lir::lmod_plan_row_aux(r) != pos) continue;
+        fprintf(self->out, "%s\n", backend::lir::lmod_plan_row_text(r));
+    }
+    return 0;
+}
 
 impl EmitShell for Emitter {
     int write_unit_header(int u)
@@ -467,14 +498,20 @@ pub int elem_has_life(struct Emitter *self, const char *elem)
 
 pub int emit_Box_helpers(struct Emitter *self, int u)
 {
-    int i, n;
+    int nr, r;
     struct StructInst *ins;
+    int n;
 
     ins = frontend::sym::ct_insts(&n);
-    for (i = 0; ins && i < n; i++) {
+    if (!ins) return 0;
+    nr = backend::lir::lmod_plan_row_count();
+    for (r = 0; r < nr; r++) {
+        int i;
         const char *ctype;
-        if (!inst_is_builtin_Box(ins[i].name)) continue;
-        if (u >= 0 && ins[i].owner != u) continue;
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_BOXHELP) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        i = backend::lir::lmod_plan_row_node(r);
+        if (i < 0 || i >= n) continue;
         ctype = ins[i].ctype[0];
         fprintf(self->out,
                 "static void __attribute__((unused)) %s__payload_release(%s *p)\n{\n",
@@ -527,14 +564,18 @@ pub int emit_Box_helpers(struct Emitter *self, int u)
 
 pub int emit_Box_protos(struct Emitter *self, int u)
 {
-    int i, n;
+    int nr, r, n;
     struct StructInst *ins;
-    (void)u;
 
     ins = frontend::sym::ct_insts(&n);
-    for (i = 0; ins && i < n; i++) {
-        if (!inst_is_builtin_Box(ins[i].name)) continue;
-        if (u >= 0 && ins[i].owner != u) continue;
+    if (!ins) return 0;
+    nr = backend::lir::lmod_plan_row_count();
+    for (r = 0; r < nr; r++) {
+        int i;
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_BOXPROTO) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        i = backend::lir::lmod_plan_row_node(r);
+        if (i < 0 || i >= n) continue;
         fprintf(self->out,
                 "static __attribute__((unused)) struct %s %s__new(%s *);\n",
                 ins[i].name, ins[i].name, ins[i].ctype[0]);
@@ -550,14 +591,16 @@ pub int emit_Box_protos(struct Emitter *self, int u)
 
 pub int emit_adt_life_defs(struct Emitter *self, int u)
 {
-    int i, n, v, d;
+    int i, n, v, d, nr, r;
     struct Adt *adts;
     adts = frontend::sym::ct_adts(&n);
     if (!adts) return 0;
-    for (i = 0; i < n; i++) {
-        if (u >= 0 && adts[i].owner != u) continue;
-        if (adts[i].is_template) continue;
-        if (!adt_owns(self, i, 0)) continue;
+    nr = backend::lir::lmod_plan_row_count();
+    for (r = 0; r < nr; r++) {
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_ADTLIFE) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        i = backend::lir::lmod_plan_row_node(r);
+        if (i < 0 || i >= n) continue;
         d = (u >= 0 && adts[i].is_pub) ? 0 : 1;
         if (d)
             fprintf(self->out, "static __attribute__((unused)) struct %s %s_retain(struct %s *self)\n{\n",
@@ -759,71 +802,52 @@ pub int emit_string_literals(struct Emitter *self, int prog)
 
 pub int emit_struct_impls(struct Emitter *self, int u, int header)
 {
-    int ki, nimpls, i, ninsts, ntmpls, tmpl;
-    struct StructImpl *im;
-    struct StructInst *ins;
-    struct StructTmpl *tps;
+    int nr = backend::lir::lmod_plan_row_count(), r;
 
-    im = frontend::sym::ct_impls(&nimpls);
-    ins = frontend::sym::ct_insts(&ninsts);
-    tps = frontend::sym::ct_tmpls(&ntmpls);
-    (void)ntmpls;
-    if (!im || !tps) return 0;
     if (!header) {
-        /* SH-102 (compile mode): one merged program emits a container impl
-           (`Result<String, …>`) before the String layer's own prototypes, so a
-           call the automatic retain added had no declaration. Every struct is
-           complete by now (types are written before the impls), so declare the
-           four entry points here; an identical later prototype is harmless. */
-        if (self->cur_unit < 0
-            && self->sym->find_struct("String") >= 0
-            && self->sym->find_struct("U16String") >= 0)
-            fputs("struct String String_retain(struct String *);\n"
-                  "void String_release(struct String *);\n"
-                  "struct U16String U16String_retain(struct U16String *);\n"
-                  "void U16String_release(struct U16String *);\n", self->out);
-        for (i = 0; i < ninsts; i++) {
-            if (!inst_writes_helpers(self, u, i)) continue;
-            if (inst_emit_elem_protos(self, i) != 0) return -1;
+        /* the compile-mode String entry declarations (module-selected) */
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_STRPROTO) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            if (backend::lir::lmod_plan_row_aux(r) != 1) continue;
+            fputs(backend::lir::lmod_plan_row_text(r), self->out);
+        }
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_INSTPROTO) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            if (inst_emit_elem_protos(self,
+                                      backend::lir::lmod_plan_row_node(r)) != 0)
+                return -1;
         }
     }
-    for (ki = 0; ki < nimpls; ki++) {
-        tmpl = im[ki].tmpl_row;
+    for (r = 0; r < nr; r++) {
+        int ki, ii;
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_IMPL) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        if (backend::lir::lmod_plan_row_hdr(r) != header) continue;
+        ki = backend::lir::lmod_plan_row_node(r);
+        ii = backend::lir::lmod_plan_row_aux(r);
         if (header) {
-            int via_hdr;
-            if (tmpl < 0 || (u >= 0 && im[ki].owner != u)) continue;
-            via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
-                      && self->units[tps[tmpl].owner].is_hdr;
-            if (!via_hdr || tps[tmpl].owner != u) continue;
-            for (i = 0; i < ninsts; i++) {
-                int m;
-                if (!frontend::sym::ct_impl_matches(ki, i)) continue;
-                /* Phase 33 O3: a foreign-element instance's methods are a
-                   private copy in the consumer, so the header declares none. */
-                if (inst_elem_foreign(self, i)) continue;
+            /* the pub template's exported method prototypes */
+            {
+                int m, nimpls;
+                struct StructImpl *im = frontend::sym::ct_impls(&nimpls);
+                if (!im || ki < 0 || ki >= nimpls) continue;
                 for (m = self->arena->nodes[im[ki].node].a; m >= 0;
                      m = self->arena->nodes[m].next)
-                    if (impl_emit_method(self, ki, i, m, 1) != 0) return -1;
+                    if (impl_emit_method(self, ki, ii, m, 1) != 0) return -1;
             }
-            continue;
-        }
-        for (i = 0; i < ninsts; i++) {
-            if (!frontend::sym::ct_impl_matches(ki, i)) continue;
-            /* Phase 33 O3: the unit that named a foreign-element instance
-               writes its methods; every other instance belongs to the impl
-               owner (Phase 29/31). */
-            if (inst_elem_foreign(self, i)) {
-                if (u >= 0 && ins[i].owner != u) continue;
-            } else if (u >= 0 && im[ki].owner != u) {
-                continue;
-            }
-            if (impl_emit_one(self, ki, i) != 0) return -1;
+        } else if (impl_emit_one(self, ki, ii) != 0) {
+            return -1;
         }
     }
     if (!header) {
-        for (i = 0; i < ninsts; i++) {
-            if (!inst_writes_helpers(self, u, i)) continue;
-            if (inst_emit_elem_helpers(self, i) != 0) return -1;
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_INSTHELP) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            if (inst_emit_elem_helpers(self,
+                                       backend::lir::lmod_plan_row_node(r)) != 0)
+                return -1;
         }
     }
     return 0;
@@ -831,49 +855,20 @@ pub int emit_struct_impls(struct Emitter *self, int u, int header)
 
 pub int emit_struct_insts(struct Emitter *self, int u, int header)
 {
-    int i, n, tn, tmpl;
-    struct StructInst *insts;
-    struct StructTmpl *tps;
+    int nr = backend::lir::lmod_plan_row_count(), r;
 
-    insts = frontend::sym::ct_insts(&n);
-    tps = frontend::sym::ct_tmpls(&tn);
-    if (!insts || !tps) return 0;
-    for (i = 0; i < n; i++) {
-        int via_hdr;
-        if (insts[i].emitted) continue;
-        tmpl = insts[i].tmpl_row;
-        if (tmpl < 0) continue;
-        via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
-                  && self->units[tps[tmpl].owner].is_hdr;
-        if (header) {
-            if (!via_hdr || tps[tmpl].owner != u) continue;
-            /* P34 S8: an `Option` / `Result` instance whose element lives in the
-               consumer cannot be defined in the layer's header (the field is
-               incomplete there); the consumer writes it after the element. */
-            if (inst_elem_foreign(self, i)) continue;
-        } else {
-            /* P34 S8: a foreign-element instance is written by the unit that
-               named it -- the only one that can print the element. The
-               container layout is handle-only, so moving it costs the layer
-               nothing; `Option` / `Result` need it or the field is
-               incomplete. */
-            if (inst_elem_foreign(self, i)) {
-                if (u >= 0 && insts[i].owner != u) continue;
-            } else {
-                if (via_hdr) continue;
-                /* `u < 0` is compile mode: the one file owns every instance. */
-                if (u >= 0 && insts[i].owner != u) continue;
-            }
-        }
-        if (inst_emit_one(self, i) != 0) return -1;
+    for (r = 0; r < nr; r++) {
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_INST) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        if (backend::lir::lmod_plan_row_hdr(r) != header) continue;
+        if (inst_emit_one(self, backend::lir::lmod_plan_row_node(r)) != 0)
+            return -1;
     }
     return 0;
 }
 
 pub int emit_unit_body(struct Emitter *self, int u)
 {
-    int n, i;
-
     /* LANG-29 S1 / B1: the type writer runs per unit; record which unit and
        which product so the ADT payload pre-emission places each shell once. */
     backend::lir::lmod_plan_set_shell(u, 0);
@@ -886,11 +881,11 @@ pub int emit_unit_body(struct Emitter *self, int u)
     fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
           self->out);
     /* PH-66 R2: the headers the unit's own direct calls need, before anything
-       that may repeat them (the layer prologues below). */
-    if (self->io_mask & 1) fputs("#include <stdio.h>\n", self->out);
-    if (self->io_mask & 2) fputs("#include <wchar.h>\n", self->out);
-    /* Phase 84: this unit writes an ADT layout plus its offsetof assertions. */
-    if (unit_has_adt(u, 0)) fputs("#include <stddef.h>\n", self->out);
+       that may repeat them (the layer prologues below). S8 shell finishing:
+       the module layer selected both the I/O headers and the ADT `<stddef.h>`
+       row, so the writer only renders them. */
+    if (shell_inc_rows(self, u, LINC_C_IO) != 0) return -1;
+    if (shell_inc_rows(self, u, LINC_C_PRE) != 0) return -1;
     /* PH-64: with --alloc the target's allocator is declared here, so the
        mapped calls below have a prototype without pulling <stdlib.h>. */
     if (self->alloc_map && self->alloc_map[0]) {
@@ -914,76 +909,24 @@ pub int emit_unit_body(struct Emitter *self, int u)
     if (emit_map_prologues(self, u) != 0) return -1;
     /* Only a `.h.ct` unit publishes a header, so only it includes one of
        its own; an implementation unit's `.c` carries every declaration it
-       needs (the types are emitted below, no longer skipped as `pub`). */
-    if (self->units[u].is_hdr) {
-        int priv = 0;
-        int si2, fi2;
-        for (si2 = 0; si2 < self->sym->nstructs; si2++) {
-            int hp = 0, hv = 0;
-            if (self->sym->structs[si2].owner != u) continue;
-            if (self->sym->structs[si2].nuse > 0) continue;
-            for (fi2 = 0; fi2 < self->sym->structs[si2].nfields; fi2++) {
-                if (self->sym->structs[si2].fields[fi2].is_pub) hp = 1;
-                else hv = 1;
-            }
-            if (hp && hv) priv = 1;
-        }
-        if (priv) fputs("#define CT_UNIT_PRIVATE 1\n", self->out);
-        fprintf(self->out, "#include \"%s.h\"\n",
-                strcmp(self->units[u].base, "String") == 0
-                    ? "String_" : self->units[u].base);
-    }
-    for (i = 0; i < self->units[u].ndep; i++) {
-        if (self->units[self->units[u].depu[i]].is_map) continue;
-        fprintf(self->out, "#include \"%s.h\"\n",
-                self->units[u].dep + (size_t)i * MAX_TEXT);
-    }
-    /* Phase 29 E29-5: instances of the built-in templates are defined in the
-       layer's headers; the unit sees them although there is no import edge.
-       P34 S9a: the layer may span several files, so every layer header the
-       unit does not own is included. */
-    if (!g_plan) {
-        /* compile mode has no module plan; every loaded layer unit is
-           included, exactly as before S8. */
-        for (i = 0; i < self->nbuiltin; i++) {
-            int bu = self->builtins[i];
-            if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n",
-                    strcmp(self->units[bu].base, "String") == 0
-                        ? "String_" : self->units[bu].base);
-        }
-    } else {
-        for (i = 0; i < g_plan->nbhead; i++) {
-            if (g_plan->bunit[i] == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n", g_plan->bhead[i]);
-        }
-    }
-    fputs("\n", self->out);
+       needs (the types are emitted below, no longer skipped as `pub`).
+       S8 shell finishing: the whole block (private guard, own header, deps,
+       layer headers, blank line) is one module-selected row sequence. */
+    if (shell_inc_rows(self, u, LINC_C_POST) != 0) return -1;
     if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
 
     {
         int nr = backend::lir::lmod_plan_row_count(), r;
-        if (nr > 0) {
-            for (r = 0; r < nr; r++) {
-                const char *t;
-                if (backend::lir::lmod_plan_row_kind(r) != LPS_PP
-                    || backend::lir::lmod_plan_row_unit(r) != u) continue;
-                t = backend::lir::lmod_plan_row_text(r);
-                if ((self->io_mask & 1)
-                    && strcmp(t, "#include <stdio.h>") == 0) continue;
-                if ((self->io_mask & 2)
-                    && strcmp(t, "#include <wchar.h>") == 0) continue;
-                fprintf(self->out, "%s\n", t);
-            }
-        } else {
-            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
-                if (self->arena->nodes[n].kind == N_PP) {
-                    if ((self->io_mask & 1)
-                        && strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
-                    if ((self->io_mask & 2)
-                        && strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
-                    fprintf(self->out, "%s\n", self->arena->nodes[n].text);
-                }
+        for (r = 0; r < nr; r++) {
+            const char *t;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_PP
+                || backend::lir::lmod_plan_row_unit(r) != u) continue;
+            t = backend::lir::lmod_plan_row_text(r);
+            if ((self->io_mask & 1)
+                && strcmp(t, "#include <stdio.h>") == 0) continue;
+            if ((self->io_mask & 2)
+                && strcmp(t, "#include <wchar.h>") == 0) continue;
+            fprintf(self->out, "%s\n", t);
         }
     }
     if (self->sym->atomic_used) {
@@ -1051,37 +994,16 @@ pub int emit_unit_body(struct Emitter *self, int u)
 
     {
         int nr = backend::lir::lmod_plan_row_count(), r;
-        if (nr > 0) {
-            for (r = 0; r < nr; r++) {
-                if (backend::lir::lmod_plan_row_unit(r) != u) continue;
-                if (backend::lir::lmod_plan_row_kind(r) == LPS_RAW) {
-                    if (emit_raw_text(self, backend::lir::lmod_plan_row_node(r)) != 0) return -1;
-                } else if (backend::lir::lmod_plan_row_kind(r) == LPS_TYPE) {
-                    /* a `pub` type of a `.h.ct` unit is published by its
-                       header; every other type is defined here. */
-                    if ((backend::lir::lmod_plan_row_aux(r) & 1) && self->units[u].is_hdr) continue;
-                    if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
-                        return -1;
-                }
-            }
-        } else {
-            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
-                 n = self->arena->nodes[n].next) {
-                /* raw blocks keep their source position relative to the declarations */
-                if (self->arena->nodes[n].kind == N_RAW_TEXT) {
-                    if (emit_raw_text(self, n) != 0) return -1;
-                    continue;
-                }
-                /* A `pub` struct/typedef/enum/union is in the header of a header
-                   unit, so only a private one is emitted here; an implementation
-                   unit has no header, so it emits all of them. */
-                if ((self->arena->nodes[n].kind == N_STRUCT
-                     || self->arena->nodes[n].kind == N_TYPEDEF
-                     || self->arena->nodes[n].kind == N_ENUM
-                     || self->arena->nodes[n].kind == N_UNION)
-                    && (self->arena->nodes[n].d != 1 || !self->units[u].is_hdr)) {
-                    if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-                }
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            if (backend::lir::lmod_plan_row_kind(r) == LPS_RAW) {
+                if (emit_raw_text(self, backend::lir::lmod_plan_row_node(r)) != 0) return -1;
+            } else if (backend::lir::lmod_plan_row_kind(r) == LPS_TYPE) {
+                /* a `pub` type of a `.h.ct` unit is published by its
+                   header; every other type is defined here. */
+                if ((backend::lir::lmod_plan_row_aux(r) & 1) && self->units[u].is_hdr) continue;
+                if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
+                    return -1;
             }
         }
     }
@@ -1099,22 +1021,24 @@ pub int emit_unit_body(struct Emitter *self, int u)
     /* PH-80: literal blocks (the built-in layer header is already included). */
     if (emit_string_literals(self, self->units[u].prog) != 0) return -1;
 
-    for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++)
-        if (self->emit_proto(i) != 0) return -1;
+    {
+        int nr = backend::lir::lmod_plan_row_count(), r;
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_PROTO
+                || backend::lir::lmod_plan_row_unit(r) != u
+                || backend::lir::lmod_plan_row_hdr(r) != 0) continue;
+            if (self->emit_proto(backend::lir::lmod_plan_row_node(r)) != 0)
+                return -1;
+        }
+    }
+    if (self->emit_inherent_protos(u) != 0) return -1;
 
     /* file-scope static assertions, after every type of this unit */
     {
         int nr = backend::lir::lmod_plan_row_count(), r;
-        if (nr > 0) {
-            for (r = 0; r < nr; r++)
-                if (backend::lir::lmod_plan_row_kind(r) == LPS_SASSERT && backend::lir::lmod_plan_row_unit(r) == u)
-                    if (self->emit_node(backend::lir::lmod_plan_row_node(r), 0) != 0) return -1;
-        } else {
-            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
-                 n = self->arena->nodes[n].next)
-                if (self->arena->nodes[n].kind == N_SASSERT)
-                    if (self->emit_node(n, 0) != 0) return -1;
-        }
+        for (r = 0; r < nr; r++)
+            if (backend::lir::lmod_plan_row_kind(r) == LPS_SASSERT && backend::lir::lmod_plan_row_unit(r) == u)
+                if (self->emit_node(backend::lir::lmod_plan_row_node(r), 0) != 0) return -1;
     }
 
     /* A `pub` global still needs its definition here (the header only
@@ -1122,20 +1046,11 @@ pub int emit_unit_body(struct Emitter *self, int u)
        initialiser may name a prototype emitted just above (D-6). */
     {
         int nr = backend::lir::lmod_plan_row_count(), r;
-        if (nr > 0) {
-            for (r = 0; r < nr; r++)
-                if (backend::lir::lmod_plan_row_kind(r) == LPS_GLOBAL && backend::lir::lmod_plan_row_unit(r) == u
-                    && !(backend::lir::lmod_plan_row_aux(r) & 2))
-                    if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
-                        return -1;
-        } else {
-            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
-                 n = self->arena->nodes[n].next) {
-                if (self->arena->nodes[n].kind != N_GLOBAL
-                    || self->arena->nodes[n].aux == 2) continue;
-                if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-            }
-        }
+        for (r = 0; r < nr; r++)
+            if (backend::lir::lmod_plan_row_kind(r) == LPS_GLOBAL && backend::lir::lmod_plan_row_unit(r) == u
+                && !(backend::lir::lmod_plan_row_aux(r) & 2))
+                if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
+                    return -1;
     }
 
     if (self->emit_impls(self->units[u].prog) != 0) return -1;
@@ -1144,30 +1059,16 @@ pub int emit_unit_body(struct Emitter *self, int u)
 
     {
         int nr = backend::lir::lmod_plan_row_count(), r;
-        if (nr > 0) {
-            for (r = 0; r < nr; r++) {
-                int fn;
-                if (backend::lir::lmod_plan_row_kind(r) != LPS_FUNC || backend::lir::lmod_plan_row_unit(r) != u) continue;
-                if (backend::lir::lmod_plan_row_aux(r) & 1) continue;   /* a generic template */
-                fn = backend::lir::lmod_plan_row_node(r);
-                if (emit_closures(self, self->arena->nodes[fn].text2,
-                                  self->arena->nodes[fn].line) != 0)
-                    return -1;
-                if (self->emit_node(fn, 0) != 0) return -1;
-            }
-        } else {
-            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
-                 n = self->arena->nodes[n].next)
-                if (self->arena->nodes[n].kind == N_FUNC) {
-                    int cur = self->sym->find_func(self->arena->nodes[n].text2);
-                    /* a generic template has no C body of its own (Phase 26) */
-                    if (cur >= 0 && self->sym->funcs[cur].ntparams > 0) continue;
-                    /* the closure products of this function land above its definition */
-                    if (emit_closures(self, self->arena->nodes[n].text2,
-                                      self->arena->nodes[n].line) != 0)
-                        return -1;
-                    if (self->emit_node(n, 0) != 0) return -1;
-                }
+        for (r = 0; r < nr; r++) {
+            int fn;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_FUNC || backend::lir::lmod_plan_row_unit(r) != u) continue;
+            if (backend::lir::lmod_plan_row_aux(r) & 1) continue;   /* a generic template */
+            fn = backend::lir::lmod_plan_row_node(r);
+            /* the closure products of this function land above its definition */
+            if (emit_closures(self, self->arena->nodes[fn].text2,
+                              self->arena->nodes[fn].line) != 0)
+                return -1;
+            if (self->emit_node(fn, 0) != 0) return -1;
         }
     }
     if (emit_generic_defs(self, u) != 0) return -1;
@@ -1577,7 +1478,6 @@ pub void sync_alloc(struct Emitter *e)
 /* The header writer's body, likewise with the sink already open. */
 pub int write_unit_header_body(struct Emitter *self, int u, const char *guard)
 {
-    int n, i, pp;
 
     /* LANG-29 S1 / B1: this is the header writer; the instance shells a pub
        ADT needs may have to land in this header rather than the matching .c. */
@@ -1585,66 +1485,21 @@ pub int write_unit_header_body(struct Emitter *self, int u, const char *guard)
 
     fprintf(self->out, "#ifndef %s\n", guard);
     fprintf(self->out, "#define %s\n", guard);
-    /* Phase 84: a `pub` ADT publishes its layout and `offsetof` assertions. */
-    if (unit_has_adt(u, 1)) fputs("#include <stddef.h>\n", self->out);
+    /* Phase 84: a `pub` ADT publishes its layout and `offsetof` assertions.
+       S8 shell finishing: the pre-banner include line is a module row. */
+    if (shell_inc_rows(self, u, LINC_H_PRE) != 0) return -1;
     fputs("\n", self->out);
     fprintf(self->out, "/* Generated by ct v%s from %s (multi-file mode: exported types; the matching .c\n"
                    "   includes this header).\n"
                    "   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n",
             self->version, self->path);
     /* The exported types may name types from the source's own C includes,
-       so those lines lead the header. Only `#include` is copied: other `#`
-       lines belong to the implementation and would be duplicated. */
-    pp = 0;
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (self->arena->nodes[n].kind != N_PP) continue;
-        if (strncmp(self->arena->nodes[n].text, "#include", 8) != 0) continue;
-        fprintf(self->out, "%s\n", self->arena->nodes[n].text);
-        pp++;
-    }
-    /* PH-65 R5: a `.h.ct` that owns a shim publishes it, so a consumer that
-       only sees the generated header still gets the C surface. Avoid the
-       duplicate when the author already wrote the include. */
-    if (self->units[u].has_shim) {
-        char line[256];
-        int dup = 0;
-        snprintf(line, sizeof line, "#include \"%s.shim.h\"", self->units[u].base);
-        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if (self->arena->nodes[n].kind != N_PP) continue;
-            if (strcmp(self->arena->nodes[n].text, line) == 0) {
-                dup = 1;
-                break;
-            }
-        }
-        if (!dup) fprintf(self->out, "%s\n", line);
-    }
-    if (pp > 0) fputs("\n", self->out);
-    for (i = 0; i < self->units[u].ndep; i++) {
-        if (self->units[self->units[u].depu[i]].is_map) continue;
-        fprintf(self->out, "#include \"%s.h\"\n",
-                self->units[u].dep + (size_t)i * MAX_TEXT);
-    }
-    if (self->units[u].ndep > 0) fputs("\n", self->out);
-    /* Phase 29 E29-5: a `pub` signature may name an instance defined in the
-       built-in layer's header. P34 S9a: include every layer header the unit
-       does not own. */
-    if (!g_plan) {
-        /* compile mode has no module plan; every loaded layer unit is
-           included, exactly as before S8. */
-        for (i = 0; i < self->nbuiltin; i++) {
-            int bu = self->builtins[i];
-            if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n",
-                    strcmp(self->units[bu].base, "String") == 0
-                        ? "String_" : self->units[bu].base);
-        }
-    } else {
-        for (i = 0; i < g_plan->nbhead; i++) {
-            if (g_plan->bunit[i] == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n", g_plan->bhead[i]);
-        }
-    }
-    if (self->nbuiltin > 0) fputs("\n", self->out);
+       so those lines lead the header (only `#include` is copied: other `#`
+       lines belong to the implementation). PH-65 R5: a `.h.ct` that owns a
+       shim publishes it unless the author already included it. S8 shell
+       finishing: the module layer selected the whole block, blank-line
+       grouping included. */
+    if (shell_inc_rows(self, u, LINC_H_POST) != 0) return -1;
 
     if (self->emit_struct_fwd() != 0) return -1;
     if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
@@ -1652,32 +1507,15 @@ pub int write_unit_header_body(struct Emitter *self, int u, const char *guard)
 
     {
         int nr = backend::lir::lmod_plan_row_count(), r;
-        if (nr > 0) {
-            for (r = 0; r < nr; r++) {
-                if (backend::lir::lmod_plan_row_unit(r) != u) continue;
-                if (backend::lir::lmod_plan_row_kind(r) == LPS_TYPE && (backend::lir::lmod_plan_row_aux(r) & 1)) {
-                    if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
-                        return -1;
-                } else if (backend::lir::lmod_plan_row_kind(r) == LPS_GLOBAL
-                           && (backend::lir::lmod_plan_row_aux(r) & 3)) {
-                    if (self->emit_global_extern(backend::lir::lmod_plan_row_node(r)) != 0)
-                        return -1;
-                }
-            }
-        } else {
-            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
-                 n = self->arena->nodes[n].next) {
-                if ((self->arena->nodes[n].kind == N_STRUCT
-                     || self->arena->nodes[n].kind == N_TYPEDEF
-                     || self->arena->nodes[n].kind == N_ENUM
-                     || self->arena->nodes[n].kind == N_UNION)
-                    && self->arena->nodes[n].d == 1) {
-                    if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-                } else if (self->arena->nodes[n].kind == N_GLOBAL
-                           && (self->arena->nodes[n].d == 1
-                               || self->arena->nodes[n].aux == 2)) {
-                    if (self->emit_global_extern(n) != 0) return -1;
-                }
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            if (backend::lir::lmod_plan_row_kind(r) == LPS_TYPE && (backend::lir::lmod_plan_row_aux(r) & 1)) {
+                if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
+                    return -1;
+            } else if (backend::lir::lmod_plan_row_kind(r) == LPS_GLOBAL
+                       && (backend::lir::lmod_plan_row_aux(r) & 3)) {
+                if (self->emit_global_extern(backend::lir::lmod_plan_row_node(r)) != 0)
+                    return -1;
             }
         }
     }
@@ -1690,23 +1528,10 @@ pub int write_unit_header_body(struct Emitter *self, int u, const char *guard)
        the header silent, which is L48-2. */
     {
         int nr = backend::lir::lmod_plan_row_count(), r;
-        if (nr > 0) {
-            for (r = 0; r < nr; r++) {
-                if (backend::lir::lmod_plan_row_kind(r) != LPS_DROP || backend::lir::lmod_plan_row_unit(r) != u) continue;
-                fprintf(self->out, "void %s_Drop_drop(void *);\n",
-                        self->sym->structs[backend::lir::lmod_plan_row_node(r)].name);
-            }
-        } else {
-            for (i = 0; i < self->sym->nstructs; i++) {
-                if (!self->sym->structs[i].uses_drop) continue;
-                if (self->sym->structs[i].is_template || self->sym->structs[i].is_inst) continue;
-                if (!self->sym->structs[i].is_pub) continue;
-                if (self->sym->structs[i].owner != u) continue;
-                if (self->sym->structs[i].has_drop_impl
-                    && !self->unit_has_drop_impl(u, i)) continue;
-                fprintf(self->out, "void %s_Drop_drop(void *);\n",
-                        self->sym->structs[i].name);
-            }
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_DROP || backend::lir::lmod_plan_row_unit(r) != u) continue;
+            fprintf(self->out, "void %s_Drop_drop(void *);\n",
+                    self->sym->structs[backend::lir::lmod_plan_row_node(r)].name);
         }
     }
 
@@ -1715,11 +1540,17 @@ pub int write_unit_header_body(struct Emitter *self, int u, const char *guard)
     if (emit_struct_insts(self, u, 1) != 0) return -1;
     if (emit_struct_impls(self, u, 1) != 0) return -1;
 
-    for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++) {
-        if (!self->sym->funcs[i].is_pub || self->sym->funcs[i].is_static) continue;
-        if (self->emit_proto(i) != 0) return -1;
+    {
+        int nr = backend::lir::lmod_plan_row_count(), r;
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_PROTO
+                || backend::lir::lmod_plan_row_unit(r) != u
+                || backend::lir::lmod_plan_row_hdr(r) != 1) continue;
+            if (self->emit_proto(backend::lir::lmod_plan_row_node(r)) != 0)
+                return -1;
+        }
     }
-    if (self->emit_inherent_protos(self->units[u].prog) != 0) return -1;
+    if (self->emit_inherent_protos(u) != 0) return -1;
 
     fputs("\n#endif\n", self->out);
     return 0;

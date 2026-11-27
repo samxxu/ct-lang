@@ -423,6 +423,7 @@ static int lw_tail_cleanups(struct backend_lir_Lower *, int, int, int);
 static int lw_is_string_value(const char *);
 static int lw_adt_owns(struct backend_lir_Lower *, const char *, int);
 static int lw_own_kind(struct backend_lir_Lower *, const char *);
+static int lw_assign_brace(struct backend_lir_Lower *, int);
 static const char * lw_own_prefix(struct backend_lir_Lower *, const char *, int);
 static int lw_spelling_tag(const char *, char *, int);
 static int lw_text_long(const char *);
@@ -1253,7 +1254,7 @@ static int lw_hoist_scan_body(struct backend_lir_Lower * w, int teid, int top) {
         }
         return 0;
     }
-    if ((((((w->hoist_temps && (t->op == 2)) && ((t->kind == TK_CALL) || (t->kind == TK_INTRINSIC))) && (t->target_kind != RT_RECIPE)) && (t->aux != 6)) && (t->nkids >= 1))) {
+    if (((((((w->hoist_temps && (t->op == 2)) && ((t->kind == TK_CALL) || (t->kind == TK_INTRINSIC))) && (t->target_kind != RT_RECIPE)) && (t->aux != 6)) && (t->aux != 11)) && (t->nkids >= 1))) {
         int chain[8];
         int nc = 0;
         int lvl = teid;
@@ -2689,6 +2690,66 @@ static int lw_own_kind(struct backend_lir_Lower * w, const char * sp) {
         return 0;
     }
     return (lw_adt_owns(w, buf, 0) ? 3 : 0);
+}
+static int lw_assign_brace(struct backend_lir_Lower * w, int lhs_te) {
+    struct backend_tir_ct_texpr * lt;
+    const char * ltsp;
+    const char * bt;
+    char base[512];
+    int n;
+    if (((lhs_te <= 0) || (lhs_te > w->m->nexprs))) {
+        return 0;
+    }
+    lt = (&w->m->exprs[(lhs_te - 1)]);
+    if (lt->type <= 0) {
+        return 0;
+    }
+    ltsp = backend_tir_tmod_cspell(w->m, lt->type);
+    if (lw_own_kind(w, ltsp) == 0) {
+        return 0;
+    }
+    if (lt->kind == TK_NAME_LOCAL) {
+        return 1;
+    }
+    if ((((lt->kind != TK_FIELD) || (lt->op != 2)) || (lt->nkids < 1))) {
+        return 0;
+    }
+    if (((lt->kids[0] <= 0) || (lt->kids[0] > w->m->nexprs))) {
+        return 0;
+    }
+    if (w->m->exprs[(lt->kids[0] - 1)].type <= 0) {
+        return 0;
+    }
+    bt = backend_tir_tmod_cspell(w->m, w->m->exprs[(lt->kids[0] - 1)].type);
+    if ((!bt)) {
+        return 0;
+    }
+    if (strncmp(bt, "struct ", 7) == 0) {
+        bt += 7;
+    }
+    else {
+        if (strncmp(bt, "union ", 6) == 0) {
+            bt += 6;
+        }
+        else {
+            if (strncmp(bt, "enum ", 5) == 0) {
+                bt += 5;
+            }
+        }
+    }
+    n = (int)(strlen(bt));
+    while (((n > 0) && ((bt[(n - 1)] == ' ') || (bt[(n - 1)] == '*')))) {
+        n--;
+    }
+    if (((n <= 0) || (n >= (int)(sizeof(base))))) {
+        return 0;
+    }
+    memcpy(base, bt, (size_t)(n));
+    base[n] = 0;
+    if (frontend_sym_ct_inst_find(base) >= 0) {
+        return 0;
+    }
+    return 1;
 }
 static const char * lw_own_prefix(struct backend_lir_Lower * w, const char * sp, int kind) {
     if (kind == 1) {
@@ -4258,6 +4319,9 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                         return 0;
                     }
                     w->l->stmts[(sid - 1)].aux = t->op;
+                    if ((((t->op == 0) && (t->nkids >= 2)) && (lw_assign_brace(w, t->kids[0]) != 0))) {
+                        w->l->stmts[(sid - 1)].brace = 1;
+                    }
                     if ((((t->op == 0) && (t->nkids >= 2)) && (w->m->exprs[(t->kids[0] - 1)].kind == TK_NAME_LOCAL))) {
                         tracked = lw_sb_find(w, w->m->exprs[(t->kids[0] - 1)].text);
                     }
@@ -6848,6 +6912,9 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
                 return 0;
             }
             lw_ind(ind);
+            if (s->brace) {
+                fputs("{ ", backend_lir_g_lir_out);
+            }
             if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) {
                 return (-1);
             }
@@ -6855,7 +6922,12 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
             if (lw_pw_expr(w, s->rhs, PW_EXPR) != 0) {
                 return (-1);
             }
-            fputs(";\n", backend_lir_g_lir_out);
+            if (s->brace) {
+                fputs("; }\n", backend_lir_g_lir_out);
+            }
+            else {
+                fputs(";\n", backend_lir_g_lir_out);
+            }
             return 0;
         case LS_EXPR:
             lw_ind(ind);

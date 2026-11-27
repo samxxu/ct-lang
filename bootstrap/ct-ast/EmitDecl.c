@@ -25,6 +25,7 @@
 #include "EmitDecl.shim.h"
 #define TEXT_LIMIT 65536
 #define MAX_TEXT   160
+#define LPS_INPROTO 11
 #define N_VAR     10
 #define N_STRUCT  20
 #define N_GLOBAL  22
@@ -203,6 +204,7 @@ int backend_emit_sb_end_body(struct backend_emit_Emitter *, int);
 int backend_emit_shell_owned_here(struct backend_emit_Emitter *, int);
 int backend_emit_shell_preemit(struct backend_emit_Emitter *, int, int);
 int backend_emit_type_layout_closure(struct backend_emit_Emitter *, const char *, int);
+static int emit_inherent_proto_one(struct backend_emit_Emitter *, int);
 static int * backend_emit_g_adt_layout_state;
 static int backend_emit_g_adt_layout_cap;
 static int * backend_emit_g_inst_layout_state;
@@ -490,78 +492,19 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_node_mentions(void *self, 
     return 0;
 }
 
-static int backend_emit_Emitter_backend_emit_EmitDecl_emit_inherent_protos(void *self, int prog) {
+static int backend_emit_Emitter_backend_emit_EmitDecl_emit_inherent_protos(void *self, int u) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int n;
-    int m;
-    int k;
-    int si;
-    int is_static;
-    int adi;
-    const char * tagp;
-    (void)(_self);
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        if (_self->arena->nodes[n].kind != N_IMPL) {
+    int nr = backend_lir_lmod_plan_row_count();
+    int r;
+    for (r = 0; r < nr; r++) {
+        if (backend_lir_lmod_plan_row_kind(r) != LPS_INPROTO) {
             continue;
         }
-        if (_self->arena->nodes[n].text2[0]) {
+        if (backend_lir_lmod_plan_row_unit(r) != u) {
             continue;
         }
-        si = _self->arena->nodes[n].aux;
-        if (si == (-1)) {
-            continue;
-        }
-        if (si <= (-2)) {
-            struct frontend_sym_Adt * adts;
-            int adts_n;
-            adi = ((-2) - si);
-            adts = frontend_sym_ct_adts((&adts_n));
-            if (((!adts) || (adi >= adts_n))) {
-                continue;
-            }
-            if ((!adts[adi].is_pub)) {
-                continue;
-            }
-            tagp = adts[adi].full;
-        }
-        else {
-            if ((!_self->__backend_emit_emitdecl_vptr->decl_is_pub(_self, N_STRUCT, _self->sym->structs[si].name))) {
-                continue;
-            }
-            tagp = _self->sym->structs[si].name;
-        }
-        for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
-            const char * suf;
-            if (_self->arena->nodes[m].d != 1) {
-                continue;
-            }
-            is_static = _self->arena->nodes[m].c;
-            suf = backend_emit_emit_overload_suffix(_self, n, m);
-            if ((!suf)) {
-                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
-            }
-            fprintf(_self->out, "%s %s_%s%s(", (_self->arena->nodes[m].text[0] ? _self->arena->nodes[m].text : "void"), tagp, _self->arena->nodes[m].text2, suf);
-            if ((!is_static)) {
-                fprintf(_self->out, "struct %s *", tagp);
-            }
-            for (k = _self->arena->nodes[m].a; k > 0; k = _self->arena->nodes[k].next) {
-                if (((!is_static) || (k != _self->arena->nodes[m].a))) {
-                    fputs(", ", _self->out);
-                }
-                if (((_self->arena->nodes[k].aux == 2) || (_self->arena->nodes[k].aux == 3))) {
-                    const char * pbuf;
-                    pbuf = tool_sh_ct_scratch_fmt("%s *", _self->arena->nodes[k].text);
-                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
-                        return (-1);
-                    }
-                }
-                else {
-                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
-                        return (-1);
-                    }
-                }
-            }
-            fputs(");\n", _self->out);
+        if (emit_inherent_proto_one(_self, backend_lir_lmod_plan_row_node(r)) != 0) {
+            return (-1);
         }
     }
     return 0;
@@ -2499,6 +2442,74 @@ int backend_emit_type_layout_closure(struct backend_emit_Emitter * self, const c
     ii = backend_emit_type_inst_index(type);
     if (ii >= 0) {
         return backend_emit_inst_layout_closure(self, ii, depth);
+    }
+    return 0;
+}
+static int emit_inherent_proto_one(struct backend_emit_Emitter * self, int n) {
+    int m;
+    int k;
+    int si;
+    int is_static;
+    int adi;
+    const char * tagp;
+    if (((n < 0) || (n >= self->arena->nnode))) {
+        return 0;
+    }
+    if (self->arena->nodes[n].kind != N_IMPL) {
+        return 0;
+    }
+    si = self->arena->nodes[n].aux;
+    if (si == (-1)) {
+        return 0;
+    }
+    if (si <= (-2)) {
+        struct frontend_sym_Adt * adts;
+        int adts_n;
+        adi = ((-2) - si);
+        adts = frontend_sym_ct_adts((&adts_n));
+        if ((((!adts) || (adi < 0)) || (adi >= adts_n))) {
+            return 0;
+        }
+        tagp = adts[adi].full;
+    }
+    else {
+        if (((si < 0) || (si >= self->sym->nstructs))) {
+            return 0;
+        }
+        tagp = self->sym->structs[si].name;
+    }
+    for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+        const char * suf;
+        if (self->arena->nodes[m].d != 1) {
+            continue;
+        }
+        is_static = self->arena->nodes[m].c;
+        suf = backend_emit_emit_overload_suffix(self, n, m);
+        if ((!suf)) {
+            return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+        }
+        fprintf(self->out, "%s %s_%s%s(", (self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void"), tagp, self->arena->nodes[m].text2, suf);
+        if ((!is_static)) {
+            fprintf(self->out, "struct %s *", tagp);
+        }
+        for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
+            if (((!is_static) || (k != self->arena->nodes[m].a))) {
+                fputs(", ", self->out);
+            }
+            if (((self->arena->nodes[k].aux == 2) || (self->arena->nodes[k].aux == 3))) {
+                const char * pbuf;
+                pbuf = tool_sh_ct_scratch_fmt("%s *", self->arena->nodes[k].text);
+                if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, pbuf, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
+                    return (-1);
+                }
+            }
+            else {
+                if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, self->arena->nodes[k].text, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
+                    return (-1);
+                }
+            }
+        }
+        fputs(");\n", self->out);
     }
     return 0;
 }

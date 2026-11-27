@@ -1110,7 +1110,8 @@ static int lw_hoist_scan_body(struct Lower *w, int teid, int top)
     }
     if (w->hoist_temps
         && t->op == 2 && (t->kind == TK_CALL || t->kind == TK_INTRINSIC)
-        && t->target_kind != RT_RECIPE && t->aux != 6 && t->nkids >= 1) {
+        && t->target_kind != RT_RECIPE && t->aux != 6 && t->aux != 11
+        && t->nkids >= 1) {
         int chain[8];
         int nc = 0, lvl = teid;
         for (;;) {
@@ -2386,6 +2387,45 @@ static int lw_own_kind(struct Lower *w, const char *sp)
     buf[n] = 0;
     if (!lw_adt_row(w, buf)) return 0;
     return lw_adt_owns(w, buf, 0) ? 3 : 0;
+}
+
+/* 1 when the owning-handle writer (`sb_assign`) reaches the assignment and
+   wraps it in `{ … }`, i.e. the target type owns and the target is a tracked
+   local or an arrow field of a *plain* struct. Two shapes stay unwrapped in the
+   writer and therefore must stay unwrapped here:
+     - a deref target (`(*p) = …`), whose type spelling the writer does not
+       resolve;
+     - a field reached through a generic instance row (`Box<String>.value`),
+       whose template field is a type parameter the container glue owns. */
+static int lw_assign_brace(struct Lower *w, int lhs_te)
+{
+    struct ct_texpr *lt;
+    const char *ltsp;
+    const char *bt;
+    char base[512];
+    int n;
+
+    if (lhs_te <= 0 || lhs_te > w->m->nexprs) return 0;
+    lt = &w->m->exprs[lhs_te - 1];
+    if (lt->type <= 0) return 0;
+    ltsp = backend::tir::tmod_cspell(w->m, lt->type);
+    if (lw_own_kind(w, ltsp) == 0) return 0;
+    if (lt->kind == TK_NAME_LOCAL) return 1;
+    if (lt->kind != TK_FIELD || lt->op != 2 || lt->nkids < 1) return 0;
+    if (lt->kids[0] <= 0 || lt->kids[0] > w->m->nexprs) return 0;
+    if (w->m->exprs[lt->kids[0] - 1].type <= 0) return 0;
+    bt = backend::tir::tmod_cspell(w->m, w->m->exprs[lt->kids[0] - 1].type);
+    if (!bt) return 0;
+    if (strncmp(bt, "struct ", 7) == 0) bt += 7;
+    else if (strncmp(bt, "union ", 6) == 0) bt += 6;
+    else if (strncmp(bt, "enum ", 5) == 0) bt += 5;
+    n = (int)strlen(bt);
+    while (n > 0 && (bt[n - 1] == ' ' || bt[n - 1] == '*')) n--;
+    if (n <= 0 || n >= (int)sizeof(base)) return 0;
+    memcpy(base, bt, (size_t)n);
+    base[n] = 0;
+    if (frontend::sym::ct_inst_find(base) >= 0) return 0;
+    return 1;
 }
 
 /* The release spelling of an owning kind: `String` / `U16String` / ADT tag. */
@@ -3780,6 +3820,13 @@ static int lw_one_stmt(struct Lower *w, int tsid, int block, int *out)
                 sid = lmod_new_stmt(w->l, LS_ASSIGN, s->span.file, s->span.line, s->span.col);
                 if (sid <= 0) { w->hard = 1; return 0; }
                 w->l->stmts[sid - 1].aux = t->op;
+                /* D-013 §3 / sb_assign: an owning-handle write is always
+                   wrapped in `{ … }`, even when the old value is borrowed and
+                   nothing is retained or released. The writer's brace is part
+                   of the shape, so reproduce it here. */
+                if (t->op == 0 && t->nkids >= 2
+                    && lw_assign_brace(w, t->kids[0]) != 0)
+                    w->l->stmts[sid - 1].brace = 1;
                 /* D-013 §3: rebinding a tracked owning local holds the old
                    value, retains (or borrows) the new one, then releases the
                    old -- the same shape the emitter's `sb_assign` writes. */
@@ -5832,10 +5879,12 @@ static int lw_pw_stmt(struct Lower *w, int sid, int ind)
                 return 0;
             }
             lw_ind(ind);
+            if (s->brace) fputs("{ ", g_lir_out);
             if (lw_pw_expr(w, s->expr, PW_EXPR) != 0) return -1;
             fputs(lw_assign_op(s->aux), g_lir_out);
             if (lw_pw_expr(w, s->rhs, PW_EXPR) != 0) return -1;
-            fputs(";\n", g_lir_out);
+            if (s->brace) fputs("; }\n", g_lir_out);
+            else fputs(";\n", g_lir_out);
             return 0;
         case LS_EXPR:
             lw_ind(ind);

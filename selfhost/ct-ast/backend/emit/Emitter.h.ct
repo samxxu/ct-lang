@@ -62,6 +62,17 @@ import backend::lir::LModule::LModulePlan as LModulePlan;
 #define LPS_FUNC        6
 #define LPS_DROP        7
 #define LPS_RAW         8
+#define LPS_INC         9
+#define LPS_PROTO       10
+#define LPS_INPROTO     11
+#define LPS_INST        12
+#define LPS_INSTPROTO   13
+#define LPS_INSTHELP    14
+#define LPS_IMPL        15
+#define LPS_BOXPROTO    16
+#define LPS_BOXHELP     17
+#define LPS_ADTLIFE     18
+#define LPS_STRPROTO    19
 /* S8 shell rows: the row table is internal to LModule, so the shell reads it
    through getters. */
 
@@ -941,7 +952,6 @@ impl EmitOps for Emitter {
     int emit_program(int prog)
     {
         if (self->no_write) return 0;
-        int n, i;
         (void)self;
 
         self->errmsg = "";
@@ -956,27 +966,16 @@ impl EmitOps for Emitter {
         self->gprefix = self->sym->ns;
         {
             int nr = backend::lir::lmod_plan_row_count(), r;
-            if (nr > 0) {
-                for (r = 0; r < nr; r++) {
-                    const char *t;
-                    if (backend::lir::lmod_plan_row_kind(r) != LPS_PP
-                        || backend::lir::lmod_plan_row_unit(r) != -1) continue;
-                    t = backend::lir::lmod_plan_row_text(r);
-                    if ((self->io_mask & 1)
-                        && strcmp(t, "#include <stdio.h>") == 0) continue;
-                    if ((self->io_mask & 2)
-                        && strcmp(t, "#include <wchar.h>") == 0) continue;
-                    fprintf(self->out, "%s\n", t);
-                }
-            } else {
-                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-                    if (self->arena->nodes[n].kind == N_PP) {
-                    if ((self->io_mask & 1)
-                        && strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
-                    if ((self->io_mask & 2)
-                        && strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
-                    fprintf(self->out, "%s\n", self->arena->nodes[n].text);
-                }
+            for (r = 0; r < nr; r++) {
+                const char *t;
+                if (backend::lir::lmod_plan_row_kind(r) != LPS_PP
+                    || backend::lir::lmod_plan_row_unit(r) != -1) continue;
+                t = backend::lir::lmod_plan_row_text(r);
+                if ((self->io_mask & 1)
+                    && strcmp(t, "#include <stdio.h>") == 0) continue;
+                if ((self->io_mask & 2)
+                    && strcmp(t, "#include <wchar.h>") == 0) continue;
+                fprintf(self->out, "%s\n", t);
             }
         }
         if (self->alloc_map && self->alloc_map[0]) {
@@ -1051,25 +1050,12 @@ impl EmitOps for Emitter {
            and C needs that declaration in scope (D-6). */
         {
             int nr = backend::lir::lmod_plan_row_count(), r;
-            if (nr > 0) {
-                for (r = 0; r < nr; r++) {
-                    if (backend::lir::lmod_plan_row_unit(r) != -1) continue;
-                    if (backend::lir::lmod_plan_row_kind(r) == LPS_RAW) {
-                        if (emit_raw_text(self, backend::lir::lmod_plan_row_node(r)) != 0) return -1;
-                    } else if (backend::lir::lmod_plan_row_kind(r) == LPS_TYPE) {
-                        if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0) return -1;
-                    }
-                }
-            } else {
-                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-                    if (self->arena->nodes[n].kind == N_RAW_TEXT) {
-                        if (emit_raw_text(self, n) != 0) return -1;
-                        continue;
-                    }
-                    if (self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
-                        || self->arena->nodes[n].kind == N_ENUM || self->arena->nodes[n].kind == N_UNION) {
-                        if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-                    }
+            for (r = 0; r < nr; r++) {
+                if (backend::lir::lmod_plan_row_unit(r) != -1) continue;
+                if (backend::lir::lmod_plan_row_kind(r) == LPS_RAW) {
+                    if (emit_raw_text(self, backend::lir::lmod_plan_row_node(r)) != 0) return -1;
+                } else if (backend::lir::lmod_plan_row_kind(r) == LPS_TYPE) {
+                    if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0) return -1;
                 }
             }
         }
@@ -1080,13 +1066,12 @@ impl EmitOps for Emitter {
            protocol. Declare that protocol here; the four handles are already
            defined by the type pass above. (The same prototypes reappear with
            the unit bodies, exactly as the pre-SH-120 output did.) */
-        if (self->sym->find_struct("String") >= 0) {
-            fputs("struct String String_retain(struct String *);\n", self->out);
-            fputs("void String_release(struct String *);\n", self->out);
-        }
-        if (self->sym->find_struct("U16String") >= 0) {
-            fputs("struct U16String U16String_retain(struct U16String *);\n", self->out);
-            fputs("void U16String_release(struct U16String *);\n", self->out);
+        {
+            int nr = backend::lir::lmod_plan_row_count(), r;
+            for (r = 0; r < nr; r++)
+                if (backend::lir::lmod_plan_row_kind(r) == LPS_STRPROTO
+                    && backend::lir::lmod_plan_row_unit(r) == -1)
+                    fputs(backend::lir::lmod_plan_row_text(r), self->out);
         }
 
         /* Phase 29: compile mode is one unit, so every instance is its own. */
@@ -1102,41 +1087,35 @@ impl EmitOps for Emitter {
 
         /* Prototypes come before the impl bodies: an impl method may call a
            free function declared earlier in the unit, and C needs the prototype
-           in scope at the call site. */
-        for (i = 0; i < self->sym->nfunc; i++)
-            if (self->emit_proto(i) != 0) return -1;
-        if (self->emit_inherent_protos(prog) != 0) return -1;
+           in scope at the call site. The module layer selected the rows. */
+        {
+            int nr = backend::lir::lmod_plan_row_count(), r;
+            for (r = 0; r < nr; r++) {
+                if (backend::lir::lmod_plan_row_kind(r) != LPS_PROTO
+                    || backend::lir::lmod_plan_row_unit(r) != -1
+                    || backend::lir::lmod_plan_row_hdr(r) != 0) continue;
+                if (self->emit_proto(backend::lir::lmod_plan_row_node(r)) != 0)
+                    return -1;
+            }
+        }
+        if (self->emit_inherent_protos(-1) != 0) return -1;
 
         /* A file-scope `_Static_assert` lands here: after every type, so an
            assertion about a struct or enum declared above it still resolves. */
         {
             int nr = backend::lir::lmod_plan_row_count(), r;
-            if (nr > 0) {
-                for (r = 0; r < nr; r++)
-                    if (backend::lir::lmod_plan_row_kind(r) == LPS_SASSERT && backend::lir::lmod_plan_row_unit(r) == -1)
-                        if (self->emit_node(backend::lir::lmod_plan_row_node(r), 0) != 0) return -1;
-            } else {
-                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-                    if (self->arena->nodes[n].kind == N_SASSERT)
-                        if (self->emit_node(n, 0) != 0) return -1;
-            }
+            for (r = 0; r < nr; r++)
+                if (backend::lir::lmod_plan_row_kind(r) == LPS_SASSERT && backend::lir::lmod_plan_row_unit(r) == -1)
+                    if (self->emit_node(backend::lir::lmod_plan_row_node(r), 0) != 0) return -1;
         }
 
         {
             int nr = backend::lir::lmod_plan_row_count(), r;
-            if (nr > 0) {
-                for (r = 0; r < nr; r++)
-                    if (backend::lir::lmod_plan_row_kind(r) == LPS_GLOBAL && backend::lir::lmod_plan_row_unit(r) == -1
-                        && !(backend::lir::lmod_plan_row_aux(r) & 2))
-                        if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
-                            return -1;
-            } else {
-                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-                    /* an `extern` global is a declaration only: it adds no definition */
-                    if (self->arena->nodes[n].kind != N_GLOBAL || self->arena->nodes[n].aux == 2) continue;
-                    if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-                }
-            }
+            for (r = 0; r < nr; r++)
+                if (backend::lir::lmod_plan_row_kind(r) == LPS_GLOBAL && backend::lir::lmod_plan_row_unit(r) == -1
+                    && !(backend::lir::lmod_plan_row_aux(r) & 2))
+                    if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
+                        return -1;
         }
 
         if (self->emit_impls(prog) != 0) return -1;
@@ -1145,28 +1124,16 @@ impl EmitOps for Emitter {
 
         {
             int nr = backend::lir::lmod_plan_row_count(), r;
-            if (nr > 0) {
-                for (r = 0; r < nr; r++) {
-                    int fn;
-                    if (backend::lir::lmod_plan_row_kind(r) != LPS_FUNC || backend::lir::lmod_plan_row_unit(r) != -1) continue;
-                    /* a generic template has no C body of its own (Phase 26) */
-                    if (backend::lir::lmod_plan_row_aux(r) & 1) continue;
-                    fn = backend::lir::lmod_plan_row_node(r);
-                    if (emit_closures(self, self->arena->nodes[fn].text2,
-                                      self->arena->nodes[fn].line) != 0)
-                        return -1;
-                    if (self->emit_node(fn, 0) != 0) return -1;
-                }
-            } else {
-                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-                    if (self->arena->nodes[n].kind == N_FUNC) {
-                        int cur = self->sym->find_func(self->arena->nodes[n].text2);
-                        if (cur >= 0 && self->sym->funcs[cur].ntparams > 0) continue;
-                        if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
-                            return -1;
-                        if (self->emit_node(n, 0) != 0) return -1;
-                    }
-                }
+            for (r = 0; r < nr; r++) {
+                int fn;
+                if (backend::lir::lmod_plan_row_kind(r) != LPS_FUNC || backend::lir::lmod_plan_row_unit(r) != -1) continue;
+                /* a generic template has no C body of its own (Phase 26) */
+                if (backend::lir::lmod_plan_row_aux(r) & 1) continue;
+                fn = backend::lir::lmod_plan_row_node(r);
+                if (emit_closures(self, self->arena->nodes[fn].text2,
+                                  self->arena->nodes[fn].line) != 0)
+                    return -1;
+                if (self->emit_node(fn, 0) != 0) return -1;
             }
         }
         if (emit_generic_defs(self, -1) != 0) return -1;
