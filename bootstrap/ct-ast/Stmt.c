@@ -2014,7 +2014,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                                 return (-1);
                             }
                         }
-                        if ((_self->ex->types_mode && (*_self->ex->types_mode))) {
+                        if (((_self->ex->types_mode && (*_self->ex->types_mode)) || tool_diag_ct_type_class_assign())) {
                             int is_zero = 0;
                             const char * out = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, e, (&is_zero));
                             if (out) {
@@ -2475,7 +2475,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                                 return (-1);
                             }
                         }
-                        if (((_self->ex->types_mode && (*_self->ex->types_mode)) && tt[0])) {
+                        if ((((_self->ex->types_mode && (*_self->ex->types_mode)) || tool_diag_ct_type_class_assign()) && tt[0])) {
                             int is_zero = 0;
                             const char * out = _self->ex->__frontend_parse_exprtypes_vptr->chk_type_text(_self->ex, rhs, (&is_zero));
                             if (out) {

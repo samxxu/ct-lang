@@ -1203,7 +1203,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 if (((!rty) || (!rty[0]))) {
                     return tool_diag_ct_sem_error(dl, dc, "'$' needs a non-void result; this hop has none (PH-76)", _self->sup->mem->path);
                 }
-                if ((_self->types_mode && (*_self->types_mode))) {
+                if (((_self->types_mode && (*_self->types_mode)) || tool_diag_ct_type_class_assign())) {
                     _self->chk_line = dl;
                     _self->chk_col = dc;
                     _self->chk_arg = 0;

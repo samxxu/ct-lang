@@ -152,6 +152,7 @@ struct tool_diag_DiagStore_vtbl {
     int (*nwarn)(void *);
     void (*set_strict)(void *, int);
     void (*set_types_level)(void *, int);
+    void (*set_types_class)(void *, int, int);
     void (*set_codes)(void *, int);
     int (*type_fail)(void *, int, int, const char *, const char *);
     void (*set_leaks_error)(void *, int);
@@ -186,6 +187,8 @@ struct tool_diag_Diag {
     int sig_errs;
     int leaks_error;
     int types_level;
+    int types_class_mask;
+    int types_class_level;
     int codes;
     const struct tool_diag_DiagStore_vtbl *__tool_diag_diagstore_vptr;
 };
@@ -217,6 +220,11 @@ int tool_diag_ct_diag_leaks_failed(void);
 int tool_diag_ct_cycle_warn(int, int, const char *, const char *);
 void tool_diag_ct_diag_set_strict(int);
 void tool_diag_ct_diag_set_types_level(int);
+void tool_diag_ct_diag_set_types_class(int, int);
+int tool_diag_ct_type_class_assign(void);
+int tool_diag_ct_type_class_return(void);
+int tool_diag_ct_type_class_container(void);
+int tool_diag_ct_type_class_warn(int, int, const char *, const char *, const char *);
 void tool_diag_ct_diag_set_codes(int);
 int tool_diag_ct_type_fail(int, int, const char *, const char *);
 void tool_diag_ct_diag_reset(void);
@@ -928,6 +936,12 @@ static void tool_diag_Diag_tool_diag_DiagStore_set_types_level(void *self, int o
     _self->types_level = on;
 }
 
+static void tool_diag_Diag_tool_diag_DiagStore_set_types_class(void *self, int mask, int level) {
+    struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
+    _self->types_class_mask = mask;
+    _self->types_class_level = level;
+}
+
 static void tool_diag_Diag_tool_diag_DiagStore_set_codes(void *self, int on) {
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     _self->codes = (on ? 1 : 0);
@@ -979,6 +993,7 @@ static const struct tool_diag_DiagStore_vtbl tool_diag_Diag_tool_diag_DiagStore_
     .nsem = tool_diag_Diag_tool_diag_DiagStore_nsem,
     .nwarn = tool_diag_Diag_tool_diag_DiagStore_nwarn,
     .set_types_level = tool_diag_Diag_tool_diag_DiagStore_set_types_level,
+    .set_types_class = tool_diag_Diag_tool_diag_DiagStore_set_types_class,
     .set_codes = tool_diag_Diag_tool_diag_DiagStore_set_codes,
     .set_strict = tool_diag_Diag_tool_diag_DiagStore_set_strict,
     .set_leaks_error = tool_diag_Diag_tool_diag_DiagStore_set_leaks_error,
@@ -1236,6 +1251,24 @@ void tool_diag_ct_diag_set_strict(int on) {
 }
 void tool_diag_ct_diag_set_types_level(int on) {
     tool_diag_g_diag.__tool_diag_diagstore_vptr->set_types_level(&tool_diag_g_diag, on);
+}
+void tool_diag_ct_diag_set_types_class(int mask, int level) {
+    tool_diag_g_diag.__tool_diag_diagstore_vptr->set_types_class(&tool_diag_g_diag, mask, level);
+}
+int tool_diag_ct_type_class_assign(void) {
+    return ((tool_diag_g_diag.types_class_level > 0) && ((tool_diag_g_diag.types_class_mask & 1) != 0));
+}
+int tool_diag_ct_type_class_return(void) {
+    return ((tool_diag_g_diag.types_class_level > 0) && ((tool_diag_g_diag.types_class_mask & 2) != 0));
+}
+int tool_diag_ct_type_class_container(void) {
+    return ((tool_diag_g_diag.types_class_level > 0) && ((tool_diag_g_diag.types_class_mask & 4) != 0));
+}
+int tool_diag_ct_type_class_warn(int line, int col, const char * callee, const char * msg, const char * path) {
+    if (tool_diag_g_diag.types_class_level == 2) {
+        return tool_diag_g_diag.__tool_diag_diagstore_vptr->sem_error(&tool_diag_g_diag, line, col, msg, path);
+    }
+    return tool_diag_g_diag.__tool_diag_diagstore_vptr->record_type_warn(&tool_diag_g_diag, line, col, callee, msg, path);
 }
 void tool_diag_ct_diag_set_codes(int on) {
     tool_diag_g_diag.__tool_diag_diagstore_vptr->set_codes(&tool_diag_g_diag, on);

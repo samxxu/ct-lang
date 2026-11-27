@@ -349,7 +349,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
     int aline;
     int acol;
     size_t bl;
-    if (((!_self->types_mode) || (!(*_self->types_mode)))) {
+    if (((!(_self->types_mode && (*_self->types_mode))) && (!tool_diag_ct_type_class_assign()))) {
         return 0;
     }
     if (((!type) || (!raw))) {
@@ -982,7 +982,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_assignable(void *sel
     if (((diag == 7) || (diag == 8))) {
         return tool_diag_ct_sem_error(_self->chk_line, _self->chk_col, msg, _self->sup->mem->path);
     }
-    return tool_diag_ct_type_warn(_self->chk_line, _self->chk_col, "", msg, _self->sup->mem->path);
+    return tool_diag_ct_type_class_warn(_self->chk_line, _self->chk_col, "", msg, _self->sup->mem->path);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprTypes_slice_view_from_array(void *self, int n) {

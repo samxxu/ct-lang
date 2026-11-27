@@ -310,6 +310,7 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     _self->m->check_mode = 0;
     _self->p->types_mode = 0;
     _self->m->types_level = 0;
+    tool_diag_ct_diag_set_types_class(0, 0);
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--types") == 0) {
             if ((!((argc > 1) && (strcmp(argv[1], "check") == 0)))) {
@@ -322,8 +323,8 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
     }
     for (i = 1; i < argc; i++) {
         if (strncmp(argv[i], "--check-level", 13) == 0) {
-            if ((!((argc > 1) && (strcmp(argv[1], "build") == 0)))) {
-                fprintf(stderr, "ctc: --check-level is only valid with 'ct build'\n");
+            if (((argc > 1) && (strcmp(argv[1], "check") == 0))) {
+                fprintf(stderr, "ctc: --check-level is only valid with 'ct build' or 'ct compile'\n");
                 return 1;
             }
         }
@@ -482,13 +483,16 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         argv++;
         argc--;
     }
+    if (_self->m->check_mode == 0) {
+        tool_diag_ct_diag_set_types_class(1, 2);
+    }
     _self->m->build_mode = 0;
     _self->m->line_mode = 0;
     _self->m->line_force = (-1);
     _self->m->have_map = 0;
     for (i = 1; i < argc; i++) {
         if (((strcmp(argv[i], "-h") == 0) || (strcmp(argv[i], "--help") == 0))) {
-            printf("usage: %s <input.ct> [-o <output.c>] [--line|--no-line]\n""              [--emit-map <file|->] [--emit-model <file|->] [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n""       %s check <input.ct> [--types] [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n""       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>] [--locked]\n""                 [--emit-c] [--outdir <dir>] [--cc <path>]\n""                 [--cflags <s>] [--ldflags <s>]\n""                 [--line|--no-line] [--emit-map <file|->]\n""                 [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n""                 [--freestanding] [--alloc <m,f[,r,c]>] [--c-boundary=strict|allow]\n""                 [--show-io-headers]\n""       %s get <spec>[@<range>]\n""       %s install\n""       %s verify [--strict]\n""       %s migrate\n""       %s update\n""       %s pkg check <dir>\n", _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog);
+            printf("usage: %s <input.ct> [-o <output.c>] [--line|--no-line]\n""              [--emit-map <file|->] [--emit-model <file|->] [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n""              [--check-level=off|warn|error]\n""       %s check <input.ct> [--types] [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n""       %s build <input.ct>... [-o <exe>] [-I <dir>] [--ns-root <dir>] [--locked]\n""                 [--emit-c] [--outdir <dir>] [--cc <path>]\n""                 [--cflags <s>] [--ldflags <s>]\n""                 [--line|--no-line] [--emit-map <file|->]\n""                 [--diagnostics=text|json] [--diag-codes] [--std=c99|gnu99|c11]\n""                 [--freestanding] [--alloc <m,f[,r,c]>] [--c-boundary=strict|allow]\n""                 [--show-io-headers]\n""       %s get <spec>[@<range>]\n""       %s install\n""       %s verify [--strict]\n""       %s migrate\n""       %s update\n""       %s pkg check <dir>\n", _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog, _self->m->prog);
             return 0;
         }
         if (((strcmp(argv[i], "-v") == 0) || (strcmp(argv[i], "--version") == 0))) {
@@ -593,6 +597,40 @@ static int tool_driver_Driver_tool_driver_DriverOps_run(void *self, int argc, ch
         }
         if (strcmp(argv[i], "--types") == 0) {
             _self->p->types_mode = 1;
+            continue;
+        }
+        if (strncmp(argv[i], "--check-level", 13) == 0) {
+            const char * v;
+            int lv;
+            if (strcmp(argv[i], "--check-level") == 0) {
+                if ((i + 1) >= argc) {
+                    fprintf(stderr, "ctc: --check-level needs an argument\n");
+                    return 1;
+                }
+                i++;
+                v = argv[i];
+            }
+            else {
+                v = (argv[i] + 14);
+            }
+            if (strcmp(v, "off") == 0) {
+                lv = 0;
+            }
+            else {
+                if (strcmp(v, "warn") == 0) {
+                    lv = 1;
+                }
+                else {
+                    if (strcmp(v, "error") == 0) {
+                        lv = 2;
+                    }
+                    else {
+                        fprintf(stderr, "ctc: --check-level takes off, warn or error, not '%s'\n", v);
+                        return 1;
+                    }
+                }
+            }
+            tool_diag_ct_diag_set_types_class(1, lv);
             continue;
         }
         if (strcmp(argv[i], "--semantics") == 0) {
