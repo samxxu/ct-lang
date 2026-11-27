@@ -23,6 +23,7 @@
 #include "EmitInit.h"
 #include "EmitHeader.h"
 #include "EmitDecl.h"
+#include "EmitExpr.h"
 #include "LModule.h"
 #include "Vec.h"
 #include "Result.h"
@@ -505,17 +506,7 @@ static int * backend_emit_g_adt_layout_state;
 static int backend_emit_g_adt_layout_cap;
 static int * backend_emit_g_inst_layout_state;
 static int backend_emit_g_inst_layout_cap;
-static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emitheader_vptr = &backend_emit_Emitter_backend_emit_EmitHeader_vtable, .__backend_emit_emitdecl_vptr = &backend_emit_Emitter_backend_emit_EmitDecl_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable, .__backend_emit_emithoist_vptr = &backend_emit_Emitter_backend_emit_EmitHoist_vtable, .__backend_emit_emitinit_vptr = &backend_emit_Emitter_backend_emit_EmitInit_vtable };
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_indent(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int i;
-    (void)(_self);
-    for (i = 0; i < (n * 4); i++) {
-        fputc(' ', _self->out);
-    }
-    return 0;
-}
-
+static struct backend_emit_Emitter backend_emit_g_emit = { .__backend_emit_emitops_vptr = &backend_emit_Emitter_backend_emit_EmitOps_vtable, .__backend_emit_emitheader_vptr = &backend_emit_Emitter_backend_emit_EmitHeader_vtable, .__backend_emit_emitdecl_vptr = &backend_emit_Emitter_backend_emit_EmitDecl_vtable, .__backend_emit_emitexpr_vptr = &backend_emit_Emitter_backend_emit_EmitExpr_vtable, .__backend_emit_emittertryops_vptr = &backend_emit_Emitter_backend_emit_EmitterTryOps_vtable, .__backend_emit_emitinvariant_vptr = &backend_emit_Emitter_backend_emit_EmitInvariant_vtable, .__backend_emit_emithoist_vptr = &backend_emit_Emitter_backend_emit_EmitHoist_vtable, .__backend_emit_emitinit_vptr = &backend_emit_Emitter_backend_emit_EmitInit_vtable };
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_program(void *self, int prog) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     if (_self->no_write) {
@@ -717,12 +708,12 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_impls(void *self, int 
                 if (((_self->arena->nodes[k].aux == 2) || (_self->arena->nodes[k].aux == 3))) {
                     const char * pbuf;
                     pbuf = tool_sh_ct_scratch_fmt("%s *", _self->arena->nodes[k].text);
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
                         return (-1);
                     }
                 }
@@ -894,12 +885,12 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_impls(void *self, int 
                 if (((_self->arena->nodes[k].aux == 2) || (_self->arena->nodes[k].aux == 3))) {
                     const char * pbuf;
                     pbuf = tool_sh_ct_scratch_fmt("%s *", _self->arena->nodes[k].text);
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
                         return (-1);
                     }
                 }
@@ -1947,41 +1938,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_node(void *self, int n
     }
 }
 
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_type_name_dims(void *self, const char * type, const char * name, const char * dims) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    const char * star;
-    const char * sub;
-    (void)(_self);
-    sub = backend_emit_emit_gsub_type_text(_self, type);
-    if (sub) {
-        type = sub;
-    }
-    else {
-        if (strchr(type, '<')) {
-            char * ibuf = (char *)(malloc(TEXT_LIMIT));
-            if ((ibuf && (frontend_sym_ct_inst_resolve(type, ibuf, TEXT_LIMIT) == 0))) {
-                const char * pooled = runtime_text_ct_intern(ibuf);
-                if (pooled) {
-                    type = pooled;
-                }
-            }
-            free(ibuf);
-        }
-    }
-    star = strstr(type, "(*)");
-    if ((!star)) {
-        fprintf(_self->out, "%s %s%s", type, name, dims);
-        return 0;
-    }
-    fprintf(_self->out, "%.*s(*%s%s)%s", (int)((star - type)), type, name, dims, (star + 3));
-    return 0;
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_type_name(void *self, const char * type, const char * name) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    return _self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, type, name, "");
-}
-
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_inline(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int nk;
@@ -2246,97 +2202,6 @@ static int backend_emit_Emitter_backend_emit_EmitOps_emit_inline(void *self, int
     else {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "cannot inline this node");
     }
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_cond(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    const char * op;
-    (void)(_self);
-    if ((((_self->arena->nodes[n].kind == N_BIN) && (_self->arena->nodes[n].aux >= B_LT)) && (_self->arena->nodes[n].aux <= B_NE))) {
-        op = "<";
-        if (_self->arena->nodes[n].aux == B_GT) {
-            op = ">";
-        }
-        else {
-            if (_self->arena->nodes[n].aux == B_LE) {
-                op = "<=";
-            }
-            else {
-                if (_self->arena->nodes[n].aux == B_GE) {
-                    op = ">=";
-                }
-                else {
-                    if (_self->arena->nodes[n].aux == B_EQ) {
-                        op = "==";
-                    }
-                    else {
-                        if (_self->arena->nodes[n].aux == B_NE) {
-                            op = "!=";
-                        }
-                    }
-                }
-            }
-        }
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[n].a) != 0) {
-            return (-1);
-        }
-        fprintf(_self->out, " %s ", op);
-        return _self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[n].b);
-    }
-    return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_ref_arg(void *self, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int k;
-    if (n < 0) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "a ref/out argument is missing");
-    }
-    k = _self->arena->nodes[n].kind;
-    if (((((((k == N_MCALL) && ((_self->arena->nodes[n].aux == 9) || (_self->arena->nodes[n].aux == 10))) && (_self->arena->nodes[n].line > 0)) && (_self->arena->nodes[n].num > 0)) && ((strcmp(_self->arena->nodes[n].text2, "get") == 0) || (strcmp(_self->arena->nodes[n].text2, "at") == 0))) && ((strncmp(_self->arena->nodes[n].text, "struct Vec_", 11) == 0) || (strncmp(_self->arena->nodes[n].text, "Vec_", 4) == 0)))) {
-        _self->arena->nodes[n].text2 = runtime_text_ct_intern("at");
-        if ((!_self->arena->nodes[n].text2)) {
-            return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
-        }
-        return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
-    }
-    if ((((k == N_VAR) && _self->sym->self_mode) && (strcmp(_self->arena->nodes[n].text2, "self") == 0))) {
-        return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
-    }
-    fputs("&", _self->out);
-    return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
-}
-
-static int backend_emit_Emitter_backend_emit_EmitOps_emit_value_for(void *self, const char * want, int n) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    char * t = tool_sh_ct_scratch_alloc(TEXT_LIMIT);
-    int d = 0;
-    int vi;
-    if (((want && (strcmp(want, "struct __ct_slice") == 0)) && (n >= 0))) {
-        if (_self->arena->nodes[n].kind == N_VAR) {
-            vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-            if (((vi >= 0) && _self->sym->vars[vi].is_fnparam)) {
-                return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
-            }
-        }
-        if ((backend_emit_hoist_ctype(n, t, TEXT_LIMIT, (&d)) && (d == 1))) {
-            fputs("(struct __ct_slice){ (void *)(", _self->out);
-            if (_self->__backend_emit_emitops_vptr->emit_expr(_self, n) != 0) {
-                return (-1);
-            }
-            fputs("), (int)(sizeof(", _self->out);
-            if (_self->__backend_emit_emitops_vptr->emit_expr(_self, n) != 0) {
-                return (-1);
-            }
-            fputs(") / sizeof((", _self->out);
-            if (_self->__backend_emit_emitops_vptr->emit_expr(_self, n) != 0) {
-                return (-1);
-            }
-            fputs(")[0])) }", _self->out);
-            return 0;
-        }
-    }
-    return _self->__backend_emit_emitops_vptr->emit_expr(_self, n);
 }
 
 static int backend_emit_Emitter_backend_emit_EmitOps_emit_outconv(void *self, int n) {
@@ -2755,18 +2620,12 @@ static int backend_emit_Emitter_backend_emit_EmitOps_fail_from(void *self, int n
 }
 
 const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable = {
-    .emit_indent = backend_emit_Emitter_backend_emit_EmitOps_emit_indent,
     .emit_program = backend_emit_Emitter_backend_emit_EmitOps_emit_program,
     .emit_impls = backend_emit_Emitter_backend_emit_EmitOps_emit_impls,
     .emit_field = backend_emit_Emitter_backend_emit_EmitOps_emit_field,
     .emit_type_decl = backend_emit_Emitter_backend_emit_EmitOps_emit_type_decl,
     .emit_node = backend_emit_Emitter_backend_emit_EmitOps_emit_node,
-    .emit_type_name_dims = backend_emit_Emitter_backend_emit_EmitOps_emit_type_name_dims,
-    .emit_type_name = backend_emit_Emitter_backend_emit_EmitOps_emit_type_name,
     .emit_inline = backend_emit_Emitter_backend_emit_EmitOps_emit_inline,
-    .emit_cond = backend_emit_Emitter_backend_emit_EmitOps_emit_cond,
-    .emit_ref_arg = backend_emit_Emitter_backend_emit_EmitOps_emit_ref_arg,
-    .emit_value_for = backend_emit_Emitter_backend_emit_EmitOps_emit_value_for,
     .emit_outconv = backend_emit_Emitter_backend_emit_EmitOps_emit_outconv,
     .emit_expr = backend_emit_Emitter_backend_emit_EmitOps_emit_expr,
     .emit_unit = backend_emit_Emitter_backend_emit_EmitOps_emit_unit,
@@ -3281,7 +3140,7 @@ static int sb_release_from(struct backend_emit_Emitter * self, int base, int ski
         if ((!pfx)) {
             continue;
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         if (backend_emit_sb_life_needs_handle_guard(pfx)) {
             fprintf(self->out, "if (%s.h != 0) (void)%s_release(&%s);\n", backend_emit_g_sb.name[i], pfx, backend_emit_g_sb.name[i]);
         }
@@ -3334,7 +3193,7 @@ static int sb_ret_release(struct backend_emit_Emitter * self, int expr, int view
         if ((!pfx)) {
             continue;
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         if (backend_emit_sb_life_needs_handle_guard(pfx)) {
             fprintf(self->out, "if (%s.h != 0) (void)%s_release(&%s);\n", backend_emit_g_sb.name[i], pfx, backend_emit_g_sb.name[i]);
         }
@@ -3635,8 +3494,8 @@ static int sb_decl(struct backend_emit_Emitter * self, int n, int ind) {
     if (self->__backend_emit_emithoist_vptr->emit_hoists(self, ind) != 0) {
         return (-1);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
-    if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, tp, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
+    if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, tp, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
         return (-1);
     }
     if (self->arena->nodes[n].aux == 3) {
@@ -3755,7 +3614,7 @@ static int sb_assign(struct backend_emit_Emitter * self, int n, int ind) {
             release_old = 1;
         }
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("{ ", self->out);
     if (release_old) {
         fprintf(self->out, "%s __ct_sold%d = ", t, self->ntmp);
@@ -3843,7 +3702,7 @@ static int sb_retain_params(struct backend_emit_Emitter * self, int ind) {
         if ((!pfx)) {
             continue;
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fprintf(self->out, "%s = %s_retain(&%s);\n", backend_emit_g_sb.name[i], pfx, backend_emit_g_sb.name[i]);
     }
     return 0;
@@ -3879,12 +3738,12 @@ static int emit_default_method(struct backend_emit_Emitter * e, int si, const ch
             if (((e->arena->nodes[p].aux == 2) || (e->arena->nodes[p].aux == 3))) {
                 const char * pbuf;
                 pbuf = tool_sh_ct_scratch_fmt("%s *", e->arena->nodes[p].text);
-                if (e->__backend_emit_emitops_vptr->emit_type_name_dims(e, pbuf, e->arena->nodes[p].text2, e->arena->nodes[p].text3) != 0) {
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, pbuf, e->arena->nodes[p].text2, e->arena->nodes[p].text3) != 0) {
                     return (-1);
                 }
             }
             else {
-                if (e->__backend_emit_emitops_vptr->emit_type_name_dims(e, e->arena->nodes[p].text, e->arena->nodes[p].text2, e->arena->nodes[p].text3) != 0) {
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, e->arena->nodes[p].text, e->arena->nodes[p].text2, e->arena->nodes[p].text3) != 0) {
                     return (-1);
                 }
             }
@@ -3894,12 +3753,12 @@ static int emit_default_method(struct backend_emit_Emitter * e, int si, const ch
             if (((e->arena->nodes[p].aux == 2) || (e->arena->nodes[p].aux == 3))) {
                 const char * pbuf;
                 pbuf = tool_sh_ct_scratch_fmt("%s *", e->arena->nodes[p].text);
-                if (e->__backend_emit_emitops_vptr->emit_type_name_dims(e, pbuf, uname, e->arena->nodes[p].text3) != 0) {
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, pbuf, uname, e->arena->nodes[p].text3) != 0) {
                     return (-1);
                 }
             }
             else {
-                if (e->__backend_emit_emitops_vptr->emit_type_name_dims(e, e->arena->nodes[p].text, uname, e->arena->nodes[p].text3) != 0) {
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, e->arena->nodes[p].text, uname, e->arena->nodes[p].text3) != 0) {
                     return (-1);
                 }
             }
@@ -5855,7 +5714,7 @@ static int impl_emit_method(struct backend_emit_Emitter * self, int ki, int ii, 
         if (((!tname[0]) && (self->arena->nodes[m].d != 1))) {
             return 0;
         }
-        if (self->__backend_emit_emitops_vptr->emit_type_name(self, mret, cname) != 0) {
+        if (self->__backend_emit_emitexpr_vptr->emit_type_name(self, mret, cname) != 0) {
             return (-1);
         }
         if (statik) {
@@ -5866,7 +5725,7 @@ static int impl_emit_method(struct backend_emit_Emitter * self, int ki, int ii, 
         }
         for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
             fputs((statik ? ((k == self->arena->nodes[m].a) ? "" : ", ") : ", "), self->out);
-            if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, self->arena->nodes[k].text, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
+            if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, self->arena->nodes[k].text, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
                 return (-1);
             }
         }
@@ -5879,7 +5738,7 @@ static int impl_emit_method(struct backend_emit_Emitter * self, int ki, int ii, 
     if ((!exported)) {
         fputs("__attribute__((unused)) ", self->out);
     }
-    if (self->__backend_emit_emitops_vptr->emit_type_name(self, mret, cname) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_type_name(self, mret, cname) != 0) {
         return (-1);
     }
     if (statik) {
@@ -5893,12 +5752,12 @@ static int impl_emit_method(struct backend_emit_Emitter * self, int ki, int ii, 
         if (((self->arena->nodes[k].aux == 2) || (self->arena->nodes[k].aux == 3))) {
             const char * pbuf;
             pbuf = tool_sh_ct_scratch_fmt("%s *", self->arena->nodes[k].text);
-            if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, pbuf, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
+            if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, pbuf, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
                 return (-1);
             }
         }
         else {
-            if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, self->arena->nodes[k].text, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
+            if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, self->arena->nodes[k].text, self->arena->nodes[k].text2, self->arena->nodes[k].text3) != 0) {
                 return (-1);
             }
         }
@@ -6729,26 +6588,26 @@ static int emit_adt_layout_body(struct backend_emit_Emitter * self, int adi, int
     else {
         fprintf(self->out, "struct %s {\n", tag);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
     fputs("int tag;\n", self->out);
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
     fputs("union {\n", self->out);
     for (v = 0; v < adts[adi].nvariants; v++) {
         if (adts[adi].variants[v].nfields == 0) {
             continue;
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 2));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
         fputs("struct {\n", self->out);
         for (f = 0; f < adts[adi].variants[v].nfields; f++) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 3));
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 3));
             fprintf(self->out, "%s %s;\n", adts[adi].variants[v].fields[f].type, adts[adi].variants[v].fields[f].name);
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 2));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
         fprintf(self->out, "} %s;\n", adts[adi].variants[v].cname);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
     fputs("} u;\n", self->out);
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}", self->out);
     if (is_typedef) {
         fprintf(self->out, " %s", alias);
@@ -7275,7 +7134,7 @@ static int emit_match_arm_ext(struct backend_emit_Emitter * self, int arm, int i
     }
     level = ind;
     if (guard >= 0) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("if (", self->out);
         if (self->__backend_emit_emitops_vptr->emit_expr(self, guard) != 0) {
             return (-1);
@@ -7284,15 +7143,15 @@ static int emit_match_arm_ext(struct backend_emit_Emitter * self, int arm, int i
         level = (ind + 1);
     }
     if (set_matched) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, level);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, level);
         fprintf(self->out, "__ct_matched%d = 1;\n", k);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, level);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, level);
     if (self->__backend_emit_emitops_vptr->emit_node(self, b, level) != 0) {
         return (-1);
     }
     if (guard >= 0) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("}\n", self->out);
     }
     sb_release_from(self, save_sb, (-1), ind);
@@ -7302,7 +7161,7 @@ static int emit_match_arm_ext(struct backend_emit_Emitter * self, int arm, int i
         backend_emit_g_sb.nblk--;
     }
     sb_field_merge(self, backend_emit_g_sb.nblk, save_l);
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind - 1));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind - 1));
     fputs("}\n", self->out);
     return 0;
 }
@@ -7829,7 +7688,7 @@ static int em_expr_try(struct backend_emit_Emitter * self, int n, int nk) {
     h = self->__backend_emit_emittertryops_vptr->try_cleanup(self, n);
     while (h >= 0) {
         if (self->arena->nodes[h].kind == N_DEFER_RUN) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
         }
         if (self->__backend_emit_emitops_vptr->emit_node(self, h, 1) != 0) {
             return (-1);
@@ -7837,55 +7696,55 @@ static int em_expr_try(struct backend_emit_Emitter * self, int n, int nk) {
         h = self->arena->nodes[h].next;
     }
     if (strcmp(self->cur_ret, "void") == 0) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
         if (self->__backend_emit_emittertryops_vptr->try_release_payload(self, ety, qt, "err") != 0) {
             return (-1);
         }
         fputs("\n", self->out);
-        self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
         fprintf(self->out, "%s = (%s){0};\n", qt, opty);
-        self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
         fputs("return;\n", self->out);
     }
     else {
         if (ety[0]) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "%s __ct_e%d = %s.err;\n", ety, q, qt);
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "%s = (%s){0};\n", qt, opty);
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "return %s_err(__ct_e%d);\n", rtag, q);
         }
         else {
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "return %s_err(%s.err);\n", rtag, qt);
         }
     }
     fputs("}\n", self->out);
     if (self->try_discard) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
         if (self->__backend_emit_emittertryops_vptr->try_release_payload(self, vty, qt, "value") != 0) {
             return (-1);
         }
         fputs("\n", self->out);
-        self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
         fprintf(self->out, "%s = (%s){0};\n", qt, opty);
-        self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
         fputs("(void)0;\n", self->out);
     }
     else {
         if (vty[0]) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "%s __ct_v%d = %s.value;\n", vty, q, qt);
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "%s = (%s){0};\n", qt, opty);
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "__ct_v%d;\n", q);
         }
         else {
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "%s = (%s){0};\n", qt, opty);
-            self->__backend_emit_emitops_vptr->emit_indent(self, 1);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, 1);
             fprintf(self->out, "%s.value;\n", qt);
         }
     }
@@ -8492,13 +8351,13 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
             while (c2 >= 0) {
                 fputs(", ", self->out);
                 if ((((bm2 >= 0) && (ai < self->sym->traits[bt2].m[bm2].nparams)) && ((self->sym->traits[bt2].m[bm2].pann[ai] == 2) || (self->sym->traits[bt2].m[bm2].pann[ai] == 3)))) {
-                    if (self->__backend_emit_emitops_vptr->emit_ref_arg(self, c2) != 0) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_ref_arg(self, c2) != 0) {
                         return (-1);
                     }
                 }
                 else {
                     if (((bm2 >= 0) && (ai < self->sym->traits[bt2].m[bm2].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->traits[bt2].m[bm2].ptype[ai], c2) != 0) {
+                        if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->sym->traits[bt2].m[bm2].ptype[ai], c2) != 0) {
                             return (-1);
                         }
                     }
@@ -8568,7 +8427,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
             while (c2 >= 0) {
                 fputs(", ", self->out);
                 if (((has == 0) && ((pann[pai] == 2) || (pann[pai] == 3)))) {
-                    if (self->__backend_emit_emitops_vptr->emit_ref_arg(self, c2) != 0) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_ref_arg(self, c2) != 0) {
                         return (-1);
                     }
                 }
@@ -8630,7 +8489,7 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
                     fputs(", ", self->out);
                 }
                 if (((has == 0) && ((pann[pai] == 2) || (pann[pai] == 3)))) {
-                    if (self->__backend_emit_emitops_vptr->emit_ref_arg(self, c2) != 0) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_ref_arg(self, c2) != 0) {
                         return (-1);
                     }
                 }
@@ -8828,13 +8687,13 @@ static int em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk) {
             }
             else {
                 if ((((mm2 >= 0) && (ai2 < self->sym->traits[tm2].m[mm2].nparams)) && ((self->sym->traits[tm2].m[mm2].pann[ai2] == 2) || (self->sym->traits[tm2].m[mm2].pann[ai2] == 3)))) {
-                    if (self->__backend_emit_emitops_vptr->emit_ref_arg(self, c2) != 0) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_ref_arg(self, c2) != 0) {
                         return (-1);
                     }
                 }
                 else {
                     if (((mm2 >= 0) && (ai2 < self->sym->traits[tm2].m[mm2].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->traits[tm2].m[mm2].ptype[ai2], c2) != 0) {
+                        if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->sym->traits[tm2].m[mm2].ptype[ai2], c2) != 0) {
                             return (-1);
                         }
                     }
@@ -8944,13 +8803,13 @@ static int em_expr_call(struct backend_emit_Emitter * self, int n, int nk) {
             }
             else {
                 if ((((fi >= 0) && (ai < self->sym->funcs[fi].nparams)) && ((self->sym->funcs[fi].pann[ai] == 2) || (self->sym->funcs[fi].pann[ai] == 3)))) {
-                    if (self->__backend_emit_emitops_vptr->emit_ref_arg(self, c) != 0) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_ref_arg(self, c) != 0) {
                         return (-1);
                     }
                 }
                 else {
                     if (((fi >= 0) && (ai < self->sym->funcs[fi].nparams))) {
-                        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->sym->funcs[fi].ptype[ai], c) != 0) {
+                        if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->sym->funcs[fi].ptype[ai], c) != 0) {
                             return (-1);
                         }
                     }
@@ -9014,12 +8873,12 @@ static int em_node_func(struct backend_emit_Emitter * self, int n, int ind, int 
             if (((self->arena->nodes[c].aux == 2) || (self->arena->nodes[c].aux == 3))) {
                 const char * pbuf;
                 pbuf = tool_sh_ct_scratch_fmt("%s *", self->arena->nodes[c].text);
-                if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, pbuf, self->arena->nodes[c].text2, self->arena->nodes[c].text3) != 0) {
+                if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, pbuf, self->arena->nodes[c].text2, self->arena->nodes[c].text3) != 0) {
                     return (-1);
                 }
             }
             else {
-                if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, self->arena->nodes[c].text, self->arena->nodes[c].text2, self->arena->nodes[c].text3) != 0) {
+                if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, self->arena->nodes[c].text, self->arena->nodes[c].text2, self->arena->nodes[c].text3) != 0) {
                     return (-1);
                 }
             }
@@ -9149,7 +9008,7 @@ static int em_node_block(struct backend_emit_Emitter * self, int n, int ind, int
         sb_field_merge(self, backend_emit_g_sb.nblk, save_l);
     }
     self->nclvar = save_nclvar;
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}\n", self->out);
     return 0;
 }
@@ -9161,7 +9020,7 @@ static int em_node_matseq(struct backend_emit_Emitter * self, int n, int ind, in
     ind++;
     for (ms = self->arena->nodes[n].a; ms >= 0; ms = self->arena->nodes[ms].next) {
         last_ms = ms;
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[ms].a) != 0) {
             return (-1);
         }
@@ -9172,14 +9031,14 @@ static int em_node_matseq(struct backend_emit_Emitter * self, int n, int ind, in
         fputs(";\n", self->out);
     }
     if (((self->arena->nodes[n].b >= 0) && (!((last_ms >= 0) && (self->arena->nodes[last_ms].a == self->arena->nodes[n].b))))) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].b) != 0) {
             return (-1);
         }
         fputs(";\n", self->out);
     }
     ind--;
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}\n", self->out);
     return 0;
 }
@@ -9234,28 +9093,28 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
     if ((((self->arena->nodes[n].aux == 1) && (self->arena->nodes[n].a >= 0)) && self->arena->nodes[n].text[0])) {
         rtv = self->ntmp;
         self->ntmp++;
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fprintf(self->out, "%s __ct_ret%d = ", self->arena->nodes[n].text, rtv);
-        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->arena->nodes[n].text, self->arena->nodes[n].a) != 0) {
+        if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->arena->nodes[n].text, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
         fputs(";\n", self->out);
     }
     if (((sret >= 0) && (rtv < 0))) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fprintf(self->out, "%s __ct_sret%d = ", self->cur_ret, sret);
-        if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->cur_ret, self->arena->nodes[n].a) != 0) {
+        if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->cur_ret, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
         fputs(";\n", self->out);
         if (sretain) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fprintf(self->out, "__ct_sret%d = %s_retain(&__ct_sret%d);\n", sret, rpfx, sret);
         }
     }
     else {
         if ((sretain && (rtv >= 0))) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fprintf(self->out, "__ct_ret%d = %s_retain(&__ct_ret%d);\n", rtv, rpfx, rtv);
         }
     }
@@ -9273,20 +9132,20 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
             if (((self->freestanding && (*self->freestanding)) && (strcmp(self->alloc_m, "malloc") == 0))) {
                 return self->__backend_emit_emitops_vptr->fail_from(self, n, "boxing needs a heap allocator; pass --alloc <malloc-symbol>,<free-symbol>");
             }
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fprintf(self->out, "extern void *%s(__SIZE_TYPE__);\n", self->alloc_m);
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fprintf(self->out, "struct %s *__ct_box = (struct %s *)%s(sizeof *__ct_box);\n", self->arena->nodes[b].text2, self->arena->nodes[b].text2, self->alloc_m);
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fputs("*__ct_box = ", self->out);
             if (self->__backend_emit_emitops_vptr->emit_expr(self, v) != 0) {
                 return (-1);
             }
             fputs(";\n", self->out);
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fprintf(self->out, "return (struct %s_iface){ (void *)__ct_box, &%s_%s_vtable };\n", self->arena->nodes[b].text, self->arena->nodes[b].text2, self->arena->nodes[b].text);
             ind--;
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fputs("}\n", self->out);
             return 0;
         }
@@ -9294,7 +9153,7 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
     if (backend_emit_g_sb.n > 0) {
         sb_ret_release(self, self->arena->nodes[n].a, ((!srk) && backend_emit_sb_view_ret(self->cur_ret)), smove, ind);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     if (self->arena->nodes[n].a < 0) {
         fputs("return;\n", self->out);
         return 0;
@@ -9303,7 +9162,7 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
         fprintf(self->out, "return __ct_ret%d;\n", rtv);
         if (wrap) {
             ind--;
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fputs("}\n", self->out);
         }
         return 0;
@@ -9312,7 +9171,7 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
         fprintf(self->out, "return __ct_sret%d;\n", sret);
         if (wrap) {
             ind--;
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fputs("}\n", self->out);
         }
         return 0;
@@ -9321,19 +9180,19 @@ static int em_node_ret(struct backend_emit_Emitter * self, int n, int ind, int n
         fprintf(self->out, "return __ct_ret%d;\n", rtv);
         if (wrap) {
             ind--;
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fputs("}\n", self->out);
         }
         return 0;
     }
     fputs("return ", self->out);
-    if (self->__backend_emit_emitops_vptr->emit_value_for(self, self->cur_ret, self->arena->nodes[n].a) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->cur_ret, self->arena->nodes[n].a) != 0) {
         return (-1);
     }
     fputs(";\n", self->out);
     if (wrap) {
         ind--;
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("}\n", self->out);
     }
     return 0;
@@ -9353,7 +9212,7 @@ static int em_node_delete(struct backend_emit_Emitter * self, int n, int ind, in
         if (si < 0) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, "cannot resolve the borrowed type");
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("if (", self->out);
         if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
             return (-1);
@@ -9372,7 +9231,7 @@ static int em_node_delete(struct backend_emit_Emitter * self, int n, int ind, in
         fputs("}\n", self->out);
         return 0;
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     if (((si >= 0) && self->sym->structs[si].uses_drop)) {
         if ((!self->__backend_emit_emitdecl_vptr->drop_visible(self, si))) {
             const char * vmsg;
@@ -9436,7 +9295,7 @@ static int em_node_break(struct backend_emit_Emitter * self, int n, int ind, int
     if (sb_jump_release(self, ind, 0) != 0) {
         return (-1);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("break;\n", self->out);
     return 0;
 }
@@ -9451,7 +9310,7 @@ static int em_node_cont(struct backend_emit_Emitter * self, int n, int ind, int 
     if (sb_jump_release(self, ind, 1) != 0) {
         return (-1);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("continue;\n", self->out);
     return 0;
 }
@@ -9464,7 +9323,7 @@ static int em_node_empty(struct backend_emit_Emitter * self, int n, int ind, int
 }
 static int em_node_sassert(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("_Static_assert(", self->out);
     if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
         return (-1);
@@ -9477,7 +9336,7 @@ static int em_node_sassert(struct backend_emit_Emitter * self, int n, int ind, i
 }
 static int em_node_goto(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fprintf(self->out, "goto %s;\n", self->arena->nodes[n].text2);
     return 0;
 }
@@ -9485,9 +9344,9 @@ static int em_node_label(struct backend_emit_Emitter * self, int n, int ind, int
     (void)(nk);
     int c;
     (void)(c);
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fprintf(self->out, "%s:\n", self->arena->nodes[n].text2);
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
     fputs(";\n", self->out);
     for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next) {
         if (self->__backend_emit_emitops_vptr->emit_node(self, c, (ind + 1)) != 0) {
@@ -9511,7 +9370,7 @@ static int em_node_decls(struct backend_emit_Emitter * self, int n, int ind, int
             if (self->__backend_emit_emithoist_vptr->emit_hoists(self, ind) != 0) {
                 return (-1);
             }
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             if (self->__backend_emit_emitops_vptr->emit_inline(self, c) != 0) {
                 return (-1);
             }
@@ -9537,7 +9396,7 @@ static int em_node_decl(struct backend_emit_Emitter * self, int n, int ind, int 
         const char * recv;
         size_t ci;
         size_t cl;
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         if (self->__backend_emit_emitops_vptr->emit_inline(self, n) != 0) {
             return (-1);
         }
@@ -9552,12 +9411,12 @@ static int em_node_decl(struct backend_emit_Emitter * self, int n, int ind, int 
         if (((!cnt) || (!recv))) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, "out of memory");
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fprintf(self->out, "for (unsigned long __ct_i = 0; __ct_i < %s; __ct_i++) {\n", cnt);
         if (self->init->__backend_emit_initops_vptr->emit_vptr_stmts(self->init, recv, tp, (ind + 1)) != 0) {
             return (-1);
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("}\n", self->out);
         return 0;
     }
@@ -9568,7 +9427,7 @@ static int em_node_decl(struct backend_emit_Emitter * self, int n, int ind, int 
             base += 7;
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         if (self->__backend_emit_emitops_vptr->emit_inline(self, n) != 0) {
             return (-1);
         }
@@ -9577,7 +9436,7 @@ static int em_node_decl(struct backend_emit_Emitter * self, int n, int ind, int 
     }
     if (heap_ptr) {
         const char * recv;
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         if (self->__backend_emit_emitops_vptr->emit_inline(self, n) != 0) {
             return (-1);
         }
@@ -9624,7 +9483,7 @@ static int em_node_expression_statement(struct backend_emit_Emitter * self, int 
     if (((nk == N_EXPR) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_INTO))) {
         return 0;
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     if (self->__backend_emit_emitops_vptr->emit_inline(self, n) != 0) {
         return (-1);
     }
@@ -9639,9 +9498,9 @@ static int em_node_if(struct backend_emit_Emitter * self, int n, int ind, int nk
     if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("if (", self->out);
-    if (self->__backend_emit_emitops_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
         return (-1);
     }
     fputs(") ", self->out);
@@ -9654,7 +9513,7 @@ static int em_node_if(struct backend_emit_Emitter * self, int n, int ind, int nk
     sb_field_snap(self, (&thn));
     if (self->arena->nodes[n].c >= 0) {
         sb_field_restore(self, (&pre));
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("else ", self->out);
         backend_emit_g_sb.branch_hold = (backend_emit_g_sb.nblk + 1);
         if (self->__backend_emit_emitops_vptr->emit_node(self, self->arena->nodes[n].c, ind) != 0) {
@@ -9675,9 +9534,9 @@ static int em_node_while(struct backend_emit_Emitter * self, int n, int ind, int
     if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("while (", self->out);
-    if (self->__backend_emit_emitops_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
         return (-1);
     }
     fputs(") ", self->out);
@@ -9702,16 +9561,16 @@ static int em_node_for(struct backend_emit_Emitter * self, int n, int ind, int n
     }
     if ((((init >= 0) && (self->arena->nodes[init].kind == N_DECL)) && self->arena->nodes[init].aux)) {
         int q;
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("{\n", self->out);
         for (q = init; q >= 0; q = self->arena->nodes[q].next) {
             if (self->__backend_emit_emitops_vptr->emit_node(self, q, (ind + 1)) != 0) {
                 return (-1);
             }
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
         fputs("for (; ", self->out);
-        if (((self->arena->nodes[n].b >= 0) && (self->__backend_emit_emitops_vptr->emit_cond(self, self->arena->nodes[n].b) != 0))) {
+        if (((self->arena->nodes[n].b >= 0) && (self->__backend_emit_emitexpr_vptr->emit_cond(self, self->arena->nodes[n].b) != 0))) {
             return (-1);
         }
         fputs("; ", self->out);
@@ -9727,17 +9586,17 @@ static int em_node_for(struct backend_emit_Emitter * self, int n, int ind, int n
                 return (-1);
             }
         }
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fputs("}\n", self->out);
         return 0;
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("for (", self->out);
     if (((self->arena->nodes[n].a >= 0) && (self->__backend_emit_emitops_vptr->emit_inline(self, self->arena->nodes[n].a) != 0))) {
         return (-1);
     }
     fputs("; ", self->out);
-    if (((self->arena->nodes[n].b >= 0) && (self->__backend_emit_emitops_vptr->emit_cond(self, self->arena->nodes[n].b) != 0))) {
+    if (((self->arena->nodes[n].b >= 0) && (self->__backend_emit_emitexpr_vptr->emit_cond(self, self->arena->nodes[n].b) != 0))) {
         return (-1);
     }
     fputs("; ", self->out);
@@ -9757,7 +9616,7 @@ static int em_node_loop(struct backend_emit_Emitter * self, int n, int ind, int 
     int k;
     k = self->ntmp;
     self->ntmp++;
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     if (self->arena->nodes[n].b == (-1)) {
         fprintf(self->out, "for (int i = 0, __ct_loop_n_%d = (", k);
         if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
@@ -9794,31 +9653,31 @@ static int em_node_foreach(struct backend_emit_Emitter * self, int n, int ind, i
     fname = self->arena->nodes[n].text2;
     k = self->ntmp;
     self->ntmp++;
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("{\n", self->out);
     if (faux == 3) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
         fprintf(self->out, "struct __ct_slice *__ct_foreach_c_%d = &(", k);
         if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
         fputs(");\n", self->out);
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
         fprintf(self->out, "int __ct_foreach_n_%d = __ct_foreach_c_%d->len;\n", k, k);
     }
     else {
         if (((faux == 1) || (faux == 2))) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
             fprintf(self->out, "struct %s *__ct_foreach_c_%d = &(", fname, k);
             if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                 return (-1);
             }
             fputs(");\n", self->out);
-            self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
             fprintf(self->out, "int __ct_foreach_n_%d = %s_len(__ct_foreach_c_%d);\n", k, fname, k);
         }
         else {
-            self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
             fprintf(self->out, "int __ct_foreach_n_%d = (int)(sizeof(", k);
             if (self->__backend_emit_emitops_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                 return (-1);
@@ -9830,13 +9689,13 @@ static int em_node_foreach(struct backend_emit_Emitter * self, int n, int ind, i
             fputs(")[0]));\n", self->out);
         }
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
     fprintf(self->out, "for (int __ct_foreach_i_%d = 0; __ct_foreach_i_%d < __ct_foreach_n_%d; __ct_foreach_i_%d++) {\n", k, k, k, k);
     if (faux != 2) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 2));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
         fprintf(self->out, "int i = __ct_foreach_i_%d;\n", k);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 2));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
     if (faux == 1) {
         fprintf(self->out, "%s item = %s_get(__ct_foreach_c_%d, __ct_foreach_i_%d);\n", self->arena->nodes[n].text, fname, k, k);
     }
@@ -9857,10 +9716,10 @@ static int em_node_foreach(struct backend_emit_Emitter * self, int n, int ind, i
             }
         }
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 2));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
     fputs("(void)item;\n", self->out);
     if (faux != 2) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 2));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
         fputs("(void)i;\n", self->out);
     }
 {
@@ -9885,9 +9744,9 @@ static int em_node_foreach(struct backend_emit_Emitter * self, int n, int ind, i
         }
         sb_field_merge(self, backend_emit_g_sb.nblk, lbase);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
     fputs("}\n", self->out);
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}\n", self->out);
     return 0;
 }
@@ -10057,7 +9916,7 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
     self->ntmp++;
     ptr = (self->arena->nodes[n].aux & 1);
     self_deref = (((self->sym->self_mode && (self->arena->nodes[n].a >= 0)) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0));
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     if (nonadt) {
         fprintf(self->out, "%s%s__ct_match%d __attribute__((unused)) = (", self->arena->nodes[n].text2, (ptr ? " *" : " "), k);
     }
@@ -10080,21 +9939,21 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
     idx = 0;
     ext = match_extended(self, n);
     if (ext) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
         fprintf(self->out, "int __ct_matched%d __attribute__((unused)) = 0;\n", k);
         backend_emit_g_sb.branch_hold = 0;
     }
     for (arm = self->arena->nodes[n].b; arm >= 0; (arm = self->arena->nodes[arm].next, idx++)) {
         if (ext) {
             if (narm == 1) {
-                self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+                self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
                 fputs("{\n", self->out);
                 if (emit_match_arm_ext(self, arm, (ind + 1), k, 0) != 0) {
                     return (-1);
                 }
                 continue;
             }
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fputs("if (", self->out);
             fprintf(self->out, "!__ct_matched%d && (", k);
             if (((!nonadt) && ((int)(self->arena->nodes[arm].num) >= 0))) {
@@ -10116,7 +9975,7 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
             if ((self->arena->nodes[arm].aux & 1)) {
                 return self->__backend_emit_emitops_vptr->fail_from(self, arm, "a wildcard match arm must be the last arm");
             }
-            self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             fputs(((idx == 0) ? "if (" : "else if ("), self->out);
             if (((!nonadt) && ((int)(self->arena->nodes[arm].num) >= 0))) {
                 fprintf(self->out, "__ct_match%d%stag == %d", k, (ptr ? "->" : "."), (int)(self->arena->nodes[arm].num));
@@ -10131,11 +9990,11 @@ static int em_node_match(struct backend_emit_Emitter * self, int n, int ind, int
         }
         else {
             if (narm > 1) {
-                self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+                self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
                 fputs("else ", self->out);
             }
             else {
-                self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+                self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
             }
         }
         if (emit_match_arm(self, arm, ind, k, ptr) != 0) {
@@ -10149,9 +10008,9 @@ static int em_node_switch(struct backend_emit_Emitter * self, int n, int ind, in
     if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("switch (", self->out);
-    if (self->__backend_emit_emitops_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
         return (-1);
     }
     fputs(") ", self->out);
@@ -10165,7 +10024,7 @@ static int em_node_switch(struct backend_emit_Emitter * self, int n, int ind, in
 static int em_node_case(struct backend_emit_Emitter * self, int n, int ind, int nk) {
     (void)(nk);
     int c;
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     if (self->arena->nodes[n].aux) {
         fputs("default:", self->out);
     }
@@ -10214,7 +10073,7 @@ static int em_node_dowhile(struct backend_emit_Emitter * self, int n, int ind, i
     if (self->__backend_emit_emithoist_vptr->hoist_expr(self, self->arena->nodes[n].a, ind) != 0) {
         return (-1);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("do {\n", self->out);
     b = self->arena->nodes[n].b;
 {
@@ -10239,9 +10098,9 @@ static int em_node_dowhile(struct backend_emit_Emitter * self, int n, int ind, i
         }
         sb_field_merge(self, backend_emit_g_sb.nblk, lbase);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("} while (", self->out);
-    if (self->__backend_emit_emitops_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_cond(self, self->arena->nodes[n].a) != 0) {
         return (-1);
     }
     fputs(");\n", self->out);
@@ -10297,7 +10156,7 @@ static int em_decl_struct(struct backend_emit_Emitter * self, int n, int ind, in
             fputs("#ifdef CT_UNIT_PRIVATE\n", self->out);
         }
         for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
-            self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
             if (self->__backend_emit_emitops_vptr->emit_field(self, m, (ind + 1)) != 0) {
                 return (-1);
             }
@@ -10309,7 +10168,7 @@ static int em_decl_struct(struct backend_emit_Emitter * self, int n, int ind, in
                 if (((self->arena->nodes[m].kind == N_FIELD) && (!self->arena->nodes[m].d))) {
                     continue;
                 }
-                self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+                self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
                 if (self->__backend_emit_emitops_vptr->emit_field(self, m, (ind + 1)) != 0) {
                     return (-1);
                 }
@@ -10335,11 +10194,11 @@ static int em_decl_struct(struct backend_emit_Emitter * self, int n, int ind, in
                 low[i] = c;
             }
             low[i] = 0;
-            self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
             fprintf(self->out, "const struct %s_vtbl *__%s_vptr;\n", use, low);
         }
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}", self->out);
     if (self->arena->nodes[n].attr >= 0) {
         fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
@@ -10367,13 +10226,13 @@ static int em_decl_union(struct backend_emit_Emitter * self, int n, int ind, int
         fprintf(self->out, "union %s {\n", self->arena->nodes[n].text2);
     }
     for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
         if (self->__backend_emit_emitops_vptr->emit_field(self, m, (ind + 1)) != 0) {
             return (-1);
         }
         fputs(";\n", self->out);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}", self->out);
     if (self->arena->nodes[n].attr >= 0) {
         fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
@@ -10405,7 +10264,7 @@ static int em_decl_enum(struct backend_emit_Emitter * self, int n, int ind, int 
         fprintf(self->out, "enum %s {\n", self->arena->nodes[n].text2);
     }
     for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
         fputs(self->arena->nodes[m].text, self->out);
         if (self->arena->nodes[m].a >= 0) {
             fputs(" = ", self->out);
@@ -10418,7 +10277,7 @@ static int em_decl_enum(struct backend_emit_Emitter * self, int n, int ind, int 
         }
         fputs("\n", self->out);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}", self->out);
     if (self->arena->nodes[n].attr >= 0) {
         fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
@@ -10434,7 +10293,7 @@ static int em_decl_typedef(struct backend_emit_Emitter * self, int n, int ind, i
     (void)(with_semi);
     (void)(nk);
     fputs("typedef ", self->out);
-    if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, self->arena->nodes[n].text, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, self->arena->nodes[n].text, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
         return (-1);
     }
     if (self->arena->nodes[n].attr >= 0) {
@@ -10452,7 +10311,7 @@ static int em_decl_global(struct backend_emit_Emitter * self, int n, int ind, in
     if (((self->freestanding && (*self->freestanding)) && backend_emit_unit_init_needed(self, n))) {
         return self->__backend_emit_emitops_vptr->fail_from(self, n, "this file-scope object needs a constructor to fill its vptrs, ""which --freestanding does not emit; give it an initialiser");
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     if (self->arena->nodes[n].aux == 1) {
         fputs("static ", self->out);
     }
@@ -10584,7 +10443,7 @@ static int em_inline_decl_field(struct backend_emit_Emitter * self, int n, int n
     if (((nk == N_DECL) && (self->arena->nodes[n].aux == 1))) {
         fputs("static ", self->out);
     }
-    if (self->__backend_emit_emitops_vptr->emit_type_name_dims(self, self->arena->nodes[n].text, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
+    if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, self->arena->nodes[n].text, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
         return (-1);
     }
     if (((nk == N_DECL) && (self->arena->nodes[n].aux == 3))) {
@@ -10778,13 +10637,13 @@ static int em_field_field_union(struct backend_emit_Emitter * self, int n, int i
     (void)(c);
     fprintf(self->out, "%s {\n", self->arena->nodes[n].text);
     for (c = self->arena->nodes[n].a; c >= 0; c = self->arena->nodes[c].next) {
-        self->__backend_emit_emitops_vptr->emit_indent(self, (ind + 1));
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
         if (self->__backend_emit_emitops_vptr->emit_field(self, c, (ind + 1)) != 0) {
             return (-1);
         }
         fputs(";\n", self->out);
     }
-    self->__backend_emit_emitops_vptr->emit_indent(self, ind);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
     fputs("}", self->out);
     return 0;
 }

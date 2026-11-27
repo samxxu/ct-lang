@@ -448,7 +448,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
         return (-1);
     }
     for (i = 0; i < _self->nopt; i++) {
-        _self->__backend_emit_emitops_vptr->emit_indent(_self, ind);
+        _self->__backend_emit_emitexpr_vptr->emit_indent(_self, ind);
         fprintf(_self->out, "%s %s;\n", _self->arena->nodes[_self->opt_nodes[i]].text4, _self->arena->nodes[_self->opt_nodes[i]].text3);
     }
     for (i = 0; i < _self->nhoist; i++) {
@@ -471,7 +471,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
         if ((!hty)) {
             return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
         }
-        _self->__backend_emit_emitops_vptr->emit_indent(_self, ind);
+        _self->__backend_emit_emitexpr_vptr->emit_indent(_self, ind);
         fprintf(_self->out, "%s %s = ", hty, _self->arena->nodes[_self->hoist_calls[i]].text3);
         _self->raw_call = _self->hoist_calls[i];
         if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->hoist_calls[i]) != 0) {
@@ -485,7 +485,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
         int save;
         k = _self->into_nodes[i];
         cat = _self->arena->nodes[k].aux;
-        _self->__backend_emit_emitops_vptr->emit_indent(_self, ind);
+        _self->__backend_emit_emitexpr_vptr->emit_indent(_self, ind);
         if (cat == 2) {
             fprintf(_self->out, "%s * %s = &(", _self->arena->nodes[k].text, _self->arena->nodes[k].text3);
         }

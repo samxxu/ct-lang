@@ -29,6 +29,7 @@
 #include "EmitInit.h"
 #include "EmitHeader.h"
 #include "EmitDecl.h"
+#include "EmitExpr.h"
 #include "LModule.h"
 
 #include "Vec.h"

@@ -151,14 +151,8 @@ struct backend_emit_EmitOps_vtbl {
     int (*emit_node)(void *, int, int);
     int (*emit_field)(void *, int, int);
     int (*emit_inline)(void *, int);
-    int (*emit_type_name)(void *, const char *, const char *);
-    int (*emit_type_name_dims)(void *, const char *, const char *, const char *);
     int (*emit_expr)(void *, int);
     int (*emit_outconv)(void *, int);
-    int (*emit_ref_arg)(void *, int);
-    int (*emit_value_for)(void *, const char *, int);
-    int (*emit_cond)(void *, int);
-    int (*emit_indent)(void *, int);
     int (*emit_type_decl)(void *, int, int, int);
     int (*emit_impls)(void *, int);
     int (*fail)(void *, const char *);
@@ -204,6 +198,19 @@ struct backend_emit_EmitDecl_vtbl {
 struct backend_emit_EmitDecl_iface {
     void *self;
     const struct backend_emit_EmitDecl_vtbl *vt;
+};
+
+struct backend_emit_EmitExpr_vtbl {
+    int (*emit_type_name)(void *, const char *, const char *);
+    int (*emit_type_name_dims)(void *, const char *, const char *, const char *);
+    int (*emit_ref_arg)(void *, int);
+    int (*emit_value_for)(void *, const char *, int);
+    int (*emit_cond)(void *, int);
+    int (*emit_indent)(void *, int);
+};
+struct backend_emit_EmitExpr_iface {
+    void *self;
+    const struct backend_emit_EmitExpr_vtbl *vt;
 };
 
 struct backend_emit_EmitInit_vtbl {
@@ -325,6 +332,7 @@ struct backend_emit_Emitter {
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
     const struct backend_emit_EmitHeader_vtbl *__backend_emit_emitheader_vptr;
     const struct backend_emit_EmitDecl_vtbl *__backend_emit_emitdecl_vptr;
+    const struct backend_emit_EmitExpr_vtbl *__backend_emit_emitexpr_vptr;
     const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;
     const struct backend_emit_EmitInvariant_vtbl *__backend_emit_emitinvariant_vptr;
     const struct backend_emit_EmitHoist_vtbl *__backend_emit_emithoist_vptr;

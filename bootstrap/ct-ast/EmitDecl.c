@@ -177,7 +177,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_global_decl(void *sel
     else {
         cn = nm;
     }
-    if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, _self->arena->nodes[n].text, cn, _self->arena->nodes[n].text3) != 0) {
+    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, _self->arena->nodes[n].text, cn, _self->arena->nodes[n].text3) != 0) {
         return (-1);
     }
     if (_self->arena->nodes[n].attr >= 0) {
@@ -242,12 +242,12 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_maps(void *self, int 
                 if (((sig->pann[k] == 2) || (sig->pann[k] == 3))) {
                     const char * pbuf;
                     pbuf = tool_sh_ct_scratch_fmt("%s *", sig->ptype[k]);
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, pbuf, b->params[k]) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name(_self, pbuf, b->params[k]) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name(_self, sig->ptype[k], b->params[k]) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name(_self, sig->ptype[k], b->params[k]) != 0) {
                         return (-1);
                     }
                 }
@@ -507,12 +507,12 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_inherent_protos(void 
                 if (((_self->arena->nodes[k].aux == 2) || (_self->arena->nodes[k].aux == 3))) {
                     const char * pbuf;
                     pbuf = tool_sh_ct_scratch_fmt("%s *", _self->arena->nodes[k].text);
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if (_self->__backend_emit_emitops_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
                         return (-1);
                     }
                 }
