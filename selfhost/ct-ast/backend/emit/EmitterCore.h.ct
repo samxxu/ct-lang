@@ -40,18 +40,6 @@ pub trait EmitOps {
 
     int  write_unit_header(int u);
 
-    /* Phase 78 S2: one `ref` / `out` actual. A plain place takes its address;
-       a Vec/Map subscript sugar already answers a pointer (`at`) and must not
-       be addressed again. */
-    /* PH-79 fix SH-100: one value against an expected C type. An array where a
-       slice (`struct __ct_slice`) is expected becomes a `{ptr,len}` view. */
-    int  emit_type_decl(int n, int ind, int with_semi);
-
-    /* PH-48 D48-2: the concrete `impl Drop` unit and the callable check; both
-       live on the trait so the compiler's MAX_FUNCS budget stays untouched
-       (the self-hosted build is at its top-level signature ceiling). */
-    int  emit_impls(int prog);
-
     int  fail(const char *msg);
 
     int  fail_from(int n, const char *msg);
@@ -83,10 +71,19 @@ pub trait EmitHeader {
     int  write_abi_header(const char *path);
 }
 
-/* S8 D5: the declaration / trait / impl-surface writers. Bodies live in
-   `EmitDecl.h.ct`; `emit_type_decl` and `emit_impls` stay on `EmitOps` until
-   their kind-slice / lifecycle tails move. */
+/* S8 D5: the declaration / trait / impl-surface writers, including the type
+   declaration kind slices and the concrete `impl` body writer. Bodies live in
+   `EmitDecl.h.ct`. */
 pub trait EmitDecl {
+    /* PH-79 fix SH-100: one value against an expected C type. An array where a
+       slice (`struct __ct_slice`) is expected becomes a `{ptr,len}` view. */
+    int  emit_type_decl(int n, int ind, int with_semi);
+
+    /* PH-48 D48-2: the concrete `impl Drop` unit and the callable check; both
+       live on the trait so the compiler's MAX_FUNCS budget stays untouched
+       (the self-hosted build is at its top-level signature ceiling). */
+    int  emit_impls(int prog);
+
     int  emit_global_decl(int n);
 
     int  emit_global_extern(int n);
