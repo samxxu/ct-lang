@@ -386,7 +386,9 @@ static int lver_chain(struct LModule *l, int scope, int stop_scope, int stop_kin
 }
 
 /* Recompute §4.3: deferred entries first (layers inner -> outer, reverse
-   source order), then owned entries the same way. */
+   source order), then owned entries in the table's own order -- the parser's
+   `autodrop_append` already stores release / handback in reverse declaration
+   order, so reversing again would flip them. */
 static int lver_expect(struct LModule *l, int *chain, int nchain, int edge,
                        int all, int line, int col, struct lir_expect *out,
                        int *nout)
@@ -408,7 +410,7 @@ static int lver_expect(struct LModule *l, int *chain, int nchain, int edge,
     }
     for (ci = 0; ci < nchain; ci++) {
         struct ct_lscope *s = &l->scopes[chain[ci] - 1];
-        for (k = s->ncleanups - 1; k >= 0; k--) {
+        for (k = 0; k < s->ncleanups; k++) {
             struct ct_lcleanup *c = &l->cleanups[s->cleanups[k] - 1];
             if (c->kind != CL_DROP && c->kind != CL_RELEASE
                 && c->kind != CL_HANDBACK) continue;

@@ -3562,17 +3562,21 @@ pub int em_node_func(struct Emitter *self, int n, int ind, int nk)
         fputs("static ", self->out);
     /* Phase 39 R4: exactly one visibility attribute on each root
        export definition; non-exports stay hidden by the compiler flag. */
-    if (self->abi_mode && *self->abi_mode && self->abi_root
-        && self->abi_exports && self->abi_n
-        && self->cur_unit == *self->abi_root
+    if (self->abi_mode && *self->abi_mode
+        && self->cur_unit == backend::lir::lmod_plan_abi_root()
         && self->arena->nodes[n].d == 1) {
-        int ai;
-        for (ai = 0; ai < *self->abi_n; ai++)
-            if (strcmp(self->sym->funcs[self->abi_exports[ai]].cname,
+        /* S8 emitter contract: the export set (and therefore the symbol that
+           carries default visibility) is plan data. */
+        int ai, an = backend::lir::lmod_plan_abi_n();
+        for (ai = 0; ai < an; ai++) {
+            int fi = backend::lir::lmod_plan_abi_export(ai);
+            if (fi < 0) continue;
+            if (strcmp(self->sym->funcs[fi].cname,
                        self->arena->nodes[n].text2) == 0) {
                 fputs("__attribute__((visibility(\"default\"))) ", self->out);
                 break;
             }
+        }
     }
     /* `num` carries the `inline` specifier (0 = plain function) */
     if (self->arena->nodes[n].num) fputs("inline ", self->out);

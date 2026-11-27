@@ -639,9 +639,16 @@ impl EmitHeader for Emitter {
         FILE *f;
 
         (void)self;
-        if (!self->abi_root || !self->abi_exports || !self->abi_n)
-            return self->fail("ABI tables are not bound");
-        root = *self->abi_root;
+        /* S8 emitter contract: the module layer selected the export set and
+           handed it over in the plan; the writer no longer re-derives it. */
+        root = backend::lir::lmod_plan_abi_root();
+        n = backend::lir::lmod_plan_abi_n();
+        if (root < 0 || n <= 0) {
+            if (!self->abi_root || !self->abi_exports || !self->abi_n)
+                return self->fail("ABI tables are not bound");
+            root = *self->abi_root;
+            n = *self->abi_n;
+        }
         if (root < 0 || root >= *self->nunits) return self->fail("bad ABI root unit");
         upper = tool::sh::ct_scratch_alloc((int)strlen(self->units[root].base) + 1);
         {
@@ -661,9 +668,11 @@ impl EmitHeader for Emitter {
             else if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) c = '_';
             upper[i] = c;
         }
-        n = *self->abi_n;
         if (n > 256) n = 256;
-        for (i = 0; i < n; i++) order[i] = self->abi_exports[i];
+        for (i = 0; i < n; i++) {
+            order[i] = backend::lir::lmod_plan_abi_export(i);
+            if (order[i] < 0) order[i] = self->abi_exports[i];
+        }
         /* Stable, deterministic order: C symbol name. */
         for (i = 0; i < n; i++)
             for (j = i + 1; j < n; j++)

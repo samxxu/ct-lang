@@ -350,6 +350,7 @@ pub struct ct_tvar {
     int is_static;      /* a function-local with static storage duration */
     int is_unused;      /* a match binding: `__attribute__((unused))` */
     int has_attr;       /* an explicit GNU attribute on the declaration */
+    const char *attr;   /* the attribute spelling, verbatim (`__attribute__((…))`) */
 }
 
 pub struct ct_tcleanup {

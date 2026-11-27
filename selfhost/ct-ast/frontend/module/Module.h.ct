@@ -42,6 +42,14 @@ import frontend::module::ModuleBoundary;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
+/* S8 shell plan row kinds (mirror of backend/lir/LModule.h.ct). */
+#define LPS_PP          1
+#define LPS_TYPE        3
+#define LPS_GLOBAL      4
+#define LPS_SASSERT     5
+#define LPS_FUNC        6
+#define LPS_DROP        7
+#define LPS_RAW         8
 #define MAX_UNITS  64
 #define CAP_LIMIT 65536
 #define MAX_IMPORTS 32
@@ -63,6 +71,10 @@ import frontend::module::ModuleBoundary;
 #define N_ENUM    45
 #define N_ENUMVAL 46
 #define N_UNION   48
+#define N_PP       2
+#define N_FUNC     3
+#define N_SASSERT 55
+#define N_RAW_TEXT 58
 
 namespace frontend::module;
 
@@ -262,6 +274,93 @@ static int ct_shim_ambiguity(struct Module *m, const struct Unit *units, int n)
         }
     }
     (void)m;
+    return 0;
+}
+
+/* S8 emitter contract: fill the shell plan for one program (compile mode:
+   `unit < 0`; build mode: the unit whose `.c`/`.h` is next). The rows carry
+   the decisions the shell used to make by scanning the AST and the symbol
+   table: preprocessor lines, raw blocks, type / global / assert / function
+   order, and (for a `.h.ct` unit) the exported surface and its includes.
+   `is_header` also asks for the header rows; a plain `.c` unit has none. */
+static int ct_shell_plan_add_program(struct Module *self, int prog, int unit,
+                                     int is_header)
+{
+    struct Arena *ar = self->arena;
+    int n;
+    const struct Unit *uu = unit >= 0 ? &self->units[unit] : 0;
+
+    if (prog < 0) return 0;   /* node ids are 0-based: 0 is a valid root */
+    for (n = ar->nodes[prog].a; n >= 0; n = ar->nodes[n].next) {
+        int k = ar->nodes[n].kind;
+        if (k == N_PP) {
+            const char *t = ar->nodes[n].text;
+            /* The io header mask belongs to the run, and the shell already
+               has it bound when it renders; only the include bit is a plan
+               fact. */
+            int aux = strncmp(t, "#include", 8) == 0 ? 1 : 0;
+            if (backend::lir::lmod_plan_shell_add(LPS_PP, unit,
+                                                  n, aux, t) != 0)
+                return 1;
+        } else if (k == N_RAW_TEXT) {
+            if (backend::lir::lmod_plan_shell_add(LPS_RAW, unit,
+                                                  n, 0, 0) != 0)
+                return 1;
+        } else if (k == N_STRUCT || k == N_TYPEDEF || k == N_ENUM
+                   || k == N_UNION) {
+            if (backend::lir::lmod_plan_shell_add(LPS_TYPE, unit,
+                                                  n, ar->nodes[n].d == 1 ? 1 : 0,
+                                                  0) != 0)
+                return 1;
+        } else if (k == N_GLOBAL) {
+            int aux = (ar->nodes[n].d == 1 ? 1 : 0)
+                      | (ar->nodes[n].aux == 2 ? 2 : 0);
+            if (backend::lir::lmod_plan_shell_add(LPS_GLOBAL, unit,
+                                                  n, aux, 0) != 0)
+                return 1;
+        } else if (k == N_SASSERT) {
+            if (backend::lir::lmod_plan_shell_add(LPS_SASSERT,
+                                                  unit, n, 0, 0) != 0)
+                return 1;
+        } else if (k == N_FUNC) {
+            int cur = self->sym->find_func(ar->nodes[n].text2);
+            int aux = (cur >= 0 && self->sym->funcs[cur].ntparams > 0) ? 1 : 0;
+            if (backend::lir::lmod_plan_shell_add(LPS_FUNC, unit,
+                                                  n, aux, 0) != 0)
+                return 1;
+        }
+    }
+    if (!is_header || !uu) return 0;
+    /* The header include block (PP lines, shim, dependencies, built-in layer
+       headers) is still assembled by the writer; its blank-line grouping is a
+       printing detail, recorded in §3d as remaining. */
+    /* Exported types and globals are the same rows filtered by the pub bit;
+       the Drop surface is its own row because its predicate (a `pub` struct
+       whose real body this unit emits) is a lifetime decision. */
+    {
+        int si;
+        for (si = 0; si < self->sym->nstructs; si++) {
+            int has_body = 0;
+            if (!self->sym->structs[si].uses_drop) continue;
+            if (self->sym->structs[si].is_template) continue;
+            if (self->sym->structs[si].is_inst) continue;
+            if (!self->sym->structs[si].is_pub) continue;
+            if (self->sym->structs[si].owner != unit) continue;
+            if (self->sym->structs[si].has_drop_impl) {
+                for (n = ar->nodes[self->units[unit].prog].a; n >= 0;
+                     n = ar->nodes[n].next)
+                    if (ar->nodes[n].kind == N_IMPL && ar->nodes[n].aux == si
+                        && strcmp(ar->nodes[n].text2, "Drop") == 0) {
+                        has_body = 1;
+                        break;
+                    }
+                if (!has_body) continue;
+            }
+            if (backend::lir::lmod_plan_shell_add(LPS_DROP, unit,
+                                                  si, 0, 0) != 0)
+                return 1;
+        }
+    }
     return 0;
 }
 
@@ -1787,6 +1886,10 @@ impl ModuleOps for Module {
                 nonroot);
             if (tool::diag::ct_type_warn(1, 1, "", msg, root_path) != 0) return 1;
         }
+        /* S8 emitter contract: the export set is plan data; the ABI writer
+           renders it instead of re-deriving it from the symbol table. */
+        backend::lir::lmod_plan_set_abi(self->lib_root, self->abi_exports,
+                                        self->abi_n);
         if (tool::diag::ct_diag_nwarn() > 0
             && tool::diag::ct_diag_emit(self->diag_json, 1) != 0) return 1;
         return 0;
@@ -2454,6 +2557,18 @@ impl ModuleOps for Module {
             if (self->lib_mode) {
                 const char *od = self->outdir_opt ? self->outdir_opt : ".ctbuild";
                 char *hp;
+                /* S8 emitter contract: `--lib` writes the ABI header and the
+                   units before the normal build plan is bound, so build the
+                   shell rows here. Liveness is not computed yet on this path,
+                   exactly like the pre-plan fallback (every loaded layer
+                   header is listed). */
+                backend::lir::lmod_plan_shell_reset();
+                for (u = 0; u < self->nunits; u++) {
+                    if (self->units[u].is_map) continue;
+                    if (ct_shell_plan_add_program(self, self->units[u].prog, u,
+                                                  self->units[u].is_hdr) != 0)
+                        return 1;
+                }
                 if (self->lib_scan(root_u) != 0) return 1;
                 self->outdir = tool::sh::ct_scratch_dup(od);
                 if (ct_ensure_dir(self->outdir) != 0) {
@@ -2782,6 +2897,15 @@ impl ModuleOps for Module {
             backend::lir::lmod_plan_set_builtin_headers(bu, bh, nb);
         }
         backend::emit::ct_emit_bind_plan(backend::lir::lmod_plan_get());
+        /* S8 emitter contract: the shell plan is built once, after every unit
+           and the symbol table are final. The shell writers only render it. */
+        backend::lir::lmod_plan_shell_reset();
+        for (u = 0; u < self->nunits; u++) {
+            if (self->units[u].is_map) continue;
+            if (ct_shell_plan_add_program(self, self->units[u].prog, u,
+                                          self->units[u].is_hdr) != 0)
+                return frontend::parse::ct_parse_report();
+        }
         if (ct_shim_ambiguity(self, self->units, self->nunits)) return 1;
         for (o = 0; o < cn; o++) {
             char *outc;
@@ -3021,6 +3145,14 @@ cmd_too_long:
     int emit_program(int prog)
     {
         const char *why;
+        /* S8 emitter contract: compile mode is one program; the plan rows let
+           the shell render its top-level order without scanning the AST. */
+        if (!self->build_mode) {
+            backend::lir::lmod_plan_shell_reset();
+            backend::lir::lmod_plan_set_prog(prog);
+            if (ct_shell_plan_add_program(self, prog, -1, 0) != 0)
+                return self->fail("cannot build the emission plan");
+        }
         if (backend::emit::ct_emit_program(prog) != 0) {
             why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail_emit(why);

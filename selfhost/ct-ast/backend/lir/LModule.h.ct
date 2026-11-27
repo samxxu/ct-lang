@@ -245,6 +245,7 @@ pub struct ct_lstmt {
     const char *name;   /* declared name (LS_DECL), label (LS_GOTO/LS_LABEL) */
     const char *dims;   /* LS_DECL array dimensions as spelled, else "" */
     const char *spelling; /* LS_DECL: the source type spelling, verbatim */
+    const char *attr;     /* LS_DECL: the explicit GNU attribute, verbatim */
     const char *member;   /* LS_MATCHBIND: the payload field name */
     const char *count;  /* LS_DECL: the array's element count for a vptr loop */
     const char *vptr;   /* LS_DECL: generated vptr statements, one per line */
@@ -413,6 +414,27 @@ pub struct LModule {
     int stat_printed;    /* bodies the seam actually printed from LIR */
 }
 
+/* Shell emission rows (S8 emitter contract, docs/design/tir-lir-contract.md
+   §6): one row per top-level item the shell prints, in emission order. The
+   module layer decides what the row is, which unit it belongs to and whether
+   it is exported; the shell only renders the row. This keeps the AST scan and
+   the symbol-table lookup out of `emit_program` / `write_unit_header_body`. */
+#define LPS_PP          1   /* text: one preprocessor line to copy          */
+#define LPS_TYPE        3   /* node: struct/typedef/enum/union declaration  */
+#define LPS_GLOBAL      4   /* node: file-scope variable                    */
+#define LPS_SASSERT     5   /* node: file-scope `_Static_assert`            */
+#define LPS_FUNC        6   /* node: function definition/prototype          */
+#define LPS_DROP        7   /* node: struct row index, Drop surface         */
+#define LPS_RAW         8   /* node: raw C block (`#ct-raw`)                */
+
+struct ct_lshellrow {
+    int kind;
+    int unit;           /* -1 = compile mode; else the product's unit */
+    int node;           /* AST node id (or symbol row for LPS_DROP) */
+    int aux;            /* LPS_TYPE/GLOBAL: pub bit; LPS_FUNC: template bit */
+    const char *text;   /* LPS_PP: the preprocessor line */
+}
+
 /* S8 emitter contract: the module-level facts the emitter consumes as input
    instead of deciding them itself. Built-in liveness is computed once by the
    semantic dependency graph (backend/tir/TGraph.h.ct) and read here; the plan
@@ -435,6 +457,20 @@ pub struct LModulePlan {
        place each generic shell exactly once. */
     int shell_u;
     int shell_header;
+    /* S8 shell contract: the ordered rows for the compile-mode program and
+       every unit's `.c` / `.h`. `prog` is the compile-mode program root. */
+    int prog;
+    /* The row table is `struct ct_lshellrow *`; the field is `void *` so the
+       plan's public shape does not leak a forward declaration of that internal
+       row into every generated unit header. */
+    void *srows;
+    int nsrows;
+    int srowcap;
+    /* S8 ABI contract: the export set is selected by the module layer (the
+       driver's ABI checks); the ABI writer only renders it. */
+    int abi_root;
+    int abi_n;
+    int abi_exports[256];
 }
 
 static struct LModule g_lir;
@@ -446,6 +482,21 @@ pub void lmod_plan_set_builtin_headers(int *bunit, const char **bhead, int n);
 pub void lmod_plan_set_shell(int u, int header);
 pub int lmod_plan_shell_u(void);
 pub int lmod_plan_shell_header(void);
+pub void lmod_plan_shell_reset(void);
+pub int lmod_plan_shell_add(int kind, int unit, int node, int aux,
+                            const char *text);
+pub int lmod_plan_row_count(void);
+pub int lmod_plan_row_kind(int i);
+pub int lmod_plan_row_unit(int i);
+pub int lmod_plan_row_node(int i);
+pub int lmod_plan_row_aux(int i);
+pub const char *lmod_plan_row_text(int i);
+pub void lmod_plan_set_prog(int prog);
+pub int lmod_plan_prog(void);
+pub void lmod_plan_set_abi(int root, int *exports, int n);
+pub int lmod_plan_abi_root(void);
+pub int lmod_plan_abi_n(void);
+pub int lmod_plan_abi_export(int i);
 
 pub struct LModulePlan *lmod_plan_get(void)
 {
@@ -568,6 +619,112 @@ pub void lmod_reset(struct LModule *self)
     free(self->headers);
     memset(self, 0, (size_t)sizeof(*self));
     self->free_sym = "free";
+}
+
+/* ------------------------------------------------------------------------- */
+/* Shell plan rows (S8 contract §6)                                          */
+/* ------------------------------------------------------------------------- */
+pub void lmod_plan_shell_reset(void)
+{
+    g_plan.nsrows = 0;
+    g_plan.prog = 0;
+}
+
+pub int lmod_plan_shell_add(int kind, int unit, int node, int aux,
+                            const char *text)
+{
+    struct ct_lshellrow *r;
+
+    if (lir_reserve(&g_plan.srows, &g_plan.srowcap,
+                    g_plan.nsrows + 1, (int)sizeof(struct ct_lshellrow)) != 0)
+        return -1;
+    r = ((struct ct_lshellrow *)g_plan.srows) + g_plan.nsrows;
+    r->kind = kind;
+    r->unit = unit;
+    r->node = node;
+    r->aux = aux;
+    r->text = text ? runtime::text::ct_intern(text) : "";
+    g_plan.nsrows++;
+    return 0;
+}
+
+pub int lmod_plan_row_count(void)
+{
+    return g_plan.nsrows;
+}
+
+static struct ct_lshellrow *lmod_row(int i)
+{
+    if (i < 0 || i >= g_plan.nsrows) return 0;
+    return ((struct ct_lshellrow *)g_plan.srows) + i;
+}
+
+pub int lmod_plan_row_kind(int i)
+{
+    struct ct_lshellrow *r = lmod_row(i);
+    return r ? r->kind : 0;
+}
+
+pub int lmod_plan_row_unit(int i)
+{
+    struct ct_lshellrow *r = lmod_row(i);
+    return r ? r->unit : -1;
+}
+
+pub int lmod_plan_row_node(int i)
+{
+    struct ct_lshellrow *r = lmod_row(i);
+    return r ? r->node : 0;
+}
+
+pub int lmod_plan_row_aux(int i)
+{
+    struct ct_lshellrow *r = lmod_row(i);
+    return r ? r->aux : 0;
+}
+
+pub const char *lmod_plan_row_text(int i)
+{
+    struct ct_lshellrow *r = lmod_row(i);
+    return r ? r->text : "";
+}
+
+pub void lmod_plan_set_prog(int prog)
+{
+    g_plan.prog = prog;
+}
+
+pub int lmod_plan_prog(void)
+{
+    return g_plan.prog;
+}
+
+pub void lmod_plan_set_abi(int root, int *exports, int n)
+{
+    int i;
+
+    if (n < 0) n = 0;
+    if (n > 256) n = 256;
+    g_plan.abi_root = root;
+    g_plan.abi_n = n;
+    for (i = 0; i < n; i++)
+        g_plan.abi_exports[i] = exports ? exports[i] : 0;
+}
+
+pub int lmod_plan_abi_root(void)
+{
+    return g_plan.abi_root;
+}
+
+pub int lmod_plan_abi_n(void)
+{
+    return g_plan.abi_n;
+}
+
+pub int lmod_plan_abi_export(int i)
+{
+    if (i < 0 || i >= g_plan.abi_n) return -1;
+    return g_plan.abi_exports[i];
 }
 
 static int lir_type_kind(const char *s)

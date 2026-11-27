@@ -53,6 +53,18 @@ import backend::emit::EmitShell;
 import backend::lir::LModule;
 import backend::lir::LModule::LModulePlan as LModulePlan;
 
+/* S8 shell plan row kinds (mirror of backend/lir/LModule.h.ct; a macro does
+   not cross a unit, tools/limits_sync.py does not check these). */
+#define LPS_PP          1
+#define LPS_TYPE        3
+#define LPS_GLOBAL      4
+#define LPS_SASSERT     5
+#define LPS_FUNC        6
+#define LPS_DROP        7
+#define LPS_RAW         8
+/* S8 shell rows: the row table is internal to LModule, so the shell reads it
+   through getters. */
+
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
 /* S1a-0 C2p-5: the formal text bound (mirror of Symbols/Limits). */
@@ -942,13 +954,30 @@ impl EmitOps for Emitter {
         if (self->invariant_check(prog) != 0) return -1;
         /* compile mode is one file: the parser's prefix is this file's */
         self->gprefix = self->sym->ns;
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-            if (self->arena->nodes[n].kind == N_PP) {
-            if ((self->io_mask & 1)
-                && strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
-            if ((self->io_mask & 2)
-                && strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
-            fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+        {
+            int nr = backend::lir::lmod_plan_row_count(), r;
+            if (nr > 0) {
+                for (r = 0; r < nr; r++) {
+                    const char *t;
+                    if (backend::lir::lmod_plan_row_kind(r) != LPS_PP
+                        || backend::lir::lmod_plan_row_unit(r) != -1) continue;
+                    t = backend::lir::lmod_plan_row_text(r);
+                    if ((self->io_mask & 1)
+                        && strcmp(t, "#include <stdio.h>") == 0) continue;
+                    if ((self->io_mask & 2)
+                        && strcmp(t, "#include <wchar.h>") == 0) continue;
+                    fprintf(self->out, "%s\n", t);
+                }
+            } else {
+                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+                    if (self->arena->nodes[n].kind == N_PP) {
+                    if ((self->io_mask & 1)
+                        && strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
+                    if ((self->io_mask & 2)
+                        && strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
+                    fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+                }
+            }
         }
         if (self->alloc_map && self->alloc_map[0]) {
             fprintf(self->out, "extern void *%s(__SIZE_TYPE__);\n", self->alloc_m);
@@ -1020,14 +1049,28 @@ impl EmitOps for Emitter {
         /* Types first, then every prototype, then the globals: a file-scope
            initialiser may name a function of this unit (`int (*gp)(int) = plus;`)
            and C needs that declaration in scope (D-6). */
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if (self->arena->nodes[n].kind == N_RAW_TEXT) {
-                if (emit_raw_text(self, n) != 0) return -1;
-                continue;
-            }
-            if (self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
-                || self->arena->nodes[n].kind == N_ENUM || self->arena->nodes[n].kind == N_UNION) {
-                if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+        {
+            int nr = backend::lir::lmod_plan_row_count(), r;
+            if (nr > 0) {
+                for (r = 0; r < nr; r++) {
+                    if (backend::lir::lmod_plan_row_unit(r) != -1) continue;
+                    if (backend::lir::lmod_plan_row_kind(r) == LPS_RAW) {
+                        if (emit_raw_text(self, backend::lir::lmod_plan_row_node(r)) != 0) return -1;
+                    } else if (backend::lir::lmod_plan_row_kind(r) == LPS_TYPE) {
+                        if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0) return -1;
+                    }
+                }
+            } else {
+                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                    if (self->arena->nodes[n].kind == N_RAW_TEXT) {
+                        if (emit_raw_text(self, n) != 0) return -1;
+                        continue;
+                    }
+                    if (self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
+                        || self->arena->nodes[n].kind == N_ENUM || self->arena->nodes[n].kind == N_UNION) {
+                        if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+                    }
+                }
             }
         }
 
@@ -1066,29 +1109,64 @@ impl EmitOps for Emitter {
 
         /* A file-scope `_Static_assert` lands here: after every type, so an
            assertion about a struct or enum declared above it still resolves. */
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-            if (self->arena->nodes[n].kind == N_SASSERT)
-                if (self->emit_node(n, 0) != 0) return -1;
+        {
+            int nr = backend::lir::lmod_plan_row_count(), r;
+            if (nr > 0) {
+                for (r = 0; r < nr; r++)
+                    if (backend::lir::lmod_plan_row_kind(r) == LPS_SASSERT && backend::lir::lmod_plan_row_unit(r) == -1)
+                        if (self->emit_node(backend::lir::lmod_plan_row_node(r), 0) != 0) return -1;
+            } else {
+                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
+                    if (self->arena->nodes[n].kind == N_SASSERT)
+                        if (self->emit_node(n, 0) != 0) return -1;
+            }
+        }
 
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            /* an `extern` global is a declaration only: it adds no definition */
-            if (self->arena->nodes[n].kind != N_GLOBAL || self->arena->nodes[n].aux == 2) continue;
-            if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+        {
+            int nr = backend::lir::lmod_plan_row_count(), r;
+            if (nr > 0) {
+                for (r = 0; r < nr; r++)
+                    if (backend::lir::lmod_plan_row_kind(r) == LPS_GLOBAL && backend::lir::lmod_plan_row_unit(r) == -1
+                        && !(backend::lir::lmod_plan_row_aux(r) & 2))
+                        if (self->emit_type_decl(backend::lir::lmod_plan_row_node(r), 0, 1) != 0)
+                            return -1;
+            } else {
+                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                    /* an `extern` global is a declaration only: it adds no definition */
+                    if (self->arena->nodes[n].kind != N_GLOBAL || self->arena->nodes[n].aux == 2) continue;
+                    if (self->emit_type_decl(n, 0, 1) != 0) return -1;
+                }
+            }
         }
 
         if (self->emit_impls(prog) != 0) return -1;
 
         if (self->emit_maps(-1) != 0) return -1;
 
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if (self->arena->nodes[n].kind == N_FUNC) {
-                int cur = self->sym->find_func(self->arena->nodes[n].text2);
-                /* a generic template has no C body of its own (Phase 26) */
-                if (cur >= 0 && self->sym->funcs[cur].ntparams > 0) continue;
-                /* the closure products of this function land above its definition */
-                if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
-                    return -1;
-                if (self->emit_node(n, 0) != 0) return -1;
+        {
+            int nr = backend::lir::lmod_plan_row_count(), r;
+            if (nr > 0) {
+                for (r = 0; r < nr; r++) {
+                    int fn;
+                    if (backend::lir::lmod_plan_row_kind(r) != LPS_FUNC || backend::lir::lmod_plan_row_unit(r) != -1) continue;
+                    /* a generic template has no C body of its own (Phase 26) */
+                    if (backend::lir::lmod_plan_row_aux(r) & 1) continue;
+                    fn = backend::lir::lmod_plan_row_node(r);
+                    if (emit_closures(self, self->arena->nodes[fn].text2,
+                                      self->arena->nodes[fn].line) != 0)
+                        return -1;
+                    if (self->emit_node(fn, 0) != 0) return -1;
+                }
+            } else {
+                for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                    if (self->arena->nodes[n].kind == N_FUNC) {
+                        int cur = self->sym->find_func(self->arena->nodes[n].text2);
+                        if (cur >= 0 && self->sym->funcs[cur].ntparams > 0) continue;
+                        if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
+                            return -1;
+                        if (self->emit_node(n, 0) != 0) return -1;
+                    }
+                }
             }
         }
         if (emit_generic_defs(self, -1) != 0) return -1;
