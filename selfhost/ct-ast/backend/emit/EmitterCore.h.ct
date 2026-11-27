@@ -40,19 +40,6 @@ pub trait EmitOps {
 
     int  write_unit_header(int u);
 
-    int  emit_node(int n, int ind);
-
-    int  emit_field(int n, int ind);
-
-    int  emit_inline(int n);
-
-    int  emit_expr(int n);
-
-    /* LANG-26 / D-020 §6.1: a call whose `out` actual needed a temporary. The
-       call is emitted as one GNU statement expression: the forward conversion
-       initialises the temporary, the call runs, the write-back follows. */
-    int  emit_outconv(int n);
-
     /* Phase 78 S2: one `ref` / `out` actual. A plain place takes its address;
        a Vec/Map subscript sugar already answers a pointer (`at`) and must not
        be addressed again. */
@@ -127,11 +114,23 @@ pub trait EmitDecl {
     int  emit_unit_init(int prog);
 }
 
-/* S8 D6: expression spelling / condition / indentation. Bodies live in
-   `EmitExpr.h.ct`; the kind dispatchers (`emit_expr` / `emit_node` /
-   `emit_field` / `emit_inline`) and `emit_outconv` stay on `EmitOps` until
-   their kind-slice / intercept tails move. */
+/* S8 D6: expression spelling / condition / indentation and the kind
+   dispatchers. Bodies live in `EmitExpr.h.ct`; the kind slices they dispatch
+   to moved with them, so the trait owns the whole body writer. */
 pub trait EmitExpr {
+    int  emit_node(int n, int ind);
+
+    int  emit_field(int n, int ind);
+
+    int  emit_inline(int n);
+
+    int  emit_expr(int n);
+
+    /* LANG-26 / D-020 §6.1: a call whose `out` actual needed a temporary. The
+       call is emitted as one GNU statement expression: the forward conversion
+       initialises the temporary, the call runs, the write-back follows. */
+    int  emit_outconv(int n);
+
     int  emit_type_name(const char *type, const char *name);
 
     int  emit_type_name_dims(const char *type, const char *name, const char *dims);

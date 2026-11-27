@@ -39,6 +39,7 @@ import backend::emit::EmitterQuery;
 import backend::emit::EmitterMapText;
 import backend::emit::EmitterCore;
 import backend::emit::EmitHeader;
+import backend::emit::EmitExpr;
 import tool::sh::Sh;
 import backend::lir::LModule;
 import backend::lir::LModule::LModulePlan as LModulePlan;
@@ -67,66 +68,7 @@ pub struct EmitDecl {
 
 
 
-pub const char *emit_gsub_type_text(struct Emitter *self, const char *type)
-{
-    const char *cur;
-    int i;
 
-    if (self->gtntparam <= 0) return (const char *)0;
-    cur = type ? type : "";
-    for (i = 0; i < self->gtntparam; i++) {
-        if (!self->gtparam[i] || !self->gtparam[i][0]) continue;
-        if (!self->gtarg[i]) continue;
-        cur = frontend::sym::ct_generic_subst_text(cur, self->gtparam[i],
-                                                    self->gtarg[i]);
-        if (!cur) return (const char *)0;
-    }
-    /* A substituted spelling may still name an instance. The char* reader is
-       given a formal-limit block so an ordinary instance still resolves; a
-       spelling past it keeps the template-shaped answer, exactly as before. */
-    if (strchr(cur, '<')) {
-        char *res = (char *)malloc(TEXT_LIMIT);
-        const char *pooled;
-        if (!res) return (const char *)0;
-        if (frontend::sym::ct_inst_resolve(cur, res, TEXT_LIMIT) != 0) {
-            free(res);
-            return (const char *)0;
-        }
-        pooled = runtime::text::ct_intern(res);
-        free(res);
-        return pooled;
-    }
-    return cur;
-}
-
-pub const char *emit_overload_suffix(struct Emitter *self, int impl_node, int m)
-{
-    char *buf = 0;
-    int cap = 0, n, pos, p;
-    const char *out;
-
-    if (impl_node < 0 || m < 0 || m >= self->arena->nnode) return "";
-    n = frontend::parse::ct_overload_count(impl_node, self->arena->nodes[m].text2);
-    if (n <= 1) return "";
-    pos = frontend::parse::ct_overload_pos(impl_node, m);
-    if (pos <= 0) return "";
-    if (tool::sh::ct_text_init(&buf, &cap, 32) != 0) return (const char *)0;
-    for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next) {
-        const char *ty = emit_gsub_type_text(self, self->arena->nodes[p].text);
-        const char *ek;
-        if (!ty) ty = self->arena->nodes[p].text;
-        ek = frontend::parse::ct_overload_key_text(ty);
-        if (!ek) goto fail;
-        if (tool::sh::ct_text_cat(&buf, &cap, "$") != 0) goto fail;
-        if (tool::sh::ct_text_cat(&buf, &cap, ek) != 0) goto fail;
-    }
-    out = runtime::text::ct_intern(buf);
-    tool::sh::ct_text_free(&buf, &cap);
-    return out ? out : "";
-fail:
-    tool::sh::ct_text_free(&buf, &cap);
-    return (const char *)0;
-}
 
 pub int unit_init_needed(struct Emitter *e, int n)
 {
