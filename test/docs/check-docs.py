@@ -158,10 +158,133 @@ FRAGMENT_EXEMPT = {
     "docs/reviews/2026-11-17-pkg-index-audit.md": {
         "../../README.md#L450",
     },
+    # v1-PH-2 S8: the Emitter D5/D6/shell split moved the body writer out of
+    # `selfhost/ct-ast/backend/emit/Emitter.h.ct` (9872 -> ~1541 lines).
+    # These are historical records that cited the line numbers true on their
+    # own date; the code they point at now lives in EmitExpr / EmitDecl /
+    # EmitShell. Keeping the record verbatim is DOC-89’s rule, so they are
+    # exact per-file exemptions, never a directory-wide relaxation.
+    'battle/phase80-retain-scope-1/claim.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5176',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5867',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5922',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5949',
+    },
+    'battle/phase80-retain-scope-1/counter.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5176',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5867',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5922',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5949',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L6086-L6097',
+    },
+    'battle/static-dispatch-1/counter.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2407',
+    },
+    'docs/design/spike-semantic-check.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2693',
+    },
+    'docs/phases/v0-PH-22/card.md': {
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2521-L2539',
+    },
+    'docs/phases/v0-PH-28/card.md': {
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1754-L1762',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3336-L3356',
+    },
+    'docs/phases/v0-PH-31/card.md': {
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1666-L1706',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1702-L1716',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1749-L1750',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1749-L1767',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1755',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1758-L1759',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1781-L1792',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2838-L2843',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3053-L3057',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3057',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3784',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3910',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3917-L3921',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3925',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3963',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3994',
+        '../../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4025-L4028',
+    },
+    'docs/planning/requirements-pool.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5321-L5329',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5347',
+    },
+    'docs/proposals/ct-bare-metal-proposal.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3613',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3620',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3939',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4035',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4049',
+    },
+    'docs/proposals/user-index-operator.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5261-L5293',
+    },
+    'docs/review/builtin-layer-vs-std-package-name-check.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2124',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2145',
+    },
+    'docs/reviews/max-calls-limit.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5730-L5742',
+    },
+    'issues/docs/doc71-range-dollar-is-member-not-index.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2018-L2038',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2020',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2034',
+    },
+    'issues/selfhost/sh30-emit-error-cleanup.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2595-L2661',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2678-L2727',
+    },
+    'issues/selfhost/sh31-emit-cond-dead-branches.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2147-L2167',
+    },
+    'issues/selfhost/sh33-autodrop-return-no-inject.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1798-L1819',
+    },
+    'issues/selfhost/sh40-delete-non-lvalue-null.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1935-L1980',
+    },
+    'issues/selfhost/sh52-namespace-static-initializer.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1742-L1744',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L1785-L1790',
+    },
+    'issues/selfhost/sh60-mct-signature-types-decorative.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2767-L2776',
+    },
+    'issues/selfhost/sh62-generic-subst-uppercase-tparam.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2995-L3037',
+    },
+    'issues/selfhost/sh65-closure-as-method-arg.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3365',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3378',
+    },
+    'issues/selfhost/sh67-closure-method-arg-silent-invalid-c.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3372-L3378',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3997-L4002',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4008-L4023',
+    },
+    'issues/selfhost/sh73-temp-receiver-dynamic-dispatch.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L2326',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L5021',
+    },
+    'issues/selfhost/sh74-impl-iface-return-self-codegen.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4800-L4808',
+    },
+    'issues/selfhost/sh75-local-iface-return-dangling.md': {
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3707-L3740',
+        '../../selfhost/ct-ast/backend/emit/Emitter.h.ct#L4818-L4827',
+    },
     "docs/proposals/ct-pure-type-alias-proposal.md": {
         "../../test/ast/153_into_type_host/lib/ops.m.ct#L9-L15",
     },
-    "issues/README.md": {"../docs/roadmap.md#L265"},
+    "issues/README.md": {
+        "../docs/roadmap.md#L265",
+        "../selfhost/ct-ast/backend/emit/Emitter.h.ct#L3157-L3158",
+    },
     "issues/docs/doc22-batch2-stale-statements.md": {
         "../../test/bindings/README.md#L192",
     },

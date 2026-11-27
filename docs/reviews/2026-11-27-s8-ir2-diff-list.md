@@ -94,49 +94,55 @@ $ bash selfhost/check-ast.sh
 > `CT_LIR=0` 的对照为准。**“回退”不是“已降级”**：这些函数不计入
 > `bodies printed`，也不计入 `ready=1`。
 
-## 3b emitter 契约与 D4–D6 的边界（本轮未扩大）
-
-S8r2 只改 LIR 默认切换与回退，**没有**继续外壳 LModule 化：
+## 3b emitter 契约与 D4–D6 的边界（S8 尾已推进）
 
 | 判定 | 原位置 | 现状 |
 | --- | --- | --- |
 | 内建层判活 | 文本扫描 | `backend/tir/TGraph.h.ct`（S8，已移） |
 | 函数体生命周期 / 类型 / 临时名 | AST body writer | LIR writer（`ct build` 与单文件默认） |
 | 内建头文件清单 | emitter 循环 | `LModulePlan.bhead[]`（已移） |
-| 类型/全局声明、泛型实例闭包与胶水、`.abi.h`、map JSON | emitter | **仍在外壳** |
-| `write_unit_header(_body)` / `emit_type_decl` / `emit_impls` / `em_*` kind 分发 / `emit_outconv` | emitter | **仍在宿主**（D4–D6 尾部未做） |
+| `.abi.h` / map JSON | emitter | `EmitHeader.h.ct`（D4，已移） |
+| 类型/全局声明、泛型实例闭包与胶水 | emitter | `EmitDecl.h.ct`（D5） + `EmitShell.h.ct`（外壳） |
+| `write_unit_header(_body)` / `emit_unit_body` | emitter | `EmitShell.h.ct`（外壳，已移） |
+| `emit_type_decl` / `emit_impls` / `em_decl_*` | emitter | `EmitDecl.h.ct`（D5 尾，已移） |
+| `emit_expr` / `emit_node` / `emit_field` / `emit_inline` / `emit_outconv` / `em_*` | emitter | `EmitExpr.h.ct`（D6 尾，已移） |
 
-四入口 `emit_module` / `write_header` / `write_abi_header` / `write_map` 仍未做到
-“只消费 LModule”。本 stage 不把部分搬移冒充为完整契约。
+`Emitter.h.ct` 现在 1541 行（原 9872 行），只剩 `emit_program` / `emit_unit` /
+fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used` 的
+定义都在子单元，宿主只按名读写。**仍未做到**四个入口“只消费 LModule”：编译
+模式的 `emit_program` 体、类型/全局节点的遍历仍在宿主读 AST 与符号表。
 
-### 3c 施工记录（S8/S8r2）
+### 3c 施工记录（S8/S8r2 + S8 尾）
 
 | 片 | 交付 | 判据 |
 | --- | --- | --- |
 | S8 判活 + build 默认 | TGraph 判活、`ct build` 默认 LIR、差异清单 | 语料/自举逐字节；`test/ir` 15 checks |
 | 外壳 LModule 第一步 | 写者身份 `g_shell_*` → `LModulePlan.shell_*`；走查状态入 `Emitter` | 单文件 + 自举 C 树逐字节 |
-| D4 EmitHeader（部分） | `backend/emit/EmitHeader.h.ct`、`pub trait EmitHeader`；10 方法 + 自由函数 | body 多重集不变；body sha 同父；cycles 0 |
+| D4 EmitHeader（部分） | `backend/emit/EmitHeader.h.ct`、`pub trait EmitHeader`；10 方法 + 自由函数 | body 多重集不变；cycles 0 |
 | D5 EmitDecl（部分） | `EmitDecl.h.ct`；13 方法 + 3 自由函数 | 同上 |
 | D6 EmitExpr（部分） | `EmitExpr.h.ct`；6 个无 kind 依赖 helper | 同上 |
 | **S8r2 单文件默认 LIR** | Driver 编译入口默认 LIR；默认路径验证器静默回退；D-013/vptr/into/static/attr/长名/闭包容量保守回退；`match` 占位名与逗号上下文修复 | 82 语料 + 839 个 `test/ast` 夹具逐字节；`check-ast` 0 失败；`check-all` 8 门；seed 两轮 |
+| **S8 尾 D6** | `emit_expr`/`emit_node`/`emit_field`/`emit_inline`/`emit_outconv` + 147 个 `em_*`/`sb_*`/`match_*`/`eb_*` 自由函数 → `EmitExpr.h.ct`；`StrRetain`/`FldSnap`/`EmitBuf`/`g_sb`/`g_body_hook`/`g_oc_bypass_node` 随走；`emit_gsub_type_text`/`emit_overload_suffix` 从 Decl 下调 | body 多重集不变（tool 仅 skeleton 差异）；82 语料逐字节；自举 2 轮 |
+| **S8 尾 D5** | `emit_type_decl` + 六个 `em_decl_*` + `emit_impls` + 27 个实例/闭包/ADT 胶水函数 → `EmitDecl.h.ct`；`g_adt_layout_state`/`g_inst_layout_state` 随走 | body 多重集不变（仅 3 条宏 skeleton）；82 语料逐字节；自举 2 轮 |
+| **S8 尾外壳** | `write_unit_header(_body)`、`emit_unit_body` 与 28 个外壳胶水函数 → 新单元 `EmitShell.h.ct`；`write_unit_header` 移入新 `EmitShell` trait；`g_plan`/`g_slice_used` 随走并导出 | 82 语料逐字节；自举 2 轮；`Emitter.h.ct` 9872 → 1541 行 |
 
 每片后 `gen-seed.sh` 重生成；本分支**未 push、未打 tag、未改版本号**。
 
 ### 3d 仍未做（剩余清单）
 
-1. **外壳完整 LModule 化**（S8 原目标，未完成）：`write_unit_header(_body)` 的
-   实例闭包/ADT 胶水、`.abi.h`、map、类型/全局声明判定仍在 emitter；四个入口
-   仍读 AST/符号表。
-2. **D5 尾**：`emit_type_decl`（六个 `em_decl_*` kind 切片）与 `emit_impls`
-   （`g_sb`）仍在宿主。
-3. **D6 尾**：`emit_expr` / `emit_node` / `emit_field` / `emit_inline`
-   （`em_*` kind 切片主体）与 `emit_outconv`（`g_oc_bypass_node`）仍在宿主。
-4. **回退改真修复**（让覆盖率从 378/529、63/72 回到 100%）：D-013
-   retain/release 与 struct sret、vptr 数组/嵌套/匿名成员胶水、多段 `into`
-   链、静态 `for` init、GNU 局部属性、超长名动态打印、命名空间 host 预检。
-   这些函数当前**字节等价**但不计入 LIR 覆盖率，是本清单的主要技术债。
-5. `test/ir/README.md` 的覆盖率数字随本清单 §2 更新；REV 需签字确认“回退 ≠
+1. **外壳完整 LModule 化**（S8 原目标，未完成）：`write_unit_header(_body)` /
+   `.abi.h` / map 已移出宿主，但四个入口仍读 AST/符号表；编译模式的
+   `emit_program` 体、类型/全局节点遍历、实例/ADT 胶水的数据来源尚未换成
+   `LModule` 数据契约（当前只消费 `LModulePlan` 的写者身份与内建头清单）。
+2. **回退改真修复**（让覆盖率回到 100%）：D-013 retain/release 与 struct
+   sret、vptr 数组/嵌套/匿名成员胶水、多段 `into` 链、静态 `for` init、
+   GNU 局部属性、超长名动态打印、命名空间 host 预检。这些函数当前**字节
+   等价**但不计入 LIR 覆盖率，是本清单的主要技术债。
+3. `test/ir/README.md` 的覆盖率数字随本清单 §2 更新；REV 需签字确认“回退 ≠
    已降级”。
+4. DOC-89 的历史行锚点：Emitter 拆分使 26 个历史记录（battle / phase 卡 /
+   issue / proposal / review）里的 `Emitter.h.ct#L…` 超出新行数；按 DOC-89
+   的既有机制登记为**精确 (文件, 原始锚点)** 豁免，不改写历史记录正文。
 
 ## 4 回滚
 

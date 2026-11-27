@@ -158,16 +158,19 @@ A1 是 spike：先验证“子单元只 import Core、宿主 import 子单元、
 
 `emit_program` / `emit_unit` / `fail` / `fail_from` 留在 `EmitOps` 作入口。
 
-**施工状态（2026-11-27）**：D4 已落 10/11 方法 + 依赖自由函数
-`adoption_default_only` 到 `backend/emit/EmitHeader.h.ct`；`write_unit_header`
-与其 `write_unit_header_body` 仍留宿主——后者经 `g_sb` 读实例闭包/ADT 胶水的
-生命周期状态，纯搬移须先完成外壳的实例判定迁移。D5 已落 13/15 方法 + 3 个
-自由函数到 `EmitDecl.h.ct`（留 `emit_type_decl` / `emit_impls`）。D6 已落
-6 个无 kind 依赖 helper 到 `EmitExpr.h.ct`（留四个 kind 分发器与
-`emit_outconv`）。S8r2 只做单文件默认 LIR 与 known-gap 清零，D4–D6 的剩余边界
-（`write_unit_header(_body)`、`emit_type_decl`、`emit_impls`、四个 kind 分发器、
-`emit_outconv`）未动，外壳仍非“只消费 LModule”。证据见
-[S8 差异清单 §3c/§3d](../reviews/2026-11-27-s8-ir2-diff-list.md)。
+**施工状态（2026-11-27，S8 尾）**：D4 已落 10/11 方法 + 依赖自由函数
+`adoption_default_only` 到 `backend/emit/EmitHeader.h.ct`；D5 全部落盘
+（`emit_type_decl` + 六个 `em_decl_*` + `emit_impls` + 实例/闭包/ADT 胶水
+27 个自由函数）到 `EmitDecl.h.ct`；D6 全部落盘（五个分发器 + 全部
+`em_*` / `sb_*` / `match_*` / `eb_*` 切片）到 `EmitExpr.h.ct`。
+`write_unit_header(_body)`、`emit_unit_body` 与外壳胶水（Box / ADT
+生命周期 / 字面量 / 实例方法）落到新单元 `EmitShell.h.ct`；
+`Emitter.h.ct` 从 9872 行降到 1541 行，只剩 `emit_program` / `emit_unit` /
+fail 与 `ct_emit_*` 绑定。写者身份由 `LModulePlan.shell_u` / `shell_header`
+提供；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used` 的定义已移入子单元，
+宿主只按名读写，不再自己判定。四个入口仍读 AST / 符号表（编译模式的
+`emit_program` 体尚在宿主），“只消费 LModule”未完成，见
+[S8 差异清单 §3d](../reviews/2026-11-27-s8-ir2-diff-list.md)。
 
 ### 4.5.1 D1–D3 施工单（S1a-1 内，IR 之前）
 
