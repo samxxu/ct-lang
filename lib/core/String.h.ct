@@ -125,6 +125,18 @@ impl String {
         return p;
     }
 
+    /* LANG-30: zero-allocation stdout exits; the owning handle borrows itself
+       through `as_str()` and reuses the `Str` body (no `cstr()`, no copy). */
+    pub void print() {
+        Str v = self->as_str();
+        v.print();
+    }
+
+    pub void println() {
+        Str v = self->as_str();
+        v.println();
+    }
+
     /* A new String over an independent copy. */
     pub String to_string() {
         return ct_str_alloc(self->ptr, self->len);

@@ -6,4 +6,5 @@
  * `.h.ct` may only include its own shim; compile mode expands this
  * shim into the single translation unit it emits.
  */
+#include <stdio.h>
 #include <stdlib.h>

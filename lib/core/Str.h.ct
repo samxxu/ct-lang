@@ -129,6 +129,25 @@ impl Str {
         return p;
     }
 
+    /* LANG-30: write exactly `len` bytes to stdout. Zero allocation: the
+       view's own `ptr` is handed to `fwrite`, so no NUL copy and no
+       `cstr()`; an empty view writes nothing. The write result is ignored,
+       the same way `printf` ignores it (a distinct error exit is out of
+       scope for REQ-PRINT-1). */
+    pub void print() {
+        if (self->len <= 0 || self->ptr == 0) return;
+        fwrite(self->ptr, 1, (size_t)self->len, stdout);
+    }
+
+    /* `print()` plus one '\n'. The newline is always written, including for
+       an empty view, so `println` has a fixed one-byte overhead. */
+    pub void println() {
+        if (self->len > 0 && self->ptr != 0) {
+            fwrite(self->ptr, 1, (size_t)self->len, stdout);
+        }
+        fputc('\n', stdout);
+    }
+
     /* A borrowed sub-view (no allocation). */
     pub Str slice(int start, int n) {
         if (start < 0) start = 0;
