@@ -111,6 +111,58 @@ seed 两轮逐字节）、`check-seed`、`check-docs`、`tools/check.sh g1/g8`�
 **sharp edge（已登记）**：1.1 发射器不会给 `return` 复合字面量中的文件作用域名加
 单元前缀（`(Result<...>){ 1, g_iset[idx], 0 }`）；D5 先绑定局部变量绕开，行为等价。
 
+## 3.6 结果（2026-11-28 施工记录，S8b 剩余子集）
+
+> 分支 `issue/s8b2`（起点 `9b980aa3`，v1-PH-2 收口后），只改本工作树；
+> **未 push、未打 tag、未改版本号、未改 issue**。承接 §3.5 的“剩余”，
+> 按 §2.1 在 S8 之后补 `backend/emit` / `frontend/parse` / `backend/mem`
+> 三域，并做 D2 符号表行块、D4 判别式、D6 函子。每片独立提交、
+> 独立 seed 重生成；用户语料生成 C 仍以 `check-goldens-ast` 25/25 兜底。
+
+| 片 | 提交 | 域 | 交付 | LOC（前→后） | 计数（前→后） |
+| --- | --- | --- | --- | --- | --- |
+| D6 | `fc039734` | `backend/emit` + `frontend/parse` | `Expr.st_hook` / `ct_emit_set_body_hook` 形参与 4 处 `body_hook` 副本改 `(A,B) => R` | 10221 → 10221 | 函子签名 0 → 6；生成 C 逐字节不变，seed 无需重生成 |
+| D4 | `8a5a0dc8` | `backend/mem` | `expr_mentions` / `expr_returns` / `leak_assign` 左值分类改 `NodeKind` match（or 模式）；节点池不动 | Memory 476 → 498 | 该单元 node-kind 比较 17 → 8；`match ((NodeKind)` 0 → 3 |
+| D2 | `7f9d737e` | `frontend/sym`（调用点含 module/parse/EmitDecl） | `types`/`type_kind`/`type_target`、`alias_name`/`alias_full`、`tbare`/`tfull`/`tbambig` 三组并行数组 → `TypeRow` / `AliasRow` / `BareTypeRow` 行块 | Symbols 3614 → 3599 | 该单元 realloc 34 → 29；全仓 `realloc(` 101 → 96 |
+| D3a | `4f062885` | `backend/emit` | allocator 名 4 个 64 字节行 → 驻留文本；`--alloc` 切分改 `ct_intern_len` | EmitShell 1566 → 1564；EmitterCore 350 → 352 | EmitShell snprintf 7 → 3 |
+| D3b | `37a589fc` | `frontend/parse` | match 成员路径 5 组手算 `malloc`+`snprintf`+`free` → `ct_scratch_fmt`；删 512 字节 `rbase` 拷贝 | StmtMatch 2295 → 2267 | snprintf 49 → 43；malloc 8 → 3；`free(` 61 → 53 |
+| D3c | `85df6ec6` | `backend/emit` | `__ct_new%d` / `__ct_q%d` / `__ct_mres%d` / `__arg%d` / `struct %s` 改 `ct_scratch_fmt` / `ct_internf`，删 6 个定长缓冲 | EmitExpr 5979 → 5975；EmitDecl 2039 → 2039 | EmitExpr snprintf 9 → 4；EmitDecl 3 → 0 |
+
+**收官汇总**（`selfhost/ct-ast/**/*.ct`，起点 `9b980aa3` → 本子集 HEAD）：
+
+| 指标 | 起点 | HEAD | 说明 |
+| --- | --- | --- | --- |
+| 源码 LOC | 81,194 | 81,169 | −25 |
+| `snprintf(`（不含 `vsnprintf`） | 326 | 308 | −18（D3a −4 / D3b −6 / D3c −8） |
+| `realloc(` | 101 | 96 | −5（D2） |
+| `malloc(` | 60 | 55 | −5（D3b） |
+| 节点 `kind ==/!=` 比较 | 289 | 280 | −9（D4） |
+| `match ((NodeKind)` | 10 | 13 | +3（D4） |
+| 发射 C 行数（p88 live pin，仅编译器自身） | 94,941 | 95,096 | +155，允许变化；用户语料 25/25 逐字节 |
+| seed 行数（`.c` + `.h`） | 109,979 | 110,360 | +381，两轮逐字节 |
+
+**门禁**（本子集 HEAD，2026-11-28 本工作树实跑）：`bash selfhost/check-all.sh`
+**8 门全绿**——`test/run` 4/0、`test/pkg` 165/0、`check-ast` 1741 passed / 0 failed /
+6 skipped（含自举 fixpoint 2 轮）、`check-warnings` 617 ok / 0 failed、`check-docs` OK、
+`check-goldens-ast` 25/25、`check-seed` 两轮逐字节 + 手改负例红；另
+`check-sanitizers` OK（662 checks，无 sanitizer 报告）、`check-semantics` 24 断言 OK、
+`tools/check.sh g0/g1/g4/g6/g8` 全绿（g4 含 `MATRIX_STRICT=1`，g8 报 9 个历史偏移）。
+原始输出见交付报告。
+
+**sharp edge（新增）**：发射器把方法体里的 `self` 重写为 `_self` 时**不进入复合
+字面量**，所以 `match ((NodeKind){ .tag = self->... })` 会发射非法 C；match 主语
+必须先绑局部（D4 的 `k`）。这与 §3.5 的 `return` 复合字面量前缀问题是同一类，
+登记给后续 C2p/emit 修复。
+
+**剩余（本子集未做）**：
+- D3 的其余 `snprintf` 仍是“拷进定长行/调用方 buffer”（`Pkg` 53、`Symbols` 41
+  等），要真正清零需把行字段改 pool 文本，属容量类结构改动，不在本子集；
+- D2 的 34 处 `Symbols` realloc 只做了并行数组部分（8 → 3）；`funcs` / `vars` /
+  `structs` 等大表仍是裸指针 + 容量，改 `Vec<T>` 需全调用点迁移；
+- D4 只在 `backend/mem` 做了 3 个函数；`EmitExpr` / `TypeCheck` 的既有 match
+  未扩展，`parser` 的 NodeKind if 链仍在；
+- 生成 C 可读性 REVIEW 签字仍未签。
+
 ## 4 非目标
 
 - 不把 Arena 节点池改成 ADT（D32 布局与性能契约不动）；
