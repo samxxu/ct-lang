@@ -2529,8 +2529,8 @@ max2<struct Point>(p, q);     /* → Point_Compare_vtable.cmp(&a, (&b)) */
   构建里只有一份定义，由**模板所在单元**发布到生成头，其他单元只引用。
 - **固有方法**：`impl<T> Name<Args> { … }` 给实例加方法，落码 `<Instance>_<method>`，调用点
   **静态派发**（`v.push(3)` → `Vec_int_push(&v, 3)`），不生成 vtable、不装箱；同一实例可同时有
-  多个 `impl` 块。实参默认只检查元数；`ct check --types` 会额外检查类型（L32-6），
-  `ct build` / `ct compile` 仍不检查（`docs/phases/v0-PH-29/card.md` §10.2）。
+  多个 `impl` 块。实参元数始终检查；类型判定（L32-6）在 `ct check --types`、`ct build` 与
+  `ct compile` 默认路径上都执行（`v1-PH-2` S7-c；默认 `error`，`--check-level` 可降级/关闭）。
 - **`.` 与 `->`（v0-PH-51，仅 ct-ast）**：结构体指针作为方法接收者必须用 `->`；`.` 是硬错 L51-1
   （`'.' cannot call method 'f' through a pointer receiver; use '->f()'`），不会再发射 `S_f(&p)` /
   `Vec_int_push(&p, …)`。值接收者的 `.`、接口指针的 `.`（`Show *p; p.m()`，按接口值派发）与
@@ -2682,10 +2682,20 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 
 ### 4.53 可选类型检查 `ct check --types`（Phase 32）
 
-- **开关**：`ct check --types` 只在三处做粗粒度类型校验——声明初值 / 赋值（含 `into` 块里的
-  `.field = expr`）、`return`、容器与泛型固有方法的实参。不带 `--types` 的 `ct check`、以及
-  `ct build` / `ct compile` 的输出、诊断和 golden 逐字节不变。`--types` 与别的子命令组合报
-  `ctc: --types is only valid with 'ct check'` 并退出 1；这是 CLI 诊断（L32-7），不是源码诊断。
+- **开关（v1-PH-2 S7 起默认）**：三类粗粒度类型校验——声明初值 / 赋值（含 `into` 块里的
+  `.field = expr`）、`return`、容器与泛型固有方法的实参——在 **`ct build` 与 `ct compile`
+  （含裸 `ctc <file>`）的默认路径**上执行，默认严重级 `error`：发现即在写任何 `.c` / 可执行
+  文件之前失败。`--check-level=warn` 降为 `warning:` 并继续写产物，`--check-level=off` 完全
+  关闭（逃生口；产物与接入前的编译逐字节相同）。`ct check` 仍需显式 `--types`，其判据、文案
+  与退出码不变；`--types` 与别的子命令组合报 `ctc: --types is only valid with 'ct check'`
+  并退出 1（CLI 诊断 L32-7，不是源码诊断）。
+- **同一判据**：`ct check --types`、`ct build` 与 `ct compile` 走同一个判定内核，同一处
+  `file:line:col` 与同一句文案；三条路径的差别只在「谁开启」与「多严」。默认路径按
+  **普通赋值 → `return` → 容器实参** 三片独立落地、每片自带 FP=0 证据与独立回滚点
+  （`v1-PH-2` S7-a / S7-b / S7-c，见 [s7-evidence-baseline](planning/s7-evidence-baseline.md)）。
+- **判定时机与优先级**：默认路径在解析期判定，所以一条同时违反专用规则的非法语句可能先报
+  本节文案（例如把 `Str` 视图当 `String` 返回、`own` 初值同时类型不匹配），专用规则不再先报
+  自己的措辞；判红与退出码不变，合法程序与生成产物不受影响。
 - **判定内核**：复用 19.2 的 `arg_class`。两侧都是指针时比较**基类型与层数**：同层不同基类型、
   不同星数是硬错；`void *` ↔ 任意对象指针、裸 `0`、typedef、数组、闭包、函数指针仍跳过。
   算术类内部一律兼容（`int x = 1.5`、`long n = 1` 不报）；接口槽仍走既有装箱路径；
@@ -2707,8 +2717,10 @@ struct ServerConfig copy = live into { .port = 9090; };  /* 左值：直接改 l
 - **容器实参**：固有方法调用先按接收者实例行把 impl 的类型参数绑定到具体 C 实参，再对形参做
   受限替换（裸 `T` / `U` 与 `T *` / `U *`），不按 `Vec` / `Map` 名字分支；用户泛型
   `Pair<A, B>` 走同一条路径。
-- **严格模式**：新诊断经 `ct_type_warn` 记录，`ct check` 的 strict 模式把 warning 升级为
-  `error` 并让退出码非 0；`ct build` / `ct compile` 不进入这些判定。
+- **严格模式**：新诊断经 `ct_type_warn` / `ct_type_class_warn` 记录。`ct check` 的 strict
+  模式把 warning 升级为 `error` 并让退出码非 0；默认路径由 `--check-level` 决定（默认 2
+  error、1 warn、0 off）。`ct build` 对既有四族（`loop` 遮蔽、非 immortal `Str` 视图、
+  `loop` 计数、trait 方法歧义）的严重级保持原样，本节的升级只作用于上述三类判定。
 
 ### 4.54 有界泛型 struct 与嵌套 impl pattern（Phase 33）
 

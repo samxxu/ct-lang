@@ -57,12 +57,14 @@
 
 ## 4. 边界（不是缺口，是取舍）
 
-- **默认路径不做全量类型检查**：`ct compile` / `ct build` 不做全量类型检查；多数算术类错配
-  仍要到 C 编译器才报（`ct build` 会转述 cc 的错误），但**按值 struct 的实参/返回不一致**
-  （v0.53.2 起）与 **impl 签名漂移**（v0.45 起）已是硬错，`ct build --check-level=warn|error`
-  还能把 B 的检查接进构建路径。需要更早发现时用可选的 `ct check --types`（**受限子集**，
-  Phase 32 / [language-spec §4.53](language-spec.md#453-可选类型检查-ct-check---typesphase-32)），
-  它不是全量类型系统，也不改变编译路径。Ct 的定位是「把 Ct 翻译成可读的 C」，不改变这个性质。
+- **默认路径仍不是全量类型检查**：`ct compile` / `ct build` 从 v1.2 起默认执行
+  [language-spec §4.53](language-spec.md#453-可选类型检查-ct-check---typesphase-32) 的三类
+  判定（声明初值/赋值、`return`、容器与泛型固有方法实参），默认 `error`，
+  `--check-level=warn|off` 可降级/关闭；但三类之外仍不是全量类型系统——多数算术类错配
+  要到 C 编译器才报（`ct build` 会转述 cc 的错误），而**按值 struct 的实参/返回不一致**
+  （v0.53.2 起）与 **impl 签名漂移**（v0.45 起）早已是硬错。`ct check --types` 保留为
+  单文件显式入口（同一判据、`ct check` 的 strict 严重级），不是第二个类型系统。
+  Ct 的定位是「把 Ct 翻译成可读的 C」，不改变这个性质。
 - **接口数组仍是固定容量**：`Vec<T>` / `Map<K,V>` 是内建动态容器，但接口值数组
   （`Iface a[N]`）仍是固定容量；需要可变数量时用 `Vec<Iface>`。Observer / Composite 的
   fixture 用固定上限演示结构，不是语言不能动态增长。

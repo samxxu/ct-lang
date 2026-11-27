@@ -142,6 +142,74 @@ FP=0（2026-11-27，冻结 seed 构建的编译器）：
 4. **S7-d**：`--check-level=off` 逃生与 `--check-level=strict` 灰度开关；
 5. **S7-e**：P-1.3 迁移 lint 三档 dry-run。
 
+## 6.1 REQ-TYPE-1 落地（2026-11-27，v1-PH-2 S7）
+
+`--types` 的三类判定进入默认路径，按 §6 的「普通赋值 → `return` → 容器」三片独立
+提交、每片单独过 FP=0 后再生成了冻结 seed（`bootstrap/**` 只随各片的 `chore(seed)`
+提交变化）。`build` 侧在 v1-PH-1 S3 已是默认 `error`（`types_level=2`），本次不再改动它；
+新增的是 `ct compile` 与裸 `ctc <file>` 的默认路径。
+
+### 6.1.1 切片、提交与开关
+
+| 片 | 判定 | 提交 | 默认路径行为 |
+| --- | --- | --- | --- |
+| S7-a | 声明初值 / 赋值（L32-1/2）、`$` 目标、struct 花括号初值 | `d8eae2c0`（红 `030eb07f`，seed `76f1c6e1`） | compile 默认 `error` |
+| S7-b | `return`（L32-3/4/5） | `159d4ef3`（红 `64ee4295`，seed `ee60d855`） | 掩码 1→3 |
+| S7-c | 容器 / 泛型固有方法实参（L32-6） | `506f337c`（红 `db4edc17`，seed `dc59ec83`） | 掩码 3→7 |
+
+- 机制：`Diag` 新增一次运行的 `types_class_mask`（1 赋值 / 2 return / 4 容器）与
+  `types_class_level`（0 off / 1 warn / 2 error）；三个 `ct_type_class_*` 门只读这一份
+  策略，`ct_type_class_warn` 是唯一出口。`--check-level=off|warn|error` 从 build-only
+  扩到 compile（`ct check` 仍拒绝，`--types` 仍只认 `ct check`）。
+- `build` / `ct check --types` 的 class level 恒为 0，出口逐字回落到原来的
+  `record_type_warn` / strict 通道，因此两条路径的判据、文案与退出码不变。
+- `--check-level=warn` 在 compile 下报 `warning:` 并继续写 `.c`；`off` 不跑判定，
+  产物与接入前逐字节相同。§6 第 4 条的 `strict` 灰度未启用：默认已是 `error`，
+  本阶段没有更严的一档。
+
+### 6.1.2 FP=0（冻结 seed 构建的编译器，2026-11-27）
+
+口径：`examples test lib selfhost/ct-ast` 下全部 `.ct`（1593 个）逐文件跑
+`ct-ast <file> -o <out>.c`（compile 默认）与 `ct-ast check --types <file>`；
+对基线 `660e2b07` 比对「退出码 + 产物 sha256 + 诊断逐行哈希」。
+`test/ast/p118_skip.tsv` 的 47 行是既有负例 / 诊断演示 / p32 基线夹具，不算合法件。
+
+| 版本 | compile-green | 退出码变化 | 其中合法件 | `check --types` 变化 |
+| --- | --- | --- | --- | --- |
+| 基线 `660e2b07` | 803 | — | — | — |
+| S7-a | 796 | 7 | **0** | 0 / 1593 |
+| S7-b | 790 | 13 | **0** | 0 / 1593 |
+| S7-c | 782 | 21 | **0** | 0 / 1593 |
+
+- 21 个变化文件全部命中 `p118_skip.tsv`（`test/ast/check_errors/*`、
+  `test/ast/errors/p45_*`、`test/probes/fixtures/p32_*`），是本来就应该判红的负例；
+  合法件无新增假阳性。分语料（S7-c 终态 vs 基线）：`examples/` 234 个 `.ct`
+  （68 个样例目录）、167 个 compile-green、**0 变化**；`lib/` 8 / 8 / **0**；
+  `selfhost/ct-ast/` 67 / 6 / **0**；`test/` 1284 个、622 个 compile-green、
+  21 个变化（全部是 skip 表内的负例）。
+- 未变化的 compile-green 文件产物 sha256 逐字节相同：判定只读 AST，不写产物。
+- `test/ast/p122_types_default.sh` 在 gate 8 内钉住切片边界（探针里 `S7B` / `S7C`
+  由各片翻 1）与两条入口的一致性：默认路径首诊断行与 `ct check --types` 首行逐字相同。
+
+> 勘误：`159d4ef3` 与 `506f337c` 的提交正文把 compile-green 余数写成 780 / 772，
+> 实际为 **790 / 782**（上表）。数值以本表为准，判定与证据不受影响。
+
+### 6.1.3 负例诊断的前移（同一提交 `a6cba61f` 重基线）
+
+三类判定在**解析期**执行，因此同一条非法语句若同时违反更专用的规则，第一诊断会前移
+到本节文案；合法语料不受影响（§6.1.2 已证 FP=0），生成产物也不变。实测有 8 条既有负例
+的诊断文本/位置变化，逐条在 `test/probes/p86_error_diags.tsv` 重基线：
+
+| 文件 | 变化 |
+| --- | --- |
+| `p45_{assign,container,depth,init,return}` | exit 0 / 空 stderr → exit 1 + L32 文案（S7 的目的） |
+| `p44_error_type`、`p44_operand` | 文案不变；位置由 emitter 的 `line:1` 换成类型内核的精确 `line:col` |
+| `p49_own_addr` | L32-1 先于 L49-1（初值同时类型不匹配）；L49-1 契约仍由 `p49_own_int_addr` 钉住 |
+
+同理 `p80_retain/neg_escape` 的 SH-102 emitter 文案在 `ct build` 上自 v1-PH-1 S3 起就已被
+parse-time 判定先行，本片只是让裸 `compile` 路径与它对齐；夹具依旧判红，探针改为钉
+`return: expected 'struct String', got 'struct Str'`。
+
 ## 7 待裁定
 
 1. §3 四条族的默认严重级（方案 A / B / C）；

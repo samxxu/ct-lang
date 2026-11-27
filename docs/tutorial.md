@@ -2015,8 +2015,9 @@ v.push("s");            // argument 1: expected 'int', got 'char *'
 ```
 
 判定是粗粒度的：两侧都是指针时不比较基类型与层数，算术类之间一律放行，裸 `0` 可填任何指针；
-数组、闭包、函数指针、`void` 实际值等判不出的位置保持沉默。不带 `--types` 的 `ct check` 与
-`ct build` / `ct compile` 的输出完全不变。
+数组、闭包、函数指针、`void` 实际值等判不出的位置保持沉默。`ct build` / `ct compile` 从
+v1.2 起默认执行这三类判定（默认 `error`，`--check-level=warn|off` 降级/关闭）；`ct check`
+仍需显式 `--types`，其输出与从前一致。
 
 ## 17. `Box<T>` 与 `new`（Phase 81，v0.81.0 起可用）
 
