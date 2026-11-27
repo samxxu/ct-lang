@@ -34,6 +34,8 @@ ir: OK (79 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 7 LIR fixtur
 - 自举：`selfhost/ct-ast/main.ct` 的 74 个单元、全部函数体由 LIR 打印；
 - seed：`bootstrap/ct-ast` 由 LIR 默认路径重生成，且与 `CT_LIR=0` 的 AST 产物
   `diff -r` 只差 `.ctcache/`（即逐字节相同）。
+- 自举 3 轮（tag 前口径，本轮未打 tag）：seed 编译出 `ct1` → `ct2` → `ct3`，
+  每轮重新发射 `selfhost/ct-ast` 的 C；`round1/2/3 identical` 三行均通过。
 
 ## 3 单文件路径剩余差异（38 条断言，AST 默认）
 
