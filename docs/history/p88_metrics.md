@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=11085 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=88977 io_cap=2048
+     emitted_before=48223 emitted_after=88979 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -264,6 +264,8 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
     `DiagStore` / `PkgOps`，发射 C 88923 → 88977（+54：方法签名、调用形状与
     `PkgOps` vtable 增长）；`Pkg` 仅余 3 个变参 builder 自由函数（真 trait 方法
     不能变参）。
+  - D1 `frontend/sym` 方法化：`symbols_grow` 进 `SymbolOps`，发射 C
+    88977 → 88979（+2：一条方法签名/调用形状）。
 - **v1-PH-2 S7-c（REQ-MEM-2 写入摘要）后的 live 校准**：`Emitter.h.ct` 仍为
   11065 行；新增 `frontend/parse/Mem2Writes.h.ct` 一个单元，发射 C 87080 → 87839
   （+759：定义出口的直接写扫描、一层组合与调用点判定）。发射器与切片清单不变。

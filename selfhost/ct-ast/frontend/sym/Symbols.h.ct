@@ -385,6 +385,9 @@ pub struct StructDef {
 }
 
 pub trait SymbolOps {
+    /* S8b D1: the table grower was the unit's last `struct Symbols *self`
+       free function; as a method it takes its receiver implicitly. */
+    int  grow(void);
     int  declare_var(const char *name, const char *type);
     int  declare_global(const char *name, const char *type, const char *cname,
                         const char *ns, int imported);
@@ -874,6 +877,68 @@ pub struct Symbols *symbols_get(void);
 
 
 impl SymbolOps for Symbols {
+    /* Give the four big tables their backing store. calloc keeps the zero-filled
+       semantics the static arrays had, and it runs before any writer -- the parser
+       appends to `funcs` directly -- so no access can meet a NULL table. */
+    int grow(void)
+    {
+        if (!self->funcs) {
+            self->funcs = calloc(MAX_FUNCS + 64, sizeof(*self->funcs));
+            if (!self->funcs) return -1;
+            self->fncap = MAX_FUNCS + 64;
+        }
+        if (!self->vars) {
+            self->vars = calloc(MAX_VARS, sizeof(*self->vars));
+            if (!self->vars) return -1;
+            self->varcap = MAX_VARS;
+        }
+        if (!self->scope) {
+            self->scope = calloc(MAX_SCOPE, sizeof(*self->scope));
+            if (!self->scope) return -1;
+            self->scopecap = MAX_SCOPE;
+        }
+        if (!self->ginsts) {
+            self->ginsts = calloc(MAX_GENERIC_INSTS, sizeof(*self->ginsts));
+            if (!self->ginsts) return -1;
+            self->ginstcap = MAX_GENERIC_INSTS;
+        }
+        if (!self->traits) {
+            self->traits = calloc(MAX_TRAITS, sizeof(*self->traits));
+            if (!self->traits) return -1;
+            self->traitscap = MAX_TRAITS;
+        }
+        if (!self->structs) {
+            self->structs = calloc(MAX_STRUCTS + MAX_STRUCT_INSTS, sizeof(*self->structs));
+            if (!self->structs) return -1;
+            self->structcap = MAX_STRUCTS + MAX_STRUCT_INSTS;
+        }
+        if (!self->closures) {
+            self->closures = calloc(MAX_CLOSURES, sizeof(*self->closures));
+            if (!self->closures) return -1;
+            self->closurecap = MAX_CLOSURES;
+        }
+        if (!self->taliases) {
+            self->taliases = calloc(MAX_TYPE_ALIASES, sizeof(*self->taliases));
+            if (!self->taliases) return -1;
+            self->taliascap = MAX_TYPE_ALIASES;
+        }
+        if (!self->gtaliases) {
+            self->gtaliases = calloc(MAX_GLOBAL_TYPE_ALIASES, sizeof(*self->gtaliases));
+            if (!self->gtaliases) return -1;
+            self->gtaliascap = MAX_GLOBAL_TYPE_ALIASES;
+        }
+        if (!self->types) {
+            self->types = (const char **)calloc(MAX_TYPES, sizeof(*self->types));
+            if (!self->types) return -1;
+            self->type_kind = calloc(MAX_TYPES, sizeof(*self->type_kind));
+            if (!self->type_kind) return -1;
+            self->type_target = (const char **)calloc(MAX_TYPES, sizeof(*self->type_target));
+            if (!self->type_target) return -1;
+            self->typecap = MAX_TYPES;
+        }
+        return 0;
+    }
+
     /* The tables report the bare reason; the position belongs to the parser
        object, which wraps this message with the current line and token. */
     int fail(const char *msg)
@@ -2631,73 +2696,11 @@ impl TypeAliasOps for Symbols {
    forward declaration the emitter places with the impl. */
 static struct Symbols g_symbols;
 
-/* Give the four big tables their backing store. calloc keeps the zero-filled
-   semantics the static arrays had, and it runs before any writer -- the parser
-   appends to `funcs` directly -- so no access can meet a NULL table. */
-static int symbols_grow(struct Symbols *self)
-{
-    if (!self->funcs) {
-        self->funcs = calloc(MAX_FUNCS + 64, sizeof(*self->funcs));
-        if (!self->funcs) return -1;
-        self->fncap = MAX_FUNCS + 64;
-    }
-    if (!self->vars) {
-        self->vars = calloc(MAX_VARS, sizeof(*self->vars));
-        if (!self->vars) return -1;
-        self->varcap = MAX_VARS;
-    }
-    if (!self->scope) {
-        self->scope = calloc(MAX_SCOPE, sizeof(*self->scope));
-        if (!self->scope) return -1;
-        self->scopecap = MAX_SCOPE;
-    }
-    if (!self->ginsts) {
-        self->ginsts = calloc(MAX_GENERIC_INSTS, sizeof(*self->ginsts));
-        if (!self->ginsts) return -1;
-        self->ginstcap = MAX_GENERIC_INSTS;
-    }
-    if (!self->traits) {
-        self->traits = calloc(MAX_TRAITS, sizeof(*self->traits));
-        if (!self->traits) return -1;
-        self->traitscap = MAX_TRAITS;
-    }
-    if (!self->structs) {
-        self->structs = calloc(MAX_STRUCTS + MAX_STRUCT_INSTS, sizeof(*self->structs));
-        if (!self->structs) return -1;
-        self->structcap = MAX_STRUCTS + MAX_STRUCT_INSTS;
-    }
-    if (!self->closures) {
-        self->closures = calloc(MAX_CLOSURES, sizeof(*self->closures));
-        if (!self->closures) return -1;
-        self->closurecap = MAX_CLOSURES;
-    }
-    if (!self->taliases) {
-        self->taliases = calloc(MAX_TYPE_ALIASES, sizeof(*self->taliases));
-        if (!self->taliases) return -1;
-        self->taliascap = MAX_TYPE_ALIASES;
-    }
-    if (!self->gtaliases) {
-        self->gtaliases = calloc(MAX_GLOBAL_TYPE_ALIASES, sizeof(*self->gtaliases));
-        if (!self->gtaliases) return -1;
-        self->gtaliascap = MAX_GLOBAL_TYPE_ALIASES;
-    }
-    if (!self->types) {
-        self->types = (const char **)calloc(MAX_TYPES, sizeof(*self->types));
-        if (!self->types) return -1;
-        self->type_kind = calloc(MAX_TYPES, sizeof(*self->type_kind));
-        if (!self->type_kind) return -1;
-        self->type_target = (const char **)calloc(MAX_TYPES, sizeof(*self->type_target));
-        if (!self->type_target) return -1;
-        self->typecap = MAX_TYPES;
-    }
-    return 0;
-}
-
 struct Symbols *symbols_get(void)
 {
     if (!g_symbols.ret_type) g_symbols.ret_type = "";   /* non-NULL before the first body */
     if (!g_symbols.trait_default) g_symbols.trait_default = "";   /* C2p-5: non-NULL outside a default body */
-    if (symbols_grow(&g_symbols) != 0) {
+    if (g_symbols.grow() != 0) {
         fprintf(stderr, "ctc: out of memory\n");
         exit(1);
     }

@@ -153,6 +153,7 @@ struct frontend_sym_TypeAliasOps_iface {
 };
 
 struct frontend_sym_SymbolOps_vtbl {
+    int (*grow)(void *);
     int (*declare_var)(void *, const char *, const char *);
     int (*declare_global)(void *, const char *, const char *, const char *, const char *, int);
     int (*declare_const)(void *, const char *, const char *, const char *, int);
