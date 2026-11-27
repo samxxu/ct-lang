@@ -3,6 +3,7 @@
 #include "Cache.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/cache/Cache.h.ct"
 #include "Cache.shim.h"
@@ -16,6 +17,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -322,6 +325,16 @@ const struct tool_cache_CacheOps_vtbl tool_cache_Cache_tool_cache_CacheOps_vtabl
     .hit = tool_cache_Cache_tool_cache_CacheOps_hit,
     .store = tool_cache_Cache_tool_cache_CacheOps_store
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 struct tool_cache_Cache * tool_cache_cache_get(void) {
     return (&tool_cache_g_cache);

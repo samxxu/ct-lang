@@ -10,6 +10,7 @@
 #include "LModule.h"
 #include "Verifier.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/lir/Lower.h.ct"
 #include "Lower.shim.h"
@@ -222,6 +223,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -444,6 +447,16 @@ static int lw_pw_params(struct backend_lir_Lower *, struct backend_lir_ct_lfunc 
 static struct backend_lir_Lower backend_lir_g_lower;
 static FILE * backend_lir_g_lir_out;
 static int backend_lir_g_lir_range_k;
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 void backend_lir_ct_lir_report_printed(void) {
     struct backend_lir_LModule * l = backend_lir_lmod_get();
     const char * e;

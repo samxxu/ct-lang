@@ -27,6 +27,7 @@
 #include "ExprCallCheck.h"
 #include "ExprClosure.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprInstantiate.h.ct"
 #include "ExprInstantiate.shim.h"
@@ -113,6 +114,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -1013,6 +1016,16 @@ const struct frontend_parse_ExprInstantiate_vtbl frontend_parse_Expr_frontend_pa
     .inst_static_method = frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_static_method,
     .static_call_ahead = frontend_parse_Expr_frontend_parse_ExprInstantiate_static_call_ahead
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int frontend_parse_expr_generic_param(struct frontend_parse_Expr * self, const char * name) {
     int i;

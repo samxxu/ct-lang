@@ -10,6 +10,7 @@
 #include "Arena.h"
 #include "Diag.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprNewObject.h.ct"
 #include "ExprNewObject.shim.h"
@@ -28,6 +29,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -428,4 +431,14 @@ const struct frontend_parse_ExprNew_vtbl frontend_parse_Expr_frontend_parse_Expr
     .new_ahead = frontend_parse_Expr_frontend_parse_ExprNew_new_ahead,
     .parse_new_expr = frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 

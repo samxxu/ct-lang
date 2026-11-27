@@ -13,6 +13,7 @@
 #include "Diag.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct"
 #include "ModuleBoundary.shim.h"
@@ -25,6 +26,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -156,6 +159,16 @@ int frontend_module_ct_root_find(const char *, const char *, char * *, int *, in
 int frontend_module_has_word(const char *, const char *);
 const char * frontend_module_io_header_for(const char *);
 int frontend_module_word_is(const char *, const char *);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 int frontend_module_c_manifest_boundary(const char * dir) {
     char * p;
     char line[512];

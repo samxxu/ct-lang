@@ -9,6 +9,7 @@
 #include "Symbols.h"
 #include "Arena.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/type/TypeCheck.h.ct"
 #include "TypeCheck.shim.h"
@@ -48,6 +49,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -541,38 +544,38 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, 
     struct frontend_type_TypeCheck *_self = (struct frontend_type_TypeCheck *)self;
     int k;
     k = _self->arena->nodes[n].kind;
-    struct runtime_arena_NodeKind __ct_match0 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
-    if (__ct_match0.tag == 0) {
+    struct runtime_arena_NodeKind __ct_match3 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
+    if (__ct_match3.tag == 0) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 1) {
+    else if (__ct_match3.tag == 1) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 2) {
+    else if (__ct_match3.tag == 2) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 3) {
+    else if (__ct_match3.tag == 3) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 4) {
+    else if (__ct_match3.tag == 4) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 5) {
+    else if (__ct_match3.tag == 5) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 6) {
+    else if (__ct_match3.tag == 6) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 7) {
+    else if (__ct_match3.tag == 7) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 8) {
+    else if (__ct_match3.tag == 8) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 9) {
+    else if (__ct_match3.tag == 9) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 10) {
+    else if (__ct_match3.tag == 10) {
         int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
         int w;
         if (vi < 0) {
@@ -584,52 +587,52 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, 
         }
         return 0;
     }
-    else if (__ct_match0.tag == 11) {
+    else if (__ct_match3.tag == 11) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 12) {
+    else if (__ct_match3.tag == 12) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 13) {
+    else if (__ct_match3.tag == 13) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 14) {
+    else if (__ct_match3.tag == 14) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 15) {
+    else if (__ct_match3.tag == 15) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 16) {
+    else if (__ct_match3.tag == 16) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 17) {
+    else if (__ct_match3.tag == 17) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 18) {
+    else if (__ct_match3.tag == 18) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 19) {
+    else if (__ct_match3.tag == 19) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 20) {
+    else if (__ct_match3.tag == 20) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 21) {
+    else if (__ct_match3.tag == 21) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 22) {
+    else if (__ct_match3.tag == 22) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 23) {
+    else if (__ct_match3.tag == 23) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 24) {
+    else if (__ct_match3.tag == 24) {
         return ctype_member(_self, n, out, cap, 0);
     }
-    else if (__ct_match0.tag == 25) {
+    else if (__ct_match3.tag == 25) {
         return ctype_member(_self, n, out, cap, 1);
     }
-    else if (__ct_match0.tag == 26) {
+    else if (__ct_match3.tag == 26) {
         char * br;
         char * close;
         if (_self->__frontend_type_typeops_vptr->expr_ctype(_self, _self->arena->nodes[n].a, out, cap) != 0) {
@@ -653,7 +656,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, 
         memmove(br, (br + 1), (strlen((br + 1)) + 1));
         return 0;
     }
-    else if (__ct_match0.tag == 27) {
+    else if (__ct_match3.tag == 27) {
         int n2;
         if (_self->__frontend_type_typeops_vptr->expr_ctype(_self, _self->arena->nodes[n].a, out, cap) != 0) {
             return (-1);
@@ -667,169 +670,169 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, 
         out[(n2 + 2)] = 0;
         return 0;
     }
-    else if (__ct_match0.tag == 28) {
+    else if (__ct_match3.tag == 28) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 29) {
+    else if (__ct_match3.tag == 29) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 30) {
+    else if (__ct_match3.tag == 30) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 31) {
+    else if (__ct_match3.tag == 31) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 32) {
+    else if (__ct_match3.tag == 32) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 33) {
+    else if (__ct_match3.tag == 33) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 34) {
+    else if (__ct_match3.tag == 34) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 35) {
+    else if (__ct_match3.tag == 35) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 36) {
+    else if (__ct_match3.tag == 36) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 37) {
+    else if (__ct_match3.tag == 37) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 38) {
+    else if (__ct_match3.tag == 38) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 39) {
+    else if (__ct_match3.tag == 39) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 40) {
+    else if (__ct_match3.tag == 40) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 41) {
+    else if (__ct_match3.tag == 41) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 42) {
+    else if (__ct_match3.tag == 42) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 43) {
+    else if (__ct_match3.tag == 43) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 44) {
+    else if (__ct_match3.tag == 44) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 45) {
+    else if (__ct_match3.tag == 45) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 46) {
+    else if (__ct_match3.tag == 46) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 47) {
+    else if (__ct_match3.tag == 47) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 48) {
+    else if (__ct_match3.tag == 48) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 49) {
+    else if (__ct_match3.tag == 49) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 50) {
+    else if (__ct_match3.tag == 50) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 51) {
+    else if (__ct_match3.tag == 51) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 52) {
+    else if (__ct_match3.tag == 52) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 53) {
+    else if (__ct_match3.tag == 53) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 54) {
+    else if (__ct_match3.tag == 54) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 55) {
+    else if (__ct_match3.tag == 55) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 56) {
+    else if (__ct_match3.tag == 56) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 57) {
+    else if (__ct_match3.tag == 57) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 58) {
+    else if (__ct_match3.tag == 58) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 59) {
+    else if (__ct_match3.tag == 59) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 60) {
+    else if (__ct_match3.tag == 60) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 61) {
+    else if (__ct_match3.tag == 61) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 62) {
+    else if (__ct_match3.tag == 62) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 63) {
+    else if (__ct_match3.tag == 63) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 64) {
+    else if (__ct_match3.tag == 64) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 65) {
+    else if (__ct_match3.tag == 65) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 66) {
+    else if (__ct_match3.tag == 66) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 67) {
+    else if (__ct_match3.tag == 67) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 68) {
+    else if (__ct_match3.tag == 68) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 69) {
+    else if (__ct_match3.tag == 69) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 70) {
+    else if (__ct_match3.tag == 70) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 71) {
+    else if (__ct_match3.tag == 71) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 72) {
+    else if (__ct_match3.tag == 72) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 73) {
+    else if (__ct_match3.tag == 73) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 74) {
+    else if (__ct_match3.tag == 74) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 75) {
+    else if (__ct_match3.tag == 75) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 76) {
+    else if (__ct_match3.tag == 76) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 77) {
+    else if (__ct_match3.tag == 77) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 78) {
+    else if (__ct_match3.tag == 78) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 79) {
+    else if (__ct_match3.tag == 79) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 80) {
+    else if (__ct_match3.tag == 80) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 81) {
+    else if (__ct_match3.tag == 81) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
-    else if (__ct_match0.tag == 82) {
+    else if (__ct_match3.tag == 82) {
         return _self->__frontend_type_typeops_vptr->expr_type(_self, n, out, cap);
     }
     else {
@@ -862,8 +865,8 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
     nk = _self->arena->nodes[n].kind;
     mptr = 0;
     iname = "";
-    struct runtime_arena_NodeKind __ct_match1 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
-    if (__ct_match1.tag == 34) {
+    struct runtime_arena_NodeKind __ct_match4 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match4.tag == 34) {
         if (strcmp(_self->arena->nodes[n].text, trait) != 0) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "interface type mismatch");
         }
@@ -878,174 +881,174 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
         _self->arena->nodes[bnode].a = n;
         return bnode;
     }
-    else if (__ct_match1.tag == 10) {
+    else if (__ct_match4.tag == 10) {
         iname = _self->arena->nodes[n].text2;
     }
-    else if (__ct_match1.tag == 27) {
+    else if (__ct_match4.tag == 27) {
         if (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_VAR) {
             iname = _self->arena->nodes[_self->arena->nodes[n].a].text2;
             mptr = 1;
         }
     }
-    else if (__ct_match1.tag == 0) {
+    else if (__ct_match4.tag == 0) {
     }
-    else if (__ct_match1.tag == 1) {
+    else if (__ct_match4.tag == 1) {
     }
-    else if (__ct_match1.tag == 2) {
+    else if (__ct_match4.tag == 2) {
     }
-    else if (__ct_match1.tag == 3) {
+    else if (__ct_match4.tag == 3) {
     }
-    else if (__ct_match1.tag == 4) {
+    else if (__ct_match4.tag == 4) {
     }
-    else if (__ct_match1.tag == 5) {
+    else if (__ct_match4.tag == 5) {
     }
-    else if (__ct_match1.tag == 6) {
+    else if (__ct_match4.tag == 6) {
     }
-    else if (__ct_match1.tag == 7) {
+    else if (__ct_match4.tag == 7) {
     }
-    else if (__ct_match1.tag == 8) {
+    else if (__ct_match4.tag == 8) {
     }
-    else if (__ct_match1.tag == 9) {
+    else if (__ct_match4.tag == 9) {
     }
-    else if (__ct_match1.tag == 11) {
+    else if (__ct_match4.tag == 11) {
     }
-    else if (__ct_match1.tag == 12) {
+    else if (__ct_match4.tag == 12) {
     }
-    else if (__ct_match1.tag == 13) {
+    else if (__ct_match4.tag == 13) {
     }
-    else if (__ct_match1.tag == 14) {
+    else if (__ct_match4.tag == 14) {
     }
-    else if (__ct_match1.tag == 15) {
+    else if (__ct_match4.tag == 15) {
     }
-    else if (__ct_match1.tag == 16) {
+    else if (__ct_match4.tag == 16) {
     }
-    else if (__ct_match1.tag == 17) {
+    else if (__ct_match4.tag == 17) {
     }
-    else if (__ct_match1.tag == 18) {
+    else if (__ct_match4.tag == 18) {
     }
-    else if (__ct_match1.tag == 19) {
+    else if (__ct_match4.tag == 19) {
     }
-    else if (__ct_match1.tag == 20) {
+    else if (__ct_match4.tag == 20) {
     }
-    else if (__ct_match1.tag == 21) {
+    else if (__ct_match4.tag == 21) {
     }
-    else if (__ct_match1.tag == 22) {
+    else if (__ct_match4.tag == 22) {
     }
-    else if (__ct_match1.tag == 23) {
+    else if (__ct_match4.tag == 23) {
     }
-    else if (__ct_match1.tag == 24) {
+    else if (__ct_match4.tag == 24) {
     }
-    else if (__ct_match1.tag == 25) {
+    else if (__ct_match4.tag == 25) {
     }
-    else if (__ct_match1.tag == 26) {
+    else if (__ct_match4.tag == 26) {
     }
-    else if (__ct_match1.tag == 28) {
+    else if (__ct_match4.tag == 28) {
     }
-    else if (__ct_match1.tag == 29) {
+    else if (__ct_match4.tag == 29) {
     }
-    else if (__ct_match1.tag == 30) {
+    else if (__ct_match4.tag == 30) {
     }
-    else if (__ct_match1.tag == 31) {
+    else if (__ct_match4.tag == 31) {
     }
-    else if (__ct_match1.tag == 32) {
+    else if (__ct_match4.tag == 32) {
     }
-    else if (__ct_match1.tag == 33) {
+    else if (__ct_match4.tag == 33) {
     }
-    else if (__ct_match1.tag == 35) {
+    else if (__ct_match4.tag == 35) {
     }
-    else if (__ct_match1.tag == 36) {
+    else if (__ct_match4.tag == 36) {
     }
-    else if (__ct_match1.tag == 37) {
+    else if (__ct_match4.tag == 37) {
     }
-    else if (__ct_match1.tag == 38) {
+    else if (__ct_match4.tag == 38) {
     }
-    else if (__ct_match1.tag == 39) {
+    else if (__ct_match4.tag == 39) {
     }
-    else if (__ct_match1.tag == 40) {
+    else if (__ct_match4.tag == 40) {
     }
-    else if (__ct_match1.tag == 41) {
+    else if (__ct_match4.tag == 41) {
     }
-    else if (__ct_match1.tag == 42) {
+    else if (__ct_match4.tag == 42) {
     }
-    else if (__ct_match1.tag == 43) {
+    else if (__ct_match4.tag == 43) {
     }
-    else if (__ct_match1.tag == 44) {
+    else if (__ct_match4.tag == 44) {
     }
-    else if (__ct_match1.tag == 45) {
+    else if (__ct_match4.tag == 45) {
     }
-    else if (__ct_match1.tag == 46) {
+    else if (__ct_match4.tag == 46) {
     }
-    else if (__ct_match1.tag == 47) {
+    else if (__ct_match4.tag == 47) {
     }
-    else if (__ct_match1.tag == 48) {
+    else if (__ct_match4.tag == 48) {
     }
-    else if (__ct_match1.tag == 49) {
+    else if (__ct_match4.tag == 49) {
     }
-    else if (__ct_match1.tag == 50) {
+    else if (__ct_match4.tag == 50) {
     }
-    else if (__ct_match1.tag == 51) {
+    else if (__ct_match4.tag == 51) {
     }
-    else if (__ct_match1.tag == 52) {
+    else if (__ct_match4.tag == 52) {
     }
-    else if (__ct_match1.tag == 53) {
+    else if (__ct_match4.tag == 53) {
     }
-    else if (__ct_match1.tag == 54) {
+    else if (__ct_match4.tag == 54) {
     }
-    else if (__ct_match1.tag == 55) {
+    else if (__ct_match4.tag == 55) {
     }
-    else if (__ct_match1.tag == 56) {
+    else if (__ct_match4.tag == 56) {
     }
-    else if (__ct_match1.tag == 57) {
+    else if (__ct_match4.tag == 57) {
     }
-    else if (__ct_match1.tag == 58) {
+    else if (__ct_match4.tag == 58) {
     }
-    else if (__ct_match1.tag == 59) {
+    else if (__ct_match4.tag == 59) {
     }
-    else if (__ct_match1.tag == 60) {
+    else if (__ct_match4.tag == 60) {
     }
-    else if (__ct_match1.tag == 61) {
+    else if (__ct_match4.tag == 61) {
     }
-    else if (__ct_match1.tag == 62) {
+    else if (__ct_match4.tag == 62) {
     }
-    else if (__ct_match1.tag == 63) {
+    else if (__ct_match4.tag == 63) {
     }
-    else if (__ct_match1.tag == 64) {
+    else if (__ct_match4.tag == 64) {
     }
-    else if (__ct_match1.tag == 65) {
+    else if (__ct_match4.tag == 65) {
     }
-    else if (__ct_match1.tag == 66) {
+    else if (__ct_match4.tag == 66) {
     }
-    else if (__ct_match1.tag == 67) {
+    else if (__ct_match4.tag == 67) {
     }
-    else if (__ct_match1.tag == 68) {
+    else if (__ct_match4.tag == 68) {
     }
-    else if (__ct_match1.tag == 69) {
+    else if (__ct_match4.tag == 69) {
     }
-    else if (__ct_match1.tag == 70) {
+    else if (__ct_match4.tag == 70) {
     }
-    else if (__ct_match1.tag == 71) {
+    else if (__ct_match4.tag == 71) {
     }
-    else if (__ct_match1.tag == 72) {
+    else if (__ct_match4.tag == 72) {
     }
-    else if (__ct_match1.tag == 73) {
+    else if (__ct_match4.tag == 73) {
     }
-    else if (__ct_match1.tag == 74) {
+    else if (__ct_match4.tag == 74) {
     }
-    else if (__ct_match1.tag == 75) {
+    else if (__ct_match4.tag == 75) {
     }
-    else if (__ct_match1.tag == 76) {
+    else if (__ct_match4.tag == 76) {
     }
-    else if (__ct_match1.tag == 77) {
+    else if (__ct_match4.tag == 77) {
     }
-    else if (__ct_match1.tag == 78) {
+    else if (__ct_match4.tag == 78) {
     }
-    else if (__ct_match1.tag == 79) {
+    else if (__ct_match4.tag == 79) {
     }
-    else if (__ct_match1.tag == 80) {
+    else if (__ct_match4.tag == 80) {
     }
-    else if (__ct_match1.tag == 81) {
+    else if (__ct_match4.tag == 81) {
     }
-    else if (__ct_match1.tag == 82) {
+    else if (__ct_match4.tag == 82) {
     }
     else {
     }
@@ -1080,176 +1083,176 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
                 return n;
             }
             if (((!ip) && addr)) {
-                struct runtime_arena_NodeKind __ct_match2 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
-                if (__ct_match2.tag == 10) {
+                struct runtime_arena_NodeKind __ct_match5 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+                if (__ct_match5.tag == 10) {
                     int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
                     if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
                         return n;
                     }
                 }
-                else if (__ct_match2.tag == 0) {
+                else if (__ct_match5.tag == 0) {
                 }
-                else if (__ct_match2.tag == 1) {
+                else if (__ct_match5.tag == 1) {
                 }
-                else if (__ct_match2.tag == 2) {
+                else if (__ct_match5.tag == 2) {
                 }
-                else if (__ct_match2.tag == 3) {
+                else if (__ct_match5.tag == 3) {
                 }
-                else if (__ct_match2.tag == 4) {
+                else if (__ct_match5.tag == 4) {
                 }
-                else if (__ct_match2.tag == 5) {
+                else if (__ct_match5.tag == 5) {
                 }
-                else if (__ct_match2.tag == 6) {
+                else if (__ct_match5.tag == 6) {
                 }
-                else if (__ct_match2.tag == 7) {
+                else if (__ct_match5.tag == 7) {
                 }
-                else if (__ct_match2.tag == 8) {
+                else if (__ct_match5.tag == 8) {
                 }
-                else if (__ct_match2.tag == 9) {
+                else if (__ct_match5.tag == 9) {
                 }
-                else if (__ct_match2.tag == 11) {
+                else if (__ct_match5.tag == 11) {
                 }
-                else if (__ct_match2.tag == 12) {
+                else if (__ct_match5.tag == 12) {
                 }
-                else if (__ct_match2.tag == 13) {
+                else if (__ct_match5.tag == 13) {
                 }
-                else if (__ct_match2.tag == 14) {
+                else if (__ct_match5.tag == 14) {
                 }
-                else if (__ct_match2.tag == 15) {
+                else if (__ct_match5.tag == 15) {
                 }
-                else if (__ct_match2.tag == 16) {
+                else if (__ct_match5.tag == 16) {
                 }
-                else if (__ct_match2.tag == 17) {
+                else if (__ct_match5.tag == 17) {
                 }
-                else if (__ct_match2.tag == 18) {
+                else if (__ct_match5.tag == 18) {
                 }
-                else if (__ct_match2.tag == 19) {
+                else if (__ct_match5.tag == 19) {
                 }
-                else if (__ct_match2.tag == 20) {
+                else if (__ct_match5.tag == 20) {
                 }
-                else if (__ct_match2.tag == 21) {
+                else if (__ct_match5.tag == 21) {
                 }
-                else if (__ct_match2.tag == 22) {
+                else if (__ct_match5.tag == 22) {
                 }
-                else if (__ct_match2.tag == 23) {
+                else if (__ct_match5.tag == 23) {
                 }
-                else if (__ct_match2.tag == 24) {
+                else if (__ct_match5.tag == 24) {
                 }
-                else if (__ct_match2.tag == 25) {
+                else if (__ct_match5.tag == 25) {
                 }
-                else if (__ct_match2.tag == 26) {
+                else if (__ct_match5.tag == 26) {
                 }
-                else if (__ct_match2.tag == 27) {
+                else if (__ct_match5.tag == 27) {
                 }
-                else if (__ct_match2.tag == 28) {
+                else if (__ct_match5.tag == 28) {
                 }
-                else if (__ct_match2.tag == 29) {
+                else if (__ct_match5.tag == 29) {
                 }
-                else if (__ct_match2.tag == 30) {
+                else if (__ct_match5.tag == 30) {
                 }
-                else if (__ct_match2.tag == 31) {
+                else if (__ct_match5.tag == 31) {
                 }
-                else if (__ct_match2.tag == 32) {
+                else if (__ct_match5.tag == 32) {
                 }
-                else if (__ct_match2.tag == 33) {
+                else if (__ct_match5.tag == 33) {
                 }
-                else if (__ct_match2.tag == 34) {
+                else if (__ct_match5.tag == 34) {
                 }
-                else if (__ct_match2.tag == 35) {
+                else if (__ct_match5.tag == 35) {
                 }
-                else if (__ct_match2.tag == 36) {
+                else if (__ct_match5.tag == 36) {
                 }
-                else if (__ct_match2.tag == 37) {
+                else if (__ct_match5.tag == 37) {
                 }
-                else if (__ct_match2.tag == 38) {
+                else if (__ct_match5.tag == 38) {
                 }
-                else if (__ct_match2.tag == 39) {
+                else if (__ct_match5.tag == 39) {
                 }
-                else if (__ct_match2.tag == 40) {
+                else if (__ct_match5.tag == 40) {
                 }
-                else if (__ct_match2.tag == 41) {
+                else if (__ct_match5.tag == 41) {
                 }
-                else if (__ct_match2.tag == 42) {
+                else if (__ct_match5.tag == 42) {
                 }
-                else if (__ct_match2.tag == 43) {
+                else if (__ct_match5.tag == 43) {
                 }
-                else if (__ct_match2.tag == 44) {
+                else if (__ct_match5.tag == 44) {
                 }
-                else if (__ct_match2.tag == 45) {
+                else if (__ct_match5.tag == 45) {
                 }
-                else if (__ct_match2.tag == 46) {
+                else if (__ct_match5.tag == 46) {
                 }
-                else if (__ct_match2.tag == 47) {
+                else if (__ct_match5.tag == 47) {
                 }
-                else if (__ct_match2.tag == 48) {
+                else if (__ct_match5.tag == 48) {
                 }
-                else if (__ct_match2.tag == 49) {
+                else if (__ct_match5.tag == 49) {
                 }
-                else if (__ct_match2.tag == 50) {
+                else if (__ct_match5.tag == 50) {
                 }
-                else if (__ct_match2.tag == 51) {
+                else if (__ct_match5.tag == 51) {
                 }
-                else if (__ct_match2.tag == 52) {
+                else if (__ct_match5.tag == 52) {
                 }
-                else if (__ct_match2.tag == 53) {
+                else if (__ct_match5.tag == 53) {
                 }
-                else if (__ct_match2.tag == 54) {
+                else if (__ct_match5.tag == 54) {
                 }
-                else if (__ct_match2.tag == 55) {
+                else if (__ct_match5.tag == 55) {
                 }
-                else if (__ct_match2.tag == 56) {
+                else if (__ct_match5.tag == 56) {
                 }
-                else if (__ct_match2.tag == 57) {
+                else if (__ct_match5.tag == 57) {
                 }
-                else if (__ct_match2.tag == 58) {
+                else if (__ct_match5.tag == 58) {
                 }
-                else if (__ct_match2.tag == 59) {
+                else if (__ct_match5.tag == 59) {
                 }
-                else if (__ct_match2.tag == 60) {
+                else if (__ct_match5.tag == 60) {
                 }
-                else if (__ct_match2.tag == 61) {
+                else if (__ct_match5.tag == 61) {
                 }
-                else if (__ct_match2.tag == 62) {
+                else if (__ct_match5.tag == 62) {
                 }
-                else if (__ct_match2.tag == 63) {
+                else if (__ct_match5.tag == 63) {
                 }
-                else if (__ct_match2.tag == 64) {
+                else if (__ct_match5.tag == 64) {
                 }
-                else if (__ct_match2.tag == 65) {
+                else if (__ct_match5.tag == 65) {
                 }
-                else if (__ct_match2.tag == 66) {
+                else if (__ct_match5.tag == 66) {
                 }
-                else if (__ct_match2.tag == 67) {
+                else if (__ct_match5.tag == 67) {
                 }
-                else if (__ct_match2.tag == 68) {
+                else if (__ct_match5.tag == 68) {
                 }
-                else if (__ct_match2.tag == 69) {
+                else if (__ct_match5.tag == 69) {
                 }
-                else if (__ct_match2.tag == 70) {
+                else if (__ct_match5.tag == 70) {
                 }
-                else if (__ct_match2.tag == 71) {
+                else if (__ct_match5.tag == 71) {
                 }
-                else if (__ct_match2.tag == 72) {
+                else if (__ct_match5.tag == 72) {
                 }
-                else if (__ct_match2.tag == 73) {
+                else if (__ct_match5.tag == 73) {
                 }
-                else if (__ct_match2.tag == 74) {
+                else if (__ct_match5.tag == 74) {
                 }
-                else if (__ct_match2.tag == 75) {
+                else if (__ct_match5.tag == 75) {
                 }
-                else if (__ct_match2.tag == 76) {
+                else if (__ct_match5.tag == 76) {
                 }
-                else if (__ct_match2.tag == 77) {
+                else if (__ct_match5.tag == 77) {
                 }
-                else if (__ct_match2.tag == 78) {
+                else if (__ct_match5.tag == 78) {
                 }
-                else if (__ct_match2.tag == 79) {
+                else if (__ct_match5.tag == 79) {
                 }
-                else if (__ct_match2.tag == 80) {
+                else if (__ct_match5.tag == 80) {
                 }
-                else if (__ct_match2.tag == 81) {
+                else if (__ct_match5.tag == 81) {
                 }
-                else if (__ct_match2.tag == 82) {
+                else if (__ct_match5.tag == 82) {
                 }
                 else {
                 }
@@ -1296,249 +1299,249 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
         return _self->__frontend_type_typeops_vptr->fail(_self, "the struct does not use this trait");
     }
     if ((!is_ptr)) {
-        struct runtime_arena_NodeKind __ct_match3 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
-        if (__ct_match3.tag == 10) {
+        struct runtime_arena_NodeKind __ct_match6 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+        if (__ct_match6.tag == 10) {
         }
-        else if (__ct_match3.tag == 24) {
+        else if (__ct_match6.tag == 24) {
         }
-        else if (__ct_match3.tag == 25) {
+        else if (__ct_match6.tag == 25) {
         }
-        else if (__ct_match3.tag == 26) {
+        else if (__ct_match6.tag == 26) {
         }
-        else if (__ct_match3.tag == 28) {
+        else if (__ct_match6.tag == 28) {
         }
-        else if (__ct_match3.tag == 0) {
+        else if (__ct_match6.tag == 0) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 1) {
+        else if (__ct_match6.tag == 1) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 2) {
+        else if (__ct_match6.tag == 2) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 3) {
+        else if (__ct_match6.tag == 3) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 4) {
+        else if (__ct_match6.tag == 4) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 5) {
+        else if (__ct_match6.tag == 5) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 6) {
+        else if (__ct_match6.tag == 6) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 7) {
+        else if (__ct_match6.tag == 7) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 8) {
+        else if (__ct_match6.tag == 8) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 9) {
+        else if (__ct_match6.tag == 9) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 11) {
+        else if (__ct_match6.tag == 11) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 12) {
+        else if (__ct_match6.tag == 12) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 13) {
+        else if (__ct_match6.tag == 13) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 14) {
+        else if (__ct_match6.tag == 14) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 15) {
+        else if (__ct_match6.tag == 15) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 16) {
+        else if (__ct_match6.tag == 16) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 17) {
+        else if (__ct_match6.tag == 17) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 18) {
+        else if (__ct_match6.tag == 18) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 19) {
+        else if (__ct_match6.tag == 19) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 20) {
+        else if (__ct_match6.tag == 20) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 21) {
+        else if (__ct_match6.tag == 21) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 22) {
+        else if (__ct_match6.tag == 22) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 23) {
+        else if (__ct_match6.tag == 23) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 27) {
+        else if (__ct_match6.tag == 27) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 29) {
+        else if (__ct_match6.tag == 29) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 30) {
+        else if (__ct_match6.tag == 30) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 31) {
+        else if (__ct_match6.tag == 31) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 32) {
+        else if (__ct_match6.tag == 32) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 33) {
+        else if (__ct_match6.tag == 33) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 34) {
+        else if (__ct_match6.tag == 34) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 35) {
+        else if (__ct_match6.tag == 35) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 36) {
+        else if (__ct_match6.tag == 36) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 37) {
+        else if (__ct_match6.tag == 37) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 38) {
+        else if (__ct_match6.tag == 38) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 39) {
+        else if (__ct_match6.tag == 39) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 40) {
+        else if (__ct_match6.tag == 40) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 41) {
+        else if (__ct_match6.tag == 41) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 42) {
+        else if (__ct_match6.tag == 42) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 43) {
+        else if (__ct_match6.tag == 43) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 44) {
+        else if (__ct_match6.tag == 44) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 45) {
+        else if (__ct_match6.tag == 45) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 46) {
+        else if (__ct_match6.tag == 46) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 47) {
+        else if (__ct_match6.tag == 47) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 48) {
+        else if (__ct_match6.tag == 48) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 49) {
+        else if (__ct_match6.tag == 49) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 50) {
+        else if (__ct_match6.tag == 50) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 51) {
+        else if (__ct_match6.tag == 51) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 52) {
+        else if (__ct_match6.tag == 52) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 53) {
+        else if (__ct_match6.tag == 53) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 54) {
+        else if (__ct_match6.tag == 54) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 55) {
+        else if (__ct_match6.tag == 55) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 56) {
+        else if (__ct_match6.tag == 56) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 57) {
+        else if (__ct_match6.tag == 57) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 58) {
+        else if (__ct_match6.tag == 58) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 59) {
+        else if (__ct_match6.tag == 59) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 60) {
+        else if (__ct_match6.tag == 60) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 61) {
+        else if (__ct_match6.tag == 61) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 62) {
+        else if (__ct_match6.tag == 62) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 63) {
+        else if (__ct_match6.tag == 63) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 64) {
+        else if (__ct_match6.tag == 64) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 65) {
+        else if (__ct_match6.tag == 65) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 66) {
+        else if (__ct_match6.tag == 66) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 67) {
+        else if (__ct_match6.tag == 67) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 68) {
+        else if (__ct_match6.tag == 68) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 69) {
+        else if (__ct_match6.tag == 69) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 70) {
+        else if (__ct_match6.tag == 70) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 71) {
+        else if (__ct_match6.tag == 71) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 72) {
+        else if (__ct_match6.tag == 72) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 73) {
+        else if (__ct_match6.tag == 73) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 74) {
+        else if (__ct_match6.tag == 74) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 75) {
+        else if (__ct_match6.tag == 75) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 76) {
+        else if (__ct_match6.tag == 76) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 77) {
+        else if (__ct_match6.tag == 77) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 78) {
+        else if (__ct_match6.tag == 78) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 79) {
+        else if (__ct_match6.tag == 79) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 80) {
+        else if (__ct_match6.tag == 80) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 81) {
+        else if (__ct_match6.tag == 81) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
-        else if (__ct_match3.tag == 82) {
+        else if (__ct_match6.tag == 82) {
             return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an rvalue struct; assign it to a variable first");
         }
         else {
@@ -2134,6 +2137,16 @@ const struct frontend_type_TypeOps_vtbl frontend_type_TypeCheck_frontend_type_Ty
     .rewrite_init_text = frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_text,
     .rewrite_init_names = frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 const char * frontend_type_type_key_text(const char * in) {
     char * raw = 0;

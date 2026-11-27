@@ -20,6 +20,7 @@
 #include "ExprSubscript.h"
 #include "ExprOptional.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTraitInst.h.ct"
 #include "ExprTraitInst.shim.h"
@@ -105,6 +106,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -383,6 +386,16 @@ static int frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_typ
 const struct frontend_parse_ExprTraitInst_vtbl frontend_parse_Expr_frontend_parse_ExprTraitInst_vtable = {
     .parse_trait_inst_type = frontend_parse_Expr_frontend_parse_ExprTraitInst_parse_trait_inst_type
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static const char * trait_inst_spell(const char * tname, int nargs, char * * args) {
     char * buf = 0;

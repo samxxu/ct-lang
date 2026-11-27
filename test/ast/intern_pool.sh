@@ -199,7 +199,7 @@ int main(void)
 C
 
 if [ -f "$w/gen/Intern.c" ] && [ -f "$w/gen/Intern.h" ]; then
-    if ! $cc $cflags -I "$w/gen" "$w/gen/Intern.c" "$w/harness.c" -o "$w/harness" \
+    if ! $cc $cflags -I "$w/gen" "$w/gen/Intern.c" "$w/gen/Result.c" "$w/harness.c" -o "$w/harness" \
             >"$w/harness.build" 2>&1; then
         bad "the Intern harness did not build: $(head -3 "$w/harness.build" | tr '\n' ' ')"
     elif ! "$w/harness" >"$w/harness.out" 2>"$w/harness.err"; then

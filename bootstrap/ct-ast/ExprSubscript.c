@@ -17,6 +17,7 @@
 #include "ExprAdtCtor.h"
 #include "ExprNewObject.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprSubscript.h.ct"
 #include "ExprSubscript.shim.h"
@@ -112,6 +113,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -393,6 +396,16 @@ const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_pars
     .custom_index_write_form = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_write_form,
     .custom_index_suffix = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_suffix
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static int ci_param_count(struct frontend_parse_Expr * self, int m) {
     int p;

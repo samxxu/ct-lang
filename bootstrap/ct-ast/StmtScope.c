@@ -3,6 +3,7 @@
 #include "StmtScope.h"
 #include "Symbols.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtScope.h.ct"
 #include "StmtScope.shim.h"
@@ -14,6 +15,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -135,6 +138,16 @@ extern void U16String_Drop_drop(void *self);
 
 int frontend_parse_var_scope(struct frontend_sym_Symbols *, int);
 int frontend_parse_outlives(struct frontend_sym_Symbols *, int, int);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 int frontend_parse_var_scope(struct frontend_sym_Symbols * sym, int vi) {
     int s;
     for (s = (sym->nscope - 1); s >= 0; s--) {

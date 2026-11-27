@@ -12,6 +12,7 @@
 #include "Intern.h"
 #include "SymbolsTypeText.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterText.h.ct"
 #include "EmitterText.shim.h"
@@ -24,6 +25,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -152,6 +155,16 @@ int backend_emit_sb_view_ret(const char *);
 int backend_emit_unit_has_adt(int, int);
 int backend_emit_init_has_elem_groups(const char *);
 const char * backend_emit_elem_ret_ctype(int, const char *);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 int backend_emit_dims_depth(const char * dims) {
     int i;
     int n;

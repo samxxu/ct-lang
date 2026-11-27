@@ -19,6 +19,7 @@
 #include "Sh.h"
 
 #include "Vec.h"
+#include "Result.h"
 
 struct ct_buf;
 struct Str;
@@ -28,6 +29,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;

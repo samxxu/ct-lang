@@ -29,6 +29,7 @@
 #include "ExprTypeParse.h"
 #include "ExprStaticType.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Expr.h.ct"
 #include "Expr.shim.h"
@@ -115,6 +116,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -4336,6 +4339,16 @@ const struct frontend_parse_ExprOps_vtbl frontend_parse_Expr_frontend_parse_Expr
     .parse_qual_path = frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path,
     .parse_args = frontend_parse_Expr_frontend_parse_ExprOps_parse_args
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static int closure_ahead(struct frontend_parse_Expr * self) {
     const char * s = self->lex->src;

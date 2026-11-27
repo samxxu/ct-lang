@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "Intern.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/runtime/text/Intern.h.ct"
 #define TEXT_LIMIT 65536
@@ -14,6 +15,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -139,12 +142,22 @@ const char * runtime_text_ct_intern_join(const char *, const char *);
 const char * runtime_text_ct_internf(const char *, ...);
 void runtime_text_ct_intern_reset(void);
 static unsigned long ct_intern_hash(const char *, int);
-static int ct_intern_grow(void);
-static const char * ct_intern_put(const char *, int);
+static struct Result_int_int ct_intern_grow(void);
+static struct Result_char_p_int ct_intern_put(const char *, int);
 static char * * runtime_text_g_iset;
 static int * runtime_text_g_ilen;
 static int runtime_text_g_icap;
 static int runtime_text_g_icount;
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 static unsigned long ct_intern_hash(const char * s, int len) {
     unsigned long h = 2166136261UL;
     int i;
@@ -154,18 +167,23 @@ static unsigned long ct_intern_hash(const char * s, int len) {
     }
     return h;
 }
-static int ct_intern_grow(void) {
+static struct Result_int_int ct_intern_grow(void) {
     int ncap;
     int i;
-    char * * nset;
-    int * nlen;
+    char * * nset = 0;
+    int * nlen = 0;
     ncap = ((runtime_text_g_icap > 0) ? (runtime_text_g_icap * 2) : 64);
     nset = (char * *)(calloc((size_t)(ncap), sizeof((*nset))));
     nlen = (int *)(calloc((size_t)(ncap), sizeof((*nlen))));
     if (((!nset) || (!nlen))) {
-        free(nset);
-        free(nlen);
-        return (-1);
+{
+            struct Result_int_int __ct_ret0 = (struct Result_int_int){ 0, 0, -1 };
+{
+                free(nset);
+                free(nlen);
+            }
+            return __ct_ret0;
+        }
     }
     for (i = 0; i < runtime_text_g_icap; i++) {
         unsigned long h;
@@ -186,37 +204,52 @@ static int ct_intern_grow(void) {
     runtime_text_g_iset = nset;
     runtime_text_g_ilen = nlen;
     runtime_text_g_icap = ncap;
-    return 0;
+{
+        struct Result_int_int __ct_ret1 = (struct Result_int_int){ 1, ncap, 0 };
+        return __ct_ret1;
+    }
 }
-static const char * ct_intern_put(const char * s, int len) {
+static struct Result_char_p_int ct_intern_put(const char * s, int len) {
     unsigned long h;
     int idx;
+    int cap;
     char * buf;
     if ((((!s) || (len < 0)) || (len > TEXT_LIMIT))) {
-        return (const char *)(0);
+        return (struct Result_char_p_int){ 0, 0, -1 };
     }
     h = ct_intern_hash(s, len);
     if (runtime_text_g_icap > 0) {
         idx = (int)((h & (unsigned long)((runtime_text_g_icap - 1))));
         while (runtime_text_g_iset[idx]) {
             if (((runtime_text_g_ilen[idx] == len) && (memcmp(runtime_text_g_iset[idx], s, (size_t)(len)) == 0))) {
-                return (const char *)(runtime_text_g_iset[idx]);
+                buf = runtime_text_g_iset[idx];
+                return (struct Result_char_p_int){ 1, buf, 0 };
             }
             idx = ((idx + 1) & (runtime_text_g_icap - 1));
         }
     }
     if (((runtime_text_g_icap == 0) || (((runtime_text_g_icount + 1) * 10) > (runtime_text_g_icap * 7)))) {
-        if (ct_intern_grow() != 0) {
-            return (const char *)(0);
-        }
+        cap = ({ struct Result_int_int __ct_q2 = ct_intern_grow();
+if (!__ct_q2.ok) {
+    int __ct_e2 = __ct_q2.err;
+    __ct_q2 = (struct Result_int_int){0};
+    return Result_char_p_int_err(__ct_e2);
+}
+    int __ct_v2 = __ct_q2.value;
+    __ct_q2 = (struct Result_int_int){0};
+    __ct_v2;
+});
     }
-    idx = (int)((h & (unsigned long)((runtime_text_g_icap - 1))));
+    else {
+        cap = runtime_text_g_icap;
+    }
+    idx = (int)((h & (unsigned long)((cap - 1))));
     while (runtime_text_g_iset[idx]) {
-        idx = ((idx + 1) & (runtime_text_g_icap - 1));
+        idx = ((idx + 1) & (cap - 1));
     }
     buf = (char *)(malloc(((size_t)(len) + 1)));
     if ((!buf)) {
-        return (const char *)(0);
+        return (struct Result_char_p_int){ 0, 0, -1 };
     }
     if (len > 0) {
         memcpy(buf, s, (size_t)(len));
@@ -225,16 +258,26 @@ static const char * ct_intern_put(const char * s, int len) {
     runtime_text_g_iset[idx] = buf;
     runtime_text_g_ilen[idx] = len;
     runtime_text_g_icount++;
-    return (const char *)(buf);
+    return (struct Result_char_p_int){ 1, buf, 0 };
 }
 const char * runtime_text_ct_intern(const char * s) {
+    struct Result_char_p_int r;
     if ((!s)) {
         return (const char *)(0);
     }
-    return ct_intern_put(s, (int)(strlen(s)));
+    r = ct_intern_put(s, (int)(strlen(s)));
+    if ((!r.ok)) {
+        return (const char *)(0);
+    }
+    return r.value;
 }
 const char * runtime_text_ct_intern_len(const char * s, int len) {
-    return ct_intern_put(s, len);
+    struct Result_char_p_int r;
+    r = ct_intern_put(s, len);
+    if ((!r.ok)) {
+        return (const char *)(0);
+    }
+    return r.value;
 }
 const char * runtime_text_ct_intern_join(const char * a, const char * b) {
     size_t la;

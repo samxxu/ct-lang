@@ -28,6 +28,7 @@
 #include "ExprClosure.h"
 #include "ExprInstantiate.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypeParse.h.ct"
 #include "ExprTypeParse.shim.h"
@@ -114,6 +115,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -1180,6 +1183,16 @@ const struct frontend_parse_ExprTypeParse_vtbl frontend_parse_Expr_frontend_pars
     .parse_inst_type = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type,
     .parse_inst_type_text = frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_inst_type_text
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static const char * inst_spell(const char * tname, int nargs, char * * args) {
     char * buf = 0;

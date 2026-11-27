@@ -19,6 +19,7 @@
 #include "EmitterTry.h"
 #include "EmitInvariant.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitHoist.h.ct"
 #include "EmitHoist.shim.h"
@@ -135,6 +136,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -534,6 +537,16 @@ const struct backend_emit_EmitHoist_vtbl backend_emit_Emitter_backend_emit_EmitH
     .emit_hoists = backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists,
     .hoist_expr = backend_emit_Emitter_backend_emit_EmitHoist_hoist_expr
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int backend_emit_ensure_hoist_capacity(struct backend_emit_Emitter * self, int need) {
     int cap;

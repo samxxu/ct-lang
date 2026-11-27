@@ -17,6 +17,7 @@
 #include "Diag.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Parser.h.ct"
 #include "Parser.shim.h"
@@ -89,6 +90,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -866,8 +869,8 @@ static int frontend_parse_Parser_frontend_parse_ParseDeclOps_top_decl(void *self
                 }
                 else {
                     if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "map"))) {
-                        struct frontend_parse_MapBuild * __ct_tmp12 = frontend_parse_mapbuild_get();
-                        n = __ct_tmp12->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp12, _self->cur_unit);
+                        struct frontend_parse_MapBuild * __ct_tmp15 = frontend_parse_mapbuild_get();
+                        n = __ct_tmp15->__frontend_parse_mapbuildops_vptr->parse(__ct_tmp15, _self->cur_unit);
                     }
                     else {
                         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "enum"))) {
@@ -5291,6 +5294,16 @@ const struct frontend_parse_ParseOps_vtbl frontend_parse_Parser_frontend_parse_P
     .drop_release_walk = frontend_parse_Parser_frontend_parse_ParseOps_drop_release_walk,
     .drop_release_scan = frontend_parse_Parser_frontend_parse_ParseOps_drop_release_scan
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static int borrow_struct_of(struct frontend_parse_Parser * self, const char * type, int is_array) {
     const char * t;

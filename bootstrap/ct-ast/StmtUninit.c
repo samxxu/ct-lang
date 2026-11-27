@@ -21,6 +21,7 @@
 #include "StmtSwitch.h"
 #include "StmtControl.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtUninit.h.ct"
 #include "StmtUninit.shim.h"
@@ -104,6 +105,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -438,4 +441,14 @@ const struct frontend_parse_StmtUninit_vtbl frontend_parse_Stmt_frontend_parse_S
     .u_scan = frontend_parse_Stmt_frontend_parse_StmtUninit_u_scan,
     .uninit_check = frontend_parse_Stmt_frontend_parse_StmtUninit_uninit_check
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 

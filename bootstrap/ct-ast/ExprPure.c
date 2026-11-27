@@ -7,6 +7,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprPure.h.ct"
 #include "ExprPure.shim.h"
@@ -20,6 +21,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -150,6 +153,16 @@ int frontend_parse_expr_is_builtin_Box_type(const char *);
 int frontend_parse_bplus_space(int);
 int frontend_parse_bplus_id(int);
 const char * frontend_parse_bplus_lit_type_text(const char *, int, int *);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 int frontend_parse_arg_count(struct runtime_arena_Arena * a, int first) {
     int c = 0;
     while (first > 0) {

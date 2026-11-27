@@ -23,6 +23,7 @@
 #include "StmtControl.h"
 #include "StmtUninit.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Stmt.h.ct"
 #include "Stmt.shim.h"
@@ -107,6 +108,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -2592,6 +2595,16 @@ const struct frontend_parse_StmtOps_vtbl frontend_parse_Stmt_frontend_parse_Stmt
     .parse_expr_stmt_node = frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node,
     .closure_global_init = frontend_parse_Stmt_frontend_parse_StmtOps_closure_global_init
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static int retire_before_return(struct frontend_parse_Stmt * self, int ret, int permanent) {
     int blk;

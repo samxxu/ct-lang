@@ -4,6 +4,7 @@
 #include "PkgIndex.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/pkg/PkgIndex.h.ct"
 #include "PkgIndex.shim.h"
@@ -18,6 +19,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -143,6 +146,16 @@ void tool_pkg_index_json_err_list(const char *, int);
 int tool_pkg_index_io_fail(const char *, const char *, int, const char *, const char *);
 int tool_pkg_index_name_ok(const char *);
 int tool_pkg_index_version_ok(const char *);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 int tool_pkg_index_err_add(char * * errs, int * nerr, int * cerr, int line, const char * kind, const char * msg) {
     char * p;
     int nc;

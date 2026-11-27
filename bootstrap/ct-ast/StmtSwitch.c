@@ -19,6 +19,7 @@
 #include "StmtMatch.h"
 #include "StmtLoop.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtSwitch.h.ct"
 #include "StmtSwitch.shim.h"
@@ -102,6 +103,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -596,6 +599,16 @@ const struct frontend_parse_StmtSwitch_vtbl frontend_parse_Stmt_frontend_parse_S
     .parse_named_label = frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_named_label,
     .parse_goto = frontend_parse_Stmt_frontend_parse_StmtSwitch_parse_goto
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int frontend_parse_map_fold_num(struct frontend_parse_Stmt * self, int n, long * out) {
     struct runtime_arena_Node * nd;

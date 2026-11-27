@@ -12,6 +12,7 @@
 #include "Diag.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypeText.h.ct"
 #include "ExprTypeText.shim.h"
@@ -25,6 +26,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -166,6 +169,16 @@ void frontend_parse_tnorm(const char *, char *, int);
 int frontend_parse_tnumeric(const char *);
 int frontend_parse_tscalar(const char *);
 int frontend_parse_tstars(const char *);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 const char * frontend_parse_tnorm_text(const char * in) {
     char * buf = 0;
     int cap = 0;

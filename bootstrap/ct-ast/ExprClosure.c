@@ -25,6 +25,7 @@
 #include "ExprBinding.h"
 #include "ExprCallCheck.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprClosure.h.ct"
 #include "ExprClosure.shim.h"
@@ -110,6 +111,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -604,6 +607,16 @@ const struct frontend_parse_ExprClosure_vtbl frontend_parse_Expr_frontend_parse_
     .closure_arg_bind = frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_bind,
     .parse_closure = frontend_parse_Expr_frontend_parse_ExprClosure_parse_closure
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int frontend_parse_closure_capture_error(struct frontend_parse_Expr * self, int line, const char * msg) {
     tool_diag_ct_sem_error(line, 1, msg, self->sup->mem->path);

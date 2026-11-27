@@ -4,6 +4,7 @@
 #include "Arena.h"
 #include "Intern.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/runtime/arena/Arena.h.ct"
 #include "Arena.shim.h"
@@ -17,6 +18,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -266,6 +269,16 @@ const struct runtime_arena_ArenaOps_vtbl runtime_arena_Arena_runtime_arena_Arena
     .str_at = runtime_arena_Arena_runtime_arena_ArenaOps_str_at,
     .reset = runtime_arena_Arena_runtime_arena_ArenaOps_reset
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 struct runtime_arena_Arena * runtime_arena_arena_get(void) {
     return (&runtime_arena_g_arena);

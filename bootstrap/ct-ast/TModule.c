@@ -5,6 +5,7 @@
 #include "TypeCheck.h"
 #include "TGraph.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TModule.h.ct"
 #include "TModule.shim.h"
@@ -164,6 +165,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -325,6 +328,16 @@ void backend_tir_tmod_report(struct backend_tir_TModule *, const char *, double)
 int backend_tir_tmod_has_free_param(struct backend_tir_TModule *, int);
 int backend_tir_tmod_spelling_free(const char *);
 static struct backend_tir_TModule backend_tir_g_tir;
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 static int tir_reserve(void * * slot, int * cap, int need, int row) {
     int ncap;
     void * grown;

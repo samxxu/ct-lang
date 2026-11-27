@@ -9,6 +9,7 @@
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterCore.h.ct"
 #include "EmitterCore.shim.h"
@@ -20,6 +21,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -138,4 +141,14 @@ struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 

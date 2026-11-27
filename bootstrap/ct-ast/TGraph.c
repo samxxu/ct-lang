@@ -6,6 +6,7 @@
 #include "Unit.h"
 #include "Symbols.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TGraph.h.ct"
 #include "TGraph.shim.h"
@@ -39,6 +40,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -174,6 +177,16 @@ static int tg_layer_needs(struct backend_tir_ct_layers *, struct backend_tir_TGr
 static int tg_instances(struct backend_tir_ct_layers *, struct backend_tir_TGraph *, int *, int);
 static int tg_reach(struct backend_tir_ct_layers *, struct backend_tir_TGraph *, int *);
 int backend_tir_tgraph_builtin_live(struct frontend_module_Unit *, int, int *, int, struct runtime_arena_Arena *, struct frontend_sym_Symbols *, int *);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 static int tg_reserve(void * * slot, int * cap, int need, int row) {
     int ncap;
     void * grown;

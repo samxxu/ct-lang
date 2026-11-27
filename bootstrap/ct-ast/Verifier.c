@@ -6,6 +6,7 @@
 #include "TGraph.h"
 #include "LModule.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/verify/Verifier.h.ct"
 #include "Verifier.shim.h"
@@ -70,6 +71,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -219,6 +222,16 @@ static void lver_block(struct backend_lir_LModule *, struct backend_lir_ct_lfunc
 int backend_verify_ct_lir_verify(struct backend_lir_LModule *);
 static struct backend_verify_Verifier backend_verify_g_verifier;
 static int backend_verify_g_lir_errors;
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 static void vfail(struct backend_tir_TModule * m, int file, int line, int col, const char * code, const char * msg) {
     const char * path;
     path = "?";

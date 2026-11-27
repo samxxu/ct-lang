@@ -18,6 +18,7 @@
 #include "TypeCheck.h"
 #include "StmtMatch.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtLoop.h.ct"
 #include "StmtLoop.shim.h"
@@ -101,6 +102,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -780,6 +783,16 @@ const struct frontend_parse_StmtLoop_vtbl frontend_parse_Stmt_frontend_parse_Stm
     .range_init_ahead = frontend_parse_Stmt_frontend_parse_StmtLoop_range_init_ahead,
     .parse_range_init = frontend_parse_Stmt_frontend_parse_StmtLoop_parse_range_init
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int frontend_parse_jump_push(struct frontend_parse_Stmt * self, int brk, int cont) {
     if (((self->nbreak >= 256) || ((cont >= 0) && (self->ncont >= 256)))) {

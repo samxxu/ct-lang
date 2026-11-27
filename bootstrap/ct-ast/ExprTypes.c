@@ -22,6 +22,7 @@
 #include "ExprRecvMut.h"
 #include "ExprTry.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypes.h.ct"
 #include "ExprTypes.shim.h"
@@ -107,6 +108,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -548,38 +551,38 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTypes_chk_type_text(v
 {
         int nk;
         nk = _self->arena->nodes[n].kind;
-        struct runtime_arena_NodeKind __ct_match4 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
-        if (__ct_match4.tag == 0) {
+        struct runtime_arena_NodeKind __ct_match7 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+        if (__ct_match7.tag == 0) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 1) {
+        else if (__ct_match7.tag == 1) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 2) {
+        else if (__ct_match7.tag == 2) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 3) {
+        else if (__ct_match7.tag == 3) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 4) {
+        else if (__ct_match7.tag == 4) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 5) {
+        else if (__ct_match7.tag == 5) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 6) {
+        else if (__ct_match7.tag == 6) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 7) {
+        else if (__ct_match7.tag == 7) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 8) {
+        else if (__ct_match7.tag == 8) {
             if (is_zero) {
                 (*is_zero) = (_self->arena->nodes[n].num == 0);
             }
             return "int";
         }
-        else if (__ct_match4.tag == 9) {
+        else if (__ct_match7.tag == 9) {
             if (_self->arena->nodes[n].aux == 1) {
                 return "String";
             }
@@ -588,10 +591,10 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTypes_chk_type_text(v
             }
             return ((_self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, (int)(_self->arena->nodes[n].num))[0] == '\'') ? "int" : "char *");
         }
-        else if (__ct_match4.tag == 10) {
+        else if (__ct_match7.tag == 10) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 11) {
+        else if (__ct_match7.tag == 11) {
 {
                 int op = (int)(_self->arena->nodes[n].aux);
                 if (((((op >= B_LT) && (op <= B_NE)) || (op == B_AND)) || (op == B_OR))) {
@@ -616,22 +619,22 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTypes_chk_type_text(v
                 return (const char *)(0);
             }
         }
-        else if (__ct_match4.tag == 12) {
+        else if (__ct_match7.tag == 12) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 13) {
+        else if (__ct_match7.tag == 13) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 14) {
+        else if (__ct_match7.tag == 14) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 15) {
+        else if (__ct_match7.tag == 15) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 16) {
+        else if (__ct_match7.tag == 16) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 17) {
+        else if (__ct_match7.tag == 17) {
 {
                 int op = (int)(_self->arena->nodes[n].aux);
                 if (((op == U_NOT) || (op == U_BNOT))) {
@@ -651,64 +654,64 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTypes_chk_type_text(v
                 return (const char *)(0);
             }
         }
-        else if (__ct_match4.tag == 18) {
+        else if (__ct_match7.tag == 18) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 19) {
+        else if (__ct_match7.tag == 19) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 20) {
+        else if (__ct_match7.tag == 20) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 21) {
+        else if (__ct_match7.tag == 21) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 22) {
+        else if (__ct_match7.tag == 22) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 23) {
+        else if (__ct_match7.tag == 23) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 24) {
+        else if (__ct_match7.tag == 24) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 25) {
+        else if (__ct_match7.tag == 25) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 26) {
+        else if (__ct_match7.tag == 26) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 27) {
+        else if (__ct_match7.tag == 27) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 28) {
+        else if (__ct_match7.tag == 28) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 29) {
+        else if (__ct_match7.tag == 29) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 30) {
+        else if (__ct_match7.tag == 30) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 31) {
+        else if (__ct_match7.tag == 31) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 32) {
+        else if (__ct_match7.tag == 32) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 33) {
+        else if (__ct_match7.tag == 33) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 34) {
+        else if (__ct_match7.tag == 34) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 35) {
+        else if (__ct_match7.tag == 35) {
             return _self->arena->nodes[n].text;
         }
-        else if (__ct_match4.tag == 36) {
+        else if (__ct_match7.tag == 36) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 37) {
+        else if (__ct_match7.tag == 37) {
 {
                 int z1 = 0;
                 int z2 = 0;
@@ -723,106 +726,106 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTypes_chk_type_text(v
                 return t1;
             }
         }
-        else if (__ct_match4.tag == 38) {
+        else if (__ct_match7.tag == 38) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 39) {
+        else if (__ct_match7.tag == 39) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 40) {
+        else if (__ct_match7.tag == 40) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 41) {
+        else if (__ct_match7.tag == 41) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 42) {
+        else if (__ct_match7.tag == 42) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 43) {
+        else if (__ct_match7.tag == 43) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 44) {
+        else if (__ct_match7.tag == 44) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 45) {
+        else if (__ct_match7.tag == 45) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 46) {
+        else if (__ct_match7.tag == 46) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 47) {
+        else if (__ct_match7.tag == 47) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 48) {
+        else if (__ct_match7.tag == 48) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 49) {
+        else if (__ct_match7.tag == 49) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 50) {
+        else if (__ct_match7.tag == 50) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 51) {
+        else if (__ct_match7.tag == 51) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 52) {
+        else if (__ct_match7.tag == 52) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 53) {
+        else if (__ct_match7.tag == 53) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 54) {
+        else if (__ct_match7.tag == 54) {
             return "double";
         }
-        else if (__ct_match4.tag == 55) {
+        else if (__ct_match7.tag == 55) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 56) {
+        else if (__ct_match7.tag == 56) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 57) {
+        else if (__ct_match7.tag == 57) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 58) {
+        else if (__ct_match7.tag == 58) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 59) {
+        else if (__ct_match7.tag == 59) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 60) {
+        else if (__ct_match7.tag == 60) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 61) {
+        else if (__ct_match7.tag == 61) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 62) {
+        else if (__ct_match7.tag == 62) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 63) {
+        else if (__ct_match7.tag == 63) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 64) {
+        else if (__ct_match7.tag == 64) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 65) {
+        else if (__ct_match7.tag == 65) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 66) {
+        else if (__ct_match7.tag == 66) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 67) {
+        else if (__ct_match7.tag == 67) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 68) {
+        else if (__ct_match7.tag == 68) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 69) {
+        else if (__ct_match7.tag == 69) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 70) {
+        else if (__ct_match7.tag == 70) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 71) {
+        else if (__ct_match7.tag == 71) {
 {
                 int ad = 0;
                 const char * opty;
@@ -875,40 +878,40 @@ static const char * frontend_parse_Expr_frontend_parse_ExprTypes_chk_type_text(v
                 return oval;
             }
         }
-        else if (__ct_match4.tag == 72) {
+        else if (__ct_match7.tag == 72) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 73) {
+        else if (__ct_match7.tag == 73) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 74) {
+        else if (__ct_match7.tag == 74) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 75) {
+        else if (__ct_match7.tag == 75) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 76) {
+        else if (__ct_match7.tag == 76) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 77) {
+        else if (__ct_match7.tag == 77) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 78) {
+        else if (__ct_match7.tag == 78) {
             if ((((_self->arena->nodes[n].sflags & 8) != 0) && _self->arena->nodes[n].text2[0])) {
                 return _self->arena->nodes[n].text2;
             }
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 79) {
+        else if (__ct_match7.tag == 79) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 80) {
+        else if (__ct_match7.tag == 80) {
             return (const char *)(0);
         }
-        else if (__ct_match4.tag == 81) {
+        else if (__ct_match7.tag == 81) {
             return frontend_parse_chk_type_static_text(_self, n);
         }
-        else if (__ct_match4.tag == 82) {
+        else if (__ct_match7.tag == 82) {
             return (const char *)(0);
         }
         else {
@@ -1227,6 +1230,16 @@ const struct frontend_parse_ExprTypes_vtbl frontend_parse_Expr_frontend_parse_Ex
     .chk_mcall_args = frontend_parse_Expr_frontend_parse_ExprTypes_chk_mcall_args,
     .lit_coerce = frontend_parse_Expr_frontend_parse_ExprTypes_lit_coerce
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int frontend_parse_closure_match(struct frontend_parse_Expr * self, int ci, const char * host, int skip_env, int set_ret) {
     struct frontend_sym_Closure * c = (&self->sym->closures[ci]);

@@ -11,6 +11,7 @@
 #include "ExprTypeText.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TBuilder.h.ct"
 #include "TBuilder.shim.h"
@@ -261,6 +262,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -444,6 +447,16 @@ static int tb_record_adts(struct backend_tir_TBuilder *);
 static int tb_build(int, const char *, const char *, const char *, int, int, int, int, const char *);
 int backend_tir_ct_tir_build_unit(void *, int);
 static struct backend_tir_TBuilder backend_tir_g_tb;
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 static int tb_reserve(void * * slot, int * cap, int need, int row) {
     int ncap;
     void * grown;
@@ -672,8 +685,8 @@ static const char * tb_trait_canon(const char * name) {
     if (((!name) || (!name[0]))) {
         return name;
     }
-    struct frontend_sym_Symbols * __ct_tmp10 = tb_sym();
-    ti = __ct_tmp10->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp10, name);
+    struct frontend_sym_Symbols * __ct_tmp13 = tb_sym();
+    ti = __ct_tmp13->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp13, name);
     if (ti < 0) {
         return name;
     }
@@ -2576,8 +2589,8 @@ static int tb_trait(struct backend_tir_TBuilder * tb, int ti) {
 static int tb_ensure_trait(struct backend_tir_TBuilder * tb, const char * name) {
     int ti;
     int decl;
-    struct frontend_sym_Symbols * __ct_tmp11 = tb_sym();
-    ti = __ct_tmp11->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp11, name);
+    struct frontend_sym_Symbols * __ct_tmp14 = tb_sym();
+    ti = __ct_tmp14->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp14, name);
     if (ti < 0) {
         return 0;
     }

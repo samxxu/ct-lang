@@ -84,21 +84,25 @@ static unsigned long ct_intern_hash(const char *s, int len)
 
 /* Double the slot table and re-insert every live text. The text blocks are
    moved between slots, never copied, so a returned pointer stays put. A failed
-   allocation leaves the old table intact and reports OOM. */
-static int ct_intern_grow(void)
+   allocation leaves the old table intact and reports OOM. S8b D5: the partial
+   `nset` / `nlen` blocks are released by one `errdefer`, and the ok payload is
+   the new mask size so the caller can use `?` without a discarded-value cast. */
+static Result<int, int> ct_intern_grow(void)
 {
     int ncap, i;
-    char **nset;
-    int *nlen;
+    char **nset = 0;
+    int *nlen = 0;
 
     ncap = g_icap > 0 ? g_icap * 2 : 64;
-    nset = (char **)calloc((size_t)ncap, sizeof(*nset));
-    nlen = (int *)calloc((size_t)ncap, sizeof(*nlen));
-    if (!nset || !nlen) {
+    /* S8b D5: one cleanup path instead of the two manual frees; only an
+       error exit runs it (the blocks are handed to the pool on success). */
+    errdefer {
         free(nset);
         free(nlen);
-        return -1;
     }
+    nset = (char **)calloc((size_t)ncap, sizeof(*nset));
+    nlen = (int *)calloc((size_t)ncap, sizeof(*nlen));
+    if (!nset || !nlen) return err: (Result<int, int>){ 0, 0, -1 };
     for (i = 0; i < g_icap; i++) {
         unsigned long h;
         int idx;
@@ -114,52 +118,69 @@ static int ct_intern_grow(void)
     g_iset = nset;
     g_ilen = nlen;
     g_icap = ncap;
-    return 0;
+    return (Result<int, int>){ 1, ncap, 0 };
 }
 
 /* The one insert path. Lookup first (dedup), grow before the insert would pass
-   the 0.7 load, then copy into a fresh block. Every early failure returns NULL
-   without inserting, so a refused text is never visible to a later lookup. */
-static const char *ct_intern_put(const char *s, int len)
+   the 0.7 load, then copy into a fresh block. Every early failure returns an
+   error `Result` without inserting, so a refused text is never visible to a
+   later lookup. S8b D5: `grow()?` propagates the grow failure; the public
+   entries keep the NULL contract below. */
+static Result<char *, int> ct_intern_put(const char *s, int len)
 {
     unsigned long h;
-    int idx;
+    int idx, cap;
     char *buf;
 
-    if (!s || len < 0 || len > TEXT_LIMIT) return (const char *)0;
+    if (!s || len < 0 || len > TEXT_LIMIT) return err: (Result<char *, int>){ 0, 0, -1 };
     h = ct_intern_hash(s, len);
     if (g_icap > 0) {
         idx = (int)(h & (unsigned long)(g_icap - 1));
         while (g_iset[idx]) {
-            if (g_ilen[idx] == len && memcmp(g_iset[idx], s, (size_t)len) == 0)
-                return (const char *)g_iset[idx];
+            if (g_ilen[idx] == len && memcmp(g_iset[idx], s, (size_t)len) == 0) {
+                /* S8b D5 sharp edge: a file-scope name inside a compound
+                   literal in a `return` is not unit-prefixed by the 1.1
+                   emitter; bind it to a local first (behaviour identical). */
+                buf = g_iset[idx];
+                return (Result<char *, int>){ 1, buf, 0 };
+            }
             idx = (idx + 1) & (g_icap - 1);
         }
     }
     if (g_icap == 0 || (g_icount + 1) * 10 > g_icap * 7) {
-        if (ct_intern_grow() != 0) return (const char *)0;
+        /* S8b D5: `?` carries the grow failure out; the ok payload is the new
+           mask size, so no `(void)` cast is needed. */
+        cap = ct_intern_grow()?;
+    } else {
+        cap = g_icap;
     }
-    idx = (int)(h & (unsigned long)(g_icap - 1));
-    while (g_iset[idx]) idx = (idx + 1) & (g_icap - 1);
+    idx = (int)(h & (unsigned long)(cap - 1));
+    while (g_iset[idx]) idx = (idx + 1) & (cap - 1);
     buf = (char *)malloc((size_t)len + 1);
-    if (!buf) return (const char *)0;
+    if (!buf) return err: (Result<char *, int>){ 0, 0, -1 };
     if (len > 0) memcpy(buf, s, (size_t)len);
     buf[len] = 0;
     g_iset[idx] = buf;
     g_ilen[idx] = len;
     g_icount++;
-    return (const char *)buf;
+    return (Result<char *, int>){ 1, buf, 0 };
 }
 
 const char *ct_intern(const char *s)
 {
+    Result<char *, int> r;
     if (!s) return (const char *)0;
-    return ct_intern_put(s, (int)strlen(s));
+    r = ct_intern_put(s, (int)strlen(s));
+    if (!r.ok) return (const char *)0;
+    return r.value;
 }
 
 const char *ct_intern_len(const char *s, int len)
 {
-    return ct_intern_put(s, len);
+    Result<char *, int> r;
+    r = ct_intern_put(s, len);
+    if (!r.ok) return (const char *)0;
+    return r.value;
 }
 
 const char *ct_intern_join(const char *a, const char *b)

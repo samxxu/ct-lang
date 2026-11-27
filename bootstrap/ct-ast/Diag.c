@@ -3,6 +3,7 @@
 #include "Diag.h"
 #include "Intern.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/diag/Diag.h.ct"
 #include "Diag.shim.h"
@@ -19,6 +20,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -1026,6 +1029,16 @@ static const struct tool_diag_DiagStore_vtbl tool_diag_Diag_tool_diag_DiagStore_
     .set_leaks_error = tool_diag_Diag_tool_diag_DiagStore_set_leaks_error,
     .reset = tool_diag_Diag_tool_diag_DiagStore_reset
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 const char * tool_diag_ct_diag_code_for_error(const char * msg) {
     if (strstr(msg, "unexpected token")) {

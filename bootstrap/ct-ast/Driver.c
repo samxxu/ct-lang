@@ -16,6 +16,7 @@
 #include "Pkg.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/driver/Driver.h.ct"
 #include "Driver.shim.h"
@@ -28,6 +29,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -1125,6 +1128,16 @@ static const struct tool_driver_DriverOps_vtbl tool_driver_Driver_tool_driver_Dr
     .load_builtin = tool_driver_Driver_tool_driver_DriverOps_load_builtin,
     .run = tool_driver_Driver_tool_driver_DriverOps_run
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static int drv_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp, int stmts) {
     return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp, stmts);

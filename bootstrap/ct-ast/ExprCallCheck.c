@@ -25,6 +25,7 @@
 #include "ExprTypes.h"
 #include "ExprBinding.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprCallCheck.h.ct"
 #include "ExprCallCheck.shim.h"
@@ -110,6 +111,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -349,6 +352,16 @@ const struct frontend_parse_ExprCallCheck_vtbl frontend_parse_Expr_frontend_pars
     .argtype_check_static = frontend_parse_Expr_frontend_parse_ExprCallCheck_argtype_check_static,
     .record_call = frontend_parse_Expr_frontend_parse_ExprCallCheck_record_call
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int frontend_parse_argtype_mismatch_text(struct frontend_parse_Expr * self, int args, int fi, int ti, int mi, const char * * out) {
     const char * at = "";

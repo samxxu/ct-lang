@@ -11,6 +11,7 @@
 #include "Diag.h"
 #include "Sh.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprAdtCtor.h.ct"
 #include "ExprAdtCtor.shim.h"
@@ -28,6 +29,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -364,4 +367,14 @@ const struct frontend_parse_ExprAdt_vtbl frontend_parse_Expr_frontend_parse_Expr
     .adt_ctor_ahead = frontend_parse_Expr_frontend_parse_ExprAdt_adt_ctor_ahead,
     .parse_adt_ctor = frontend_parse_Expr_frontend_parse_ExprAdt_parse_adt_ctor
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 

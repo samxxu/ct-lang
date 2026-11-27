@@ -23,6 +23,7 @@
 #include "ExprTry.h"
 #include "ExprTypes.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprBinding.h.ct"
 #include "ExprBinding.shim.h"
@@ -109,6 +110,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -249,6 +252,16 @@ static int frontend_parse_Expr_frontend_parse_ExprBinding_binding_convert(void *
 const struct frontend_parse_ExprBinding_vtbl frontend_parse_Expr_frontend_parse_ExprBinding_vtable = {
     .binding_convert = frontend_parse_Expr_frontend_parse_ExprBinding_binding_convert
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 int frontend_parse_bind_conv_struct_like(struct frontend_parse_Expr * self, const char * t) {
     const char * p = t;

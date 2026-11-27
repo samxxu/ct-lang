@@ -2,6 +2,7 @@
 /* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 #include "Lexer.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/lex/Lexer.h.ct"
 #define TEXT_LIMIT 65536
@@ -20,6 +21,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -500,6 +503,16 @@ const struct frontend_lex_LexOps_vtbl frontend_lex_Lexer_frontend_lex_LexOps_vta
     .tok_first = frontend_lex_Lexer_frontend_lex_LexOps_tok_first,
     .next = frontend_lex_Lexer_frontend_lex_LexOps_next
 };
+
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
 
 static int lex_view_ok(struct frontend_lex_Lexer * l) {
     return (((l->tokstr.len >= 0) && (l->tokstr.ptr >= l->src)) && ((l->tokstr.ptr + l->tokstr.len) <= (l->src + l->srclen)));

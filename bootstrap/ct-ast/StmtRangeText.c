@@ -10,6 +10,7 @@
 #include "Diag.h"
 #include "Intern.h"
 #include "Vec.h"
+#include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtRangeText.h.ct"
 #include "StmtRangeText.shim.h"
@@ -22,6 +23,8 @@ struct U16Str;
 struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
+struct Result_int_int;
+struct Result_char_p_int;
 struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
@@ -152,6 +155,16 @@ int frontend_parse_range_vec_target(const char *, char *, int, char *, int);
 int frontend_parse_range_vec_target_text(const char *, const char * *, const char * *);
 int frontend_parse_vbrace_type_same(const char *, const char *);
 static int range_word_is(const char *, int, const char *);
+static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
+    struct Result_int_int *_self = (struct Result_int_int *)self;
+    (void)_self;
+}
+
+static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
+    struct Result_char_p_int *_self = (struct Result_char_p_int *)self;
+    (void)_self;
+}
+
 static int range_word_is(const char * w, int n, const char * kw) {
     int i;
     for (i = 0; i < n; i++) {
