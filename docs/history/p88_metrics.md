@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=11085 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=90663 io_cap=2048
+     emitted_before=48223 emitted_after=90652 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -273,6 +273,8 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
     传播、`errdefer` 释放半成品块），公共 `ct_intern*` 保持 NULL 契约；发射 C
     89453 → 90663（+1210：内建 `Result` 实例 `Result.c` 进入产物，Intern 内部
     错误路径改 Result）。
+  - D2 `tool/pkg` 容器化：`Pkg.owned` 的 `char **` + count + capacity 三件套
+    改 `Vec<char *>`，发射 C 90663 → 90652（-11：注册表增长代码收进容器）。
 - **v1-PH-2 S7-c（REQ-MEM-2 写入摘要）后的 live 校准**：`Emitter.h.ct` 仍为
   11065 行；新增 `frontend/parse/Mem2Writes.h.ct` 一个单元，发射 C 87080 → 87839
   （+759：定义出口的直接写扫描、一层组合与调用点判定）。发射器与切片清单不变。

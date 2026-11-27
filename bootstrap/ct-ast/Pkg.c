@@ -249,9 +249,7 @@ struct tool_pkg_LockParsedRow {
     char dig[80];
 };
 struct tool_pkg_Pkg {
-    char * * owned;
-    int nowned;
-    int ownedcap;
+    struct Vec_char_p owned;
     char * lock;
     int lockcap;
     int locklen;
@@ -403,26 +401,16 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_lock_reserve(void *self, int need) {
 static void * tool_pkg_Pkg_tool_pkg_PkgOps_owned_alloc(void *self, size_t size) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     char * p;
-    char * * grown;
-    int cap;
     p = (char *)(malloc(size));
     if ((!p)) {
         fprintf(stderr, "ctc: out of memory\n");
         return (void *)(0);
     }
-    if (_self->nowned >= _self->ownedcap) {
-        cap = ((_self->ownedcap > 0) ? (_self->ownedcap * 2) : MAX_PKG_DEPS);
-        grown = (char * *)(realloc(_self->owned, ((size_t)(cap) * sizeof((*grown)))));
-        if ((!grown)) {
-            free(p);
-            fprintf(stderr, "ctc: out of memory\n");
-            return (void *)(0);
-        }
-        _self->owned = grown;
-        _self->ownedcap = cap;
+    if (Vec_char_p_push(&_self->owned, p) == 0) {
+        free(p);
+        fprintf(stderr, "ctc: out of memory\n");
+        return (void *)(0);
     }
-    _self->owned[_self->nowned] = p;
-    _self->nowned++;
     return p;
 }
 
@@ -438,9 +426,9 @@ static void * tool_pkg_Pkg_tool_pkg_PkgOps_owned_grow(void *self, void * p, size
         fprintf(stderr, "ctc: out of memory\n");
         return (void *)(0);
     }
-    for (i = 0; i < _self->nowned; i++) {
-        if (_self->owned[i] == (char *)(p)) {
-            _self->owned[i] = np;
+    for (i = 0; i < Vec_char_p_len(&_self->owned); i++) {
+        if (Vec_char_p_get(&_self->owned, i) == (char *)(p)) {
+            Vec_char_p_set(&_self->owned, i, np);
             break;
         }
     }
@@ -450,13 +438,14 @@ static void * tool_pkg_Pkg_tool_pkg_PkgOps_owned_grow(void *self, void * p, size
 static void tool_pkg_Pkg_tool_pkg_PkgOps_owned_free(void *self) {
     struct tool_pkg_Pkg *_self = (struct tool_pkg_Pkg *)self;
     int i;
-    for (i = 0; i < _self->nowned; i++) {
-        free(_self->owned[i]);
+    int n;
+    n = Vec_char_p_len(&_self->owned);
+    for (i = 0; i < n; i++) {
+        free(Vec_char_p_get(&_self->owned, i));
     }
-    free(_self->owned);
-    _self->owned = 0;
-    _self->nowned = 0;
-    _self->ownedcap = 0;
+    if (n > 0) {
+        Vec_char_p_release(&_self->owned);
+    }
 }
 
 static int tool_pkg_Pkg_tool_pkg_PkgOps_text_grow(void *self, char * * buf, int * cap, int need) {
