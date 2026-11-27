@@ -40,5 +40,20 @@ pub struct Unit {
     int  tr_end;
     int  call_start;
     int  call_end;
+    /* v1-PH-2 S8: the half-open AST node range this unit's own parse allocated.
+       The semantic dependency graph (backend/tir/TGraph.h.ct) scans exactly this
+       slice, so a built-in unit's liveness never reads source text and never
+       sees a sibling unit's nodes. 0/0 when the unit was not parsed (a map
+       unit, or a caller outside the module layer). */
+    int  node_start;
+    int  node_end;
+    /* S8: this unit used a LANG-26 `out` conversion, whose GNU statement
+       expression is parser scratch the LIR stage does not model. Its function
+       bodies stay on the AST path instead of being lowered incorrectly. */
+    int  has_outconv;
+    /* S8: an anonymous `typedef struct { … } Name;` hides the record tag, and
+       the LIR stage resolves vptr-containing declarations by tag. Such a unit
+       stays on the AST body path instead of printing an uninitialised local. */
+    int  has_anon_typedef;
     unsigned long digest;       /* this unit's key digest (10.5) */
 }

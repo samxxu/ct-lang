@@ -11,6 +11,8 @@
 
 #include "Intern.h"
 #include "Unit.h"
+#include "Symbols.h"
+#include "Arena.h"
 #include "TModule.h"
 #include "TBuilder.h"
 #include "LModule.h"
@@ -69,9 +71,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -89,23 +109,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -156,9 +161,12 @@ struct backend_lir_Lower {
     int breakcap;
     int mode;
     int forced;
+    int defaulted;
     int tmp_delta;
     int func_scope;
     int func_has_self;
+    int no_bodies;
+    int global_no_bodies;
     int stmt_is_last;
     int hoist_temps;
     int tmp_start_temps;
@@ -190,6 +198,9 @@ struct backend_lir_Lower {
 int backend_lir_ct_lir_on(void);
 int backend_lir_ct_lir_emit_on(void);
 void backend_lir_ct_lir_set_switch(int);
+void backend_lir_ct_lir_default_build(void);
+void backend_lir_ct_lir_disable_bodies(void);
+int backend_lir_ct_lir_forced(void);
 int backend_lir_ct_lir_build_program(int, const char *, const char *, const char *, int, int);
 int backend_lir_ct_lir_build_unit(void *, int, int);
 int backend_lir_ct_lir_ready(void);

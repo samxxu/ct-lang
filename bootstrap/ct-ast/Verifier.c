@@ -3,6 +3,7 @@
 #include "Verifier.h"
 #include "Intern.h"
 #include "TModule.h"
+#include "TGraph.h"
 #include "LModule.h"
 
 #line 1 "selfhost/ct-ast/backend/verify/Verifier.h.ct"
@@ -114,9 +115,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -134,23 +153,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -192,7 +196,6 @@ static int v_decl_kind(struct backend_tir_TModule *, int);
 static int v_check_types(struct backend_tir_TModule *, struct backend_tir_ct_tmark *);
 static int v_check_value_class(struct backend_tir_TModule *, struct backend_tir_ct_tmark *);
 static int v_check_targets(struct backend_tir_TModule *, struct backend_tir_ct_tmark *);
-static int v_dfs(struct backend_tir_TModule *, int, int *);
 static int v_check_instances(struct backend_tir_TModule *, struct backend_tir_ct_tmark *);
 static void lfail(struct backend_lir_LModule *, int, int, int, const char *, const char *);
 static int lver_scope_kind(struct backend_lir_LModule *, int);
@@ -327,31 +330,6 @@ static int v_check_targets(struct backend_tir_TModule * m, struct backend_tir_ct
     }
     return 0;
 }
-static int v_dfs(struct backend_tir_TModule * m, int node, int * color) {
-    int e;
-    color[node] = 1;
-    for (e = 0; e < m->graph.nedges; e++) {
-        int to;
-        if (m->graph.edges[e].from != node) {
-            continue;
-        }
-        if (m->graph.edges[e].kind != TE_INSTANTIATE) {
-            continue;
-        }
-        to = m->graph.edges[e].to;
-        if (((to < 0) || (to >= m->graph.nnodes))) {
-            continue;
-        }
-        if (color[to] == 1) {
-            return 1;
-        }
-        if (((color[to] == 0) && (v_dfs(m, to, color) != 0))) {
-            return 1;
-        }
-    }
-    color[node] = 2;
-    return 0;
-}
 static int v_check_instances(struct backend_tir_TModule * m, struct backend_tir_ct_tmark * mark) {
     int i;
     int rc;
@@ -367,22 +345,14 @@ static int v_check_instances(struct backend_tir_TModule * m, struct backend_tir_
         }
     }
     if (m->graph.nnodes > 0) {
-        int * color;
-        color = (int *)(calloc((size_t)(m->graph.nnodes), sizeof(int)));
-        if ((!color)) {
+        rc = backend_tir_tgraph_has_cycle((&m->graph), TE_INSTANTIATE);
+        if (rc < 0) {
             vfail(m, 0, 0, 0, "E-IR-104", "cannot allocate the instance-cycle mark");
             return 0;
-        }
-        rc = 0;
-        for (i = 0; ((i < m->graph.nnodes) && (rc == 0)); i++) {
-            if (color[i] == 0) {
-                rc = v_dfs(m, i, color);
-            }
         }
         if (rc != 0) {
             vfail(m, 0, 0, 0, "E-IR-104", "instance closure contains a cycle");
         }
-        free(color);
     }
     return 0;
 }

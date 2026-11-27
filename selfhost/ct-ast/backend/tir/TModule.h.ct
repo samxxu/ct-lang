@@ -34,6 +34,7 @@
 #include <time.h>
 import runtime::text::Intern;
 import frontend::type::TypeCheck;
+import backend::tir::TGraph;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define CAP_LIMIT 65536
@@ -444,28 +445,6 @@ pub struct ct_troot {
     const char *name;
 }
 
-pub struct ct_tnode {
-    int kind;
-    int id;
-}
-
-pub struct ct_tedge {
-    int from;           /* index into graph.nodes */
-    int to;
-    int kind;
-    const char *key;
-    int approximate;
-}
-
-pub struct ct_tgraph {
-    struct ct_tnode *nodes;
-    int nnodes;
-    int ncap;
-    struct ct_tedge *edges;
-    int nedges;
-    int ecap;
-}
-
 /* A unit's slice boundaries: the verifier walks [start, current) so one run
    that accumulates several units re-checks only the unit it was handed. */
 pub struct ct_tmark {
@@ -525,7 +504,7 @@ pub struct TModule {
     const char **files;
     int nfiles;
     int fcap;
-    struct ct_tgraph graph;
+    struct TGraph graph;
     /* Coverage counters for the report. */
     int stat_fallback_type;
     int stat_unknown_target;
@@ -1250,47 +1229,13 @@ pub int tmod_add_root(struct TModule *self, int kind, int unit, const char *name
 
 pub int tmod_graph_node(struct TModule *self, int kind, int id)
 {
-    int i, slot;
-    struct ct_tgraph *g;
-
-    g = &self->graph;
-    for (i = 0; i < g->nnodes; i++)
-        if (g->nodes[i].kind == kind && g->nodes[i].id == id) return i;
-    if (tir_reserve((void **)&g->nodes, &g->ncap, g->nnodes + 1,
-                    (int)sizeof(struct ct_tnode)) != 0) return -1;
-    slot = g->nnodes;
-    g->nodes[slot].kind = kind;
-    g->nodes[slot].id = id;
-    g->nnodes++;
-    return slot;
+    return tgraph_node(&self->graph, kind, id);
 }
 
 pub int tmod_graph_edge(struct TModule *self, int from, int to, int kind,
                         const char *key, int approximate)
 {
-    struct ct_tgraph *g;
-    int slot;
-    const char *pooled;
-
-    g = &self->graph;
-    if (from < 0 || to < 0) return 0;
-    for (slot = 0; slot < g->nedges; slot++) {
-        if (g->edges[slot].from != from || g->edges[slot].to != to) continue;
-        if (g->edges[slot].kind != kind) continue;
-        return 0;
-    }
-    if (tir_reserve((void **)&g->edges, &g->ecap, g->nedges + 1,
-                    (int)sizeof(struct ct_tedge)) != 0) return -1;
-    pooled = runtime::text::ct_intern(key ? key : "");
-    if (!pooled) return -1;
-    slot = g->nedges;
-    g->edges[slot].from = from;
-    g->edges[slot].to = to;
-    g->edges[slot].kind = kind;
-    g->edges[slot].key = pooled;
-    g->edges[slot].approximate = approximate;
-    g->nedges++;
-    return 0;
+    return tgraph_edge(&self->graph, from, to, kind, key, approximate);
 }
 
 /* The coverage / timing line. Debug only: `CT_TIR_REPORT=1`. One line per

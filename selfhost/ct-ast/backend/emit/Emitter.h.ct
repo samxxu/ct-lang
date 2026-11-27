@@ -45,6 +45,8 @@ import backend::emit::EmitterTry;
 import backend::emit::EmitInvariant;
 import backend::emit::EmitHoist;
 import backend::emit::EmitInit;
+import backend::lir::LModule;
+import backend::lir::LModule::LModulePlan as LModulePlan;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT   160
@@ -244,6 +246,11 @@ pub struct StrRetain {
    private to this unit and single-threaded), so the `pub struct Emitter`
    field budget is untouched. */
 static struct StrRetain g_sb;
+
+/* S8 emitter contract: built-in liveness is an input, not a decision. The
+   plan is filled by the module layer from the semantic dependency graph and
+   bound once per run; the emitter only reads `plan->live`. */
+static struct LModulePlan *g_plan;
 
 /* LANG-26: the call node whose own `out`-conversion statement expression is
    being written, so the intercept does not fire again for that node while a
@@ -2794,13 +2801,21 @@ static int emit_unit_body(struct Emitter *self, int u)
        layer's headers; the unit sees them although there is no import edge.
        P34 S9a: the layer may span several files, so every layer header the
        unit does not own is included. */
-    for (i = 0; i < self->nbuiltin; i++) {
-        int bu = self->builtins[i];
-        if (self->builtin_live && !self->builtin_live[i]) continue;
-        if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-        fprintf(self->out, "#include \"%s.h\"\n",
-                strcmp(self->units[bu].base, "String") == 0
-                    ? "String_" : self->units[bu].base);
+    if (!g_plan) {
+        /* compile mode has no module plan; every loaded layer unit is
+           included, exactly as before S8. */
+        for (i = 0; i < self->nbuiltin; i++) {
+            int bu = self->builtins[i];
+            if (bu < 0 || bu >= *self->nunits || bu == u) continue;
+            fprintf(self->out, "#include \"%s.h\"\n",
+                    strcmp(self->units[bu].base, "String") == 0
+                        ? "String_" : self->units[bu].base);
+        }
+    } else {
+        for (i = 0; i < g_plan->nbhead; i++) {
+            if (g_plan->bunit[i] == u) continue;
+            fprintf(self->out, "#include \"%s.h\"\n", g_plan->bhead[i]);
+        }
     }
     fputs("\n", self->out);
     if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
@@ -2995,13 +3010,21 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
     /* Phase 29 E29-5: a `pub` signature may name an instance defined in the
        built-in layer's header. P34 S9a: include every layer header the unit
        does not own. */
-    for (i = 0; i < self->nbuiltin; i++) {
-        int bu = self->builtins[i];
-        if (self->builtin_live && !self->builtin_live[i]) continue;
-        if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-        fprintf(self->out, "#include \"%s.h\"\n",
-                strcmp(self->units[bu].base, "String") == 0
-                    ? "String_" : self->units[bu].base);
+    if (!g_plan) {
+        /* compile mode has no module plan; every loaded layer unit is
+           included, exactly as before S8. */
+        for (i = 0; i < self->nbuiltin; i++) {
+            int bu = self->builtins[i];
+            if (bu < 0 || bu >= *self->nunits || bu == u) continue;
+            fprintf(self->out, "#include \"%s.h\"\n",
+                    strcmp(self->units[bu].base, "String") == 0
+                        ? "String_" : self->units[bu].base);
+        }
+    } else {
+        for (i = 0; i < g_plan->nbhead; i++) {
+            if (g_plan->bunit[i] == u) continue;
+            fprintf(self->out, "#include \"%s.h\"\n", g_plan->bhead[i]);
+        }
     }
     if (self->nbuiltin > 0) fputs("\n", self->out);
 
@@ -10884,11 +10907,11 @@ void ct_emit_bind_flags(int *freestanding, char *alloc_map, int *slice_used)
     g_slice_used = slice_used;
 }
 
-pub void ct_emit_bind_builtin_live(int *live);
+pub void ct_emit_bind_plan(struct LModulePlan *plan);
 pub void ct_emit_bind_io_mask(int mask);
-void ct_emit_bind_builtin_live(int *live)
+void ct_emit_bind_plan(struct LModulePlan *plan)
 {
-    g_emit.builtin_live = live;
+    g_plan = plan;
 }
 
 

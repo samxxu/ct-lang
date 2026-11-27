@@ -416,7 +416,57 @@ pub struct LModule {
     int stat_printed;    /* bodies the seam actually printed from LIR */
 }
 
+/* S8 emitter contract: the module-level facts the emitter consumes as input
+   instead of deciding them itself. Built-in liveness is computed once by the
+   semantic dependency graph (backend/tir/TGraph.h.ct) and read here; the plan
+   is process-scoped and deliberately survives `lmod_reset` (which clears the
+   per-unit lowering tables). */
+pub struct LModulePlan {
+    int nbuiltin;
+    int live[8];
+    int ready;
+    /* the live built-in headers this run prints (contract §6: the emitter
+       consumes the include list, it does not decide it). `bunit` is the
+       header's module unit, so the emitter can skip its own. */
+    int bunit[8];
+    const char *bhead[8];
+    int nbhead;
+}
+
 static struct LModule g_lir;
+static struct LModulePlan g_plan;
+
+pub struct LModulePlan *lmod_plan_get(void);
+pub void lmod_plan_set_live(int *live, int n);
+pub void lmod_plan_set_builtin_headers(int *bunit, const char **bhead, int n);
+
+pub struct LModulePlan *lmod_plan_get(void)
+{
+    return &g_plan;
+}
+
+pub void lmod_plan_set_live(int *live, int n)
+{
+    int i;
+
+    if (n > 8) n = 8;
+    g_plan.nbuiltin = n;
+    for (i = 0; i < 8; i++) g_plan.live[i] = 1;
+    for (i = 0; i < n; i++) g_plan.live[i] = (live && !live[i]) ? 0 : 1;
+    g_plan.ready = 1;
+}
+
+pub void lmod_plan_set_builtin_headers(int *bunit, const char **bhead, int n)
+{
+    int i;
+
+    if (n > 8) n = 8;
+    g_plan.nbhead = n;
+    for (i = 0; i < n; i++) {
+        g_plan.bunit[i] = bunit ? bunit[i] : -1;
+        g_plan.bhead[i] = bhead ? bhead[i] : "";
+    }
+}
 
 pub struct LModule *lmod_get(void);
 pub void lmod_reset(struct LModule *self);

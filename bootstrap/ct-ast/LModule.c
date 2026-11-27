@@ -201,9 +201,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -221,23 +239,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -272,6 +275,9 @@ struct tool_driver_Driver;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+struct backend_lir_LModulePlan * backend_lir_lmod_plan_get(void);
+void backend_lir_lmod_plan_set_live(int *, int);
+void backend_lir_lmod_plan_set_builtin_headers(int *, const char * *, int);
 struct backend_lir_LModule * backend_lir_lmod_get(void);
 void backend_lir_lmod_reset(struct backend_lir_LModule *);
 int backend_lir_lmod_type(struct backend_lir_LModule *, const char *);
@@ -303,6 +309,35 @@ static int lir_type_kind(const char *);
 static int lir_add_int(int * *, int *, int *, int);
 static const char * lir_tmp_prefix(int);
 static struct backend_lir_LModule backend_lir_g_lir;
+static struct backend_lir_LModulePlan backend_lir_g_plan;
+struct backend_lir_LModulePlan * backend_lir_lmod_plan_get(void) {
+    return (&backend_lir_g_plan);
+}
+void backend_lir_lmod_plan_set_live(int * live, int n) {
+    int i;
+    if (n > 8) {
+        n = 8;
+    }
+    backend_lir_g_plan.nbuiltin = n;
+    for (i = 0; i < 8; i++) {
+        backend_lir_g_plan.live[i] = 1;
+    }
+    for (i = 0; i < n; i++) {
+        backend_lir_g_plan.live[i] = ((live && (!live[i])) ? 0 : 1);
+    }
+    backend_lir_g_plan.ready = 1;
+}
+void backend_lir_lmod_plan_set_builtin_headers(int * bunit, const char * * bhead, int n) {
+    int i;
+    if (n > 8) {
+        n = 8;
+    }
+    backend_lir_g_plan.nbhead = n;
+    for (i = 0; i < n; i++) {
+        backend_lir_g_plan.bunit[i] = (bunit ? bunit[i] : (-1));
+        backend_lir_g_plan.bhead[i] = (bhead ? bhead[i] : "");
+    }
+}
 static int lir_reserve(void * * slot, int * cap, int need, int row) {
     int ncap;
     void * grown;

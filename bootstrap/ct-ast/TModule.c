@@ -3,6 +3,7 @@
 #include "TModule.h"
 #include "Intern.h"
 #include "TypeCheck.h"
+#include "TGraph.h"
 
 #line 1 "selfhost/ct-ast/backend/tir/TModule.h.ct"
 #include <stdio.h>
@@ -209,9 +210,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -229,23 +248,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -1036,56 +1040,10 @@ int backend_tir_tmod_add_root(struct backend_tir_TModule * self, int kind, int u
     return 0;
 }
 int backend_tir_tmod_graph_node(struct backend_tir_TModule * self, int kind, int id) {
-    int i;
-    int slot;
-    struct backend_tir_ct_tgraph * g;
-    g = (&self->graph);
-    for (i = 0; i < g->nnodes; i++) {
-        if (((g->nodes[i].kind == kind) && (g->nodes[i].id == id))) {
-            return i;
-        }
-    }
-    if (tir_reserve((void * *)((&g->nodes)), (&g->ncap), (g->nnodes + 1), (int)(sizeof(struct backend_tir_ct_tnode))) != 0) {
-        return (-1);
-    }
-    slot = g->nnodes;
-    g->nodes[slot].kind = kind;
-    g->nodes[slot].id = id;
-    g->nnodes++;
-    return slot;
+    return backend_tir_tgraph_node((&self->graph), kind, id);
 }
 int backend_tir_tmod_graph_edge(struct backend_tir_TModule * self, int from, int to, int kind, const char * key, int approximate) {
-    struct backend_tir_ct_tgraph * g;
-    int slot;
-    const char * pooled;
-    g = (&self->graph);
-    if (((from < 0) || (to < 0))) {
-        return 0;
-    }
-    for (slot = 0; slot < g->nedges; slot++) {
-        if (((g->edges[slot].from != from) || (g->edges[slot].to != to))) {
-            continue;
-        }
-        if (g->edges[slot].kind != kind) {
-            continue;
-        }
-        return 0;
-    }
-    if (tir_reserve((void * *)((&g->edges)), (&g->ecap), (g->nedges + 1), (int)(sizeof(struct backend_tir_ct_tedge))) != 0) {
-        return (-1);
-    }
-    pooled = runtime_text_ct_intern((key ? key : ""));
-    if ((!pooled)) {
-        return (-1);
-    }
-    slot = g->nedges;
-    g->edges[slot].from = from;
-    g->edges[slot].to = to;
-    g->edges[slot].kind = kind;
-    g->edges[slot].key = pooled;
-    g->edges[slot].approximate = approximate;
-    g->nedges++;
-    return 0;
+    return backend_tir_tgraph_edge((&self->graph), from, to, kind, key, approximate);
 }
 void backend_tir_tmod_report(struct backend_tir_TModule * self, const char * unit, double ms) {
     const char * e;

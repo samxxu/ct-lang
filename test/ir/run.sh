@@ -53,6 +53,7 @@ root = sys.argv[1]
 files = [
     "selfhost/ct-ast/backend/tir/TModule.h.ct",
     "selfhost/ct-ast/backend/tir/TBuilder.h.ct",
+    "selfhost/ct-ast/backend/tir/TGraph.h.ct",
     "selfhost/ct-ast/backend/lir/LModule.h.ct",
     "selfhost/ct-ast/backend/lir/Lower.h.ct",
     "selfhost/ct-ast/backend/verify/Verifier.h.ct",
@@ -424,6 +425,33 @@ for spec in "test/modules/split/main.ct:split" \
 done
 if [ "$ldbad" -eq 0 ] && [ "$ldn" -ge 1 ]; then ok; else bad "a LIR build differs"; fi
 printf 'ir: LIR builds %d\n' "$ldn"
+
+# ---------------------------------------------------------------------------
+# H. S8: `ct build` prints from LIR by default; `--ir=off` is the AST oracle
+# ---------------------------------------------------------------------------
+default_lir="$work/default-lir"
+rm -rf "$default_lir"
+mkdir -p "$default_lir"
+if CT_LIR_REPORT=1 "$CT" build --emit-c -I "examples/01_greeter" \
+        examples/01_greeter/greeter.ct -o "$default_lir" >"$work/dl.out" 2>"$work/dl.err" \
+   && grep -q 'bodies printed=[1-9]' "$work/dl.err"; then
+    ok
+    printf 'ir: build defaults to LIR (%s)\n' "$(grep -m1 'bodies printed=[1-9]' "$work/dl.err")"
+else
+    bad "a plain build did not print from LIR by default"
+fi
+default_off="$work/default-off"
+rm -rf "$default_off"
+mkdir -p "$default_off"
+if CT_LIR=0 CT_LIR_REPORT=1 "$CT" build --emit-c \
+        -I "examples/01_greeter" examples/01_greeter/greeter.ct \
+        -o "$default_off" >"$work/do.out" 2>"$work/do.err" \
+   && ! grep -q 'bodies printed=[1-9]' "$work/do.err" \
+   && diff -r "$default_lir" "$default_off" >"$work/dod.log" 2>&1; then
+    ok
+else
+    bad "CT_LIR=0 did not stay on the AST oracle / changed the C tree"
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then

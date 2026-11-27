@@ -21,7 +21,7 @@ Emitter D4–D6 拆分（D1–D3 是 S1a-1 的搬移，S1b 只在其后读 Emitt
 | --- | --- | --- | --- |
 | `backend/tir/TModule.h.ct` | `struct TModule` | 模块级表：unit / decl / type / instance / graph | S1b S1 |
 | `backend/tir/TBuilder.h.ct` | `struct TBuilder` | AST → TIR：类型判定、解析目标、实例闭包、所有权动作 | S1b S1 |
-| `backend/tir/TGraph.h.ct` | `struct TGraph` | 语义依赖图、判活、环检测 | S1b S3 |
+| `backend/tir/TGraph.h.ct` | `struct TGraph` | 语义依赖图、判活、环检测 | S1b S3（S8 已落） |
 | `backend/lir/Lower.h.ct` | `struct Lower` | TIR → LIR：基本块、临时、清理语句、布局 | S1b S2 |
 | `backend/lir/LModule.h.ct` | `struct LModule` | 发射所需元数据：拼写、布局、头文件、ABI、map | S1b S2 |
 | `backend/verify/Verifier.h.ct` | `struct Verifier` | V1–V10 检查点，**打开输出文件之前**运行 | S1b S1（V1–V4）/ S2（V5–V8）/ S3（V9–V10） |
@@ -190,16 +190,26 @@ verifier 从块元数据**重算**应有清理集，与 lowerer 写入的语句�
 `write_abi_header(struct LModule *)`、`write_map(struct LModule *)`。`struct Emitter` 不再持有
 `sym` / `ty` / `lex` / unit 表；S4 之后 `fail_from` 只报 I/O 错误。
 
+**S8 落地边界（2026-11-27）**：函数体的**生命周期判定**已经移出：`ct build` 默认由
+LIR 打印每个函数体，AST body writer 只作 `--ir=off` 的 oracle；`builtin_live_for` 的
+**内建判活**已移入 `TGraph`（不再读源码文本）。仍未迁走的是**外壳**：类型/全局声明、
+泛型实例闭包与胶水、头文件、ABI 导出表、map JSON 仍由 emitter 读 AST/符号表打印。
+`write_header` / `write_abi_header` / `write_map` / `emit_module` 的纯 LModule 化
+留给 S8 之后的切片；单文件编译路径的剩余差异见
+[S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md)。
+
 ## 7 双跑、开关与回滚
 
 | 开关 | 行为 | 默认 |
 | --- | --- | --- |
-| `--ir=off` | 只走 AST→C（现状） | ✔ 直到 S4 |
+| `--ir=off` | 只走 AST→C（oracle；一提交可回滚） | 单文件编译路径 |
 | `--ir=shadow` | 同时构建 TIR / LIR 并跑 verifier，但**只发射旧路径的字节** | 否 |
-| `--ir=on` | 发射 LIR→C，旧路径只做对照 | 否（S4 才切换） |
+| `--ir=on` | 发射 LIR→C，旧路径只做对照 | `ct build`（S8 起） |
 
 - S1–S3：`shadow` 下逐 unit `cmp`，差异进差异清单（临时编号、声明顺序、空行），REVIEW 签字；
-- S4：连续两轮全绿 + 自举 3 轮不动点后才重基线 `test/goldens/ast/**`，重基线提交与实现提交分开；
+- S8：`ct build`（含自举与 seed 生成）默认 LIR 打印，自举 2 轮（tag 前 3 轮）逐字节；
+  单文件编译路径保留 AST 默认，差异清单见 [S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md)；
+- S4（历史）：连续两轮全绿 + 自举 3 轮不动点后才重基线 `test/goldens/ast/**`，重基线提交与实现提交分开；
 - 任何阶段 `git revert` 后，`check-goldens-ast` 与 `check-seed` 必须仍绿。
 
 ## 8 待裁定

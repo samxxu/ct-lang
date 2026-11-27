@@ -1,0 +1,555 @@
+/*
+ * TGraph.h.ct - the semantic dependency graph (S1b-S3 / v1-PH-2 S8, contract §3.4).
+ *
+ * TGraph owns the node / edge model the TIR builder records (unit contains
+ * decl, instance instantiates template) and the analysis the emitter used to
+ * do by hand:
+ *
+ *   - `tgraph_has_cycle` is the instance-closure cycle check (contract V4);
+ *   - `tgraph_builtin_live` decides which built-in layer units a build can
+ *     reach. It replaces the whole-file text scan `builtin_live_for` used
+ *     (SH-113 boundary): the edges come from the parsed AST node ranges, from
+ *     the generic-instance registry and from the layer's own declared needs,
+ *     so a comment or a string literal can never pull a unit in.
+ *
+ * The scan is still a name scan, but over AST rows, not source bytes: a
+ * declaration's type spelling, a call's callee and a struct field's type are
+ * rows the parser produced, and comments / string literals never reach them.
+ * That is the semantic boundary of this stage: a resolved-symbol graph is a
+ * later step (`tir-lir-contract.md` §8), and the edges are labelled now so
+ * the step is a data change, not a rewrite.
+ *
+ * Node ids are `int`; `0` means "none" and an id is never reused. Nodes are
+ * deduplicated by (kind, id), edges by (from, to, kind). Arrays append in
+ * discovery order and grow to `CAP_LIMIT` / `NODE_LIMIT` (S1a-0).
+ *
+ * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+import runtime::text::Intern;
+import runtime::arena::Arena;
+import frontend::module::Unit;
+import frontend::sym::Symbols;
+import frontend::sym::Symbols::StructInst as StructInst;
+
+/* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
+#define CAP_LIMIT 65536
+#define NODE_LIMIT 16777216
+
+namespace backend::tir;
+
+/* Node kinds (contract §3.4). */
+#define GN_UNIT             1
+#define GN_DECL             2
+#define GN_TMPL             3
+#define GN_INST             4
+#define GN_LAYER            5
+#define GN_RECIPE           6
+#define GN_HEADER           7
+
+/* Edge kinds (contract §3.4). */
+#define TE_CONTAINS         1
+#define TE_TYPE_REF         2
+#define TE_CALL             3
+#define TE_DISPATCH         4
+#define TE_INSTANTIATE      5
+#define TE_RECIPE           6
+#define TE_LAYER_NEEDS      7
+#define TE_EXPORT           8
+
+/* AST node kinds the scan reads. They mirror frontend/parse/Expr.h.ct; a
+   macro does not cross a unit, so the block is repeated here. */
+#define TG_N_PP       2
+#define TG_N_CALL     7
+#define TG_N_STR      9
+#define TG_N_RAW     31
+#define TG_N_RAW_TEXT 58
+
+pub struct ct_tnode {
+    int kind;
+    int id;
+}
+
+/* One declared layer -> layer need (a companion row, not a graph node). */
+pub struct ct_lneed {
+    int from;
+    int to;
+}
+
+pub struct ct_tedge {
+    int from;           /* index into graph.nodes */
+    int to;
+    int kind;
+    const char *key;
+    int approximate;
+}
+
+pub struct TGraph {
+    struct ct_tnode *nodes;
+    int nnodes;
+    int ncap;
+    struct ct_tedge *edges;
+    int nedges;
+    int ecap;
+}
+
+static int tg_reserve(void **slot, int *cap, int need, int row)
+{
+    int ncap;
+    void *grown;
+
+    if (need <= *cap) return 0;
+    ncap = *cap > 0 ? *cap * 2 : 32;
+    while (ncap < need && ncap < NODE_LIMIT) ncap *= 2;
+    if (ncap > NODE_LIMIT) ncap = NODE_LIMIT;
+    if (need > ncap) return -1;
+    grown = realloc(*slot, (size_t)ncap * (size_t)row);
+    if (!grown) return -1;
+    memset((char *)grown + (size_t)(*cap) * (size_t)row, 0,
+           (size_t)(ncap - *cap) * (size_t)row);
+    *slot = grown;
+    *cap = ncap;
+    return 0;
+}
+
+pub void tgraph_reset(struct TGraph *self)
+{
+    int i;
+
+    for (i = 0; i < self->nedges; i++) {
+        /* edges carry only interned text, which the pool owns */
+    }
+    self->nnodes = 0;
+    self->nedges = 0;
+}
+
+pub void tgraph_free(struct TGraph *self)
+{
+    free(self->nodes);
+    free(self->edges);
+    self->nodes = (struct ct_tnode *)0;
+    self->edges = (struct ct_tedge *)0;
+    self->nnodes = 0;
+    self->nedges = 0;
+    self->ncap = 0;
+    self->ecap = 0;
+}
+
+/* Add or find the node for (kind, id); returns the node index, -1 on failure. */
+pub int tgraph_node(struct TGraph *self, int kind, int id)
+{
+    int i, slot;
+
+    for (i = 0; i < self->nnodes; i++)
+        if (self->nodes[i].kind == kind && self->nodes[i].id == id) return i;
+    if (tg_reserve((void **)&self->nodes, &self->ncap, self->nnodes + 1,
+                   (int)sizeof(struct ct_tnode)) != 0)
+        return -1;
+    slot = self->nnodes;
+    self->nodes[slot].kind = kind;
+    self->nodes[slot].id = id;
+    self->nnodes++;
+    return slot;
+}
+
+/* Add an edge once; -1 on failure. `from` / `to` are node indices. */
+pub int tgraph_edge(struct TGraph *self, int from, int to, int kind,
+                    const char *key, int approximate)
+{
+    int slot;
+    const char *pooled;
+
+    if (from < 0 || to < 0) return 0;
+    for (slot = 0; slot < self->nedges; slot++) {
+        if (self->edges[slot].from != from) continue;
+        if (self->edges[slot].to != to) continue;
+        if (self->edges[slot].kind != kind) continue;
+        return 0;
+    }
+    if (tg_reserve((void **)&self->edges, &self->ecap, self->nedges + 1,
+                   (int)sizeof(struct ct_tedge)) != 0)
+        return -1;
+    pooled = runtime::text::ct_intern(key ? key : "");
+    if (!pooled) return -1;
+    slot = self->nedges;
+    self->edges[slot].from = from;
+    self->edges[slot].to = to;
+    self->edges[slot].kind = kind;
+    self->edges[slot].key = pooled;
+    self->edges[slot].approximate = approximate;
+    self->nedges++;
+    return 0;
+}
+
+/* DFS over one edge kind; 1 = cycle found. `mark` is a nnodes-length array of
+   0/1/2 colours, allocated by the caller. */
+static int tg_dfs(struct TGraph *self, int node, int kind, int *mark)
+{
+    int e;
+
+    mark[node] = 1;
+    for (e = 0; e < self->nedges; e++) {
+        int to;
+
+        if (self->edges[e].from != node) continue;
+        if (self->edges[e].kind != kind) continue;
+        to = self->edges[e].to;
+        if (to < 0 || to >= self->nnodes) continue;
+        if (mark[to] == 1) return 1;
+        if (mark[to] == 0 && tg_dfs(self, to, kind, mark) != 0) return 1;
+    }
+    mark[node] = 2;
+    return 0;
+}
+
+/* 1 = the graph has a cycle over `kind` edges; 0 = acyclic; -1 = OOM. */
+pub int tgraph_has_cycle(struct TGraph *self, int kind)
+{
+    int *mark;
+    int i, rc;
+
+    if (self->nnodes <= 0) return 0;
+    mark = (int *)calloc((size_t)self->nnodes, sizeof(int));
+    if (!mark) return -1;
+    rc = 0;
+    for (i = 0; i < self->nnodes && rc == 0; i++)
+        if (mark[i] == 0) rc = tg_dfs(self, i, kind, mark);
+    free(mark);
+    return rc;
+}
+
+/* Whole-identifier match: `name` must stand alone in `text`, so `String` does
+   not match `U16String` / `Stringy` / `MyString`. */
+static int tg_word(const char *text, const char *name)
+{
+    size_t nl;
+    const char *p;
+
+    if (!text || !name || !name[0]) return 0;
+    nl = strlen(name);
+    p = text;
+    while (*p) {
+        const char *q;
+
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
+              || (*p >= '0' && *p <= '9') || *p == '_')) {
+            p++;
+            continue;
+        }
+        q = p;
+        while ((*q >= 'a' && *q <= 'z') || (*q >= 'A' && *q <= 'Z')
+               || (*q >= '0' && *q <= '9') || *q == '_')
+            q++;
+        if ((size_t)(q - p) == nl && strncmp(p, name, nl) == 0) return 1;
+        p = q;
+    }
+    return 0;
+}
+
+/* The layer slots a graph run knows about. `slot` is the built-in unit's index
+   in Module.builtin_units; the base name is the unit's file base. */
+pub struct ct_layers {
+    int n;
+    int unit[16];
+    const char *base[16];
+    /* slot roles, resolved from `base` */
+    int s_vec;
+    int s_option;
+    int s_result;
+    int s_box;
+    int s_str;
+    int s_string;
+    int s_u16str;
+    int s_u16string;
+}
+
+static void tg_layers_init(struct ct_layers *l, struct Unit *units,
+                           int *bunit, int nbuiltin)
+{
+    int i;
+
+    l->n = nbuiltin > 16 ? 16 : nbuiltin;
+    l->s_vec = -1;
+    l->s_option = -1;
+    l->s_result = -1;
+    l->s_box = -1;
+    l->s_str = -1;
+    l->s_string = -1;
+    l->s_u16str = -1;
+    l->s_u16string = -1;
+    for (i = 0; i < l->n; i++) {
+        const char *b;
+
+        l->unit[i] = bunit[i];
+        l->base[i] = (bunit[i] >= 0) ? units[bunit[i]].base : "";
+        b = l->base[i];
+        if (strcmp(b, "Vec") == 0) l->s_vec = i;
+        else if (strcmp(b, "Option") == 0) l->s_option = i;
+        else if (strcmp(b, "Result") == 0) l->s_result = i;
+        else if (strcmp(b, "Box") == 0) l->s_box = i;
+        else if (strcmp(b, "Str") == 0) l->s_str = i;
+        else if (strcmp(b, "String") == 0) l->s_string = i;
+        else if (strcmp(b, "U16Str") == 0) l->s_u16str = i;
+        else if (strcmp(b, "U16String") == 0) l->s_u16string = i;
+    }
+}
+
+/* Does `word` name a type `slot` exports? The container unit also owns `Map`. */
+static int tg_slot_type(struct ct_layers *l, int slot, const char *word)
+{
+    if (slot == l->s_vec)
+        return tg_word(word, "Vec") || tg_word(word, "Map");
+    return tg_word(word, l->base[slot]);
+}
+
+/* Does `word` name a function `slot` exports (by source or C spelling)? */
+static int tg_slot_fn(struct Symbols *sym, struct Unit *units, int unit,
+                      const char *word)
+{
+    int i;
+    struct Unit *u;
+
+    if (unit < 0) return 0;
+    u = &units[unit];
+    for (i = u->fn_start; i < u->fn_end; i++) {
+        if (sym->funcs[i].name && strcmp(sym->funcs[i].name, word) == 0) return 1;
+        if (sym->funcs[i].cname && strcmp(sym->funcs[i].cname, word) == 0) return 1;
+    }
+    return 0;
+}
+
+/* The four text rows of one AST node. */
+static int tg_scan_node(struct ct_layers *l, struct TGraph *g, struct Arena *ar,
+                        struct Symbols *sym, struct Unit *units, int u, int n)
+{
+    int k, i;
+    const char *row[4];
+    int from;
+
+    k = ar->nodes[n].kind;
+    /* A string literal, the compiler's own raw fragment and a `#` line never
+       contribute a source identifier. */
+    if (k == TG_N_STR || k == TG_N_RAW || k == TG_N_PP) return 0;
+    from = tgraph_node(g, GN_UNIT, u);
+    if (from < 0) return -1;
+    row[0] = ar->nodes[n].text;
+    row[1] = ar->nodes[n].text2;
+    row[2] = ar->nodes[n].text3;
+    row[3] = ar->nodes[n].text4;
+    for (i = 0; i < 4; i++) {
+        int s;
+
+        if (!row[i] || !row[i][0]) continue;
+        for (s = 0; s < l->n; s++) {
+            if (!tg_slot_type(l, s, row[i])) continue;
+            if (tgraph_edge(g, from, tgraph_node(g, GN_LAYER, s),
+                            TE_TYPE_REF, l->base[s], 0) != 0)
+                return -1;
+        }
+    }
+    if (k == TG_N_CALL) {
+        int s;
+
+        for (s = 0; s < l->n; s++) {
+            if (!tg_slot_fn(sym, units, l->unit[s], row[1] ? row[1] : "")) continue;
+            if (tgraph_edge(g, from, tgraph_node(g, GN_LAYER, s),
+                            TE_CALL, l->base[s], 0) != 0)
+                return -1;
+            continue;
+        }
+        for (s = 0; s < l->n; s++) {
+            if (!tg_slot_fn(sym, units, l->unit[s], row[2] ? row[2] : "")) continue;
+            if (tgraph_edge(g, from, tgraph_node(g, GN_LAYER, s),
+                            TE_CALL, l->base[s], 0) != 0)
+                return -1;
+        }
+    }
+    return 0;
+}
+
+/* The layer's own needs, declared once here instead of inferred from the text
+   (SH-120 keeps the historical behaviour: any UTF-16 use keeps the whole
+   string half alive, and any string half needs `Vec` for `split`). */
+static int tg_layer_needs(struct ct_layers *l, struct TGraph *g)
+{
+    struct ct_lneed e[16];
+    int n = 0;
+    int i;
+
+    if (l->s_string >= 0 && l->s_str >= 0) { e[n].from = l->s_string; e[n].to = l->s_str; n++; }
+    if (l->s_str >= 0 && l->s_string >= 0) { e[n].from = l->s_str; e[n].to = l->s_string; n++; }
+    if (l->s_string >= 0 && l->s_vec >= 0) { e[n].from = l->s_string; e[n].to = l->s_vec; n++; }
+    if (l->s_str >= 0 && l->s_vec >= 0) { e[n].from = l->s_str; e[n].to = l->s_vec; n++; }
+    if (l->s_u16string >= 0) {
+        if (l->s_u16str >= 0) { e[n].from = l->s_u16string; e[n].to = l->s_u16str; n++; }
+        if (l->s_string >= 0) { e[n].from = l->s_u16string; e[n].to = l->s_string; n++; }
+        if (l->s_vec >= 0) { e[n].from = l->s_u16string; e[n].to = l->s_vec; n++; }
+    }
+    if (l->s_u16str >= 0) {
+        if (l->s_u16string >= 0) { e[n].from = l->s_u16str; e[n].to = l->s_u16string; n++; }
+        if (l->s_string >= 0) { e[n].from = l->s_u16str; e[n].to = l->s_string; n++; }
+        if (l->s_vec >= 0) { e[n].from = l->s_u16str; e[n].to = l->s_vec; n++; }
+    }
+    for (i = 0; i < n; i++) {
+        int from = tgraph_node(g, GN_LAYER, e[i].from);
+        int to = tgraph_node(g, GN_LAYER, e[i].to);
+        if (tgraph_edge(g, from, to, TE_LAYER_NEEDS, l->base[e[i].to], 0) != 0)
+            return -1;
+    }
+    return 0;
+}
+
+/* Instance edges: the registry already records which unit asked for which
+   template (contract §3.4 `instantiate`). */
+static int tg_instances(struct ct_layers *l, struct TGraph *g,
+                        int *is_builtin, int nunits)
+{
+    struct StructInst *ins;
+    int n, i;
+
+    ins = frontend::sym::ct_insts(&n);
+    for (i = 0; i < n && ins; i++) {
+        int owner, from, s;
+
+        owner = ins[i].owner;
+        if (owner < 0 || owner >= nunits) continue;
+        if (is_builtin[owner]) continue;
+        from = tgraph_node(g, GN_UNIT, owner);
+        s = -1;
+        if (ins[i].tmpl && strcmp(ins[i].tmpl, "Vec") == 0) s = l->s_vec;
+        else if (ins[i].tmpl && strcmp(ins[i].tmpl, "Map") == 0) s = l->s_vec;
+        else if (ins[i].tmpl && strcmp(ins[i].tmpl, "Option") == 0) s = l->s_option;
+        else if (ins[i].tmpl && strcmp(ins[i].tmpl, "Result") == 0) s = l->s_result;
+        else if (ins[i].tmpl && strcmp(ins[i].tmpl, "Box") == 0) s = l->s_box;
+        if (s >= 0) {
+            if (tgraph_edge(g, from, tgraph_node(g, GN_LAYER, s),
+                            TE_INSTANTIATE, l->base[s], 0) != 0)
+                return -1;
+        }
+        /* SH-113: an instance whose first argument names a plain string type
+           keeps that unit alive (`Vec<Str>`, `Option<String>`). */
+        for (s = 0; s < l->n; s++) {
+            int hit = 0;
+
+            if (s == l->s_str)
+                hit = tg_word(ins[i].ctype[0], "Str") || tg_word(ins[i].carg[0], "Str");
+            else if (s == l->s_u16string)
+                hit = tg_word(ins[i].ctype[0], "U16String")
+                      || tg_word(ins[i].carg[0], "U16String");
+            if (!hit) continue;
+            if (tgraph_edge(g, from, tgraph_node(g, GN_LAYER, s),
+                            TE_INSTANTIATE, l->base[s], 0) != 0)
+                return -1;
+        }
+    }
+    return 0;
+}
+
+/* Reachability from every user unit over TE_TYPE_REF / TE_CALL /
+   TE_INSTANTIATE / TE_LAYER_NEEDS. Writes one 0/1 per layer slot. */
+static int tg_reach(struct ct_layers *l, struct TGraph *g, int *live)
+{
+    int *seen;
+    int *queue;
+    int head, tail, i, rc;
+
+    for (i = 0; i < l->n; i++) live[i] = 0;
+    if (g->nnodes <= 0) return 0;
+    seen = (int *)calloc((size_t)g->nnodes, sizeof(int));
+    queue = (int *)calloc((size_t)g->nnodes, sizeof(int));
+    if (!seen || !queue) {
+        free(seen);
+        free(queue);
+        return -1;
+    }
+    head = 0;
+    tail = 0;
+    for (i = 0; i < g->nnodes; i++) {
+        if (g->nodes[i].kind != GN_UNIT) continue;
+        seen[i] = 1;
+        queue[tail++] = i;
+    }
+    rc = 0;
+    while (head < tail && rc == 0) {
+        int n = queue[head++];
+        int e;
+
+        if (g->nodes[n].kind == GN_LAYER
+            && g->nodes[n].id >= 0 && g->nodes[n].id < l->n)
+            live[g->nodes[n].id] = 1;
+        for (e = 0; e < g->nedges; e++) {
+            int to;
+
+            if (g->edges[e].from != n) continue;
+            if (g->edges[e].kind != TE_TYPE_REF
+                && g->edges[e].kind != TE_CALL
+                && g->edges[e].kind != TE_INSTANTIATE
+                && g->edges[e].kind != TE_LAYER_NEEDS) continue;
+            to = g->edges[e].to;
+            if (to < 0 || to >= g->nnodes) continue;
+            if (seen[to]) continue;
+            seen[to] = 1;
+            if (tail >= g->nnodes) { rc = -1; break; }
+            queue[tail++] = to;
+        }
+    }
+    free(seen);
+    free(queue);
+    return rc;
+}
+
+/* Decide the layer's liveness. `bunit[i]` is the unit index of built-in slot
+   i (in Module.builtin_units order); `live[i]` receives 1 for a reachable
+   unit. A non-built-in unit is not a layer slot and is not written here.
+   Returns 0, or -1 when a graph allocation fails (the caller then keeps the
+   conservative "everything live" answer). */
+pub int tgraph_builtin_live(struct Unit *units, int nunits,
+                            int *bunit, int nbuiltin,
+                            struct Arena *arena, struct Symbols *sym,
+                            int *live)
+{
+    struct TGraph g;
+    struct ct_layers l;
+    int *is_builtin;
+    int i, u, rc;
+
+    memset(&g, 0, sizeof(struct TGraph));
+    if (!units || !arena || !sym || !live) return -1;
+    tg_layers_init(&l, units, bunit, nbuiltin);
+    for (i = 0; i < l.n; i++) live[i] = 0;
+    is_builtin = (int *)calloc((size_t)(nunits > 0 ? nunits : 1), sizeof(int));
+    if (!is_builtin) return -1;
+    for (i = 0; i < l.n; i++) {
+        int bu = l.unit[i];
+        if (bu >= 0 && bu < nunits) is_builtin[bu] = 1;
+    }
+    rc = 0;
+    for (u = 0; u < nunits && rc == 0; u++) {
+        int n, end;
+
+        if (is_builtin[u]) continue;
+        if (units[u].node_end <= units[u].node_start) {
+            /* no recorded slice (a caller outside the module layer): keep the
+               conservative answer rather than declaring the layer dead */
+            rc = -1;
+            break;
+        }
+        end = units[u].node_end;
+        if (end > arena->nnode) end = arena->nnode;
+        for (n = units[u].node_start; n < end && rc == 0; n++)
+            rc = tg_scan_node(&l, &g, arena, sym, units, u, n);
+    }
+    if (rc == 0) rc = tg_layer_needs(&l, &g);
+    if (rc == 0) rc = tg_instances(&l, &g, is_builtin, nunits);
+    if (rc == 0) rc = tg_reach(&l, &g, live);
+    if (rc != 0) {
+        for (i = 0; i < l.n; i++) live[i] = 1;
+    }
+    tgraph_free(&g);
+    free(is_builtin);
+    return rc;
+}

@@ -68,8 +68,8 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
 
 | 开关 | 行为 | 默认 |
 | --- | --- | --- |
-| （未设置） | 只走 AST→C，历史行为逐字节不变 | ✔ |
-| `--ir=on` / `CT_LIR=1` | 建 TIR（V1–V4）→ 降级到 LIR → CP2（V5–V10）→ 逐函数打印已覆盖的函数体 | 否 |
+| （未设置） | `ct build` 走 LIR；`ct <file>.ct` 走 AST→C | S8 起（build） |
+| `--ir=on` / `CT_LIR=1` | 建 TIR（V1–V4）→ 降级到 LIR → CP2（V5–V10）→ 逐函数打印已覆盖的函数体 | build 默认 |
 | `--ir=shadow` / `CT_LIR=shadow` | 同上，但只校验，不打印 LIR | 否 |
 | `--ir=off` / `CT_LIR=0` | 同未设置（CLI 优先于环境） | — |
 | `CT_LIR_REPORT=1` | 每个 unit 打一行 `lir: unit=… ready=… funcs=ok/total …`，发射后打 `lir: bodies printed=N skipped=M` | 否 |
@@ -134,6 +134,16 @@ defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，D
 - ADT 构造的 payload 是 owning 值且实参是 place（需要 emitter 的 retain，
   `L7811`）时回退；同样未被语料/自举触发；
 - 顶层声明仍由 emitter 打印（S8 的 emitter 契约阶段迁走）。
+
+## S8：语义判活（TGraph）与自举切换
+
+- `builtin_live_for` 不再读源码文本：`backend/tir/TGraph.h.ct` 从单元 AST 节点区间
+  （`Unit.node_start/node_end`）、实例注册表与层内声明的 `layer-needs` 边做可达性。
+  SH-113 的 6 组 8 条边界断言保持全绿；注释/字符串/前缀不再可能拉活一个单元。
+- 图节点/边枚举与 TIR 共用；`tgraph_has_cycle` 接替 Verifier V4 的实例环 DFS。
+- `ct build` 默认由 LIR 打印函数体（`--ir=off` / `CT_LIR=0` 是 oracle）；单文件编译路径
+  默认仍是 AST，剩余 69 项差异登记在
+  [S8 差异清单](../../docs/reviews/2026-11-27-s8-ir2-diff-list.md)。
 
 ## S1 的已知边界（不声称已覆盖）
 

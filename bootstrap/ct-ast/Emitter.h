@@ -30,6 +30,7 @@
 #include "EmitInvariant.h"
 #include "EmitHoist.h"
 #include "EmitInit.h"
+#include "LModule.h"
 
 
 struct ct_buf;
@@ -84,9 +85,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -104,23 +123,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -189,7 +193,7 @@ void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, cha
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
 void backend_emit_ct_emit_bind_units(void *);
 void backend_emit_ct_emit_bind_flags(int *, char *, int *);
-void backend_emit_ct_emit_bind_builtin_live(int *);
+void backend_emit_ct_emit_bind_plan(struct backend_lir_LModulePlan *);
 void backend_emit_ct_emit_bind_io_mask(int);
 void backend_emit_ct_emit_bind_parse(int *, void *, int *);
 int backend_emit_ct_emit_ntmp(void);

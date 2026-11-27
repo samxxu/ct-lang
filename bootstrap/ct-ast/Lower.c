@@ -3,6 +3,8 @@
 #include "Lower.h"
 #include "Intern.h"
 #include "Unit.h"
+#include "Symbols.h"
+#include "Arena.h"
 #include "TModule.h"
 #include "TBuilder.h"
 #include "LModule.h"
@@ -265,9 +267,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -285,23 +305,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -339,6 +344,9 @@ extern void U16String_Drop_drop(void *self);
 int backend_lir_ct_lir_on(void);
 int backend_lir_ct_lir_emit_on(void);
 void backend_lir_ct_lir_set_switch(int);
+void backend_lir_ct_lir_default_build(void);
+void backend_lir_ct_lir_disable_bodies(void);
+int backend_lir_ct_lir_forced(void);
 int backend_lir_ct_lir_build_program(int, const char *, const char *, const char *, int, int);
 int backend_lir_ct_lir_build_unit(void *, int, int);
 int backend_lir_ct_lir_ready(void);
@@ -365,6 +373,8 @@ static int lw_type_text(struct backend_lir_Lower *, const char *);
 static int lw_decl_is_template(struct backend_lir_Lower *, struct backend_tir_ct_tdecl *);
 static int lw_active(struct backend_lir_Lower *, struct backend_lir_ct_lcleanup *, int, int, int);
 static int lw_decl_param_ref(struct backend_lir_Lower *, int, int);
+static int lw_method_param_ref(struct backend_lir_Lower *, struct backend_tir_ct_texpr *, int);
+static int lw_actual_ref(struct backend_lir_Lower *, struct backend_tir_ct_texpr *, int, int);
 static int lw_name_is_ref(struct backend_lir_Lower *, const char *);
 static int lw_hoist_clear(struct backend_lir_Lower *);
 static int lw_hoist_into_lookup(struct backend_lir_Lower *, int);
@@ -468,9 +478,28 @@ static int lw_env_switch(void) {
     }
     return 1;
 }
+void backend_lir_ct_lir_default_build(void) {
+    const char * e;
+    if (backend_lir_g_lower.forced) {
+        return;
+    }
+    e = getenv("CT_LIR");
+    if ((e && e[0])) {
+        return;
+    }
+    backend_lir_g_lower.mode = 1;
+    backend_lir_g_lower.defaulted = 1;
+    backend_lir_lmod_get()->enabled = 1;
+}
+void backend_lir_ct_lir_disable_bodies(void) {
+    backend_lir_g_lower.global_no_bodies = 1;
+}
+int backend_lir_ct_lir_forced(void) {
+    return backend_lir_g_lower.forced;
+}
 int backend_lir_ct_lir_on(void) {
     struct backend_lir_LModule * l = backend_lir_lmod_get();
-    if ((!backend_lir_g_lower.forced)) {
+    if (((!backend_lir_g_lower.forced) && (!backend_lir_g_lower.defaulted))) {
         backend_lir_g_lower.mode = lw_env_switch();
     }
     l->enabled = (backend_lir_g_lower.mode != 0);
@@ -904,6 +933,99 @@ static int lw_decl_param_ref(struct backend_lir_Lower * w, int decl, int idx) {
     }
     return 0;
 }
+static int lw_method_param_ref(struct backend_lir_Lower * w, struct backend_tir_ct_texpr * t, int idx) {
+    struct frontend_sym_Symbols * sym = frontend_sym_symbols_get();
+    (void)(w);
+    if ((((t->target_kind == RT_VIRTUAL) && t->target_key) && t->text)) {
+        char tn[256];
+        int tl = 0;
+        int ti;
+        int mi;
+        while ((t->target_key[tl] && (t->target_key[tl] != '.'))) {
+            if (tl < ((int)(sizeof(tn)) - 1)) {
+                tn[tl] = t->target_key[tl];
+            }
+            tl++;
+        }
+        tn[((tl < (int)(sizeof(tn))) ? tl : ((int)(sizeof(tn)) - 1))] = 0;
+        ti = sym->__frontend_sym_symbolops_vptr->find_trait(sym, tn);
+        if (ti >= 0) {
+            for (mi = 0; mi < sym->traits[ti].nm; mi++) {
+                struct frontend_sym_MethodSig * ms = (&sym->traits[ti].m[mi]);
+                if (((!ms->name) || (strcmp(ms->name, t->text) != 0))) {
+                    continue;
+                }
+                if (idx >= ms->nparams) {
+                    return 0;
+                }
+                return ((ms->pann[idx] == 2) || (ms->pann[idx] == 3));
+            }
+        }
+        return 0;
+    }
+    if ((((t->op == 2) && t->target_key) && t->target_key[0])) {
+        char host[512];
+        const char * dot;
+        int hl;
+        int pann[16];
+        dot = t->target_key;
+{
+            const char * p = t->target_key;
+            while ((*p)) {
+                if ((*p) == '.') {
+                    dot = p;
+                }
+                p++;
+            }
+        }
+        hl = (int)((dot - t->target_key));
+        if (hl > ((int)(sizeof(host)) - 1)) {
+            hl = ((int)(sizeof(host)) - 1);
+        }
+        memcpy(host, t->target_key, (size_t)(hl));
+        host[hl] = 0;
+        if (((sym->__frontend_sym_symbolops_vptr->find_meth_ann(sym, host, (dot + 1), pann, 16) == 0) && (idx < 16))) {
+            return ((pann[idx] == 2) || (pann[idx] == 3));
+        }
+    }
+    return 0;
+}
+static int lw_actual_ref(struct backend_lir_Lower * w, struct backend_tir_ct_texpr * t, int kid, int idx) {
+    struct backend_lir_ct_lexpr * kk;
+    size_t nl;
+    int aref;
+    if (kid <= 0) {
+        return kid;
+    }
+    if ((!lw_method_param_ref(w, t, idx))) {
+        return kid;
+    }
+    kk = (&w->l->exprs[(kid - 1)]);
+    if ((((kk->kind == LE_NAME) && kk->text) && (strcmp(kk->text, "_self") == 0))) {
+        return kid;
+    }
+    nl = (kk->text ? strlen(kk->text) : 0);
+    if (((((kk->kind == LE_MCALL) && (nl > 4)) && (strncmp(kk->text, "Vec_", 4) == 0)) && (strcmp(((kk->text + nl) - 4), "_get") == 0))) {
+        const char * nn = runtime_text_ct_internf("%.*s_at", (int)((nl - 4)), kk->text);
+        if ((!nn)) {
+            w->hard = 1;
+            return 0;
+        }
+        kk->text = nn;
+        return kid;
+    }
+    aref = backend_lir_lmod_new_expr(w->l, LE_REF, t->span.file, t->span.line, t->span.col);
+    if (aref <= 0) {
+        w->hard = 1;
+        return 0;
+    }
+    w->l->exprs[(aref - 1)].type = w->l->exprs[(kid - 1)].type;
+    if (backend_lir_lmod_expr_add_kid(w->l, aref, kid) != 0) {
+        w->hard = 1;
+        return 0;
+    }
+    return aref;
+}
 static int lw_name_is_ref(struct backend_lir_Lower * w, const char * name) {
     int i;
     if (((!name) || (!name[0]))) {
@@ -1287,7 +1409,13 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                 lw_abort(w, "L394");
                 return 0;
             }
-            e = backend_lir_lmod_new_expr(w->l, ((t->op == 2) ? LE_ARROW : LE_FIELD), t->span.file, t->span.line, t->span.col);
+{
+                int arrow = (t->op == 2);
+                if ((((((((!arrow) && w->func_has_self) && (t->kids[0] > 0)) && (t->kids[0] <= w->m->nexprs)) && (w->m->exprs[(t->kids[0] - 1)].kind == TK_NAME_LOCAL)) && w->m->exprs[(t->kids[0] - 1)].text) && (strcmp(w->m->exprs[(t->kids[0] - 1)].text, "self") == 0))) {
+                    arrow = 1;
+                }
+                e = backend_lir_lmod_new_expr(w->l, (arrow ? LE_ARROW : LE_FIELD), t->span.file, t->span.line, t->span.col);
+            }
             if (e <= 0) {
                 w->hard = 1;
                 return 0;
@@ -1301,6 +1429,39 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
         case TK_INDEX:
         case TK_DEREF:
         case TK_ADDR:
+            if (((t->kind == TK_ADDR) && (t->nkids >= 1))) {
+                struct backend_tir_ct_texpr * kc = (&w->m->exprs[(t->kids[0] - 1)]);
+                if ((((((kc->kind == TK_CALL) && kc->text) && (strcmp(kc->text, "get") == 0)) && kc->target_key) && (strncmp(kc->target_key, "Vec", 3) == 0))) {
+                    int kid = lw_expr(w, t->kids[0]);
+                    struct backend_lir_ct_lexpr * le;
+                    size_t nl;
+                    if (kid <= 0) {
+                        return 0;
+                    }
+                    le = (&w->l->exprs[(kid - 1)]);
+                    nl = (le->text ? strlen(le->text) : 0);
+                    if ((((le->kind == LE_MCALL) && (nl > 4)) && (strcmp(((le->text + nl) - 4), "_get") == 0))) {
+                        const char * nn = runtime_text_ct_internf("%.*s_at", (int)((nl - 4)), le->text);
+                        if ((!nn)) {
+                            w->hard = 1;
+                            return 0;
+                        }
+                        le->text = nn;
+                        return kid;
+                    }
+                    e = backend_lir_lmod_new_expr(w->l, LE_ADDR, t->span.file, t->span.line, t->span.col);
+                    if (e <= 0) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                    w->l->exprs[(e - 1)].type = lw_type(w, t->type);
+                    if (backend_lir_lmod_expr_add_kid(w->l, e, kid) != 0) {
+                        w->hard = 1;
+                        return 0;
+                    }
+                    return e;
+                }
+            }
         case TK_UNARY:
         case TK_CAST:
             if (t->kind == TK_INDEX) {
@@ -1441,6 +1602,12 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                 w->l->exprs[(e - 1)].type = lw_type(w, t->type);
                 for (i = 0; i < t->nkids; i++) {
                     int kid = lw_expr_actual(w, t->kids[i]);
+{
+                        int base = (((t->aux == 11) && (t->target_kind != RT_VIRTUAL)) ? 0 : 1);
+                        if (i >= base) {
+                            kid = lw_actual_ref(w, t, kid, (i - base));
+                        }
+                    }
                     if (kid <= 0) {
                         return 0;
                     }
@@ -1494,6 +1661,12 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                 w->l->exprs[(e - 1)].type = lw_type(w, t->type);
                 for (i = 0; i < t->nkids; i++) {
                     int kid = lw_expr_actual(w, t->kids[i]);
+{
+                        int base = (((t->aux == 11) && (t->target_kind != RT_VIRTUAL)) ? 0 : 1);
+                        if (i >= base) {
+                            kid = lw_actual_ref(w, t, kid, (i - base));
+                        }
+                    }
                     if (kid <= 0) {
                         return 0;
                     }
@@ -1527,6 +1700,12 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                 w->l->exprs[(e - 1)].type = lw_type(w, t->type);
                 for (i = 0; i < t->nkids; i++) {
                     int kid = lw_expr_actual(w, t->kids[i]);
+{
+                        int base = (((t->aux == 11) && (t->target_kind != RT_VIRTUAL)) ? 0 : 1);
+                        if (i >= base) {
+                            kid = lw_actual_ref(w, t, kid, (i - base));
+                        }
+                    }
                     if (kid <= 0) {
                         return 0;
                     }
@@ -1587,18 +1766,32 @@ static int lw_expr(struct backend_lir_Lower * w, int teid) {
                 if (kid <= 0) {
                     return 0;
                 }
-                if (((t->target_kind == RT_DIRECT) && lw_decl_param_ref(w, lw_call_name(w, t), i))) {
-                    int aref = backend_lir_lmod_new_expr(w->l, LE_REF, t->span.file, t->span.line, t->span.col);
-                    if (aref <= 0) {
-                        w->hard = 1;
-                        return 0;
+                if ((((t->target_kind == RT_DIRECT) && lw_decl_param_ref(w, lw_call_name(w, t), i)) || ((t->target_kind != RT_DIRECT) && lw_method_param_ref(w, t, i)))) {
+                    struct backend_lir_ct_lexpr * kk = (&w->l->exprs[(kid - 1)]);
+                    size_t nl = (kk->text ? strlen(kk->text) : 0);
+                    int need_ref = 1;
+                    if (((((kk->kind == LE_MCALL) && (nl > 4)) && (strncmp(kk->text, "Vec_", 4) == 0)) && (strcmp(((kk->text + nl) - 4), "_get") == 0))) {
+                        const char * nn = runtime_text_ct_internf("%.*s_at", (int)((nl - 4)), kk->text);
+                        if ((!nn)) {
+                            w->hard = 1;
+                            return 0;
+                        }
+                        kk->text = nn;
+                        need_ref = 0;
                     }
-                    w->l->exprs[(aref - 1)].type = w->l->exprs[(kid - 1)].type;
-                    if (backend_lir_lmod_expr_add_kid(w->l, aref, kid) != 0) {
-                        w->hard = 1;
-                        return 0;
+                    if (need_ref) {
+                        int aref = backend_lir_lmod_new_expr(w->l, LE_REF, t->span.file, t->span.line, t->span.col);
+                        if (aref <= 0) {
+                            w->hard = 1;
+                            return 0;
+                        }
+                        w->l->exprs[(aref - 1)].type = w->l->exprs[(kid - 1)].type;
+                        if (backend_lir_lmod_expr_add_kid(w->l, aref, kid) != 0) {
+                            w->hard = 1;
+                            return 0;
+                        }
+                        kid = aref;
                     }
-                    kid = aref;
                 }
                 if (backend_lir_lmod_expr_add_kid(w->l, e, kid) != 0) {
                     w->hard = 1;
@@ -3919,7 +4112,7 @@ static int lw_lower_func(struct backend_lir_Lower * w, int decl) {
         }
     }
     w->l->funcs[(f - 1)].temp_end = w->l->tmp_next;
-    if (((w->aborted || w->hard) || w->drop_seen)) {
+    if ((((w->aborted || w->hard) || w->drop_seen) || w->no_bodies)) {
         if (getenv("CT_LIR_DEBUG")) {
             fprintf(stderr, "lir: function '%s' not lowered\n", (d->name ? d->name : ""));
         }
@@ -4019,6 +4212,7 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
     w->drop_seen = 0;
     w->unit = 0;
     w->aborted = 0;
+    w->no_bodies = backend_lir_g_lower.global_no_bodies;
     w->func = 0;
     w->loops = 0;
     w->nloops = 0;
@@ -4031,6 +4225,9 @@ int backend_lir_ct_lir_build_program(int prog, const char * path, const char * b
     unit = m->nunits;
     w->unit = unit;
     l->path = path;
+    if (runtime_arena_arena_get()->noutconv > 0) {
+        w->no_bodies = 1;
+    }
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
         fprintf(stderr, "lir: cannot copy the scope table\n");
@@ -4077,6 +4274,7 @@ int backend_lir_ct_lir_build_unit(void * up, int mod_unit, int tmp_base) {
     w->hard = 0;
     w->drop_seen = 0;
     w->aborted = 0;
+    w->no_bodies = backend_lir_g_lower.global_no_bodies;
     w->func = 0;
     w->loops = 0;
     w->nloops = 0;
@@ -4095,6 +4293,12 @@ int backend_lir_ct_lir_build_unit(void * up, int mod_unit, int tmp_base) {
         }
     }
     (void)(tmp_base);
+{
+        struct frontend_module_Unit * uu = (struct frontend_module_Unit *)(up);
+        if ((uu && (uu->has_outconv || uu->has_anon_typedef))) {
+            w->no_bodies = 1;
+        }
+    }
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
         fprintf(stderr, "lir: cannot copy the scope table\n");
@@ -4873,13 +5077,17 @@ static int lw_pw_expr(struct backend_lir_Lower * w, int eid, int ctx) {
                     return 0;
                 }
                 fprintf(backend_lir_g_lir_out, "(struct %s_iface){ (void *)", (e->text ? e->text : ""));
-                if ((e->op & 1)) {
-                    if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
-                        return (-1);
+{
+                    int no_amp = (e->op & 1);
+                    if (((!no_amp) && (e->nkids > 0))) {
+                        struct backend_lir_ct_lexpr * r = (&w->l->exprs[(e->kids[0] - 1)]);
+                        if ((((r->kind == LE_NAME) && r->text) && (strcmp(r->text, "_self") == 0))) {
+                            no_amp = 1;
+                        }
                     }
-                }
-                else {
-                    fputs("&", backend_lir_g_lir_out);
+                    if ((!no_amp)) {
+                        fputs("&", backend_lir_g_lir_out);
+                    }
                     if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) {
                         return (-1);
                     }

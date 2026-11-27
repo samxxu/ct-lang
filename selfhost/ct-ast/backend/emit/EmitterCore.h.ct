@@ -207,9 +207,6 @@ pub struct Emitter {
     int  builtins[8];   /* P34 S9a / SH-120: Vec / Option / Result / Str /
                            String / U16Str / U16String / Box layer units */
     int  nbuiltin;
-    /* PH-64 T2: slot-parallel liveness; a dead layer unit is not included and
-       not emitted, so the product set follows what the program can reach. */
-    int *builtin_live;
     /* PH-66 R2: bit0 <stdio.h>, bit1 <wchar.h> -- headers the unit's direct
        libc I/O calls need. Bound by the module layer before each unit. */
     int  io_mask;

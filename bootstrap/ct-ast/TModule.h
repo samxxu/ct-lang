@@ -12,6 +12,7 @@
 
 #include "Intern.h"
 #include "TypeCheck.h"
+#include "TGraph.h"
 
 
 struct ct_buf;
@@ -66,9 +67,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -86,23 +105,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -319,25 +323,6 @@ struct backend_tir_ct_troot {
     int unit;
     const char * name;
 };
-struct backend_tir_ct_tnode {
-    int kind;
-    int id;
-};
-struct backend_tir_ct_tedge {
-    int from;
-    int to;
-    int kind;
-    const char * key;
-    int approximate;
-};
-struct backend_tir_ct_tgraph {
-    struct backend_tir_ct_tnode * nodes;
-    int nnodes;
-    int ncap;
-    struct backend_tir_ct_tedge * edges;
-    int nedges;
-    int ecap;
-};
 struct backend_tir_ct_tmark {
     int ndecls;
     int nexprs;
@@ -394,7 +379,7 @@ struct backend_tir_TModule {
     const char * * files;
     int nfiles;
     int fcap;
-    struct backend_tir_ct_tgraph graph;
+    struct backend_tir_TGraph graph;
     int stat_fallback_type;
     int stat_unknown_target;
     int stat_void_expr;

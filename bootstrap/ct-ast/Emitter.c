@@ -21,6 +21,7 @@
 #include "EmitInvariant.h"
 #include "EmitHoist.h"
 #include "EmitInit.h"
+#include "LModule.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Emitter.h.ct"
 #include <stdio.h>
@@ -185,9 +186,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -205,23 +224,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -471,7 +475,7 @@ void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, cha
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
 void backend_emit_ct_emit_bind_units(void *);
 void backend_emit_ct_emit_bind_flags(int *, char *, int *);
-void backend_emit_ct_emit_bind_builtin_live(int *);
+void backend_emit_ct_emit_bind_plan(struct backend_lir_LModulePlan *);
 void backend_emit_ct_emit_bind_io_mask(int);
 static void sync_alloc(struct backend_emit_Emitter *);
 void backend_emit_ct_emit_bind_parse(int *, void *, int *);
@@ -493,6 +497,7 @@ int backend_emit_ct_emit_error_line(void);
 void backend_emit_ct_emit_set_no_write(int);
 int backend_emit_ct_emit_no_write(void);
 static struct backend_emit_StrRetain backend_emit_g_sb;
+static struct backend_lir_LModulePlan * backend_emit_g_plan;
 static int backend_emit_g_oc_bypass_node = (-1);
 static int (*backend_emit_g_body_hook)(const char *, void *, int, int, int *, int);
 static int backend_emit_g_shell_u = (-1);
@@ -6707,15 +6712,22 @@ static int emit_unit_body(struct backend_emit_Emitter * self, int u) {
         }
         fprintf(self->out, "#include \"%s.h\"\n", (self->units[u].dep + ((size_t)(i) * MAX_TEXT)));
     }
-    for (i = 0; i < self->nbuiltin; i++) {
-        int bu = self->builtins[i];
-        if ((self->builtin_live && (!self->builtin_live[i]))) {
-            continue;
+    if ((!backend_emit_g_plan)) {
+        for (i = 0; i < self->nbuiltin; i++) {
+            int bu = self->builtins[i];
+            if ((((bu < 0) || (bu >= (*self->nunits))) || (bu == u))) {
+                continue;
+            }
+            fprintf(self->out, "#include \"%s.h\"\n", ((strcmp(self->units[bu].base, "String") == 0) ? "String_" : self->units[bu].base));
         }
-        if ((((bu < 0) || (bu >= (*self->nunits))) || (bu == u))) {
-            continue;
+    }
+    else {
+        for (i = 0; i < backend_emit_g_plan->nbhead; i++) {
+            if (backend_emit_g_plan->bunit[i] == u) {
+                continue;
+            }
+            fprintf(self->out, "#include \"%s.h\"\n", backend_emit_g_plan->bhead[i]);
         }
-        fprintf(self->out, "#include \"%s.h\"\n", ((strcmp(self->units[bu].base, "String") == 0) ? "String_" : self->units[bu].base));
     }
     fputs("\n", self->out);
     if ((*self->line_mode)) {
@@ -6876,15 +6888,22 @@ static int write_unit_header_body(struct backend_emit_Emitter * self, int u, con
     if (self->units[u].ndep > 0) {
         fputs("\n", self->out);
     }
-    for (i = 0; i < self->nbuiltin; i++) {
-        int bu = self->builtins[i];
-        if ((self->builtin_live && (!self->builtin_live[i]))) {
-            continue;
+    if ((!backend_emit_g_plan)) {
+        for (i = 0; i < self->nbuiltin; i++) {
+            int bu = self->builtins[i];
+            if ((((bu < 0) || (bu >= (*self->nunits))) || (bu == u))) {
+                continue;
+            }
+            fprintf(self->out, "#include \"%s.h\"\n", ((strcmp(self->units[bu].base, "String") == 0) ? "String_" : self->units[bu].base));
         }
-        if ((((bu < 0) || (bu >= (*self->nunits))) || (bu == u))) {
-            continue;
+    }
+    else {
+        for (i = 0; i < backend_emit_g_plan->nbhead; i++) {
+            if (backend_emit_g_plan->bunit[i] == u) {
+                continue;
+            }
+            fprintf(self->out, "#include \"%s.h\"\n", backend_emit_g_plan->bhead[i]);
         }
-        fprintf(self->out, "#include \"%s.h\"\n", ((strcmp(self->units[bu].base, "String") == 0) ? "String_" : self->units[bu].base));
     }
     if (self->nbuiltin > 0) {
         fputs("\n", self->out);
@@ -12264,8 +12283,8 @@ void backend_emit_ct_emit_bind_flags(int * freestanding, char * alloc_map, int *
     backend_emit_g_emit.alloc_map = alloc_map;
     backend_emit_g_slice_used = slice_used;
 }
-void backend_emit_ct_emit_bind_builtin_live(int * live) {
-    backend_emit_g_emit.builtin_live = live;
+void backend_emit_ct_emit_bind_plan(struct backend_lir_LModulePlan * plan) {
+    backend_emit_g_plan = plan;
 }
 static void sync_alloc(struct backend_emit_Emitter * e) {
     const char * p;

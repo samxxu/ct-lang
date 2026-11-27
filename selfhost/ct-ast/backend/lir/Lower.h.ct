@@ -45,6 +45,10 @@
 
 import runtime::text::Intern;
 import frontend::module::Unit;
+import frontend::sym::Symbols;
+import runtime::arena::Arena;
+import frontend::sym::Symbols::MethodSig as MethodSig;
+import frontend::sym::Symbols::Trait as Trait;
 import backend::tir::TModule;
 import backend::tir::TModule::ct_tmark as ct_tmark;
 import backend::tir::TModule::ct_tdecl as ct_tdecl;
@@ -302,11 +306,15 @@ pub struct Lower {
     int nbreaks;
     int breakcap;
     int mode;           /* 0 off, 1 on, 2 shadow */
-    int forced;         /* the CLI named the mode, so the env cannot override */
+    int forced;
+    int defaulted;   /* build mode chose LIR without a flag */
+         /* the CLI named the mode, so the env cannot override */
     int tmp_delta;      /* emitter counter minus the lowering's counter
                            (generated products move one and not the other) */
     int func_scope;     /* TScope id of the function being lowered */
     int func_has_self;  /* an impl method: the C spelling of `self` is `_self` */
+    int no_bodies;      /* the unit uses a construct this stage must not lower */
+    int global_no_bodies; /* the run set a mode the lowerer does not model */
     int stmt_is_last;   /* the statement being lowered ends its block */
     int hoist_temps;    /* 1 = a statement head (hoist_rvalue), 0 = a condition
                            (hoist_expr disables the receiver-temp chain) */
@@ -342,6 +350,9 @@ static struct Lower g_lower;
 pub int ct_lir_on(void);
 pub int ct_lir_emit_on(void);
 pub void ct_lir_set_switch(int mode);
+pub void ct_lir_default_build(void);
+pub void ct_lir_disable_bodies(void);
+pub int ct_lir_forced(void);
 pub int ct_lir_build_program(int prog, const char *path, const char *base,
                              const char *ns, int is_hdr, int is_map);
 pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base);
@@ -389,11 +400,40 @@ static int lw_env_switch(void)
     return 1;
 }
 
+/* S8: the self-hosting build prints from LIR by default. An explicit `--ir=`
+   flag or `CT_LIR` env still wins, so `--ir=off` is the oracle. Compile mode
+   keeps the AST default until its remaining shapes are closed (the S8 diff
+   list); the switch is entered once, at the top of a build. */
+pub void ct_lir_default_build(void)
+{
+    const char *e;
+
+    if (g_lower.forced) return;
+    e = getenv("CT_LIR");
+    if (e && e[0]) return;
+    g_lower.mode = 1;
+    g_lower.defaulted = 1;
+    lmod_get()->enabled = 1;
+}
+
+/* `--runtime-checks` and the stable-receiver refusal live in the emitter's
+   method-call writer; a LIR-printed body would bypass both, so that run keeps
+   every body on the AST path. */
+pub void ct_lir_disable_bodies(void)
+{
+    g_lower.global_no_bodies = 1;
+}
+
+pub int ct_lir_forced(void)
+{
+    return g_lower.forced;
+}
+
 pub int ct_lir_on(void)
 {
     struct LModule *l = lmod_get();
 
-    if (!g_lower.forced) g_lower.mode = lw_env_switch();
+    if (!g_lower.forced && !g_lower.defaulted) g_lower.mode = lw_env_switch();
     l->enabled = g_lower.mode != 0;
     return l->enabled;
 }
@@ -760,6 +800,87 @@ static int lw_decl_param_ref(struct Lower *w, int decl, int idx)
         n++;
     }
     return 0;
+}
+
+/* A trait / inherent method's `ref` / `out` parameter. The direct-call path
+   reads the TDecl's parameter rows; a virtual dispatch has no TDecl, so the
+   trait's MethodSig answers instead (same `pann` values the emitter uses). */
+static int lw_method_param_ref(struct Lower *w, struct ct_texpr *t, int idx)
+{
+    struct Symbols *sym = frontend::sym::symbols_get();
+    (void)w;
+    if (t->target_kind == RT_VIRTUAL && t->target_key && t->text) {
+        char tn[256];
+        int tl = 0, ti, mi;
+        while (t->target_key[tl] && t->target_key[tl] != '.') {
+            if (tl < (int)sizeof(tn) - 1) tn[tl] = t->target_key[tl];
+            tl++;
+        }
+        tn[tl < (int)sizeof(tn) ? tl : (int)sizeof(tn) - 1] = 0;
+        ti = sym->find_trait(tn);
+        if (ti >= 0) {
+            for (mi = 0; mi < sym->traits[ti].nm; mi++) {
+                struct MethodSig *ms = &sym->traits[ti].m[mi];
+                if (!ms->name || strcmp(ms->name, t->text) != 0) continue;
+                if (idx >= ms->nparams) return 0;
+                return ms->pann[idx] == 2 || ms->pann[idx] == 3;
+            }
+        }
+        return 0;
+    }
+    if (t->op == 2 && t->target_key && t->target_key[0]) {
+        /* Inherent-method annotations are keyed by (host, method), not by the
+           synthesized C name (`Counter_add` never appears in the symbol
+           table). `find_meth_ann` is the same table the emitter reads. */
+        char host[512];
+        const char *dot;
+        int hl, pann[16];
+        dot = t->target_key;
+        {
+            const char *p = t->target_key;
+            while (*p) {
+                if (*p == '.') dot = p;
+                p++;
+            }
+        }
+        hl = (int)(dot - t->target_key);
+        if (hl > (int)sizeof(host) - 1) hl = (int)sizeof(host) - 1;
+        memcpy(host, t->target_key, (size_t)hl);
+        host[hl] = 0;
+        if (sym->find_meth_ann(host, dot + 1, pann, 16) == 0 && idx < 16)
+            return pann[idx] == 2 || pann[idx] == 3;
+    }
+    return 0;
+}
+
+/* Apply the ref/out address rule to one already-lowered actual. `Vec.get`
+   becomes `Vec.at` (already a pointer, SH-96); everything else takes `&`. */
+static int lw_actual_ref(struct Lower *w, struct ct_texpr *t, int kid, int idx)
+{
+    struct ct_lexpr *kk;
+    size_t nl;
+    int aref;
+
+    if (kid <= 0) return kid;
+    if (!lw_method_param_ref(w, t, idx)) return kid;
+    kk = &w->l->exprs[kid - 1];
+    /* SH-96: `self` is already the receiver pointer in the emitted C, so
+       `self.bump(self)` passes `_self`, not `&_self`. */
+    if (kk->kind == LE_NAME && kk->text && strcmp(kk->text, "_self") == 0)
+        return kid;
+    nl = kk->text ? strlen(kk->text) : 0;
+    if (kk->kind == LE_MCALL && nl > 4 && strncmp(kk->text, "Vec_", 4) == 0
+        && strcmp(kk->text + nl - 4, "_get") == 0) {
+        const char *nn = runtime::text::ct_internf("%.*s_at", (int)(nl - 4), kk->text);
+        if (!nn) { w->hard = 1; return 0; }
+        kk->text = nn;
+        return kid;
+    }
+    aref = lmod_new_expr(w->l, LE_REF, t->span.file, t->span.line, t->span.col);
+    if (aref <= 0) { w->hard = 1; return 0; }
+    w->l->exprs[aref - 1].type = w->l->exprs[kid - 1].type;
+    if (lmod_expr_add_kid(w->l, aref, kid) != 0) { w->hard = 1; return 0; }
+    return aref;
 }
 
 /* A `ref` / `out` binding is a pointer in the emitted C: every read and write
@@ -1141,8 +1262,21 @@ static int lw_expr(struct Lower *w, int teid)
             return e;
         case TK_FIELD:
             if (!t->text || !t->text[0] || t->nkids < 1) { lw_abort(w, "L394"); return 0; }
-            e = lmod_new_expr(w->l, t->op == 2 ? LE_ARROW : LE_FIELD,
-                              t->span.file, t->span.line, t->span.col);
+            /* An impl body writes `self.n`, but the C receiver is the
+               `_self` pointer, so the emitter turns that access into
+               `_self->n`. The TIR row keeps the source operator (`.`), so the
+               lowerer has to make the same pointer decision here. */
+            {
+                int arrow = t->op == 2;
+                if (!arrow && w->func_has_self && t->kids[0] > 0
+                    && t->kids[0] <= w->m->nexprs
+                    && w->m->exprs[t->kids[0] - 1].kind == TK_NAME_LOCAL
+                    && w->m->exprs[t->kids[0] - 1].text
+                    && strcmp(w->m->exprs[t->kids[0] - 1].text, "self") == 0)
+                    arrow = 1;
+                e = lmod_new_expr(w->l, arrow ? LE_ARROW : LE_FIELD,
+                                  t->span.file, t->span.line, t->span.col);
+            }
             if (e <= 0) { w->hard = 1; return 0; }
             w->l->exprs[e - 1].text = t->text;
             w->l->exprs[e - 1].type = lw_type(w, t->type);
@@ -1151,6 +1285,42 @@ static int lw_expr(struct Lower *w, int teid)
         case TK_INDEX:
         case TK_DEREF:
         case TK_ADDR:
+            /* SH-96 / emit_ref_arg: `inc(vec[i])` passes the element place.
+               The subscription sugar is a `Vec.get` call in TIR; the emitter
+               rewrites it to `Vec.at` (which already returns a pointer) and
+               adds no `&`. The lowerer has to make the same call, or the C
+               would be `&Vec_int_get(...)` -- the address of an int rvalue. */
+            if (t->kind == TK_ADDR && t->nkids >= 1) {
+                struct ct_texpr *kc = &w->m->exprs[t->kids[0] - 1];
+                if (kc->kind == TK_CALL && kc->text
+                    && strcmp(kc->text, "get") == 0
+                    && kc->target_key && strncmp(kc->target_key, "Vec", 3) == 0) {
+                    int kid = lw_expr(w, t->kids[0]);
+                    struct ct_lexpr *le;
+                    size_t nl;
+
+                    if (kid <= 0) return 0;
+                    le = &w->l->exprs[kid - 1];
+                    nl = le->text ? strlen(le->text) : 0;
+                    if (le->kind == LE_MCALL && nl > 4
+                        && strcmp(le->text + nl - 4, "_get") == 0) {
+                        const char *nn = runtime::text::ct_internf("%.*s_at",
+                                                                   (int)(nl - 4),
+                                                                   le->text);
+                        if (!nn) { w->hard = 1; return 0; }
+                        le->text = nn;
+                        return kid;
+                    }
+                    /* not the expected shape: fall back to the safe wrap by
+                       building a fresh LE_ADDR around the lowered child */
+                    e = lmod_new_expr(w->l, LE_ADDR, t->span.file, t->span.line,
+                                      t->span.col);
+                    if (e <= 0) { w->hard = 1; return 0; }
+                    w->l->exprs[e - 1].type = lw_type(w, t->type);
+                    if (lmod_expr_add_kid(w->l, e, kid) != 0) { w->hard = 1; return 0; }
+                    return e;
+                }
+            }
         case TK_UNARY:
         case TK_CAST:
             if (t->kind == TK_INDEX) e = lmod_new_expr(w->l, LE_INDEX, t->span.file,
@@ -1245,6 +1415,10 @@ static int lw_expr(struct Lower *w, int teid)
                 w->l->exprs[e - 1].type = lw_type(w, t->type);
                 for (i = 0; i < t->nkids; i++) {
                     int kid = lw_expr_actual(w, t->kids[i]);
+                    {
+                        int base = (t->aux == 11 && t->target_kind != RT_VIRTUAL) ? 0 : 1;
+                        if (i >= base) kid = lw_actual_ref(w, t, kid, i - base);
+                    }
                     if (kid <= 0) return 0;
                     if (lmod_expr_add_kid(w->l, e, kid) != 0) {
                         w->hard = 1;
@@ -1294,6 +1468,10 @@ static int lw_expr(struct Lower *w, int teid)
                 w->l->exprs[e - 1].type = lw_type(w, t->type);
                 for (i = 0; i < t->nkids; i++) {
                     int kid = lw_expr_actual(w, t->kids[i]);
+                    {
+                        int base = (t->aux == 11 && t->target_kind != RT_VIRTUAL) ? 0 : 1;
+                        if (i >= base) kid = lw_actual_ref(w, t, kid, i - base);
+                    }
                     if (kid <= 0) return 0;
                     if (lmod_expr_add_kid(w->l, e, kid) != 0) {
                         w->hard = 1;
@@ -1325,6 +1503,10 @@ static int lw_expr(struct Lower *w, int teid)
                 w->l->exprs[e - 1].type = lw_type(w, t->type);
                 for (i = 0; i < t->nkids; i++) {
                     int kid = lw_expr_actual(w, t->kids[i]);
+                    {
+                        int base = (t->aux == 11 && t->target_kind != RT_VIRTUAL) ? 0 : 1;
+                        if (i >= base) kid = lw_actual_ref(w, t, kid, i - base);
+                    }
                     if (kid <= 0) return 0;
                     if (lmod_expr_add_kid(w->l, e, kid) != 0) {
                         w->hard = 1;
@@ -1395,18 +1577,37 @@ static int lw_expr(struct Lower *w, int teid)
             for (i = 0; i < t->nkids; i++) {
                 int kid = lw_expr_actual(w, t->kids[i]);
                 if (kid <= 0) return 0;
-                if (t->target_kind == RT_DIRECT
-                    && lw_decl_param_ref(w, lw_call_name(w, t), i)) {
-                    /* the emitter writes `&` + actual for a ref/out formal */
-                    int aref = lmod_new_expr(w->l, LE_REF, t->span.file,
-                                             t->span.line, t->span.col);
-                    if (aref <= 0) { w->hard = 1; return 0; }
-                    w->l->exprs[aref - 1].type = w->l->exprs[kid - 1].type;
-                    if (lmod_expr_add_kid(w->l, aref, kid) != 0) {
-                        w->hard = 1;
-                        return 0;
+                if ((t->target_kind == RT_DIRECT
+                     && lw_decl_param_ref(w, lw_call_name(w, t), i))
+                    || (t->target_kind != RT_DIRECT
+                        && lw_method_param_ref(w, t, i))) {
+                    /* the emitter writes `&` + actual for a ref/out formal,
+                       except for a `Vec` subscription: `emit_ref_arg` turns
+                       `Vec.get` into `Vec.at`, which already answers a
+                       pointer (SH-96). Mirror that here. */
+                    struct ct_lexpr *kk = &w->l->exprs[kid - 1];
+                    size_t nl = kk->text ? strlen(kk->text) : 0;
+                    int need_ref = 1;
+                    if (kk->kind == LE_MCALL && nl > 4
+                        && strncmp(kk->text, "Vec_", 4) == 0
+                        && strcmp(kk->text + nl - 4, "_get") == 0) {
+                        const char *nn = runtime::text::ct_internf(
+                            "%.*s_at", (int)(nl - 4), kk->text);
+                        if (!nn) { w->hard = 1; return 0; }
+                        kk->text = nn;
+                        need_ref = 0;
                     }
-                    kid = aref;
+                    if (need_ref) {
+                        int aref = lmod_new_expr(w->l, LE_REF, t->span.file,
+                                                 t->span.line, t->span.col);
+                        if (aref <= 0) { w->hard = 1; return 0; }
+                        w->l->exprs[aref - 1].type = w->l->exprs[kid - 1].type;
+                        if (lmod_expr_add_kid(w->l, aref, kid) != 0) {
+                            w->hard = 1;
+                            return 0;
+                        }
+                        kid = aref;
+                    }
                 }
                 if (lmod_expr_add_kid(w->l, e, kid) != 0) { w->hard = 1; return 0; }
             }
@@ -3232,7 +3433,7 @@ static int lw_lower_func(struct Lower *w, int decl)
     for (i = start_blocks; i < w->l->nblocks; i++)
         if (lmod_func_add_block(w->l, f, i + 1) != 0) { w->hard = 1; return 0; }
     w->l->funcs[f - 1].temp_end = w->l->tmp_next;
-    if (w->aborted || w->hard || w->drop_seen) {
+    if (w->aborted || w->hard || w->drop_seen || w->no_bodies) {
         if (getenv("CT_LIR_DEBUG"))
             fprintf(stderr, "lir: function '%s' not lowered\n", d->name ? d->name : "");
         w->l->funcs[f - 1].ok = 0;
@@ -3336,6 +3537,7 @@ pub int ct_lir_build_program(int prog, const char *path, const char *base,
     w->drop_seen = 0;
     w->unit = 0;
     w->aborted = 0;
+    w->no_bodies = g_lower.global_no_bodies;
     w->func = 0;
     w->loops = 0;
     w->nloops = 0;
@@ -3347,6 +3549,7 @@ pub int ct_lir_build_program(int prog, const char *path, const char *base,
     unit = m->nunits;
     w->unit = unit;
     l->path = path;
+    if (runtime::arena::arena_get()->noutconv > 0) w->no_bodies = 1;
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
         fprintf(stderr, "lir: cannot copy the scope table\n");
@@ -3399,6 +3602,7 @@ pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base)
     w->hard = 0;
     w->drop_seen = 0;
     w->aborted = 0;
+    w->no_bodies = g_lower.global_no_bodies;
     w->func = 0;
     w->loops = 0;
     w->nloops = 0;
@@ -3413,6 +3617,10 @@ pub int ct_lir_build_unit(void *up, int mod_unit, int tmp_base)
         if (uu) l->path = uu->path;
     }
     (void)tmp_base;   /* per-function temp numbering: no seed from the emitter */
+    {
+        struct Unit *uu = (struct Unit *)up;
+        if (uu && (uu->has_outconv || uu->has_anon_typedef)) w->no_bodies = 1;
+    }
     l->ready = 1;
     if (lw_copy_scopes(w) != 0) {
         fprintf(stderr, "lir: cannot copy the scope table\n");
@@ -3990,10 +4198,17 @@ static int lw_pw_expr(struct Lower *w, int eid, int ctx)
             }
             fprintf(g_lir_out, "(struct %s_iface){ (void *)",
                     e->text ? e->text : "");
-            if (e->op & 1) {
-                if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
-            } else {
-                fputs("&", g_lir_out);
+            {
+                /* SH-96: `self` is already the receiver pointer, so the
+                   interface stores `_self`, not `&_self`. */
+                int no_amp = e->op & 1;
+                if (!no_amp && e->nkids > 0) {
+                    struct ct_lexpr *r = &w->l->exprs[e->kids[0] - 1];
+                    if (r->kind == LE_NAME && r->text
+                        && strcmp(r->text, "_self") == 0)
+                        no_amp = 1;
+                }
+                if (!no_amp) fputs("&", g_lir_out);
                 if (lw_pw_kid(w, e, 0, PW_EXPR) != 0) return -1;
             }
             fprintf(g_lir_out, ", &%s_%s_vtable }",

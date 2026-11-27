@@ -24,7 +24,9 @@
 
 import backend::emit::Emitter;
 import backend::tir::TBuilder;
+import backend::tir::TGraph;
 import backend::lir::Lower;
+import backend::verify::Verifier;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Unit;
@@ -189,6 +191,11 @@ pub struct Module {
     /* PH-64 T2: a built-in unit is emitted only when the program can reach it.
        Filled once per build, before the emit loop. */
     int  builtin_live[8];      /* slot order, parallel to builtin_units[] */
+    /* v1-PH-2 S8: the semantic dependency graph's answer, computed once per
+       build (backend/tir/TGraph.h.ct). `tgraph_done` keeps the per-slot query
+       from re-walking the AST. */
+    int  tgraph_live[8];
+    int  tgraph_done;
     int  computed_live;
     int  line_force;            /* -1 mode default, 0 --no-line, 1 --line */
     char *map_path;             /* S1a-0 C2l: run-scoped owned path */
@@ -245,149 +252,6 @@ pub struct Module {
 
 /* Declared here, after the struct, so the parameter spells the mangled type. */
 static int ct_pkg_ns_clash(struct Module *m, char **msg, char **file);
-
-/* SH-87: is `word` one of layer unit `u`'s own functions? The list is derived
-   from the parsed rows (`fn_start..fn_end`), not written down here, so a new
-   helper in `lib/core/Str.h.ct` needs no second edit. */
-static int is_layer_fn(struct Symbols *sym, int fn_start, int fn_end, const char *word)
-{
-    int i;
-    for (i = fn_start; i < fn_end; i++)
-        if (strcmp(sym->funcs[i].name, word) == 0) return 1;
-    return 0;
-}
-
-
-
-/* Does this source use the built-in `Str` layer?
-
-   Three defects of the first version (battle hw-2): a substring match counted
-   `Struct` / `String` / comments (J-2), a single `fread` into a 256 KiB buffer
-   dropped the tail of a larger source (J-1), and the layer's lowercase helpers
-   (`str_from`, `str_len`) contain no `Str` at all (J-1). So: whole identifiers
-   only; comments and literals skipped; a layer function counts only when it is
-   called; the whole file is read. */
-static int file_uses_str(struct Symbols *sym, const char *path, int fn_start, int fn_end,
-                         int u16_only)
-{
-    FILE *f;
-    char *b;
-    char word[96];
-    size_t cap = 65536, n = 0, k;
-    int state = 0, i, wl = 0, pend = 0, hit = 0;
-
-    f = fopen(path, "r");
-    if (!f) return 0;
-    b = (char *)malloc(cap);
-    if (!b) {
-        fclose(f);
-        return 0;
-    }
-    for (;;) {
-        if (n + 1 >= cap) {
-            char *nb = (char *)realloc(b, cap * 2);
-            if (!nb) {
-                free(b);
-                fclose(f);
-                return 0;
-            }
-            b = nb;
-            cap *= 2;
-        }
-        k = fread(b + n, 1, cap - n - 1, f);
-        n += k;
-        if (k == 0) break;
-    }
-    fclose(f);
-    b[n] = 0;
-    for (i = 0; i < (int)n && !hit; i++) {
-        char c = b[i];
-        if (state == 1) {                    /* `// …` */
-            if (c == '\n') state = 0;
-            continue;
-        }
-        if (state == 2) {                    /* a block comment, ends at star-slash */
-            if (c == '*' && i + 1 < (int)n && b[i + 1] == '/') {
-                state = 0;
-                i++;
-            }
-            continue;
-        }
-        if (state == 3 || state == 4) {      /* a string or a character literal */
-            if (c == '\\' && i + 1 < (int)n) {
-                i++;
-                continue;
-            }
-            if ((state == 3 && c == '"') || (state == 4 && c == '\'')) state = 0;
-            continue;
-        }
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-            if (wl < (int)sizeof word - 1) word[wl++] = c;
-            pend = 0;
-            continue;
-        }
-        if (wl > 0) {
-            word[wl] = 0;
-            wl = 0;
-            if (u16_only) {
-                if (word_is(word, "U16String")) {
-                    hit = 1;
-                    break;
-                }
-            } else if (word_is(word, "Str") || word_is(word, "String")
-                       || word_is(word, "U16String")) {
-                hit = 1;
-                break;
-            }
-            if (u16_only)
-                pend = (strncmp(word, "u16_", 4) == 0
-                        || strncmp(word, "ct_u16_", 7) == 0);
-            else
-                pend = is_layer_fn(sym, fn_start, fn_end, word);
-        }
-        if (c == '/' && i + 1 < (int)n && b[i + 1] == '/') {
-            state = 1;
-            i++;
-            continue;
-        }
-        if (c == '/' && i + 1 < (int)n && b[i + 1] == '*') {
-            state = 2;
-            i++;
-            continue;
-        }
-        if (c == '"') {
-            state = 3;
-            pend = 0;
-            continue;
-        }
-        if (c == '\'') {
-            state = 4;
-            pend = 0;
-            continue;
-        }
-        if (c == '(') {
-            if (pend) {
-                hit = 1;
-                break;
-            }
-            continue;
-        }
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') pend = 0;
-    }
-    if (!hit && wl > 0) {
-        word[wl] = 0;
-        if (u16_only) {
-            if (word_is(word, "U16String")) hit = 1;
-        } else if (word_is(word, "Str") || word_is(word, "String")
-                   || word_is(word, "U16String")) hit = 1;
-    }
-    free(b);
-    return hit;
-}
-
-
-
-
 
 /* PH-65 R5: two units with the same base both publishing a shim make the
    `#include "<base>.shim.h"` (and the `-I` set) ambiguous. */
@@ -1092,6 +956,10 @@ impl ModuleOps for Module {
         self->units[u].path = tool::sh::ct_scratch_dup(path);
         self->units[u].ndep = 0;
         self->units[u].prog = -1;
+        self->units[u].node_start = 0;
+        self->units[u].node_end = 0;
+        self->units[u].has_outconv = 0;
+        self->units[u].has_anon_typedef = 0;
         self->units[u].digest = 0;
         self->units[u].ns = runtime::text::ct_intern("");
         if (!self->units[u].ns) return self->fail("out of memory");
@@ -1411,7 +1279,20 @@ impl ModuleOps for Module {
            are pre-scanned so a use before the declaration names the alias. */
         if (self->register_visible_type_aliases(u) != 0) return -1;
         if (self->scan_forward_type_aliases(self->units[u].path, u) != 0) return -1;
-        self->units[u].prog = frontend::parse::ct_parse_program();
+        self->units[u].node_start = self->arena->nnode;
+        {
+            int oc0 = self->arena->noutconv;
+            int nn;
+            self->units[u].prog = frontend::parse::ct_parse_program();
+            self->units[u].has_outconv = self->arena->noutconv > oc0 ? 1 : 0;
+            for (nn = self->units[u].node_start; nn < self->arena->nnode; nn++)
+                if (self->arena->nodes[nn].kind == N_STRUCT
+                    && self->arena->nodes[nn].aux != 0
+                    && (!self->arena->nodes[nn].text
+                        || !self->arena->nodes[nn].text[0]))
+                    self->units[u].has_anon_typedef = 1;
+        }
+        self->units[u].node_end = self->arena->nnode;
         if (self->units[u].prog < 0) return -1;
         /* Every local alias now exists: rewrite the exported targets in terms of
            the underlying spelling so an importer never depends on a private one. */
@@ -2407,6 +2288,16 @@ impl ModuleOps for Module {
                                            self->diag_codes);
         tool::diag::ct_diag_set_codes(self->diag_codes);
         self->build_mode = 1;
+        /* v1-PH-2 S8: the self-hosting build (this path) prints function
+           bodies from LIR by default. `--ir=off` and `CT_LIR=0` keep the AST
+           path as the oracle; compile mode stays AST by default until the
+           remaining shapes in the S8 diff list are closed. */
+        if (!self->check_mode) backend::lir::ct_lir_default_build();
+        if (self->runtime_checks) backend::lir::ct_lir_disable_bodies();
+        /* `--freestanding` / `--alloc` rewrite malloc/free/realloc/calloc at
+           emit time (`sync_alloc`); the lowerer has no such mapping. */
+        if (self->freestanding || self->alloc_map[0])
+            backend::lir::ct_lir_disable_bodies();
 
         /* Phase 29 E29-5: the built-in layer is loaded as a unit of every
            build, so a program needs neither an `import` nor `ct get std`. Each
@@ -2426,6 +2317,7 @@ impl ModuleOps for Module {
         self->sym->builtin_tmpl_hi = CAP_LIMIT;
         self->nbuiltin = 0;
         self->computed_live = 0;
+        self->tgraph_done = 0;
         self->builtin_live[0] = 0;
         self->builtin_live[1] = 0;
         self->builtin_live[2] = 0;
@@ -2556,6 +2448,13 @@ impl ModuleOps for Module {
                writes no `.c`/`.h`. The default path is untouched. */
             if (backend::tir::ct_tir_shadow_on()) {
                 for (u = 0; u < self->nunits; u++) {
+                    /* S8: with LIR on (the build default), the LIR entry
+                       builds and verifies the unit's TIR slice before its
+                       `.c` is opened; a second shadow build would duplicate
+                       every row. Map units have no LIR body, so they keep
+                       the shadow. */
+                    if (backend::lir::ct_lir_on() && !self->units[u].is_map)
+                        continue;
                     if (backend::tir::ct_tir_shadow_unit((void *)&self->units[u], u) != 0)
                         return 1;
                 }
@@ -2840,7 +2739,24 @@ impl ModuleOps for Module {
         for (o = 0; o < self->nbuiltin; o++)
             self->builtin_live[o] = self->builtin_live_for(self->builtin_units[o]);
         self->computed_live = 1;
-        backend::emit::ct_emit_bind_builtin_live(self->builtin_live);
+        /* S8 emitter contract: the liveness decision is TGraph's; the emitter
+           receives it as LModule plan metadata, never as a module table. */
+        backend::lir::lmod_plan_set_live(self->builtin_live, self->nbuiltin);
+        {
+            int bi, nb = 0;
+            int bu[8];
+            const char *bh[8];
+            for (bi = 0; bi < self->nbuiltin && nb < 8; bi++) {
+                const char *bb;
+                if (!self->builtin_live[bi]) continue;
+                bu[nb] = self->builtin_units[bi];
+                bb = self->units[bu[nb]].base;
+                bh[nb] = strcmp(bb, "String") == 0 ? "String_" : bb;
+                nb++;
+            }
+            backend::lir::lmod_plan_set_builtin_headers(bu, bh, nb);
+        }
+        backend::emit::ct_emit_bind_plan(backend::lir::lmod_plan_get());
         if (ct_shim_ambiguity(self, self->units, self->nunits)) return 1;
         for (o = 0; o < cn; o++) {
             char *outc;
@@ -2852,14 +2768,29 @@ impl ModuleOps for Module {
                opened, then let the body seam print what the lowerer covered.
                A verifier failure removes the (still absent) product. */
             if (backend::lir::ct_lir_on() && backend::lir::ct_lir_emit_on()) {
+                int verr = backend::verify::ct_verifier_errors();
                 if (backend::lir::ct_lir_build_unit((void *)&self->units[u], u,
                         backend::emit::ct_emit_ntmp()) != 0) {
-                    outc = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir,
-                                                    self->units[u].base);
-                    remove(outc);
-                    return frontend::parse::ct_parse_report();
+                    /* S8: the TIR/LIR verifier and the emitter still own
+                       different diagnostics. A program the AST path rejects
+                       with a richer message (an unknown method receiver, a
+                       construct outside the LIR subset) must keep that
+                       message; on a verifier finding the build falls back to
+                       the AST oracle for the rest of the run instead of
+                       replacing the diagnostic. `CT_LIR_STRICT=1` keeps the
+                       verifier fatal (test/ir's negatives). */
+                    if (backend::verify::ct_verifier_errors() > verr
+                        && !getenv("CT_LIR_STRICT")) {
+                        backend::lir::ct_lir_set_switch(0);
+                    } else {
+                        outc = tool::sh::ct_scratch_fmt("%s/%s.c", self->outdir,
+                                                        self->units[u].base);
+                        remove(outc);
+                        return frontend::parse::ct_parse_report();
+                    }
+                } else {
+                    backend::emit::ct_emit_set_body_hook(mod_lir_body);
                 }
-                backend::emit::ct_emit_set_body_hook(mod_lir_body);
             }
             if (self->emit_unit(u) != 0) {
                 /* the `.c` was already opened, so a failure leaves half a file;
@@ -3037,96 +2968,34 @@ cmd_too_long:
         return 0;
     }
 
-    /* PH-64 T2: is built-in unit `u` reachable from this program? A generic
-       unit is live when one of its templates was instantiated (`Vec`/`Map` for
-       the Vec unit); `Str` is a plain struct, so the sources are scanned for
-       the name. `Vec` uses `Str` in its own signatures, which is the only
-       inter-unit edge in the layer. */
+    /* v1-PH-2 S8: is built-in unit `u` reachable from this program? The
+       answer comes from the semantic dependency graph (backend/tir/TGraph.h.ct,
+       contract §3.4): unit -> layer edges from the parsed AST (type spellings,
+       callee names), layer -> layer edges for the layer's own needs, and
+       instance -> layer edges from the instance registry. The old whole-file
+       text scan is gone; the SH-113 boundary cases are pinned by
+       test/ast/sh113_builtin_live.sh. */
     int builtin_live_for(int u)
     {
-        const char *base;
-        int i, n, su = -1, si = -1, uu = -1, us = -1, str_used = 0, u16_used = 0;
-        struct frontend_sym_StructInst *ins;
+        int slot, i, rc;
         (void)self;
 
         if (!self->is_builtin_unit(u)) return 1;
-        base = self->units[u].base;
-        /* PH-80 / SH-120: the string units are plain structs, so the user
-           sources are scanned for their names and exported functions. The
-           UTF-8 and UTF-16 halves are scanned separately: a UTF-8-only program
-           must not emit the UTF-16 units, while a UTF-16 program needs
-           String / Str / U16Str because U16String calls their helpers. */
-        for (i = 0; i < self->nbuiltin; i++) {
-            const char *b = self->units[self->builtin_units[i]].base;
-            if (strcmp(b, "Str") == 0) su = self->builtin_units[i];
-            if (strcmp(b, "String") == 0) si = self->builtin_units[i];
-            if (strcmp(b, "U16String") == 0) uu = self->builtin_units[i];
-            if (strcmp(b, "U16Str") == 0) us = self->builtin_units[i];
+        slot = self->builtin_slot(u);
+        if (slot < 0) return 1;
+        if (!self->tgraph_done) {
+            rc = backend::tir::tgraph_builtin_live(self->units, self->nunits,
+                                                   self->builtin_units,
+                                                   self->nbuiltin, self->arena,
+                                                   self->sym, self->tgraph_live);
+            if (rc != 0) {
+                /* a caller outside the module layer has no node ranges: keep
+                   the conservative answer (nothing pruned) */
+                for (i = 0; i < 8; i++) self->tgraph_live[i] = 1;
+            }
+            self->tgraph_done = 1;
         }
-        for (i = 0; i < self->nunits; i++) {
-            if (self->is_builtin_unit(i)) continue;
-            /* The layer helpers now span the pair: `str_slice` / `str_compare`
-               live in Str, `str_dup` / `str_concat` / `ct_str_live_count` in
-               String. Scan both ranges so a helper call is still a use. */
-            if (su >= 0 && file_uses_str(self->sym, self->units[i].path,
-                                         self->units[su].fn_start,
-                                         self->units[su].fn_end, 0))
-                str_used = 1;
-            if (si >= 0 && file_uses_str(self->sym, self->units[i].path,
-                                         self->units[si].fn_start,
-                                         self->units[si].fn_end, 0))
-                str_used = 1;
-            if (uu >= 0 && file_uses_str(self->sym, self->units[i].path,
-                                         self->units[uu].fn_start,
-                                         self->units[uu].fn_end, 1))
-                u16_used = 1;
-            if (us >= 0 && file_uses_str(self->sym, self->units[i].path,
-                                         self->units[us].fn_start,
-                                         self->units[us].fn_end, 1))
-                u16_used = 1;
-        }
-        ins = frontend::sym::ct_insts(&n);
-        for (i = 0; i < n; i++) {
-            /* PH-80: the built-in layer itself names `Vec<U16String>` (the
-               `split` result), so parsing it registers a `Vec` instance.
-               That layer-internal instance must not make the container unit
-               live on its own; a concrete `Vec`/`Map` named by a user unit, or
-               the container the live string layer needs, pulls it in (below). */
-            if (strcmp(base, "Vec") == 0
-                && (strcmp(ins[i].tmpl, "Vec") == 0 || strcmp(ins[i].tmpl, "Map") == 0)
-                && !self->is_builtin_unit(ins[i].owner))
-                return 1;
-            if (strcmp(base, "Option") == 0 && strcmp(ins[i].tmpl, "Option") == 0
-                && !self->is_builtin_unit(ins[i].owner)) return 1;
-            if (strcmp(base, "Result") == 0 && strcmp(ins[i].tmpl, "Result") == 0
-                && !self->is_builtin_unit(ins[i].owner)) return 1;
-            /* SH-116: `Box` has its own layer unit (PH-81), so it needs the same
-               on-demand rule as the other templates. Without this branch the
-               unit was loaded but pruned: the product kept only
-               `struct ct_Box_hdr;` and `cc` rejected the incomplete type. */
-            if (strcmp(base, "Box") == 0 && strcmp(ins[i].tmpl, "Box") == 0
-                && !self->is_builtin_unit(ins[i].owner)) return 1;
-            if (strcmp(base, "Str") == 0
-                && (has_word(ins[i].ctype[0], "Str") || has_word(ins[i].carg[0], "Str"))
-                && !self->is_builtin_unit(ins[i].owner))
-                return 1;
-            if (strcmp(base, "U16String") == 0
-                && (has_word(ins[i].ctype[0], "U16String")
-                    || has_word(ins[i].carg[0], "U16String"))
-                && !self->is_builtin_unit(ins[i].owner))
-                return 1;
-        }
-        /* The string layer needs the container unit for `split`; the UTF-16
-           half additionally needs the UTF-8 half (String / Str) and U16Str. */
-        if (strcmp(base, "Vec") == 0) {
-            if (su >= 0 && (str_used || u16_used)) return 1;
-            return 0;
-        }
-        if (strcmp(base, "Str") == 0 || strcmp(base, "String") == 0)
-            return (str_used || u16_used) ? 1 : 0;
-        if (strcmp(base, "U16Str") == 0 || strcmp(base, "U16String") == 0)
-            return u16_used ? 1 : 0;
-        return 0;
+        return self->tgraph_live[slot];
     }
 
     /* PH-65 R1: the policy for one unit path. The CLI wins; then the package

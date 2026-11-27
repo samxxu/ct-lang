@@ -4,7 +4,9 @@
 #include "Module.h"
 #include "Emitter.h"
 #include "TBuilder.h"
+#include "TGraph.h"
 #include "Lower.h"
+#include "Verifier.h"
 #include "Memory.h"
 #include "Lexer.h"
 #include "Unit.h"
@@ -96,9 +98,27 @@ struct backend_emit_EmitterQuery;
 struct backend_emit_EmitterMapText;
 struct backend_emit_Emitter;
 struct backend_emit_EmitterTry;
+struct backend_lir_ct_lspan;
+struct backend_lir_ct_ltype;
+struct backend_lir_ct_lexpr;
+struct backend_lir_ct_lstmt;
+struct backend_lir_ct_lblock;
+struct backend_lir_ct_ltemp;
+struct backend_lir_ct_lrawc;
+struct backend_lir_ct_lparam;
+struct backend_lir_ct_lfunc;
+struct backend_lir_ct_lcleanup;
+struct backend_lir_ct_lscope;
+struct backend_lir_LModule;
+struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
 struct backend_emit_EmitBuf;
+struct backend_tir_ct_tnode;
+struct backend_tir_ct_lneed;
+struct backend_tir_ct_tedge;
+struct backend_tir_TGraph;
+struct backend_tir_ct_layers;
 struct backend_tir_ct_tspan;
 struct backend_tir_ct_tunit;
 struct backend_tir_ct_tdecl;
@@ -116,23 +136,8 @@ struct backend_tir_ct_tadt;
 struct backend_tir_ct_tinst;
 struct backend_tir_ct_tmember;
 struct backend_tir_ct_troot;
-struct backend_tir_ct_tnode;
-struct backend_tir_ct_tedge;
-struct backend_tir_ct_tgraph;
 struct backend_tir_ct_tmark;
 struct backend_tir_TModule;
-struct backend_lir_ct_lspan;
-struct backend_lir_ct_ltype;
-struct backend_lir_ct_lexpr;
-struct backend_lir_ct_lstmt;
-struct backend_lir_ct_lblock;
-struct backend_lir_ct_ltemp;
-struct backend_lir_ct_lrawc;
-struct backend_lir_ct_lparam;
-struct backend_lir_ct_lfunc;
-struct backend_lir_ct_lcleanup;
-struct backend_lir_ct_lscope;
-struct backend_lir_LModule;
 struct backend_verify_Verifier;
 struct backend_verify_lir_expect;
 struct backend_tir_TBuilder;
@@ -170,8 +175,6 @@ extern void U16String_Drop_drop(void *self);
 
 static int mod_lir_body(const char *, void *, int, int, int *, int);
 static int ct_pkg_ns_clash(struct frontend_module_Module *, char * *, char * *);
-static int is_layer_fn(struct frontend_sym_Symbols *, int, int, const char *);
-static int file_uses_str(struct frontend_sym_Symbols *, const char *, int, int, int);
 static int ct_shim_ambiguity(struct frontend_module_Module *, const struct frontend_module_Unit *, int);
 static const char * cycle_file(struct frontend_module_Module *, int);
 static int cycle_is_builtin_Box(struct frontend_module_Module *, const char *);
@@ -702,6 +705,10 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     _self->units[u].path = tool_sh_ct_scratch_dup(path);
     _self->units[u].ndep = 0;
     _self->units[u].prog = (-1);
+    _self->units[u].node_start = 0;
+    _self->units[u].node_end = 0;
+    _self->units[u].has_outconv = 0;
+    _self->units[u].has_anon_typedef = 0;
     _self->units[u].digest = 0;
     _self->units[u].ns = runtime_text_ct_intern("");
     if ((!_self->units[u].ns)) {
@@ -1008,7 +1015,19 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
     if (_self->__frontend_module_moduleops_vptr->scan_forward_type_aliases(_self, _self->units[u].path, u) != 0) {
         return (-1);
     }
-    _self->units[u].prog = frontend_parse_ct_parse_program();
+    _self->units[u].node_start = _self->arena->nnode;
+{
+        int oc0 = _self->arena->noutconv;
+        int nn;
+        _self->units[u].prog = frontend_parse_ct_parse_program();
+        _self->units[u].has_outconv = ((_self->arena->noutconv > oc0) ? 1 : 0);
+        for (nn = _self->units[u].node_start; nn < _self->arena->nnode; nn++) {
+            if ((((_self->arena->nodes[nn].kind == N_STRUCT) && (_self->arena->nodes[nn].aux != 0)) && ((!_self->arena->nodes[nn].text) || (!_self->arena->nodes[nn].text[0])))) {
+                _self->units[u].has_anon_typedef = 1;
+            }
+        }
+    }
+    _self->units[u].node_end = _self->arena->nnode;
     if (_self->units[u].prog < 0) {
         return (-1);
     }
@@ -2034,9 +2053,19 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
     frontend_parse_ct_parse_set_json(_self->diag_json, (_self->check_mode ? 0 : 1), _self->diag_codes);
     tool_diag_ct_diag_set_codes(_self->diag_codes);
     _self->build_mode = 1;
+    if ((!_self->check_mode)) {
+        backend_lir_ct_lir_default_build();
+    }
+    if (_self->runtime_checks) {
+        backend_lir_ct_lir_disable_bodies();
+    }
+    if ((_self->freestanding || _self->alloc_map[0])) {
+        backend_lir_ct_lir_disable_bodies();
+    }
     _self->sym->builtin_tmpl_hi = CAP_LIMIT;
     _self->nbuiltin = 0;
     _self->computed_live = 0;
+    _self->tgraph_done = 0;
     _self->builtin_live[0] = 0;
     _self->builtin_live[1] = 0;
     _self->builtin_live[2] = 0;
@@ -2148,6 +2177,9 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         }
         if (backend_tir_ct_tir_shadow_on()) {
             for (u = 0; u < _self->nunits; u++) {
+                if ((backend_lir_ct_lir_on() && (!_self->units[u].is_map))) {
+                    continue;
+                }
                 if (backend_tir_ct_tir_shadow_unit((void *)((&_self->units[u])), u) != 0) {
                     return 1;
                 }
@@ -2439,7 +2471,25 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         _self->builtin_live[o] = _self->__frontend_module_moduleops_vptr->builtin_live_for(_self, _self->builtin_units[o]);
     }
     _self->computed_live = 1;
-    backend_emit_ct_emit_bind_builtin_live(_self->builtin_live);
+    backend_lir_lmod_plan_set_live(_self->builtin_live, _self->nbuiltin);
+{
+        int bi;
+        int nb = 0;
+        int bu[8];
+        const char * bh[8];
+        for (bi = 0; ((bi < _self->nbuiltin) && (nb < 8)); bi++) {
+            const char * bb;
+            if ((!_self->builtin_live[bi])) {
+                continue;
+            }
+            bu[nb] = _self->builtin_units[bi];
+            bb = _self->units[bu[nb]].base;
+            bh[nb] = ((strcmp(bb, "String") == 0) ? "String_" : bb);
+            nb++;
+        }
+        backend_lir_lmod_plan_set_builtin_headers(bu, bh, nb);
+    }
+    backend_emit_ct_emit_bind_plan(backend_lir_lmod_plan_get());
     if (ct_shim_ambiguity(_self, _self->units, _self->nunits)) {
         return 1;
     }
@@ -2454,12 +2504,20 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
             continue;
         }
         if ((backend_lir_ct_lir_on() && backend_lir_ct_lir_emit_on())) {
+            int verr = backend_verify_ct_verifier_errors();
             if (backend_lir_ct_lir_build_unit((void *)((&_self->units[u])), u, backend_emit_ct_emit_ntmp()) != 0) {
-                outc = tool_sh_ct_scratch_fmt("%s/%s.c", _self->outdir, _self->units[u].base);
-                remove(outc);
-                return frontend_parse_ct_parse_report();
+                if (((backend_verify_ct_verifier_errors() > verr) && (!getenv("CT_LIR_STRICT")))) {
+                    backend_lir_ct_lir_set_switch(0);
+                }
+                else {
+                    outc = tool_sh_ct_scratch_fmt("%s/%s.c", _self->outdir, _self->units[u].base);
+                    remove(outc);
+                    return frontend_parse_ct_parse_report();
+                }
             }
-            backend_emit_ct_emit_set_body_hook(mod_lir_body);
+            else {
+                backend_emit_ct_emit_set_body_hook(mod_lir_body);
+            }
         }
         if (_self->__frontend_module_moduleops_vptr->emit_unit(_self, u) != 0) {
             outc = tool_sh_ct_scratch_fmt("%s/%s.c", _self->outdir, _self->units[u].base);
@@ -2650,87 +2708,27 @@ static int frontend_module_Module_frontend_module_ModuleOps_emit_program(void *s
 
 static int frontend_module_Module_frontend_module_ModuleOps_builtin_live_for(void *self, int u) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    const char * base;
+    int slot;
     int i;
-    int n;
-    int su = (-1);
-    int si = (-1);
-    int uu = (-1);
-    int us = (-1);
-    int str_used = 0;
-    int u16_used = 0;
-    struct frontend_sym_StructInst * ins;
+    int rc;
     (void)(_self);
     if ((!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, u))) {
         return 1;
     }
-    base = _self->units[u].base;
-    for (i = 0; i < _self->nbuiltin; i++) {
-        const char * b = _self->units[_self->builtin_units[i]].base;
-        if (strcmp(b, "Str") == 0) {
-            su = _self->builtin_units[i];
-        }
-        if (strcmp(b, "String") == 0) {
-            si = _self->builtin_units[i];
-        }
-        if (strcmp(b, "U16String") == 0) {
-            uu = _self->builtin_units[i];
-        }
-        if (strcmp(b, "U16Str") == 0) {
-            us = _self->builtin_units[i];
-        }
+    slot = _self->__frontend_module_moduleops_vptr->builtin_slot(_self, u);
+    if (slot < 0) {
+        return 1;
     }
-    for (i = 0; i < _self->nunits; i++) {
-        if (_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, i)) {
-            continue;
+    if ((!_self->tgraph_done)) {
+        rc = backend_tir_tgraph_builtin_live(_self->units, _self->nunits, _self->builtin_units, _self->nbuiltin, _self->arena, _self->sym, _self->tgraph_live);
+        if (rc != 0) {
+            for (i = 0; i < 8; i++) {
+                _self->tgraph_live[i] = 1;
+            }
         }
-        if (((su >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[su].fn_start, _self->units[su].fn_end, 0))) {
-            str_used = 1;
-        }
-        if (((si >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[si].fn_start, _self->units[si].fn_end, 0))) {
-            str_used = 1;
-        }
-        if (((uu >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[uu].fn_start, _self->units[uu].fn_end, 1))) {
-            u16_used = 1;
-        }
-        if (((us >= 0) && file_uses_str(_self->sym, _self->units[i].path, _self->units[us].fn_start, _self->units[us].fn_end, 1))) {
-            u16_used = 1;
-        }
+        _self->tgraph_done = 1;
     }
-    ins = frontend_sym_ct_insts((&n));
-    for (i = 0; i < n; i++) {
-        if ((((strcmp(base, "Vec") == 0) && ((strcmp(ins[i].tmpl, "Vec") == 0) || (strcmp(ins[i].tmpl, "Map") == 0))) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
-            return 1;
-        }
-        if ((((strcmp(base, "Option") == 0) && (strcmp(ins[i].tmpl, "Option") == 0)) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
-            return 1;
-        }
-        if ((((strcmp(base, "Result") == 0) && (strcmp(ins[i].tmpl, "Result") == 0)) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
-            return 1;
-        }
-        if ((((strcmp(base, "Box") == 0) && (strcmp(ins[i].tmpl, "Box") == 0)) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
-            return 1;
-        }
-        if ((((strcmp(base, "Str") == 0) && (frontend_module_has_word(ins[i].ctype[0], "Str") || frontend_module_has_word(ins[i].carg[0], "Str"))) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
-            return 1;
-        }
-        if ((((strcmp(base, "U16String") == 0) && (frontend_module_has_word(ins[i].ctype[0], "U16String") || frontend_module_has_word(ins[i].carg[0], "U16String"))) && (!_self->__frontend_module_moduleops_vptr->is_builtin_unit(_self, ins[i].owner)))) {
-            return 1;
-        }
-    }
-    if (strcmp(base, "Vec") == 0) {
-        if (((su >= 0) && (str_used || u16_used))) {
-            return 1;
-        }
-        return 0;
-    }
-    if (((strcmp(base, "Str") == 0) || (strcmp(base, "String") == 0))) {
-        return ((str_used || u16_used) ? 1 : 0);
-    }
-    if (((strcmp(base, "U16Str") == 0) || (strcmp(base, "U16String") == 0))) {
-        return (u16_used ? 1 : 0);
-    }
-    return 0;
+    return _self->tgraph_live[slot];
 }
 
 static int frontend_module_Module_frontend_module_ModuleOps_c_boundary_for(void *self, const char * path) {
@@ -3120,156 +3118,6 @@ const struct frontend_module_ModuleOps_vtbl frontend_module_Module_frontend_modu
 
 static int mod_lir_body(const char * name, void * out, int ind, int ntmp, int * new_ntmp, int stmts) {
     return backend_lir_ct_lir_try_body(name, out, ind, ntmp, new_ntmp, stmts);
-}
-static int is_layer_fn(struct frontend_sym_Symbols * sym, int fn_start, int fn_end, const char * word) {
-    int i;
-    for (i = fn_start; i < fn_end; i++) {
-        if (strcmp(sym->funcs[i].name, word) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-static int file_uses_str(struct frontend_sym_Symbols * sym, const char * path, int fn_start, int fn_end, int u16_only) {
-    FILE * f;
-    char * b;
-    char word[96];
-    size_t cap = 65536;
-    size_t n = 0;
-    size_t k;
-    int state = 0;
-    int i;
-    int wl = 0;
-    int pend = 0;
-    int hit = 0;
-    f = fopen(path, "r");
-    if ((!f)) {
-        return 0;
-    }
-    b = (char *)(malloc(cap));
-    if ((!b)) {
-        fclose(f);
-        return 0;
-    }
-    for (; ; ) {
-        if ((n + 1) >= cap) {
-            char * nb = (char *)(realloc(b, (cap * 2)));
-            if ((!nb)) {
-                free(b);
-                fclose(f);
-                return 0;
-            }
-            b = nb;
-            cap *= 2;
-        }
-        k = fread((b + n), 1, ((cap - n) - 1), f);
-        n += k;
-        if (k == 0) {
-            break;
-        }
-    }
-    fclose(f);
-    b[n] = 0;
-    for (i = 0; ((i < (int)(n)) && (!hit)); i++) {
-        char c = b[i];
-        if (state == 1) {
-            if (c == '\n') {
-                state = 0;
-            }
-            continue;
-        }
-        if (state == 2) {
-            if ((((c == '*') && ((i + 1) < (int)(n))) && (b[(i + 1)] == '/'))) {
-                state = 0;
-                i++;
-            }
-            continue;
-        }
-        if (((state == 3) || (state == 4))) {
-            if (((c == '\\') && ((i + 1) < (int)(n)))) {
-                i++;
-                continue;
-            }
-            if ((((state == 3) && (c == '"')) || ((state == 4) && (c == '\'')))) {
-                state = 0;
-            }
-            continue;
-        }
-        if ((((((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'))) || ((c >= '0') && (c <= '9'))) || (c == '_'))) {
-            if (wl < ((int)(sizeof(word)) - 1)) {
-                word[wl++] = c;
-            }
-            pend = 0;
-            continue;
-        }
-        if (wl > 0) {
-            word[wl] = 0;
-            wl = 0;
-            if (u16_only) {
-                if (frontend_module_word_is(word, "U16String")) {
-                    hit = 1;
-                    break;
-                }
-            }
-            else {
-                if (((frontend_module_word_is(word, "Str") || frontend_module_word_is(word, "String")) || frontend_module_word_is(word, "U16String"))) {
-                    hit = 1;
-                    break;
-                }
-            }
-            if (u16_only) {
-                pend = ((strncmp(word, "u16_", 4) == 0) || (strncmp(word, "ct_u16_", 7) == 0));
-            }
-            else {
-                pend = is_layer_fn(sym, fn_start, fn_end, word);
-            }
-        }
-        if ((((c == '/') && ((i + 1) < (int)(n))) && (b[(i + 1)] == '/'))) {
-            state = 1;
-            i++;
-            continue;
-        }
-        if ((((c == '/') && ((i + 1) < (int)(n))) && (b[(i + 1)] == '*'))) {
-            state = 2;
-            i++;
-            continue;
-        }
-        if (c == '"') {
-            state = 3;
-            pend = 0;
-            continue;
-        }
-        if (c == '\'') {
-            state = 4;
-            pend = 0;
-            continue;
-        }
-        if (c == '(') {
-            if (pend) {
-                hit = 1;
-                break;
-            }
-            continue;
-        }
-        if (((((c != ' ') && (c != '\t')) && (c != '\n')) && (c != '\r'))) {
-            pend = 0;
-        }
-    }
-    if (((!hit) && (wl > 0))) {
-        word[wl] = 0;
-        if (u16_only) {
-            if (frontend_module_word_is(word, "U16String")) {
-                hit = 1;
-            }
-        }
-        else {
-            if (((frontend_module_word_is(word, "Str") || frontend_module_word_is(word, "String")) || frontend_module_word_is(word, "U16String"))) {
-                hit = 1;
-            }
-        }
-    }
-    free(b);
-    return hit;
 }
 static int ct_shim_ambiguity(struct frontend_module_Module * m, const struct frontend_module_Unit * units, int n) {
     int i;
