@@ -146,3 +146,4 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | REV（状态词） | 证据包 | 本文 §1 |
 | Q-12 | LANG-31（常量键折叠） | 登记（deferred） | 下一窗口重评 | 所有者决定窗口 | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md) |
+| Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | 待开 | DEV | Q-5 已交付，缺汇总节 | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
