@@ -1547,12 +1547,14 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(rline, rcol,
                         "an error return needs a value", self->mem->path);
                 /* Phase 32 S5 (L32-4): a value-returning function may not
-                   `return;`. The position is the `return` keyword. */
-                if (self->ex->types_mode && *self->ex->types_mode
+                   `return;`. The position is the `return` keyword. S7 adds the
+                   compile default path through the return class gate. */
+                if (((self->ex->types_mode && *self->ex->types_mode)
+                     || tool::diag::ct_type_class_return())
                     && self->ex->ncl_stack == 0
                     && self->sym->ret_type[0]
                     && strcmp(self->sym->ret_type, "void") != 0) {
-                    if (tool::diag::ct_type_warn(rline, rcol, "",
+                    if (tool::diag::ct_type_class_warn(rline, rcol, "",
                             tool::sh::ct_scratch_fmt(
                                 "return: missing a value (function returns '%s')",
                                 self->sym->ret_type),
@@ -1663,9 +1665,10 @@ impl StmtOps for Stmt {
                channel (7), so `ct compile` also refuses to write bad C; the
                ordinary return keeps the opt-in warning path. */
             if (self->ex->ncl_stack == 0 && self->sym->ret_type[0]
-                && (is_err || (self->ex->types_mode && *self->ex->types_mode))) {
+                && (is_err || (self->ex->types_mode && *self->ex->types_mode)
+                    || tool::diag::ct_type_class_return())) {
                 if (strcmp(self->sym->ret_type, "void") == 0) {
-                    if (tool::diag::ct_type_warn(eline, ecol, "",
+                    if (tool::diag::ct_type_class_warn(eline, ecol, "",
                             "return: a value is not allowed in a void function",
                             self->sup->mem->path) != 0)
                         return -1;

@@ -645,7 +645,7 @@ impl DriverOps for Driver {
            reaches here with `check_mode == 0`, so its `--types` opt-in is
            untouched. */
         if (self->m->check_mode == 0)
-            tool::diag::ct_diag_set_types_class(1, 2);
+            tool::diag::ct_diag_set_types_class(3, 2);
         self->m->build_mode = 0;
         self->m->line_mode = 0;
         self->m->line_force = -1;
@@ -810,7 +810,7 @@ impl DriverOps for Driver {
                     fprintf(stderr, "ctc: --check-level takes off, warn or error, not '%s'\n", v);
                     return 1;
                 }
-                tool::diag::ct_diag_set_types_class(1, lv);
+                tool::diag::ct_diag_set_types_class(3, lv);
                 continue;
             }
             /* PH-70: flow/semantic findings share `ct check`; the flag is
