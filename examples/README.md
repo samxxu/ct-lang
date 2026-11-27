@@ -123,7 +123,7 @@ S4 模式扩展、S5 or/守卫与 S6 泛型 ADT；每个只有一份 `prog.ct`�
 | `52_box_new` | `Box<T>` / `new T { … }`、`at()` 借出 `T *`、`release()` 释放；SH-116 已修复 build 模式的 Box 内置单元，`ct build` 可用 | ct-ast | 同上（compile + build） |
 | `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | 同上 |
 | `58_optional_chain` | `?.` 穿过可空指针：接收者只求值一次（`__ct_optN` 临时）、空接收者读作 `0`；无 `T?` / `Maybe<T>` 结果类型 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
-| `59_custom_subscript` | `x[k]` → `get(k)`、`x[k] = v` → `set(k, v)`；S2 起按**名字 + 参数类型**匹配（`int` 键样例；同类型并存 `int` / `char *` 键的形态见 `test/ast/index_overload_both`） | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `59_custom_subscript` | `x[k]` → `get(k)`、`x[k] = v` → `set(k, v)`；S2 起按**名字 + 参数类型**匹配：同一 struct 上 `get(int)` 与 `get(Str)` 并存，`s[0]` / `s[name]` 各选其版（`char *` 键形态见 `test/ast/index_overload_both`） | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
 | `63_ref_out_places` | `ref` / `out` 写回调用方：`ref` 需已初始化、trivial `out` 可未初始化；实参必须是可赋值 place | ct-ast | 同上 |
 | `64_match_expr` | 表达式 `match` + `yield`：块臂无隐式取值、主语只求值一次、`_` 末位且唯一 | ct-ast | 同上 |
 | `67_adt_patterns` | S4 模式：整数/字符字面量、枚举负载里的嵌套模式（`Shape.At(Point { x: 0, y })`）、结构体模式的显式子模式 / 简写绑定 / `..` | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |

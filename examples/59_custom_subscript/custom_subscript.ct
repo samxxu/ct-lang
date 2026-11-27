@@ -2,8 +2,8 @@
 //
 // `x[k]` expands to the inherent `get(k)`; the statement `x[k] = v` expands to
 // `set(k, v)`. Since S2 (D-028) the match is by name **and parameter type**, so
-// an int keyed protocol can coexist with a string keyed one on the same struct
-// -- here the int instance is the only one, and no C string is involved.
+// the two `get` methods below coexist: `s[0]` picks `get(int)` and `s[name]`
+// picks `get(Str)`. The C symbol of the second overload gets the type suffix.
 //
 // Also out of scope for this sugar: `+=` / `++` / `&x[k]` and assignment to a
 // non-place -- all three are rejected with their own diagnostics (spec §4.64).
@@ -30,16 +30,24 @@ impl Slot {
             self->other = n;
         }
     }
+    int get(Str name)
+    {
+        if (name.len == 4) {
+            return self->value + 1;
+        }
+        return self->value;
+    }
 }
 
 int main(void)
 {
     Slot s;
+    Str name = "name";
 
     s.value = 1;
     s.other = 2;
     s[0] = 7;
     s[1] = 8;
-    printf("zero=%d one=%d\n", s[0], s[1]);
+    printf("zero=%d one=%d name=%d\n", s[0], s[1], s[name]);
     return 0;
 }
