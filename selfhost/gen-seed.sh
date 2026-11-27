@@ -69,14 +69,23 @@ rm -rf "$out/.ctcache"
 # previous release's seed, which may predate that copy, so copy every source
 # shim explicitly; the flat names are unique because a duplicate base is a hard
 # build error (`ct_shim_ambiguity`).
-# The emitter of the previous release may also have copied the built-in
-# layer's shims; the seed's closure does not emit those units, so keep only the
-# compiler's own shim set and let the explicit pass below define it.
+# S8b D2: the compiler's closure now also carries a built-in unit (`Vec` in
+# `tool/sh`), so `lib/core`'s shim set travels with the seed too. The explicit
+# pass below defines the whole set; the emitter's own copies are removed first.
 rm -f "$out"/*.shim.h
+# The compiler's own units are always part of the closure; a built-in unit
+# (`lib/core`) travels only when the emitter wrote its `.c`, so the seed set is
+# exactly the emitted set (gate 13 compares the two sets).
 dups=$(find selfhost/ct-ast -name '*.shim.h' -type f -exec basename {} \; | sort | uniq -d)
 [ -z "$dups" ] || die "duplicate shim base name(s): $dups"
 find selfhost/ct-ast -name '*.shim.h' -type f | while IFS= read -r h; do
     cp "$h" "$out/$(basename "$h")" || die "cannot copy the shim $h"
+done
+find lib/core -name '*.shim.h' -type f | while IFS= read -r h; do
+    base=$(basename "$h")
+    unit=${base%.shim.h}
+    [ -f "$out/$unit.c" ] || continue
+    cp "$h" "$out/$base" || die "cannot copy the shim $h"
 done
 
 nc=$(find "$out" -maxdepth 1 -type f -name '*.c' | wc -l | tr -d ' ')

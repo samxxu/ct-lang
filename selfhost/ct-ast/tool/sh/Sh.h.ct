@@ -182,33 +182,21 @@ int ct_text_dup(const char *s, char **out)
 }
 
 /* --- S1a-0 C2l: the run-scoped path pool ------------------------------- */
-static char **g_scratch;
-static int g_nscratch;
-static int g_capscratch;
-
-static void ct_scratch_keep(char *p)
-{
-    char **grown;
-    int ncap;
-
-    if (g_nscratch >= g_capscratch) {
-        ncap = g_capscratch > 0 ? g_capscratch * 2 : 256;
-        grown = (char **)realloc(g_scratch, (size_t)ncap * sizeof(*grown));
-        if (!grown) {
-            fprintf(stderr, "ctc: out of memory\n");
-            exit(1);
-        }
-        g_scratch = grown;
-        g_capscratch = ncap;
-    }
-    g_scratch[g_nscratch] = p;
-    g_nscratch++;
-}
+/* S8b D2: one `Vec<char *>` replaces the hand-written `char **` + count +
+   capacity triple. The pool still owns each block it hands out; `push` aborts
+   on a header allocation failure, so a path builder never sees a half-grown
+   registry (the same hard stop the old `ct_scratch_keep` took). */
+static Vec<char *> g_scratch;
 
 static void ct_scratch_die(const char *what)
 {
     fprintf(stderr, "ctc: %s\n", what);
     exit(1);
+}
+
+static void ct_scratch_keep(char *p)
+{
+    if (g_scratch.push(p) == 0) ct_scratch_die("out of memory");
 }
 
 char *ct_scratch_fmt(const char *fmt, ...)
@@ -278,12 +266,14 @@ char *ct_scratch_alloc(int size)
 void ct_scratch_free_all(void)
 {
     int i;
+    int n;
 
-    for (i = 0; i < g_nscratch; i++) free(g_scratch[i]);
-    free(g_scratch);
-    g_scratch = (char **)0;
-    g_nscratch = 0;
-    g_capscratch = 0;
+    n = g_scratch.len();
+    for (i = 0; i < n; i++) free(g_scratch.get(i));
+    /* `release` aborts on an already-released handle, so an empty pool (no
+       path was registered) skips it; a re-used pool starts from a fresh
+       header on the next `push`. */
+    if (n > 0) g_scratch.release();
 }
 
 int ct_text_quote(char **buf, int *cap, const char *s)

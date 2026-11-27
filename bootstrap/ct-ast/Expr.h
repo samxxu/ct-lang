@@ -35,6 +35,7 @@
 #include "ExprTypeParse.h"
 #include "ExprStaticType.h"
 
+#include "Vec.h"
 
 struct ct_buf;
 struct Str;
@@ -45,6 +46,7 @@ struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
 struct tool_sh_Sh;
+struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;

@@ -65,7 +65,7 @@ fi
 
 # --- cache: owned directory / key path for a 1406-byte logical output path.
 if ! $cc -Wall -Wextra -std=c99 -I "$gen" test/ast/cap_path_cache.c \
-        "$gen/Cache.c" "$gen/Sh.c" -o "$w/cache" 2>"$w/cache.build"; then
+        "$gen/Cache.c" "$gen/Sh.c" "$gen/Vec.c" -o "$w/cache" 2>"$w/cache.build"; then
     echo "FAIL cache: the generated Cache unit cannot compose a long logical path:"
     sed 's/^/    /' "$w/cache.build" | head -3
     fail=1

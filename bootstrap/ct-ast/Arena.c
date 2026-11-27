@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include "Arena.h"
 #include "Intern.h"
+#include "Vec.h"
 
 #line 1 "selfhost/ct-ast/runtime/arena/Arena.h.ct"
 #include "Arena.shim.h"
@@ -17,6 +18,7 @@ struct U16String;
 struct Vec_U16String;
 struct runtime_text_Intern;
 struct tool_sh_Sh;
+struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
 struct frontend_sym_Fn;
