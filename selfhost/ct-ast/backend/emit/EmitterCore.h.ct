@@ -38,11 +38,16 @@ pub trait EmitOps {
 
     int  emit_unit(int u);
 
-    int  write_unit_header(int u);
-
     int  fail(const char *msg);
 
     int  fail_from(int n, const char *msg);
+}
+
+/* S8 shell: the per-unit `.c` / `.h` writer entry point. Bodies live in
+   `EmitShell.h.ct` with the instance / ADT / Box glue they place; the host
+   only calls it from `emit_program` / the module layer. */
+pub trait EmitShell {
+    int  write_unit_header(int u);
 }
 
 /* S8 D4: the header / map / ABI writers. The trait lives here with the rest of
@@ -342,4 +347,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps, EmitHeader, EmitDecl, EmitExpr, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;
+} use EmitOps, EmitShell, EmitHeader, EmitDecl, EmitExpr, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;

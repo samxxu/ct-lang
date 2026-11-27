@@ -45,6 +45,7 @@ import backend::emit::EmitInit;
 import backend::emit::EmitHeader;
 import backend::emit::EmitDecl;
 import backend::emit::EmitExpr;
+import backend::emit::EmitShell;
 import backend::lir::LModule;
 import backend::lir::LModule::LModulePlan as LModulePlan;
 
@@ -203,10 +204,6 @@ namespace backend::emit;
 
 
 
-/* S8 emitter contract: built-in liveness is an input, not a decision. The
-   plan is filled by the module layer from the semantic dependency graph and
-   bound once per run; the emitter only reads `plan->live`. */
-static struct LModulePlan *g_plan;
 
 
 /* defined further down; `sb_norm_text` needs it to substitute a template
@@ -416,69 +413,6 @@ static struct LModulePlan *g_plan;
 /* The prologue of the map closure: every `#include` / `#define` line of an
    imported `.m.ct` unit, deduplicated by whole line. Emitted only in build
    mode, where the unit table exists. */
-static int emit_map_prologues(struct Emitter *e, int u)
-{
-    char *reach;
-    char seen[64][256];
-    char line[256];
-    int nseen, d, k, n, i, dup, changed;
-    if (ensure_reach(e, *e->nunits) != 0) return e->fail("out of memory");
-    reach = e->reach;
-    for (i = 0; i < *e->nunits; i++) reach[i] = 0;
-    reach[u] = 1;
-    changed = 1;
-    while (changed) {
-        changed = 0;
-        for (d = 0; d < (*e->nunits); d++) {
-            if (!reach[d]) continue;
-            for (k = 0; k < e->units[d].ndep; k++) {
-                int dep = e->units[d].depu[k];
-                if (dep >= 0 && dep < *e->nunits && !reach[dep]) {
-                    reach[dep] = 1;
-                    changed = 1;
-                }
-            }
-        }
-    }
-    nseen = 0;
-    for (d = 0; d < (*e->nunits); d++) {
-        if (!reach[d] || !e->units[d].is_map || e->units[d].prog < 0) continue;
-        /* A sibling `.shim.h` declares what a recipe cannot spell: macro
-           wrappers, global accessors, variadic forwarders. It leads the unit's
-           prologue, because that unit's `#include`s may feed the shim. */
-        if (e->units[d].has_shim) {
-            snprintf(line, sizeof line, "#include \"%s.shim.h\"", e->units[d].base);
-            dup = 0;
-            for (i = 0; i < nseen; i++)
-                if (strcmp(seen[i], line) == 0) dup = 1;
-            if (!dup) {
-                if (nseen < 64) {
-                    snprintf(seen[nseen], 256, "%s", line);
-                    nseen++;
-                }
-                fprintf(e->out, "%s\n", line);
-            }
-        }
-        for (n = e->arena->nodes[e->units[d].prog].a; n >= 0; n = e->arena->nodes[n].next) {
-            if (e->arena->nodes[n].kind != N_PP) continue;
-            if ((e->io_mask & 1)
-                && strcmp(e->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
-            if ((e->io_mask & 2)
-                && strcmp(e->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
-            dup = 0;
-            for (i = 0; i < nseen; i++)
-                if (strcmp(seen[i], e->arena->nodes[n].text) == 0) dup = 1;
-            if (dup) continue;
-            if (nseen < 64) {
-                snprintf(seen[nseen], 256, "%s", e->arena->nodes[n].text);
-                nseen++;
-            }
-            fprintf(e->out, "%s\n", e->arena->nodes[n].text);
-        }
-    }
-    if (nseen > 0) fputs("\n", e->out);
-    return 0;
-}
 
 /* The parameter's declared type, without array dims (a compound literal needs
    the base type). */
@@ -527,21 +461,6 @@ static int emit_map_prologues(struct Emitter *e, int u)
    after the closing marker: the block starts on the line after `#ct-raw`
    (directive line + 1), spans `nl` newlines, and the next line follows the
    `#ct-endraw` line. */
-static int emit_raw_text(struct Emitter *self, int n)
-{
-    const char *text;
-    int i;
-    int nl = 0;
-
-    text = self->arena->str_at((int)self->arena->nodes[n].num);
-    for (i = 0; text[i]; i++)
-        if (text[i] == '\n') nl++;
-    fputs(text, self->out);
-    if (i > 0 && text[i - 1] != '\n') fputc('\n', self->out);
-    if ((*self->line_mode))
-        fprintf(self->out, "#line %d \"%s\"\n", self->arena->nodes[n].line + nl + 2, self->path);
-    return 0;
-}
 
 /* Does this closure belong to the function the emitter is writing? `owner` is
    the parser's `cur_func` (the short name of a function, or
@@ -582,48 +501,15 @@ static int emit_raw_text(struct Emitter *self, int n)
 
 /* Phase 84: the ADT layout writer, the match-arm writer and the include test. */
 
-static int emit_struct_insts(struct Emitter *self, int u, int header);
 /* Phase 33 O3: 1 when an instance's element belongs to a unit other than the
    container template's own, so its helpers and methods move to the consumer. */
 /* Phase 29: write the methods of the template impl blocks. `header` writes the
    prototypes an exported template's consumer needs; otherwise the definitions. */
-static int emit_struct_impls(struct Emitter *self, int u, int header);
 
 /* Phase 26: write one definition per generic instance owned by unit `u`
    (-1 = the single compile-mode unit). The template's own N_FUNC node is
    reused with `gtparam`/`gtarg`/`gtname` set for the duration, so no AST copy
    is made and the non-generic path is untouched (D26-7). */
-static int emit_generic_defs(struct Emitter *self, int u)
-{
-    int i, t;
-    for (i = 0; i < self->sym->nginsts; i++) {
-        if (u >= 0 && self->sym->ginsts[i].owner != u)
-            continue;
-        t = self->sym->funcs[self->sym->ginsts[i].func].body;
-        if (t < 0) continue;
-        self->gtparam = frontend::sym::ct_text_rows_reserve(self->gtparam, self->gtcap,
-                                                            1, &self->gtcap);
-        self->gtarg = frontend::sym::ct_text_rows_reserve(self->gtarg, self->gtacap,
-                                                          1, &self->gtacap);
-        if (!self->gtparam || self->gtcap < 1 || !self->gtarg || self->gtacap < 1)
-            return self->fail("out of memory");
-        /* S1a-0 C2p-6: `Func.tparam` / `GenericInst.targ` are pool texts, so
-           the row is a reference and the whole 2000-byte argument survives. */
-        self->gtparam[0] = self->sym->funcs[self->sym->ginsts[i].func].tparam;
-        self->gtarg[0] = self->sym->ginsts[i].targ;
-        self->gtntparam = 1;
-        self->gtname = runtime::text::ct_intern(self->sym->ginsts[i].cname);
-        if (!self->gtname) return self->fail("out of memory");
-        if (self->emit_node(t, 0) != 0) {
-            self->gtntparam = 0;
-            self->gtname = "";
-            return -1;
-        }
-        self->gtntparam = 0;
-        self->gtname = "";
-    }
-    return 0;
-}
 
 /* Phase 41 R2: the 12 seq_cst helpers. They strip `_Atomic(T)` before calling
    the builtin because Clang 21 rejects `__atomic_load_n(_Atomic(int) *, ...)`.
@@ -640,39 +526,16 @@ static int emit_generic_defs(struct Emitter *self, int u)
 /* P-7.2: the parser's slice-use flag. It lives as a file-scope pointer rather
    than in `struct Emitter` (that struct is at the build's 64-field cap), and
    is declared up here because `emit_unit_body` runs before the bind at the end
-   of the unit. */
-static int *g_slice_used;
 
 /* P-7.2: emitted only when the parser noted a slice use; defined below with
    the other emission helpers, declared here because `emit_unit_body` runs
    before it in the translation unit. */
-static void emit_slice_helpers(struct Emitter *self);
 
 /* PH-80: one static block per `String` literal. The header sits immediately
    before the payload, so `String.ptr - 8` always names `ct_str_hdr`; `refs` is
    -1, which makes `release()` a no-op and never frees read-only literal data.
    `__attribute__((unused))` keeps `-Wall -Wextra` quiet when the scan sees a
    literal whose unit is not the one currently being written. */
-static int emit_string_literals(struct Emitter *self, int prog)
-{
-    int n, any = 0;
-    (void)prog;
-
-    for (n = 0; n < self->arena->nnode; n++) {
-        const char *lit;
-        if (self->arena->nodes[n].kind != N_STR) continue;
-        if (self->arena->nodes[n].aux != 1) continue;
-        lit = self->arena->str_at((int)self->arena->nodes[n].num);
-        if (!any) fputs("\n/* PH-80: immortal String literal headers */\n", self->out);
-        fprintf(self->out,
-                "static struct { struct ct_str_hdr h; char d[sizeof(%s)]; }"
-                " ct_str_lit_%d __attribute__((unused)) = { { -1, 0 }, %s };\n",
-                lit, n, lit);
-        any = 1;
-    }
-    if (any) fputs("\n", self->out);
-    return 0;
-}
 
 /* ---- PH-81 / S1: `Box<T>` per-instance helpers -------------------------
    The template lives in `lib/core/Box.h.ct`; the compiler writes two static
@@ -687,120 +550,7 @@ static int emit_string_literals(struct Emitter *self, int prog)
    handle. A project may still declare its own `struct Box<T>` (the historical
    fixtures do); its instances share the `Box_` prefix but must not inherit the
    built-in retain/release/auto-deref rules. */
-static int Box_type_owns(struct Emitter *self, const char *ctype, int depth)
-{
-    const char *base;
-    const char *b;
-    int si, fi;
 
-    if (!ctype || !ctype[0] || depth > 16) return 0;
-    if (strchr(ctype, '*')) return 0;
-    b = ctype;
-    if (strncmp(b, "struct ", 7) == 0) b += 7;
-    else if (strncmp(b, "union ", 6) == 0) return 0;
-    else if (strncmp(b, "enum ", 5) == 0) return 0;
-    base = base_type_text(b);
-    if (!base) return 0;
-    if (strcmp(base, "String") == 0 || strcmp(base, "U16String") == 0) return 1;
-    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
-        || strncmp(base, "Option_", 7) == 0
-        || strncmp(base, "Result_", 7) == 0)
-        return 1;
-    if (inst_is_builtin_Box(base)) return 1;
-    si = self->sym->find_struct(base);
-    if (si < 0) return 0;
-    if (self->sym->structs[si].is_inst) {
-        /* a user generic instance: judge its concrete fields */
-    } else if (self->sym->structs[si].has_drop_impl) {
-        return 1;
-    }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char *ft = self->sym->structs[si].fields[fi].type;
-        const char *dims = self->sym->structs[si].fields[fi].dims;
-        if (dims[0]) {
-            if (Box_type_owns(self, ft, depth + 1)) return 1;
-        } else if (Box_type_owns(self, ft, depth + 1)) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-/* Release the payload field at `expr` (a pointer expression of type T *). */
-static int Box_emit_release_at(struct Emitter *self, const char *ctype, const char *expr, int depth)
-{
-    const char *base;
-    const char *b;
-    char *at = 0;
-    int acap = 0;
-    int si, fi;
-
-    if (!Box_type_owns(self, ctype, depth) || depth > 16) return 0;
-    b = ctype;
-    if (strncmp(b, "struct ", 7) == 0) b += 7;
-    base = base_type_text(b);
-    if (!base) return 0;
-    if (strcmp(base, "String") == 0 || strcmp(base, "U16String") == 0) {
-        fprintf(self->out, "    %s_Drop_drop(%s);\n", base, expr);
-        return 0;
-    }
-    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
-        || strncmp(base, "Option_", 7) == 0
-        || strncmp(base, "Result_", 7) == 0
-        || inst_is_builtin_Box(base)) {
-        fprintf(self->out, "    %s_release(%s);\n", base, expr);
-        return 0;
-    }
-    si = self->sym->find_struct(base);
-    if (si < 0) return 0;
-    if (!self->sym->structs[si].is_inst && self->sym->structs[si].has_drop_impl) {
-        fprintf(self->out, "    %s_Drop_drop(%s);\n", base, expr);
-        return 0;
-    }
-    /* S1a-0 C2p-8: the nested field expression is generated text whose depth
-       is the payload's, so it is built in a growable block, not a row. */
-    if (tool::sh::ct_text_init(&at, &acap, 64) != 0) return -1;
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char *ft = self->sym->structs[si].fields[fi].type;
-        const char *dims = self->sym->structs[si].fields[fi].dims;
-        const char *fn = self->sym->structs[si].fields[fi].name;
-        if (dims[0]) {
-            /* one dimension of owning elements; a multi-dimensional array is
-               left to the explicit Drop body (the same rule the Drop glue
-               follows for pointer arrays). */
-            if (strchr(dims + 1, '[')) continue;
-            if (!Box_type_owns(self, ft, depth + 1)) continue;
-            fprintf(self->out,
-                    "    { int __ct_i; for (__ct_i = 0; __ct_i < "
-                    "(int)(sizeof((%s)->%s) / sizeof((%s)->%s[0])); __ct_i++)\n",
-                    expr, fn, expr, fn);
-            if (tool::sh::ct_text_reset(&at, &acap, 64) != 0
-                || tool::sh::ct_text_printf(&at, &acap, "&((%s)->%s[__ct_i])",
-                                            expr, fn) != 0) {
-                tool::sh::ct_text_free(&at, &acap);
-                return -1;
-            }
-            if (Box_emit_release_at(self, ft, at, depth + 1) != 0) {
-                tool::sh::ct_text_free(&at, &acap);
-                return -1;
-            }
-            fputs("    }\n", self->out);
-        } else if (Box_type_owns(self, ft, depth + 1)) {
-            if (tool::sh::ct_text_reset(&at, &acap, 64) != 0
-                || tool::sh::ct_text_printf(&at, &acap, "&((%s)->%s)",
-                                            expr, fn) != 0) {
-                tool::sh::ct_text_free(&at, &acap);
-                return -1;
-            }
-            if (Box_emit_release_at(self, ft, at, depth + 1) != 0) {
-                tool::sh::ct_text_free(&at, &acap);
-                return -1;
-            }
-        }
-    }
-    tool::sh::ct_text_free(&at, &acap);
-    return 0;
-}
 
 /* Copy one payload value into `*dst`, retaining the owning leaves. `dst` and
    `src` are pointer expressions of type T *. Scalar / pointer payloads are a
@@ -808,167 +558,8 @@ static int Box_emit_release_at(struct Emitter *self, const char *ctype, const ch
    (its `retain` method is written later than these helpers); a container or
    Box takes its own reference through `retain`; a plain struct copies every
    field and then fixes up the owning ones. */
-static int Box_emit_copy_at(struct Emitter *self, const char *ctype, const char *dst, const char *src, int depth)
-{
-    const char *base;
-    const char *b;
-    char *nd = 0;
-    char *ns = 0;
-    int ndcap = 0, nscap = 0;
-    int si, fi;
 
-    if (!ctype || !ctype[0] || depth > 16) return 0;
-    if (strchr(ctype, '*')) {
-        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
-        return 0;
-    }
-    b = ctype;
-    if (strncmp(b, "struct ", 7) == 0) b += 7;
-    else if (strncmp(b, "union ", 6) == 0 || strncmp(b, "enum ", 5) == 0) {
-        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
-        return 0;
-    }
-    base = base_type_text(b);
-    if (!base) return 0;
-    if (strcmp(base, "String") == 0 || strcmp(base, "U16String") == 0) {
-        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
-        fprintf(self->out,
-                "    if ((*(%s)).ptr != 0) {\n"
-                "        struct ct_str_hdr *__ct_h = (struct ct_str_hdr *)"
-                "((char *)(*(%s)).ptr - sizeof(struct ct_str_hdr));\n"
-                "        if (__ct_h->refs >= 0) __ct_h->refs = __ct_h->refs + 1;\n"
-                "    }\n", src, src);
-        return 0;
-    }
-    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
-        || strncmp(base, "Option_", 7) == 0
-        || strncmp(base, "Result_", 7) == 0
-        || inst_is_builtin_Box(base)) {
-        fprintf(self->out, "    *(%s) = %s_retain(%s);\n", dst, base, src);
-        return 0;
-    }
-    si = self->sym->find_struct(base);
-    if (si < 0) {
-        fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
-        return 0;
-    }
-    fprintf(self->out, "    *(%s) = *(%s);\n", dst, src);
-    /* S1a-0 C2p-8: both nested field expressions are generated text whose
-       length follows the payload depth, so they grow instead of being cut. */
-    if (tool::sh::ct_text_init(&nd, &ndcap, 64) != 0) return -1;
-    if (tool::sh::ct_text_init(&ns, &nscap, 64) != 0) {
-        tool::sh::ct_text_free(&nd, &ndcap);
-        return -1;
-    }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char *ft = self->sym->structs[si].fields[fi].type;
-        const char *dims = self->sym->structs[si].fields[fi].dims;
-        const char *fn = self->sym->structs[si].fields[fi].name;
-        int rc;
-        if (dims[0]) continue;          /* arrays are the explicit Drop body's */
-        if (!Box_type_owns(self, ft, depth + 1)) continue;
-        if (tool::sh::ct_text_reset(&nd, &ndcap, 64) != 0
-            || tool::sh::ct_text_printf(&nd, &ndcap, "&((%s)->%s)", dst, fn) != 0
-            || tool::sh::ct_text_reset(&ns, &nscap, 64) != 0
-            || tool::sh::ct_text_printf(&ns, &nscap, "&((%s)->%s)", src, fn) != 0) {
-            tool::sh::ct_text_free(&nd, &ndcap);
-            tool::sh::ct_text_free(&ns, &nscap);
-            return -1;
-        }
-        rc = Box_emit_copy_at(self, ft, nd, ns, depth + 1);
-        if (rc != 0) {
-            tool::sh::ct_text_free(&nd, &ndcap);
-            tool::sh::ct_text_free(&ns, &nscap);
-            return -1;
-        }
-    }
-    tool::sh::ct_text_free(&nd, &ndcap);
-    tool::sh::ct_text_free(&ns, &nscap);
-    return 0;
-}
 
-static int emit_Box_protos(struct Emitter *self, int u)
-{
-    int i, n;
-    struct StructInst *ins;
-    (void)u;
-
-    ins = frontend::sym::ct_insts(&n);
-    for (i = 0; ins && i < n; i++) {
-        if (!inst_is_builtin_Box(ins[i].name)) continue;
-        if (u >= 0 && ins[i].owner != u) continue;
-        fprintf(self->out,
-                "static __attribute__((unused)) struct %s %s__new(%s *);\n",
-                ins[i].name, ins[i].name, ins[i].ctype[0]);
-        fprintf(self->out,
-                "static __attribute__((unused)) struct %s %s__copy(%s *);\n",
-                ins[i].name, ins[i].name, ins[i].ctype[0]);
-        fprintf(self->out,
-                "static void __attribute__((unused)) %s__payload_release(%s *);\n",
-                ins[i].name, ins[i].ctype[0]);
-    }
-    return 0;
-}
-
-static int emit_Box_helpers(struct Emitter *self, int u)
-{
-    int i, n;
-    struct StructInst *ins;
-
-    ins = frontend::sym::ct_insts(&n);
-    for (i = 0; ins && i < n; i++) {
-        const char *ctype;
-        if (!inst_is_builtin_Box(ins[i].name)) continue;
-        if (u >= 0 && ins[i].owner != u) continue;
-        ctype = ins[i].ctype[0];
-        fprintf(self->out,
-                "static void __attribute__((unused)) %s__payload_release(%s *p)\n{\n",
-                ins[i].name, ctype);
-        if (!Box_type_owns(self, ctype, 0)) {
-            fputs("    (void)p;\n", self->out);
-        } else if (Box_emit_release_at(self, ctype, "p", 0) != 0) {
-            return -1;
-        }
-        fputs("}\n\n", self->out);
-        fprintf(self->out,
-                "static __attribute__((unused)) struct %s %s__new(%s *v)\n{\n",
-                ins[i].name, ins[i].name, ctype);
-        fputs("    struct ct_Box_hdr *h;\n", self->out);
-        fprintf(self->out, "    struct %s b;\n", ins[i].name);
-        fputs("    size_t off;\n", self->out);
-        fprintf(self->out,
-                "    off = ((sizeof(struct ct_Box_hdr) + _Alignof(%s) - 1)"
-                " / _Alignof(%s)) * _Alignof(%s);\n", ctype, ctype, ctype);
-        fputs("    h = (struct ct_Box_hdr *)malloc(off + sizeof(*v));\n"
-              "    if (h == 0) abort();\n"
-              "    h->refs = 1;\n"
-              "    h->aux = 0;\n"
-              "    b.h = h;\n", self->out);
-        fprintf(self->out, "    b.ptr = (%s *)((char *)h + off);\n", ctype);
-        fputs("    *b.ptr = *v;\n"
-              "    return b;\n"
-              "}\n\n", self->out);
-        fprintf(self->out,
-                "static __attribute__((unused)) struct %s %s__copy(%s *v)\n{\n",
-                ins[i].name, ins[i].name, ctype);
-        fputs("    struct ct_Box_hdr *h;\n", self->out);
-        fprintf(self->out, "    struct %s b;\n", ins[i].name);
-        fputs("    size_t off;\n", self->out);
-        fprintf(self->out,
-                "    off = ((sizeof(struct ct_Box_hdr) + _Alignof(%s) - 1)"
-                " / _Alignof(%s)) * _Alignof(%s);\n", ctype, ctype, ctype);
-        fputs("    h = (struct ct_Box_hdr *)malloc(off + sizeof(*v));\n"
-              "    if (h == 0) abort();\n"
-              "    h->refs = 1;\n"
-              "    h->aux = 0;\n"
-              "    b.h = h;\n", self->out);
-        fprintf(self->out, "    b.ptr = (%s *)((char *)h + off);\n", ctype);
-        if (Box_emit_copy_at(self, ctype, "b.ptr", "v", 0) != 0) return -1;
-        fputs("    return b;\n"
-              "}\n\n", self->out);
-    }
-    return 0;
-}
 
 /* ---- LANG-29 S2 / B3: the per-ADT retain / release glue ----------------
    One pair per owning ADT (the predicate is `adt_owns`), emitted with the same
@@ -978,446 +569,15 @@ static int emit_Box_helpers(struct Emitter *self, int u)
    and lets the last reference free the tree. A `Vec` / `Map` leaf is guarded on
    its zero handle: the built-in `release` aborts on `h == 0` (D29-12), while a
    zero-initialised ADT value legitimately holds one. */
-/* 1 when this variant carries at least one owning payload field. */
-static int adt_own_kind_variant(struct Emitter *self, int adi, int v)
-{
-    int f, n;
-    struct Adt *adts;
-    adts = frontend::sym::ct_adts(&n);
-    if (!adts || adi < 0 || adi >= n || v < 0 || v >= adts[adi].nvariants) return 0;
-    for (f = 0; f < adts[adi].variants[v].nfields; f++)
-        if (adt_own_kind(self, adts[adi].variants[v].fields[f].type, 0)) return 1;
-    return 0;
-}
 
-static int adt_emit_variant_life(struct Emitter *self, int adi, int v, int retain)
-{
-    int f, n;
-    struct Adt *adts;
-    char *lv = 0;
-    int lcap = 0;
-    adts = frontend::sym::ct_adts(&n);
-    if (!adts || adi < 0 || adi >= n || v < 0 || v >= adts[adi].nvariants) return 0;
-    if (tool::sh::ct_text_init(&lv, &lcap, 64) != 0) return -1;
-    for (f = 0; f < adts[adi].variants[v].nfields; f++) {
-        const char *ft = adts[adi].variants[v].fields[f].type;
-        const char *base;
-        const char *pfx;
-        if (!adt_own_kind(self, ft, 0)) continue;
-        pfx = sb_life_prefix_text(self, ft);
-        if (!pfx) continue;
-        base = adt_base_type_text(self, ft);
-        if (!base) { tool::sh::ct_text_free(&lv, &lcap); return -1; }
-        if (tool::sh::ct_text_reset(&lv, &lcap, 64) != 0
-            || tool::sh::ct_text_printf(&lv, &lcap, "self->u.%s.%s",
-                    adts[adi].variants[v].cname,
-                    adts[adi].variants[v].fields[f].name) != 0) {
-            tool::sh::ct_text_free(&lv, &lcap);
-            return -1;
-        }
-        if (retain)
-            fprintf(self->out, "        %s = %s_retain(&%s);\n", lv, pfx, lv);
-        else if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0)
-            fprintf(self->out, "        if ((%s).h != 0) (void)%s_release(&%s);\n",
-                    lv, pfx, lv);
-        else
-            fprintf(self->out, "        %s_release(&%s);\n", pfx, lv);
-    }
-    tool::sh::ct_text_free(&lv, &lcap);
-    return 0;
-}
 
-static int emit_adt_life_defs(struct Emitter *self, int u)
-{
-    int i, n, v, d;
-    struct Adt *adts;
-    adts = frontend::sym::ct_adts(&n);
-    if (!adts) return 0;
-    for (i = 0; i < n; i++) {
-        if (u >= 0 && adts[i].owner != u) continue;
-        if (adts[i].is_template) continue;
-        if (!adt_owns(self, i, 0)) continue;
-        d = (u >= 0 && adts[i].is_pub) ? 0 : 1;
-        if (d)
-            fprintf(self->out, "static __attribute__((unused)) struct %s %s_retain(struct %s *self)\n{\n",
-                    adts[i].full, adts[i].full, adts[i].full);
-        else
-            fprintf(self->out, "struct %s %s_retain(struct %s *self)\n{\n",
-                    adts[i].full, adts[i].full, adts[i].full);
-        for (v = 0; v < adts[i].nvariants; v++) {
-            if (!adt_own_kind_variant(self, i, v)) continue;
-            fprintf(self->out, "    if (self->tag == %d) {\n", v);
-            if (adt_emit_variant_life(self, i, v, 1) != 0) return -1;
-            fputs("    }\n", self->out);
-        }
-        fputs("    return *self;\n}\n\n", self->out);
-        if (d)
-            fprintf(self->out, "static __attribute__((unused)) void %s_release(struct %s *self)\n{\n",
-                    adts[i].full, adts[i].full);
-        else
-            fprintf(self->out, "void %s_release(struct %s *self)\n{\n",
-                    adts[i].full, adts[i].full);
-        fputs("    if (self == 0) return;\n", self->out);
-        for (v = 0; v < adts[i].nvariants; v++) {
-            if (!adt_own_kind_variant(self, i, v)) continue;
-            fprintf(self->out, "    if (self->tag == %d) {\n", v);
-            if (adt_emit_variant_life(self, i, v, 0) != 0) return -1;
-            fputs("    }\n", self->out);
-        }
-        fputs("}\n\n", self->out);
-    }
-    return 0;
-}
 
 /* The per-unit emission proper: everything from the banner to the last
    function, run with `self->out` already pointing at an open file. Every
    failure is a bare `return -1`; the method that opened the file closes it and
    drops the half-written artefact, so a failed build leaves nothing that looks
    like a real unit. */
-static int emit_unit_body(struct Emitter *self, int u)
-{
-    int n, i;
 
-    /* LANG-29 S1 / B1: the type writer runs per unit; record which unit and
-       which product so the ADT payload pre-emission places each shell once. */
-    backend::lir::lmod_plan_set_shell(u, 0);
-
-    /* SH-111: the same pre-emission assertion as compile mode, per unit. It
-       runs before the banner, so a refusal leaves no half-written product. */
-    if (self->invariant_check(self->units[u].prog) != 0) return -1;
-    fprintf(self->out, "/* Generated by ct v%s from %s -- do not edit; change the .ct and re-run ct. */\n",
-            self->version, self->path);
-    fputs("/* Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n",
-          self->out);
-    /* PH-66 R2: the headers the unit's own direct calls need, before anything
-       that may repeat them (the layer prologues below). */
-    if (self->io_mask & 1) fputs("#include <stdio.h>\n", self->out);
-    if (self->io_mask & 2) fputs("#include <wchar.h>\n", self->out);
-    /* Phase 84: this unit writes an ADT layout plus its offsetof assertions. */
-    if (unit_has_adt(u, 0)) fputs("#include <stddef.h>\n", self->out);
-    /* PH-64: with --alloc the target's allocator is declared here, so the
-       mapped calls below have a prototype without pulling <stdlib.h>. */
-    if (self->alloc_map && self->alloc_map[0]) {
-        fprintf(self->out, "extern void *%s(__SIZE_TYPE__);\n", self->alloc_m);
-        fprintf(self->out, "extern void %s(void *);\n", self->alloc_f);
-    }
-    if (self->runtime_checks && *self->runtime_checks) {
-        fputs("#include <stdio.h>\n#include <stdlib.h>\n", self->out);
-        fputs("static void *__attribute__((unused)) __ct_vt_guard(void *vt, const char *file, int line, const char *method)\n"
-              "{\n"
-              "    if (!vt) {\n"
-              "        fprintf(stderr, \"%s:%d: runtime check: null vtable in call to '%s'\\n\", file, line, method);\n"
-              "        abort();\n"
-              "    }\n"
-              "    return vt;\n"
-              "}\n\n",
-              self->out);
-    }
-    /* The imported `.m.ct` prologue leads the unit: the recipes call C
-       functions whose declarations (and macros) come from those lines. */
-    if (emit_map_prologues(self, u) != 0) return -1;
-    /* Only a `.h.ct` unit publishes a header, so only it includes one of
-       its own; an implementation unit's `.c` carries every declaration it
-       needs (the types are emitted below, no longer skipped as `pub`). */
-    if (self->units[u].is_hdr) {
-        int priv = 0;
-        int si2, fi2;
-        for (si2 = 0; si2 < self->sym->nstructs; si2++) {
-            int hp = 0, hv = 0;
-            if (self->sym->structs[si2].owner != u) continue;
-            if (self->sym->structs[si2].nuse > 0) continue;
-            for (fi2 = 0; fi2 < self->sym->structs[si2].nfields; fi2++) {
-                if (self->sym->structs[si2].fields[fi2].is_pub) hp = 1;
-                else hv = 1;
-            }
-            if (hp && hv) priv = 1;
-        }
-        if (priv) fputs("#define CT_UNIT_PRIVATE 1\n", self->out);
-        fprintf(self->out, "#include \"%s.h\"\n",
-                strcmp(self->units[u].base, "String") == 0
-                    ? "String_" : self->units[u].base);
-    }
-    for (i = 0; i < self->units[u].ndep; i++) {
-        if (self->units[self->units[u].depu[i]].is_map) continue;
-        fprintf(self->out, "#include \"%s.h\"\n",
-                self->units[u].dep + (size_t)i * MAX_TEXT);
-    }
-    /* Phase 29 E29-5: instances of the built-in templates are defined in the
-       layer's headers; the unit sees them although there is no import edge.
-       P34 S9a: the layer may span several files, so every layer header the
-       unit does not own is included. */
-    if (!g_plan) {
-        /* compile mode has no module plan; every loaded layer unit is
-           included, exactly as before S8. */
-        for (i = 0; i < self->nbuiltin; i++) {
-            int bu = self->builtins[i];
-            if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n",
-                    strcmp(self->units[bu].base, "String") == 0
-                        ? "String_" : self->units[bu].base);
-        }
-    } else {
-        for (i = 0; i < g_plan->nbhead; i++) {
-            if (g_plan->bunit[i] == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n", g_plan->bhead[i]);
-        }
-    }
-    fputs("\n", self->out);
-    if ((*self->line_mode)) fprintf(self->out, "#line 1 \"%s\"\n", self->path);
-
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
-        if (self->arena->nodes[n].kind == N_PP) {
-            if ((self->io_mask & 1)
-                && strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0) continue;
-            if ((self->io_mask & 2)
-                && strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0) continue;
-            fprintf(self->out, "%s\n", self->arena->nodes[n].text);
-        }
-    if (self->sym->atomic_used) {
-        fputs(
-"static inline __attribute__((unused)) int __ct_atomic_load_int(_Atomic(int) *p)\n"
-"{\n"
-"    return __atomic_load_n((int *)p, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) void __ct_atomic_store_int(_Atomic(int) *p, int v)\n"
-"{\n"
-"    __atomic_store_n((int *)p, v, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) _Bool __ct_atomic_cas_int(_Atomic(int) *p, int *e, int v)\n"
-"{\n"
-"    return __atomic_compare_exchange_n((int *)p, e, v, 0,\n"
-"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) long __ct_atomic_load_long(_Atomic(long) *p)\n"
-"{\n"
-"    return __atomic_load_n((long *)p, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) void __ct_atomic_store_long(_Atomic(long) *p, long v)\n"
-"{\n"
-"    __atomic_store_n((long *)p, v, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) _Bool __ct_atomic_cas_long(_Atomic(long) *p, long *e, long v)\n"
-"{\n"
-"    return __atomic_compare_exchange_n((long *)p, e, v, 0,\n"
-"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) _Bool __ct_atomic_load_bool(_Atomic(_Bool) *p)\n"
-"{\n"
-"    return __atomic_load_n((_Bool *)p, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) void __ct_atomic_store_bool(_Atomic(_Bool) *p, _Bool v)\n"
-"{\n"
-"    __atomic_store_n((_Bool *)p, v, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) _Bool __ct_atomic_cas_bool(_Atomic(_Bool) *p, _Bool *e, _Bool v)\n"
-"{\n"
-"    return __atomic_compare_exchange_n((_Bool *)p, e, v, 0,\n"
-"                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) void *__ct_atomic_load_ptr(_Atomic(void *) *p)\n"
-"{\n"
-"    return __atomic_load_n((void **)p, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) void __ct_atomic_store_ptr(_Atomic(void *) *p, void *v)\n"
-"{\n"
-"    __atomic_store_n((void **)p, v, __ATOMIC_SEQ_CST);\n"
-"}\n"
-"static inline __attribute__((unused)) _Bool __ct_atomic_cas_ptr(_Atomic(void *) *p, void **e, void *v)\n"
-"{\n"
-"    return __atomic_compare_exchange_n((void **)p, e, v, 0,\n"
-"                              __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n"
-"}\n"
-        , self->out);
-    }
-
-    if (g_slice_used && *g_slice_used) emit_slice_helpers(self);
-
-    if (self->emit_struct_fwd() != 0) return -1;
-    if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 2) != 0) return -1;
-    if (self->emit_vtable_fwd(self->units[u].prog) != 0) return -1;
-
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        /* raw blocks keep their source position relative to the declarations */
-        if (self->arena->nodes[n].kind == N_RAW_TEXT) {
-            if (emit_raw_text(self, n) != 0) return -1;
-            continue;
-        }
-        /* A `pub` struct/typedef/enum/union is in the header of a header
-           unit, so only a private one is emitted here; an implementation
-           unit has no header, so it emits all of them. */
-        if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
-             || self->arena->nodes[n].kind == N_ENUM || self->arena->nodes[n].kind == N_UNION)
-            && (self->arena->nodes[n].d != 1 || !self->units[u].is_hdr)) {
-            if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-        }
-    }
-
-    /* Phase 29: the monomorphised structs this unit must define, after every
-       plain type and before the prototypes that name them. */
-    if (emit_struct_insts(self, u, 0) != 0) return -1;
-    /* PH-81: the Box helpers are defined after the instance methods (which
-       call the payload-release helper), so their prototypes lead them. */
-    if (emit_Box_protos(self, u) != 0) return -1;
-    if (emit_struct_impls(self, u, 0) != 0) return -1;
-    if (emit_Box_helpers(self, u) != 0) return -1;
-    /* LANG-29 S2 / B3: after the container instance methods the glue calls. */
-    if (emit_adt_life_defs(self, u) != 0) return -1;
-    /* PH-80: literal blocks (the built-in layer header is already included). */
-    if (emit_string_literals(self, self->units[u].prog) != 0) return -1;
-
-    for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++)
-        if (self->emit_proto(i) != 0) return -1;
-
-    /* file-scope static assertions, after every type of this unit */
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
-        if (self->arena->nodes[n].kind == N_SASSERT)
-            if (self->emit_node(n, 0) != 0) return -1;
-
-    /* A `pub` global still needs its definition here (the header only
-       declares it), and an `extern` global needs nothing at all. The
-       initialiser may name a prototype emitted just above (D-6). */
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (self->arena->nodes[n].kind != N_GLOBAL || self->arena->nodes[n].aux == 2) continue;
-        if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-    }
-
-    if (self->emit_impls(self->units[u].prog) != 0) return -1;
-
-    if (self->emit_maps(u) != 0) return -1;
-
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next)
-        if (self->arena->nodes[n].kind == N_FUNC) {
-            int cur = self->sym->find_func(self->arena->nodes[n].text2);
-            /* a generic template has no C body of its own (Phase 26) */
-            if (cur >= 0 && self->sym->funcs[cur].ntparams > 0) continue;
-            /* the closure products of this function land above its definition */
-            if (emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0)
-                return -1;
-            if (self->emit_node(n, 0) != 0) return -1;
-        }
-    if (emit_generic_defs(self, u) != 0) return -1;
-
-    return 0;
-}
-
-/* The header writer's body, likewise with the sink already open. */
-static int write_unit_header_body(struct Emitter *self, int u, const char *guard)
-{
-    int n, i, pp;
-
-    /* LANG-29 S1 / B1: this is the header writer; the instance shells a pub
-       ADT needs may have to land in this header rather than the matching .c. */
-    backend::lir::lmod_plan_set_shell(u, 1);
-
-    fprintf(self->out, "#ifndef %s\n", guard);
-    fprintf(self->out, "#define %s\n", guard);
-    /* Phase 84: a `pub` ADT publishes its layout and `offsetof` assertions. */
-    if (unit_has_adt(u, 1)) fputs("#include <stddef.h>\n", self->out);
-    fputs("\n", self->out);
-    fprintf(self->out, "/* Generated by ct v%s from %s (multi-file mode: exported types; the matching .c\n"
-                   "   includes this header).\n"
-                   "   Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */\n\n",
-            self->version, self->path);
-    /* The exported types may name types from the source's own C includes,
-       so those lines lead the header. Only `#include` is copied: other `#`
-       lines belong to the implementation and would be duplicated. */
-    pp = 0;
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (self->arena->nodes[n].kind != N_PP) continue;
-        if (strncmp(self->arena->nodes[n].text, "#include", 8) != 0) continue;
-        fprintf(self->out, "%s\n", self->arena->nodes[n].text);
-        pp++;
-    }
-    /* PH-65 R5: a `.h.ct` that owns a shim publishes it, so a consumer that
-       only sees the generated header still gets the C surface. Avoid the
-       duplicate when the author already wrote the include. */
-    if (self->units[u].has_shim) {
-        char line[256];
-        int dup = 0;
-        snprintf(line, sizeof line, "#include \"%s.shim.h\"", self->units[u].base);
-        for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if (self->arena->nodes[n].kind != N_PP) continue;
-            if (strcmp(self->arena->nodes[n].text, line) == 0) {
-                dup = 1;
-                break;
-            }
-        }
-        if (!dup) fprintf(self->out, "%s\n", line);
-    }
-    if (pp > 0) fputs("\n", self->out);
-    for (i = 0; i < self->units[u].ndep; i++) {
-        if (self->units[self->units[u].depu[i]].is_map) continue;
-        fprintf(self->out, "#include \"%s.h\"\n",
-                self->units[u].dep + (size_t)i * MAX_TEXT);
-    }
-    if (self->units[u].ndep > 0) fputs("\n", self->out);
-    /* Phase 29 E29-5: a `pub` signature may name an instance defined in the
-       built-in layer's header. P34 S9a: include every layer header the unit
-       does not own. */
-    if (!g_plan) {
-        /* compile mode has no module plan; every loaded layer unit is
-           included, exactly as before S8. */
-        for (i = 0; i < self->nbuiltin; i++) {
-            int bu = self->builtins[i];
-            if (bu < 0 || bu >= *self->nunits || bu == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n",
-                    strcmp(self->units[bu].base, "String") == 0
-                        ? "String_" : self->units[bu].base);
-        }
-    } else {
-        for (i = 0; i < g_plan->nbhead; i++) {
-            if (g_plan->bunit[i] == u) continue;
-            fprintf(self->out, "#include \"%s.h\"\n", g_plan->bhead[i]);
-        }
-    }
-    if (self->nbuiltin > 0) fputs("\n", self->out);
-
-    if (self->emit_struct_fwd() != 0) return -1;
-    if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
-    if (self->emit_link_externs(self->units[u].prog, u) != 0) return -1;
-
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if ((self->arena->nodes[n].kind == N_STRUCT || self->arena->nodes[n].kind == N_TYPEDEF
-             || self->arena->nodes[n].kind == N_ENUM || self->arena->nodes[n].kind == N_UNION)
-            && self->arena->nodes[n].d == 1) {
-            if (self->emit_type_decl(n, 0, 1) != 0) return -1;
-        } else if (self->arena->nodes[n].kind == N_GLOBAL
-                   && (self->arena->nodes[n].d == 1 || self->arena->nodes[n].aux == 2)) {
-            if (self->emit_global_extern(n) != 0) return -1;
-        }
-    }
-
-    /* PH-48 D48-2: the exported Drop surface. A `pub` struct that `use Drop`
-       and is declared here publishes the real non-static prototype iff this
-       unit emits its body (an explicit impl here, or the recursive glue when
-       there is no impl anywhere). The prototype is the visibility bit a
-       consumer's `delete` relies on; an impl written in another unit leaves
-       the header silent, which is L48-2. */
-    for (i = 0; i < self->sym->nstructs; i++) {
-        if (!self->sym->structs[i].uses_drop) continue;
-        if (self->sym->structs[i].is_template || self->sym->structs[i].is_inst) continue;
-        if (!self->sym->structs[i].is_pub) continue;
-        if (self->sym->structs[i].owner != u) continue;
-        if (self->sym->structs[i].has_drop_impl
-            && !self->unit_has_drop_impl(u, i)) continue;
-        fprintf(self->out, "void %s_Drop_drop(void *);\n",
-                self->sym->structs[i].name);
-    }
-
-    /* Phase 29: a `pub` template publishes every instance of it here, so a
-       consumer only includes this header instead of repeating the layout. */
-    if (emit_struct_insts(self, u, 1) != 0) return -1;
-    if (emit_struct_impls(self, u, 1) != 0) return -1;
-
-    for (i = self->units[u].fn_start; i < self->units[u].fn_end; i++) {
-        if (!self->sym->funcs[i].is_pub || self->sym->funcs[i].is_static) continue;
-        if (self->emit_proto(i) != 0) return -1;
-    }
-    if (self->emit_inherent_protos(self->units[u].prog) != 0) return -1;
-
-    fputs("\n#endif\n", self->out);
-    return 0;
-}
 
 /* Phase 29 §2.3: one definition per monomorphised struct. The symbol table is
    build-wide, so the filter decides which unit owns which definition:
@@ -1434,92 +594,10 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
    already wrote. Emitting on first mention keeps both cases legal without a
    whole-type dependency sort. */
 
-static int emit_struct_insts(struct Emitter *self, int u, int header)
-{
-    int i, n, tn, tmpl;
-    struct StructInst *insts;
-    struct StructTmpl *tps;
-
-    insts = frontend::sym::ct_insts(&n);
-    tps = frontend::sym::ct_tmpls(&tn);
-    if (!insts || !tps) return 0;
-    for (i = 0; i < n; i++) {
-        int via_hdr;
-        if (insts[i].emitted) continue;
-        tmpl = insts[i].tmpl_row;
-        if (tmpl < 0) continue;
-        via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
-                  && self->units[tps[tmpl].owner].is_hdr;
-        if (header) {
-            if (!via_hdr || tps[tmpl].owner != u) continue;
-            /* P34 S8: an `Option` / `Result` instance whose element lives in the
-               consumer cannot be defined in the layer's header (the field is
-               incomplete there); the consumer writes it after the element. */
-            if (inst_elem_foreign(self, i)) continue;
-        } else {
-            /* P34 S8: a foreign-element instance is written by the unit that
-               named it -- the only one that can print the element. The
-               container layout is handle-only, so moving it costs the layer
-               nothing; `Option` / `Result` need it or the field is
-               incomplete. */
-            if (inst_elem_foreign(self, i)) {
-                if (u >= 0 && insts[i].owner != u) continue;
-            } else {
-                if (via_hdr) continue;
-                /* `u < 0` is compile mode: the one file owns every instance. */
-                if (u >= 0 && insts[i].owner != u) continue;
-            }
-        }
-        if (inst_emit_one(self, i) != 0) return -1;
-    }
-    return 0;
-}
 
 /* Bind the block's type parameters to the instance's arguments. The type
    printing paths read these two pairs, so a method's signature and body are
    written with `T`/`U` replaced by the concrete C spellings. */
-static void impl_inst_bind(struct Emitter *self, int ki, int ii)
-{
-    int k, n, nins, pi, at, nt;
-    struct StructImpl *im;
-    struct StructInst *ins;
-
-    im = frontend::sym::ct_impls(&n);
-    ins = frontend::sym::ct_insts(&nins);
-    self->gtntparam = 0;
-    self->ginst = "";
-    if (!im || !ins || ki < 0 || ki >= n || ii < 0 || ii >= nins) return;
-    nt = im[ki].ntparams;
-    self->gtparam = frontend::sym::ct_text_rows_reserve(self->gtparam, self->gtcap,
-                                                        nt, &self->gtcap);
-    self->gtarg = frontend::sym::ct_text_rows_reserve(self->gtarg, self->gtacap,
-                                                      nt, &self->gtacap);
-    if (nt > 0 && (!self->gtparam || self->gtcap < nt
-                   || !self->gtarg || self->gtacap < nt)) return;
-    {
-        /* keep the previous spelling on OOM: every reader indexes `ginst[0]` */
-        const char *g = runtime::text::ct_intern(ins[ii].name);
-        if (!g) return;
-        self->ginst = g;
-    }
-    self->gtntparam = nt;
-    for (pi = 0; pi < nt; pi++) {
-        at = -1;
-        for (k = 0; k < ins[ii].nargs; k++)
-            if (im[ki].tparam[pi] && im[ki].pat[k]
-                && strcmp(im[ki].pat[k], im[ki].tparam[pi]) == 0) {
-                at = k;
-                break;
-            }
-        if (at >= 0 && ins[ii].ctype[at]) {
-            self->gtparam[pi] = im[ki].tparam[pi];
-            self->gtarg[pi] = ins[ii].ctype[at];
-        } else {
-            self->gtparam[pi] = (const char *)0;
-            self->gtarg[pi] = (const char *)0;
-        }
-    }
-}
 
 /* P29-14 (V29-1): two inherent blocks can cover one instance -- `impl<V>
    Map<char *, V>` and `impl<K, V> Map<K, V>` both match `Map<char *, int>`.
@@ -1530,31 +608,6 @@ static void impl_inst_bind(struct Emitter *self, int ki, int ii)
    type parameters. The generic `impl<K,V> Map<K,V>` scores 0; a key block
    `impl<V> Map<String,V>` scores 1. A concrete block may be declared after the
    generic one and still own the method. */
-static int impl_method_shadowed(struct Emitter *self, int ki, int ii, const char *fname)
-{
-    int k, m, nimpls;
-    struct StructImpl *im;
-
-    im = frontend::sym::ct_impls(&nimpls);
-    if (!im) return 0;
-    for (k = 0; k < nimpls; k++) {
-        if (k == ki) continue;
-        if (im[k].use[0]) continue;
-        if (!frontend::sym::ct_impl_matches(k, ii)) continue;
-        /* Earlier blocks shadow only when they are at least as specific; a
-           later block shadows only when it is strictly more specific. This
-           lets the concrete `Map<String,V>` key block own the name no matter
-           which side of the generic block it is declared on. */
-        if (k < ki) {
-            if (emit_impl_score(im, k) < emit_impl_score(im, ki)) continue;
-        } else {
-            if (emit_impl_score(im, k) <= emit_impl_score(im, ki)) continue;
-        }
-        for (m = self->arena->nodes[im[k].node].a; m >= 0; m = self->arena->nodes[m].next)
-            if (strcmp(self->arena->nodes[m].text2, fname) == 0) return 1;
-    }
-    return 0;
-}
 
 /* D-028: the C-symbol suffix of an overloaded inherent method. The first
    declaration of a name in the block keeps `<T>_<name>` (byte-identical to
@@ -1566,173 +619,7 @@ static int impl_method_shadowed(struct Emitter *self, int ki, int ii, const char
    `<Inst>_<method>` symbol and is dispatched statically; a `use` block keeps the
    `<Inst>_<Trait>_<method>` spelling plus its vtable, so the vptr path stays
    exactly what a concrete impl already produces. */
-static int impl_emit_method(struct Emitter *self, int ki, int ii, int m, int header)
-{
-    int k, nimpls, ninsts, ntmpls, body, tmpl;
-    const char *iname;
-    const char *cname;
-    const char *cuse;
-    const char *mret;
-    const char *one;
-    const char *tname;
-    struct StructInst *ins;
-    struct StructTmpl *tps;
-    struct StructImpl *im;
-    int exported;
-    int statik;
 
-    ins = frontend::sym::ct_insts(&ninsts);
-    tps = frontend::sym::ct_tmpls(&ntmpls);
-    im = frontend::sym::ct_impls(&nimpls);
-    (void)nimpls;
-    (void)ntmpls;
-    iname = ins[ii].name;
-    tmpl = ins[ii].tmpl_row;
-    exported = tmpl >= 0 && tps[tmpl].is_pub && tps[tmpl].owner >= 0
-               && self->units[tps[tmpl].owner].is_hdr;
-    /* Phase 33 O3: a consumer copy is private to the unit that writes it, so it
-       stays `static` even when the template's header normally exports the name;
-       one copy per consumer unit links fine, two globals would not. */
-    if (inst_elem_foreign(self, ii)) exported = 0;
-    tname = frontend::sym::ct_impls(&nimpls)[ki].use;
-    /* Phase 35 S5a: a template impl's `use Iter<T>` is spelled per instance.
-       S1a-0 C2p-8: a formal-limit scratch block, so a 2000-byte trait
-       argument is not cut at the old 160-byte caller row. */
-    cuse = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
-    if (self->sym->impl_use_concrete(tname, ins[ii].nargs,
-                             ins[ii].carg, ins[ii].ctype, -1,
-                             (char *)cuse, TEXT_LIMIT) != 0)
-        return -1;
-    tname = cuse;
-    /* Phase 42: an inherent method is exported only when the source wrote
-       `pub` on it; trait methods keep their trait/vtable rules. */
-    if (!tname[0] && self->arena->nodes[m].d != 1) exported = 0;
-    /* An inherent name a more specific block already owns for this instance is
-       not emitted twice (V29-1); a trait method keeps its own symbol. */
-    if (!tname[0] && impl_method_shadowed(self, ki, ii, self->arena->nodes[m].text2))
-        return 0;
-    mret = self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void";
-    /* D-028: the suffix needs the instance substitution, so bind before the
-       name is built. A unique method name answers "" and keeps the symbol. */
-    impl_inst_bind(self, ki, ii);
-    if (tname[0])
-        cname = runtime::text::ct_internf("%s_%s_%s", iname, tname,
-                                          self->arena->nodes[m].text2);
-    else {
-        const char *suf = emit_overload_suffix(self, im[ki].node, m);
-        if (!suf) return self->fail("out of memory");
-        cname = runtime::text::ct_internf("%s_%s%s", iname,
-                                          self->arena->nodes[m].text2, suf);
-    }
-    if (!cname) return self->fail("out of memory");
-    g_sb.method = runtime::text::ct_intern(self->arena->nodes[m].text2);
-    g_sb.recv = iname;
-    if (!g_sb.method || !g_sb.recv) return self->fail("out of memory");
-    /* Phase 44: a postfix `?` in the body propagates the (instance-bound)
-       return type of the method. */
-    {
-        const char *sub = emit_gsub_type_text(self, mret);
-        self->cur_ret = sub ? sub : runtime::text::ct_intern(mret);
-        if (!self->cur_ret) return self->fail("out of memory");
-    }
-    /* P29-2: `c` marks a static (receiverless) method -- `Vec_int_from` takes
-       only its own parameters and gets no `_self` local. */
-    statik = self->arena->nodes[m].c;
-    if (header) {
-        if (!tname[0] && self->arena->nodes[m].d != 1) return 0;
-        if (self->emit_type_name(mret, cname) != 0) return -1;
-        if (statik) fputs("(", self->out);
-        else fputs("(void *self", self->out);
-        for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
-            fputs(statik ? (k == self->arena->nodes[m].a ? "" : ", ") : ", ", self->out);
-            if (self->emit_type_name_dims(self->arena->nodes[k].text,
-                                          self->arena->nodes[k].text2,
-                                          self->arena->nodes[k].text3) != 0) return -1;
-        }
-        fputs(");\n", self->out);
-        return 0;
-    }
-    if (!exported) fputs("static ", self->out);
-    /* A private method nothing calls is dead code; the attribute keeps the
-       output clean under -Wall, exactly like the Drop / Handback bodies. */
-    if (!exported) fputs("__attribute__((unused)) ", self->out);
-    if (self->emit_type_name(mret, cname) != 0) return -1;
-    if (statik) fputs("(", self->out);
-    else fputs("(void *self", self->out);
-    for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next) {
-        fputs(statik ? (k == self->arena->nodes[m].a ? "" : ", ") : ", ", self->out);
-        if (self->arena->nodes[k].aux == 2 || self->arena->nodes[k].aux == 3) {
-            const char *pbuf;
-            pbuf = tool::sh::ct_scratch_fmt("%s *", self->arena->nodes[k].text);
-            if (self->emit_type_name_dims(pbuf, self->arena->nodes[k].text2,
-                                          self->arena->nodes[k].text3) != 0) return -1;
-        } else if (self->emit_type_name_dims(self->arena->nodes[k].text,
-                                             self->arena->nodes[k].text2,
-                                             self->arena->nodes[k].text3) != 0) return -1;
-    }
-    fputs(") {\n", self->out);
-    if (!statik) {
-        one = tool::sh::ct_scratch_fmt("struct %s", iname);
-        fprintf(self->out, "    %s *_self = (%s *)self;\n", one, one);
-    }
-    /* SH-102: a by-value `String` / `U16String` parameter owns its reference
-       for the body; the same list is released before the closing brace. */
-    sb_push_params(self, self->arena->nodes[m].a, 0);
-    sb_retain_params(self, 1);
-    self->sym->self_mode = statik ? 0 : 1;
-    body = self->arena->nodes[m].b;
-    for (k = self->arena->nodes[m].a; k > 0; k = self->arena->nodes[k].next)
-        if (!self->node_mentions(body, self->arena->nodes[k].text2))
-            fprintf(self->out, "    (void)%s;\n", self->arena->nodes[k].text2);
-    if (!statik && !self->node_mentions(body, "self")) fputs("    (void)_self;\n", self->out);
-    for (k = self->arena->nodes[body].a; k >= 0; k = self->arena->nodes[k].next)
-        if (self->emit_node(k, 1) != 0) {
-            self->sym->self_mode = 0;
-            return -1;
-        }
-    sb_end_body(self, 1);
-    self->sym->self_mode = 0;
-    fputs("}\n\n", self->out);
-    return 0;
-}
-
-static int impl_emit_one(struct Emitter *self, int ki, int ii)
-{
-    int m, nimpls, ninsts;
-    const char *cuse;
-    struct StructImpl *im;
-    struct StructInst *ins;
-
-    im = frontend::sym::ct_impls(&nimpls);
-    ins = frontend::sym::ct_insts(&ninsts);
-    if (!im || !ins || ki < 0 || ki >= nimpls || ii < 0 || ii >= ninsts) return 0;
-    for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next)
-        if (impl_emit_method(self, ki, ii, m, 0) != 0) return -1;
-    if (im[ki].use[0]) {
-        int first = 1;
-        int builtin = (strcmp(im[ki].use, "Drop") == 0 || strcmp(im[ki].use, "Handback") == 0)
-                      && self->sym->find_trait(im[ki].use) < 0;
-        /* P36 S1a: the built-in `Drop`/`Handback` have no vptr, no vtable and
-           no vtable type, so a generic impl of them emits only the methods. */
-        if (!builtin) {
-            cuse = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
-            if (self->sym->impl_use_concrete(im[ki].use, ins[ii].nargs,
-                                     ins[ii].carg, ins[ii].ctype, -1,
-                                     (char *)cuse, TEXT_LIMIT) != 0)
-                return -1;
-            fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
-                    cuse, ins[ii].name, cuse);
-            for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next) {
-                if (!first) fputs(",\n", self->out);
-                fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
-                        ins[ii].name, cuse, self->arena->nodes[m].text2);
-                first = 0;
-            }
-            fputs("\n};\n\n", self->out);
-        }
-    }
-    return 0;
-}
 
 
 /* Phase 31 O3 (S5b): a user element type owns a resource when it declares both
@@ -1744,90 +631,11 @@ static int impl_emit_one(struct Emitter *self, int ki, int ii)
    when `ct_inst_find` misses we fall back to the struct row and match inherent
    impls by their N_IMPL `aux` (the struct row index). Without this,
    `Vec<Probe>` / `Vec<Str>` would never release their elements. */
-static int elem_has_life(struct Emitter *self, const char *elem)
-{
-    const char *base;
-    const char *want;
-    int inst, si, k, n, m, got_r, got_rel;
-    struct StructImpl *im;
-
-    if (frontend::sym::ct_is_container_type(elem)) return 1;
-    /* LANG-29 S2 / B3: an ADT element carries the compiler-written
-       `T_retain` / `T_release` pair, so the container glue binds to it. */
-    {
-        int adi = frontend::sym::ct_adt_from_type(elem);
-        if (adi >= 0) return adt_owns(self, adi, 0);
-    }
-    if (strncmp(elem, "struct ", 7) != 0) return 0;
-    /* S1a-0 C2p-8: a view of the element spelling plus one interned prefix,
-       so a 2000-byte element type is not cut at a 160 row. */
-    base = elem + 7;
-    want = runtime::text::ct_internf("struct %s", base);
-    if (!want) return 0;
-    im = frontend::sym::ct_impls(&n);
-    inst = frontend::sym::ct_inst_find(base);
-    if (inst >= 0) {
-        got_r = 0;
-        got_rel = 0;
-        for (k = 0; im && k < n; k++) {
-            if (im[k].use[0]) continue;
-            if (!frontend::sym::ct_impl_matches(k, inst)) continue;
-            for (m = self->arena->nodes[im[k].node].a; m >= 0;
-                 m = self->arena->nodes[m].next) {
-                if (strcmp(self->arena->nodes[m].text2, "release") == 0) got_rel = 1;
-                if (strcmp(self->arena->nodes[m].text2, "retain") == 0
-                    && self->arena->nodes[m].text[0]) {
-                    const char *ret = elem_ret_ctype(inst, self->arena->nodes[m].text);
-                    if (ret && strcmp(ret, want) == 0) got_r = 1;
-                }
-            }
-            if (got_r && got_rel) return 1;
-        }
-        return 0;
-    }
-    /* Plain struct: inherent impls are N_IMPL nodes in the arena (they are not
-       registered in the global ct_impls table, which only holds generic
-       impls). Walk the arena for N_IMPL nodes whose aux is this struct row. */
-    si = self->sym->find_struct(base);
-    if (si < 0) return 0;
-    got_r = 0;
-    got_rel = 0;
-    for (k = 0; k < self->arena->nnode; k++) {
-        if (self->arena->nodes[k].kind != N_IMPL) continue;
-        if (self->arena->nodes[k].aux != si) continue;
-        if (self->arena->nodes[k].text2[0]) continue;  /* trait impl */
-        for (m = self->arena->nodes[k].a; m >= 0;
-             m = self->arena->nodes[m].next) {
-            if (strcmp(self->arena->nodes[m].text2, "release") == 0) got_rel = 1;
-            if (strcmp(self->arena->nodes[m].text2, "retain") == 0
-                && self->arena->nodes[m].text[0]
-                && (strcmp(self->arena->nodes[m].text, base) == 0
-                    || strcmp(self->arena->nodes[m].text, want) == 0))
-                got_r = 1;
-        }
-        if (got_r && got_rel) return 1;
-    }
-    return 0;
-}
 
 /* Phase 31 O3: the unit that writes an instance's methods owns its helpers, so
    the filter follows the impl owner, not the instance owner (a Vec instance is
    created in the user's unit while `impl<T> Vec<T>` lives in the built-in
    unit). */
-static int inst_touched_by_unit(struct Emitter *self, int u, int ii)
-{
-    int k, n;
-    struct StructImpl *im;
-
-    (void)self;
-    if (u < 0) return 1;
-    im = frontend::sym::ct_impls(&n);
-    for (k = 0; im && k < n; k++) {
-        if (im[k].owner != u) continue;
-        if (frontend::sym::ct_impl_matches(k, ii)) return 1;
-    }
-    return 0;
-}
 
 /* Phase 33 O3: an instance whose element belongs to a unit other than the
    container template's own. The template's unit cannot print the element's
@@ -1852,92 +660,14 @@ static int inst_touched_by_unit(struct Emitter *self, int u, int ii)
 /* Phase 33 O3: which unit writes the element-lifecycle helper pair. A foreign
    element moves the pair to the unit that named the instance; every other case
    keeps the Phase 31 rule (the impl owner writes it). */
-static int inst_writes_helpers(struct Emitter *self, int u, int ii)
-{
-    int n;
-    struct StructInst *ins;
-
-    ins = frontend::sym::ct_insts(&n);
-    if (!ins || ii < 0 || ii >= n) return 0;
-    if (!inst_elem_foreign(self, ii)) return inst_touched_by_unit(self, u, ii);
-    if (u < 0) return 1;
-    return ins[ii].owner == u;
-}
 
 /* Phase 36 S1a: forward-declare a plain-struct element's retain/release so the
    elem helpers (emitted before the inherent method bodies) compile. The return
    type is read straight off the method node, the same spelling the definition
    uses. */
-static int inst_emit_elem_method_protos(struct Emitter *self, const char *elem)
-{
-    const char *base;
-    const char *want;
-    int si, k, m;
-
-    if (frontend::sym::ct_is_container_type(elem)) return 0;
-    if (strncmp(elem, "struct ", 7) != 0) return 0;
-    base = elem + 7;
-    si = self->sym->find_struct(base);
-    if (si < 0) return 0;
-    want = runtime::text::ct_internf("struct %s", base);
-    if (!want) return -1;
-    for (k = 0; k < self->arena->nnode; k++) {
-        if (self->arena->nodes[k].kind != N_IMPL) continue;
-        if (self->arena->nodes[k].aux != si) continue;
-        if (self->arena->nodes[k].text2[0]) continue;
-        for (m = self->arena->nodes[k].a; m >= 0; m = self->arena->nodes[m].next) {
-            const char *mname = self->arena->nodes[m].text2;
-            const char *rtype;
-            if (strcmp(mname, "retain") != 0 && strcmp(mname, "release") != 0)
-                continue;
-            rtype = self->arena->nodes[m].text[0]
-                    ? self->arena->nodes[m].text : "void";
-            /* Match the definition's linkage: private structs emit static
-               methods, pub structs emit external-linkage ones. */
-            if (!self->decl_is_pub(N_STRUCT, base)
-                || self->arena->nodes[m].d != 1)
-                fputs("static ", self->out);
-            fprintf(self->out, "%s %s_%s(%s *);\n", rtype, base, mname, want);
-        }
-    }
-    return 0;
-}
 
 /* Phase 31 O3: the definitions live after the instance methods, so a prototype
    pair must precede every body that calls them (compile mode has no header). */
-static int inst_emit_elem_protos(struct Emitter *self, int ii)
-{
-    int n;
-    struct StructInst *ins;
-    const char *elem;
-
-    ins = frontend::sym::ct_insts(&n);
-    if (!ins || ii < 0 || ii >= n) return 0;
-    if (strcmp(ins[ii].tmpl, "Vec") == 0) elem = ins[ii].ctype[0];
-    else if (strcmp(ins[ii].tmpl, "Map") == 0) elem = ins[ii].ctype[1];
-    else return 0;
-    /* Phase 36 S1a: a plain-struct element's retain/release are inherent
-       methods emitted after the elem helpers, so forward-declare them.
-       Container elements get their methods from the instance impls above. */
-    if (elem_has_life(self, elem) && inst_emit_elem_method_protos(self, elem) != 0)
-        return -1;
-    /* PH-47: a `Map` also stores its key by value. An owning key (`Str`) is
-       deep-copied and released by the key block in `lib/core/Vec.h.ct`, whose
-       bodies sit with the instance methods and call the key's `retain` /
-       `release` before those inherent definitions are written; compile mode has
-       no header to supply the prototypes, so forward-declare them here too.
-       The key is only a plain struct for the `Str` block (the other keys are
-       `int`, `long` or `char *`), so the other key blocks are unchanged. */
-    if (strcmp(ins[ii].tmpl, "Map") == 0
-        && elem_has_life(self, ins[ii].ctype[0])
-        && inst_emit_elem_method_protos(self, ins[ii].ctype[0]) != 0)
-        return -1;
-    fprintf(self->out, "static void %s__elem_retain(%s *e);\n",
-            ins[ii].name, elem);
-    fprintf(self->out, "static void %s__elem_release(%s *e);\n",
-            ins[ii].name, elem);
-    return 0;
-}
 
 /* Phase 31 O3: one pair of element lifecycle helpers per container instance.
    `retain`/`release` on an element type that owns a resource copy the bumped
@@ -1945,112 +675,7 @@ static int inst_emit_elem_protos(struct Emitter *self, int ii)
    itself a Vec / Map; every other element is non-owning and gets empty bodies.
    The calls in lib/core spell the reserved names and bind to these at emission
    time (`ginst`). */
-static int inst_emit_elem_helpers(struct Emitter *self, int ii)
-{
-    int n, life, handle;
-    struct StructInst *ins;
-    const char *elem;
-    const char *iname;
-    const char *ename;
 
-    ins = frontend::sym::ct_insts(&n);
-    if (!ins || ii < 0 || ii >= n) return 0;
-    if (strcmp(ins[ii].tmpl, "Vec") == 0) elem = ins[ii].ctype[0];
-    else if (strcmp(ins[ii].tmpl, "Map") == 0) elem = ins[ii].ctype[1];
-    else return 0;
-    iname = ins[ii].name;
-    handle = frontend::sym::ct_is_container_type(elem);
-    life = elem_has_life(self, elem);
-    ename = elem;
-    if (strncmp(ename, "struct ", 7) == 0) ename += 7;
-    fprintf(self->out,
-            "static void __attribute__((unused)) %s__elem_retain(%s *e)\n{\n",
-            iname, elem);
-    if (life) fprintf(self->out, "    *e = %s_retain(e);\n}\n\n", ename);
-    else fputs("    (void)e;\n}\n\n", self->out);
-    fprintf(self->out,
-            "static void __attribute__((unused)) %s__elem_release(%s *e)\n{\n",
-            iname, elem);
-    if (life && handle)
-        fprintf(self->out, "    if (e->h == 0) return;\n    (void)%s_release(e);\n}\n\n",
-                ename);
-    else if (life)
-        fprintf(self->out, "    (void)%s_release(e);\n}\n\n", ename);
-    else fputs("    (void)e;\n}\n\n", self->out);
-    return 0;
-}
-
-static int emit_struct_impls(struct Emitter *self, int u, int header)
-{
-    int ki, nimpls, i, ninsts, ntmpls, tmpl;
-    struct StructImpl *im;
-    struct StructInst *ins;
-    struct StructTmpl *tps;
-
-    im = frontend::sym::ct_impls(&nimpls);
-    ins = frontend::sym::ct_insts(&ninsts);
-    tps = frontend::sym::ct_tmpls(&ntmpls);
-    (void)ntmpls;
-    if (!im || !tps) return 0;
-    if (!header) {
-        /* SH-102 (compile mode): one merged program emits a container impl
-           (`Result<String, …>`) before the String layer's own prototypes, so a
-           call the automatic retain added had no declaration. Every struct is
-           complete by now (types are written before the impls), so declare the
-           four entry points here; an identical later prototype is harmless. */
-        if (self->cur_unit < 0
-            && self->sym->find_struct("String") >= 0
-            && self->sym->find_struct("U16String") >= 0)
-            fputs("struct String String_retain(struct String *);\n"
-                  "void String_release(struct String *);\n"
-                  "struct U16String U16String_retain(struct U16String *);\n"
-                  "void U16String_release(struct U16String *);\n", self->out);
-        for (i = 0; i < ninsts; i++) {
-            if (!inst_writes_helpers(self, u, i)) continue;
-            if (inst_emit_elem_protos(self, i) != 0) return -1;
-        }
-    }
-    for (ki = 0; ki < nimpls; ki++) {
-        tmpl = im[ki].tmpl_row;
-        if (header) {
-            int via_hdr;
-            if (tmpl < 0 || (u >= 0 && im[ki].owner != u)) continue;
-            via_hdr = tps[tmpl].is_pub && tps[tmpl].owner >= 0
-                      && self->units[tps[tmpl].owner].is_hdr;
-            if (!via_hdr || tps[tmpl].owner != u) continue;
-            for (i = 0; i < ninsts; i++) {
-                int m;
-                if (!frontend::sym::ct_impl_matches(ki, i)) continue;
-                /* Phase 33 O3: a foreign-element instance's methods are a
-                   private copy in the consumer, so the header declares none. */
-                if (inst_elem_foreign(self, i)) continue;
-                for (m = self->arena->nodes[im[ki].node].a; m >= 0;
-                     m = self->arena->nodes[m].next)
-                    if (impl_emit_method(self, ki, i, m, 1) != 0) return -1;
-            }
-            continue;
-        }
-        for (i = 0; i < ninsts; i++) {
-            if (!frontend::sym::ct_impl_matches(ki, i)) continue;
-            /* Phase 33 O3: the unit that named a foreign-element instance
-               writes its methods; every other instance belongs to the impl
-               owner (Phase 29/31). */
-            if (inst_elem_foreign(self, i)) {
-                if (u >= 0 && ins[i].owner != u) continue;
-            } else if (u >= 0 && im[ki].owner != u) {
-                continue;
-            }
-            if (impl_emit_one(self, ki, i) != 0) return -1;
-        }
-    }
-    if (!header) {
-        for (i = 0; i < ninsts; i++) {
-            if (!inst_writes_helpers(self, u, i)) continue;
-            if (inst_emit_elem_helpers(self, i) != 0) return -1;
-        }
-    }
-    return 0;
-}
 
 
 /* P-7.2: the erased slice representation and its helpers. A slice is
@@ -2061,39 +686,6 @@ static int emit_struct_impls(struct Emitter *self, int u, int header)
    (the bounds a literal array length already proved are checked again here
    for the forms only a length at run time can judge). All three are `static`
    and marked unused, so a program that never calls one stays warning-free. */
-static void emit_slice_helpers(struct Emitter *self)
-{
-    fputs("#include <stdio.h>\n#include <stdlib.h>\n", self->out);
-    fputs("struct __ct_slice { void *ptr; int len; };\n", self->out);
-    fputs("static void __attribute__((unused)) __ct_slice_check(struct __ct_slice *s, int i)\n"
-          "{\n"
-          "    if (i < 0 || i >= s->len) {\n"
-          "        fprintf(stderr, \"ct: slice index %d out of bounds (length %d)\\n\", i, s->len);\n"
-          "        exit(1);\n"
-          "    }\n"
-          "}\n"
-          "__attribute__((unused)) static void *__ct_slice_at(struct __ct_slice *s, int i, unsigned long esz)\n"
-          "{\n"
-          "    __ct_slice_check(s, i);\n"
-          "    return (char *)s->ptr + (unsigned long)i * esz;\n"
-          "}\n"
-          "__attribute__((unused)) static void *__ct_slice_get(struct __ct_slice s, int i, unsigned long esz)\n"
-          "{\n"
-          "    if (i < 0 || i >= s.len) return 0;\n"
-          "    return (char *)s.ptr + (unsigned long)i * esz;\n"
-          "}\n"
-          "__attribute__((unused)) static struct __ct_slice __ct_slice_range(void *p, int len, int lo, int hi, unsigned long esz, const char *where)\n"
-          "{\n"
-          "    struct __ct_slice s;\n"
-          "    if (lo < 0 || hi < lo || hi > len) {\n"
-          "        fprintf(stderr, \"%s: slice construction out of bounds: [%d,%d) for length %d\\n\", where, lo, hi, len);\n"
-          "        exit(1);\n"
-          "    }\n"
-          "    s.ptr = (char *)p + (unsigned long)lo * esz;\n"
-          "    s.len = hi - lo;\n"
-          "    return s;\n"
-          "}\n\n", self->out);
-}
 
 
 
@@ -2664,35 +1256,6 @@ impl EmitOps for Emitter {
 
     /* Build mode: the unit's exported surface (D34 fixes the naming rules, not
        the wording of the header). */
-    int write_unit_header(int u)
-    {
-        if (self->no_write) return 0;
-        char *path;
-        char *guard;
-        FILE *f;
-        int rc;
-        (void)self;
-
-        self->gprefix = self->units[u].nsprefix;
-        /* SH-120: the `String` unit's header would be `String.h`, which a
-           case-insensitive filesystem resolves for every `#include
-           <string.h>` once the output directory is on the include path. The
-           C unit stays `String.c` (the acceptance name); only its header is
-           `String_.h`, so libc's `string.h` is always the real one. */
-        {
-            const char *hb = strcmp(self->units[u].base, "String") == 0
-                             ? "String_" : self->units[u].base;
-            path = tool::sh::ct_scratch_fmt("%s/%s.h", *self->outdir, hb);
-            if (self->header_guard(hb, &guard) != 0) return -1;
-        }
-        f = fopen(path, "w");
-        if (!f) return self->fail("cannot write the header");
-        self->out = f;
-        self->path = self->units[u].path;
-        rc = write_unit_header_body(self, u, guard);
-        if (fclose(f) != 0 && rc == 0) rc = self->fail("cannot write the header");
-        return rc;
-    }
 
     /* JSON string body (no surrounding quotes). */
 
@@ -2838,36 +1401,6 @@ void ct_emit_bind_plan(struct LModulePlan *plan)
 /* `--alloc A[,B[,C[,D]]]` is parsed at emission time, not at bind time: the
    bind runs before the driver has read the command line. Defaults keep libc, so
    a build without --alloc is byte-identical to before. */
-static void sync_alloc(struct Emitter *e)
-{
-    const char *p;
-    int which;
-
-    snprintf(e->alloc_m, sizeof e->alloc_m, "malloc");
-    snprintf(e->alloc_f, sizeof e->alloc_f, "free");
-    snprintf(e->alloc_r, sizeof e->alloc_r, "realloc");
-    snprintf(e->alloc_c, sizeof e->alloc_c, "calloc");
-    if (!e->alloc_map || !e->alloc_map[0]) return;
-    p = e->alloc_map;
-    which = 0;
-    while (which < 4) {
-        const char *comma = strchr(p, ',');
-        size_t n = comma ? (size_t)(comma - p) : strlen(p);
-        char *dst = which == 0 ? e->alloc_m
-                  : which == 1 ? e->alloc_f
-                  : which == 2 ? e->alloc_r : e->alloc_c;
-        size_t cap = which == 0 ? sizeof e->alloc_m
-                   : which == 1 ? sizeof e->alloc_f
-                   : which == 2 ? sizeof e->alloc_r : sizeof e->alloc_c;
-        if (n > 0 && n < cap) {
-            memcpy(dst, p, n);
-            dst[n] = 0;
-        }
-        if (!comma) break;
-        p = comma + 1;
-        which++;
-    }
-}
 
 pub void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend);
 void ct_emit_bind_parse(int *nparams, void *pend_fields, int *npend)
