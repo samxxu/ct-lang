@@ -428,6 +428,13 @@ pub struct LModulePlan {
     int bunit[8];
     const char *bhead[8];
     int nbhead;
+    /* S8 shell: which writer is running, kept as module metadata instead of a
+       cross-unit global. `shell_u` is the unit whose product is being written
+       (-1 in compile mode) and `shell_header` says whether the writer is the
+       `.h` (1) or the `.c` (0). The type / instance-glue writers read it to
+       place each generic shell exactly once. */
+    int shell_u;
+    int shell_header;
 }
 
 static struct LModule g_lir;
@@ -436,10 +443,31 @@ static struct LModulePlan g_plan;
 pub struct LModulePlan *lmod_plan_get(void);
 pub void lmod_plan_set_live(int *live, int n);
 pub void lmod_plan_set_builtin_headers(int *bunit, const char **bhead, int n);
+pub void lmod_plan_set_shell(int u, int header);
+pub int lmod_plan_shell_u(void);
+pub int lmod_plan_shell_header(void);
 
 pub struct LModulePlan *lmod_plan_get(void)
 {
     return &g_plan;
+}
+
+/* S8 shell: the writer identity is a plan fact, so a child emit unit can read
+   it without a unit-scope global and without importing the host. */
+pub void lmod_plan_set_shell(int u, int header)
+{
+    g_plan.shell_u = u;
+    g_plan.shell_header = header;
+}
+
+pub int lmod_plan_shell_u(void)
+{
+    return g_plan.shell_u;
+}
+
+pub int lmod_plan_shell_header(void)
+{
+    return g_plan.shell_header;
 }
 
 pub void lmod_plan_set_live(int *live, int n)

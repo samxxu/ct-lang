@@ -248,6 +248,11 @@ pub struct Emitter {
        instead of a `char[MAX_UNITS]` stack row. */
     char *reach;
     int  reachcap;
+    /* S8 shell: the per-run "this generic instance shell was already walked"
+       state. It used to be a unit-scope `g_shell_emit_state` block; it is
+       emission scratch, so it lives on the instance (the struct grows). */
+    int *shell_emit_state;
+    int  shell_emit_cap;
     /* PH-53: optional-chain nodes whose receiver needs a `__ct_optN`
        temporary. The declaration is emitted at the statement head; the
        assignment stays in the ternary's condition so evaluation is lazy. */

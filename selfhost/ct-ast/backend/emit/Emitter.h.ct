@@ -2283,10 +2283,9 @@ static int emit_generic_defs(struct Emitter *self, int u)
 
 /* LANG-29 S1 / B1: the writer whose types are being emitted and whether it is
    the header writer, so the ADT payload pre-emission knows if an instance
-   definition is already visible through an included header. Declared before
-   `emit_unit_body`, which runs before the emit helpers below. */
-static int g_shell_u = -1;
-static int g_shell_header;
+   definition is already visible through an included header. S8 moved these
+   facts to `LModulePlan` (`lmod_plan_set_shell`): a child emit unit can read
+   them from the module metadata instead of a cross-unit global. */
 
 /* P-7.2: the parser's slice-use flag. It lives as a file-scope pointer rather
    than in `struct Emitter` (that struct is at the build's 64-field cap), and
@@ -2731,8 +2730,7 @@ static int emit_unit_body(struct Emitter *self, int u)
 
     /* LANG-29 S1 / B1: the type writer runs per unit; record which unit and
        which product so the ADT payload pre-emission places each shell once. */
-    g_shell_u = u;
-    g_shell_header = 0;
+    backend::lir::lmod_plan_set_shell(u, 0);
 
     /* SH-111: the same pre-emission assertion as compile mode, per unit. It
        runs before the banner, so a refusal leaves no half-written product. */
@@ -2959,8 +2957,7 @@ static int write_unit_header_body(struct Emitter *self, int u, const char *guard
 
     /* LANG-29 S1 / B1: this is the header writer; the instance shells a pub
        ADT needs may have to land in this header rather than the matching .c. */
-    g_shell_u = u;
-    g_shell_header = 1;
+    backend::lir::lmod_plan_set_shell(u, 1);
 
     fprintf(self->out, "#ifndef %s\n", guard);
     fprintf(self->out, "#define %s\n", guard);
@@ -3964,7 +3961,7 @@ static void emit_slice_helpers(struct Emitter *self)
  * limit is refused for the same reason a recursive walk needs a bound. A
  * pointer field (`N *next`) is not a layout dependency, so it is skipped.
  *
- * `g_shell_u` / `g_shell_header` name the writer that is running. An instance
+ * `LModulePlan.shell_u` / `shell_header` name the writer that is running. An instance
  * the template owner's header already defines is not repeated here; when the
  * owner's header is the one being written, it is not visible yet and the shell
  * must be emitted. Caps are the starting capacities (`MAX_LAYOUT_ADTS` 64,
@@ -3980,8 +3977,6 @@ static int *g_adt_layout_state;
 static int g_adt_layout_cap;
 static int *g_inst_layout_state;
 static int g_inst_layout_cap;
-static int *g_shell_emit_state;
-static int g_shell_emit_cap;
 
 static int ensure_adt_layout_state(int need)
 {
@@ -4017,20 +4012,21 @@ static int ensure_inst_layout_state(int need)
     return 0;
 }
 
-static int ensure_shell_emit_state(int need)
+static int ensure_shell_emit_state(struct Emitter *self, int need)
 {
     int cap;
     int *grown;
-    if (need <= g_shell_emit_cap) return 0;
-    cap = g_shell_emit_cap > 0 ? g_shell_emit_cap : MAX_LAYOUT_INSTS;
+    if (need <= self->shell_emit_cap) return 0;
+    cap = self->shell_emit_cap > 0 ? self->shell_emit_cap : MAX_LAYOUT_INSTS;
     while (cap < need && cap < CAP_LIMIT) cap *= 2;
     if (cap > CAP_LIMIT) cap = CAP_LIMIT;
     if (need > cap) return -1;
-    grown = (int *)realloc(g_shell_emit_state, (size_t)cap * sizeof(*grown));
+    grown = (int *)realloc(self->shell_emit_state, (size_t)cap * sizeof(*grown));
     if (!grown) return -1;
-    memset(grown + g_shell_emit_cap, 0, (size_t)(cap - g_shell_emit_cap) * sizeof(*grown));
-    g_shell_emit_state = grown;
-    g_shell_emit_cap = cap;
+    memset(grown + self->shell_emit_cap, 0,
+           (size_t)(cap - self->shell_emit_cap) * sizeof(*grown));
+    self->shell_emit_state = grown;
+    self->shell_emit_cap = cap;
     return 0;
 }
 
@@ -4150,10 +4146,11 @@ static int shell_owned_here(struct Emitter *self, int ii)
               && !inst_elem_foreign(self, ii);
     /* The owner's header is included before the types, except when it is the
        file being written now: that definition has not been reached yet. */
-    if (already && g_shell_header && tps[tmpl].owner == g_shell_u) already = 0;
+    if (already && backend::lir::lmod_plan_shell_header()
+        && tps[tmpl].owner == backend::lir::lmod_plan_shell_u()) already = 0;
     if (already) return 0;
-    if (g_shell_u < 0) return 1;
-    return ins[ii].owner == g_shell_u;
+    if (backend::lir::lmod_plan_shell_u() < 0) return 1;
+    return ins[ii].owner == backend::lir::lmod_plan_shell_u();
 }
 
 /* Emit `ii`'s shell after the shells its own by-value fields need. */
@@ -4164,18 +4161,18 @@ static int shell_preemit(struct Emitter *self, int ii, int depth)
 
     ins = frontend::sym::ct_insts(&n);
     if (!ins || ii < 0 || ii >= n) return 0;
-    if (ensure_inst_layout_state(n) != 0 || ensure_shell_emit_state(n) != 0)
+    if (ensure_inst_layout_state(n) != 0 || ensure_shell_emit_state(self, n) != 0)
         return self->fail("out of memory");
     if (depth > MAX_LAYOUT_DEPTH)
         return self->fail(tool::sh::ct_scratch_fmt(
             "a by-value ADT payload nests deeper than %d; use a pointer or a container",
             MAX_LAYOUT_DEPTH));
-    if (g_shell_emit_state[ii] == 2) return 0;
-    if (g_shell_emit_state[ii] == 1)
+    if (self->shell_emit_state[ii] == 2) return 0;
+    if (self->shell_emit_state[ii] == 1)
         return self->fail(tool::sh::ct_scratch_fmt(
             "generic instance '%s' is recursive by value; store a pointer instead",
             ins[ii].name));
-    g_shell_emit_state[ii] = 1;
+    self->shell_emit_state[ii] = 1;
     ti = self->sym->find_struct(ins[ii].name);
     if (ti >= 0) {
         for (j = 0; j < self->sym->structs[ti].nfields; j++) {
@@ -4185,7 +4182,7 @@ static int shell_preemit(struct Emitter *self, int ii, int depth)
     }
     if (!ins[ii].emitted && shell_owned_here(self, ii))
         if (inst_emit_one(self, ii) != 0) return -1;
-    g_shell_emit_state[ii] = 2;
+    self->shell_emit_state[ii] = 2;
     return 0;
 }
 
@@ -4199,8 +4196,8 @@ static int preemit_adt_payload(struct Emitter *self, int adi)
     adts = frontend::sym::ct_adts(&nadts);
     ins = frontend::sym::ct_insts(&n);
     if (!adts || !ins || adi < 0 || adi >= nadts) return 0;
-    if (ensure_shell_emit_state(n) != 0) return self->fail("out of memory");
-    for (i = 0; i < n; i++) g_shell_emit_state[i] = 0;
+    if (ensure_shell_emit_state(self, n) != 0) return self->fail("out of memory");
+    for (i = 0; i < n; i++) self->shell_emit_state[i] = 0;
     for (v = 0; v < adts[adi].nvariants; v++)
         for (f = 0; f < adts[adi].variants[v].nfields; f++) {
             /* v1-PH-2 S6: a payload that names another generic ADT instance
@@ -4289,7 +4286,7 @@ static int emit_adt_layout_body(struct Emitter *self, int adi, int n,
        the element glue and every copy site see it before its definition. A pub
        ADT publishes it from the header; a private one keeps it static. */
     if (adt_owns(self, adi, 0)) {
-        int link = adts[adi].is_pub && !g_shell_header ? 0 : 1;
+        int link = adts[adi].is_pub && !backend::lir::lmod_plan_shell_header() ? 0 : 1;
         fputs(link ? "static " : "", self->out);
         fprintf(self->out, "struct %s %s_retain(struct %s *);\n", tag, tag, tag);
         fputs(link ? "static " : "", self->out);
@@ -8143,8 +8140,7 @@ impl EmitOps for Emitter {
         self->errmsg = "";
         self->failline = 0;
         self->cur_unit = -1;
-        g_shell_u = -1;
-        g_shell_header = 0;
+        backend::lir::lmod_plan_set_shell(-1, 0);
         /* SH-111: assert the lowering invariants before the first byte is
            written. A legal program cannot fail this; a failure means the
            parser/lowering built an AST the emitter's contract does not cover. */
