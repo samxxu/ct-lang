@@ -349,6 +349,7 @@ pub struct ct_tvar {
     const char *spelling; /* the declaration's own type spelling */
     int is_static;      /* a function-local with static storage duration */
     int is_unused;      /* a match binding: `__attribute__((unused))` */
+    int has_attr;       /* an explicit GNU attribute on the declaration */
 }
 
 pub struct ct_tcleanup {

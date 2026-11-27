@@ -100,8 +100,27 @@ pub struct Verifier {
 
 pub int ct_verifier_run(struct TModule *m, int unit, struct ct_tmark *mark);
 pub int ct_verifier_errors(void);
+/* v1-PH-2 S8: when the default LIR path cannot prove a program it may fall
+   back to the AST body writer. The finding must not reach stderr in that
+   case (check-ast byte-compares diagnostics against the AST oracle), so the
+   caller silences the reporter and only reads the error count / return code.
+   `CT_LIR_STRICT=1` and an explicit `--ir=on` keep the reporter on. */
+pub void ct_verifier_set_quiet(int quiet);
+pub void ct_lir_verify_set_quiet(int quiet);
 
 static struct Verifier g_verifier;
+static int g_verifier_quiet;
+static int g_lir_quiet;
+
+pub void ct_verifier_set_quiet(int quiet)
+{
+    g_verifier_quiet = quiet ? 1 : 0;
+}
+
+pub void ct_lir_verify_set_quiet(int quiet)
+{
+    g_lir_quiet = quiet ? 1 : 0;
+}
 
 static void vfail(struct TModule *m, int file, int line, int col,
                   const char *code, const char *msg)
@@ -110,7 +129,8 @@ static void vfail(struct TModule *m, int file, int line, int col,
 
     path = "?";
     if (file > 0 && file <= m->nfiles) path = m->files[file - 1];
-    fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+    if (!g_verifier_quiet)
+        fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
     g_verifier.errors++;
 }
 
@@ -282,8 +302,9 @@ pub int ct_verifier_run(struct TModule *m, int unit, struct ct_tmark *mark)
     v_check_targets(m, mark);
     v_check_instances(m, mark);
     if (g_verifier.errors > 0) {
-        fprintf(stderr, "tir: verifier: %d TIR invariant failure(s) in this unit\n",
-                g_verifier.errors);
+        if (!g_verifier_quiet)
+            fprintf(stderr, "tir: verifier: %d TIR invariant failure(s) in this unit\n",
+                    g_verifier.errors);
         return -1;
     }
     return 0;
@@ -318,7 +339,8 @@ static void lfail(struct LModule *l, int file, int line, int col,
     m = backend::tir::tmod_get();
     path = "?";
     if (m && file > 0 && file <= m->nfiles) path = m->files[file - 1];
-    fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
+    if (!g_lir_quiet)
+        fprintf(stderr, "%s:%d:%d: error: %s [%s]\n", path, line, col, msg, code);
     g_lir_errors++;
 }
 
@@ -908,8 +930,9 @@ pub int ct_lir_verify(struct LModule *l)
         for (j = 0; j < f->nblocks; j++) lver_block(l, f, f->blocks[j]);
     }
     if (g_lir_errors > 0) {
-        fprintf(stderr, "lir: verifier: %d LIR invariant failure(s) in this unit\n",
-                g_lir_errors);
+        if (!g_lir_quiet)
+            fprintf(stderr, "lir: verifier: %d LIR invariant failure(s) in this unit\n",
+                    g_lir_errors);
         return -1;
     }
     return 0;

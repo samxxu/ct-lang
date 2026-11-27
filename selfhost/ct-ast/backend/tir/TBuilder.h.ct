@@ -1595,6 +1595,7 @@ static int tb_declare(struct TBuilder *tb, int n, int is_param, int is_self)
     m->vars[vid - 1].is_static = ar->nodes[n].aux == 1 ? 1 : 0;
     m->vars[vid - 1].is_unused =
         (!is_param && ar->nodes[n].aux == 3) ? 1 : 0;
+    m->vars[vid - 1].has_attr = ar->nodes[n].attr >= 0 ? 1 : 0;
     if (tb->func_decl > 0 && tb->scope > 0)
         m->vars[vid - 1].decl_stmt = 0;
     return vid;
