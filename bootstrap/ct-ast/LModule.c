@@ -148,6 +148,13 @@
 #define LX_CONTINUE         6
 #define LX_CONTINUE_ERR     7
 #define LX_GOTO             8
+#define LPS_PP          1   /* text: one preprocessor line to copy          */
+#define LPS_TYPE        3   /* node: struct/typedef/enum/union declaration  */
+#define LPS_GLOBAL      4   /* node: file-scope variable                    */
+#define LPS_SASSERT     5   /* node: file-scope `_Static_assert`            */
+#define LPS_FUNC        6   /* node: function definition/prototype          */
+#define LPS_DROP        7   /* node: struct row index, Drop surface         */
+#define LPS_RAW         8   /* node: raw C block (`#ct-raw`)                */
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -215,6 +222,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -277,12 +285,33 @@ struct tool_driver_Driver;
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+struct backend_lir_ct_lshellrow {
+    int kind;
+    int unit;
+    int node;
+    int aux;
+    const char * text;
+};
 struct backend_lir_LModulePlan * backend_lir_lmod_plan_get(void);
 void backend_lir_lmod_plan_set_live(int *, int);
 void backend_lir_lmod_plan_set_builtin_headers(int *, const char * *, int);
 void backend_lir_lmod_plan_set_shell(int, int);
 int backend_lir_lmod_plan_shell_u(void);
 int backend_lir_lmod_plan_shell_header(void);
+void backend_lir_lmod_plan_shell_reset(void);
+int backend_lir_lmod_plan_shell_add(int, int, int, int, const char *);
+int backend_lir_lmod_plan_row_count(void);
+int backend_lir_lmod_plan_row_kind(int);
+int backend_lir_lmod_plan_row_unit(int);
+int backend_lir_lmod_plan_row_node(int);
+int backend_lir_lmod_plan_row_aux(int);
+const char * backend_lir_lmod_plan_row_text(int);
+void backend_lir_lmod_plan_set_prog(int);
+int backend_lir_lmod_plan_prog(void);
+void backend_lir_lmod_plan_set_abi(int, int *, int);
+int backend_lir_lmod_plan_abi_root(void);
+int backend_lir_lmod_plan_abi_n(void);
+int backend_lir_lmod_plan_abi_export(int);
 struct backend_lir_LModule * backend_lir_lmod_get(void);
 void backend_lir_lmod_reset(struct backend_lir_LModule *);
 int backend_lir_lmod_type(struct backend_lir_LModule *, const char *);
@@ -310,6 +339,7 @@ void backend_lir_lmod_report_printed(struct backend_lir_LModule *);
 const char * backend_lir_lmod_temp_name(struct backend_lir_LModule *, int, int);
 int backend_lir_lmod_temp_num(struct backend_lir_LModule *, int, int);
 static int lir_reserve(void * *, int *, int, int);
+static struct backend_lir_ct_lshellrow * lmod_row(int);
 static int lir_type_kind(const char *);
 static int lir_add_int(int * *, int *, int *, int);
 static const char * lir_tmp_prefix(int);
@@ -408,6 +438,85 @@ void backend_lir_lmod_reset(struct backend_lir_LModule * self) {
     free(self->headers);
     memset(self, 0, (size_t)(sizeof((*self))));
     self->free_sym = "free";
+}
+void backend_lir_lmod_plan_shell_reset(void) {
+    backend_lir_g_plan.nsrows = 0;
+    backend_lir_g_plan.prog = 0;
+}
+int backend_lir_lmod_plan_shell_add(int kind, int unit, int node, int aux, const char * text) {
+    struct backend_lir_ct_lshellrow * r;
+    if (lir_reserve((&backend_lir_g_plan.srows), (&backend_lir_g_plan.srowcap), (backend_lir_g_plan.nsrows + 1), (int)(sizeof(struct backend_lir_ct_lshellrow))) != 0) {
+        return (-1);
+    }
+    r = ((struct backend_lir_ct_lshellrow *)(backend_lir_g_plan.srows) + backend_lir_g_plan.nsrows);
+    r->kind = kind;
+    r->unit = unit;
+    r->node = node;
+    r->aux = aux;
+    r->text = (text ? runtime_text_ct_intern(text) : "");
+    backend_lir_g_plan.nsrows++;
+    return 0;
+}
+int backend_lir_lmod_plan_row_count(void) {
+    return backend_lir_g_plan.nsrows;
+}
+static struct backend_lir_ct_lshellrow * lmod_row(int i) {
+    if (((i < 0) || (i >= backend_lir_g_plan.nsrows))) {
+        return 0;
+    }
+    return ((struct backend_lir_ct_lshellrow *)(backend_lir_g_plan.srows) + i);
+}
+int backend_lir_lmod_plan_row_kind(int i) {
+    struct backend_lir_ct_lshellrow * r = lmod_row(i);
+    return (r ? r->kind : 0);
+}
+int backend_lir_lmod_plan_row_unit(int i) {
+    struct backend_lir_ct_lshellrow * r = lmod_row(i);
+    return (r ? r->unit : (-1));
+}
+int backend_lir_lmod_plan_row_node(int i) {
+    struct backend_lir_ct_lshellrow * r = lmod_row(i);
+    return (r ? r->node : 0);
+}
+int backend_lir_lmod_plan_row_aux(int i) {
+    struct backend_lir_ct_lshellrow * r = lmod_row(i);
+    return (r ? r->aux : 0);
+}
+const char * backend_lir_lmod_plan_row_text(int i) {
+    struct backend_lir_ct_lshellrow * r = lmod_row(i);
+    return (r ? r->text : "");
+}
+void backend_lir_lmod_plan_set_prog(int prog) {
+    backend_lir_g_plan.prog = prog;
+}
+int backend_lir_lmod_plan_prog(void) {
+    return backend_lir_g_plan.prog;
+}
+void backend_lir_lmod_plan_set_abi(int root, int * exports, int n) {
+    int i;
+    if (n < 0) {
+        n = 0;
+    }
+    if (n > 256) {
+        n = 256;
+    }
+    backend_lir_g_plan.abi_root = root;
+    backend_lir_g_plan.abi_n = n;
+    for (i = 0; i < n; i++) {
+        backend_lir_g_plan.abi_exports[i] = (exports ? exports[i] : 0);
+    }
+}
+int backend_lir_lmod_plan_abi_root(void) {
+    return backend_lir_g_plan.abi_root;
+}
+int backend_lir_lmod_plan_abi_n(void) {
+    return backend_lir_g_plan.abi_n;
+}
+int backend_lir_lmod_plan_abi_export(int i) {
+    if (((i < 0) || (i >= backend_lir_g_plan.abi_n))) {
+        return (-1);
+    }
+    return backend_lir_g_plan.abi_exports[i];
 }
 static int lir_type_kind(const char * s) {
     size_t n;

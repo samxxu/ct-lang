@@ -26,6 +26,13 @@
 #line 1 "selfhost/ct-ast/frontend/module/Module.h.ct"
 #include "Module.shim.h"
 #define MAX_TEXT   160
+#define LPS_PP          1
+#define LPS_TYPE        3
+#define LPS_GLOBAL      4
+#define LPS_SASSERT     5
+#define LPS_FUNC        6
+#define LPS_DROP        7
+#define LPS_RAW         8
 #define MAX_UNITS  64
 #define CAP_LIMIT 65536
 #define MAX_IMPORTS 32
@@ -43,6 +50,10 @@
 #define N_ENUM    45
 #define N_ENUMVAL 46
 #define N_UNION   48
+#define N_PP       2
+#define N_FUNC     3
+#define N_SASSERT 55
+#define N_RAW_TEXT 58
 #define CYCLE_ROWS 256
 #define CYCLE_DEGREE 64
 struct ct_buf;
@@ -112,6 +123,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -178,6 +190,7 @@ extern void U16String_Drop_drop(void *self);
 static int mod_lir_body(const char *, void *, int, int, int *, int);
 static int ct_pkg_ns_clash(struct frontend_module_Module *, char * *, char * *);
 static int ct_shim_ambiguity(struct frontend_module_Module *, const struct frontend_module_Unit *, int);
+static int ct_shell_plan_add_program(struct frontend_module_Module *, int, int, int);
 static const char * cycle_file(struct frontend_module_Module *, int);
 static int cycle_is_builtin_Box(struct frontend_module_Module *, const char *);
 static int cycle_Box_target(struct frontend_module_Module *, int, int);
@@ -1552,6 +1565,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
             return 1;
         }
     }
+    backend_lir_lmod_plan_set_abi(_self->lib_root, _self->abi_exports, _self->abi_n);
     if (((tool_diag_ct_diag_nwarn() > 0) && (tool_diag_ct_diag_emit(_self->diag_json, 1) != 0))) {
         return 1;
     }
@@ -2190,6 +2204,15 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         if (_self->lib_mode) {
             const char * od = (_self->outdir_opt ? _self->outdir_opt : ".ctbuild");
             char * hp;
+            backend_lir_lmod_plan_shell_reset();
+            for (u = 0; u < _self->nunits; u++) {
+                if (_self->units[u].is_map) {
+                    continue;
+                }
+                if (ct_shell_plan_add_program(_self, _self->units[u].prog, u, _self->units[u].is_hdr) != 0) {
+                    return 1;
+                }
+            }
             if (_self->__frontend_module_moduleops_vptr->lib_scan(_self, root_u) != 0) {
                 return 1;
             }
@@ -2526,6 +2549,15 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
         backend_lir_lmod_plan_set_builtin_headers(bu, bh, nb);
     }
     backend_emit_ct_emit_bind_plan(backend_lir_lmod_plan_get());
+    backend_lir_lmod_plan_shell_reset();
+    for (u = 0; u < _self->nunits; u++) {
+        if (_self->units[u].is_map) {
+            continue;
+        }
+        if (ct_shell_plan_add_program(_self, _self->units[u].prog, u, _self->units[u].is_hdr) != 0) {
+            return frontend_parse_ct_parse_report();
+        }
+    }
     if (ct_shim_ambiguity(_self, _self->units, _self->nunits)) {
         return 1;
     }
@@ -2766,6 +2798,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_build_main(void *sel
 static int frontend_module_Module_frontend_module_ModuleOps_emit_program(void *self, int prog) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
     const char * why;
+    if ((!_self->build_mode)) {
+        backend_lir_lmod_plan_shell_reset();
+        backend_lir_lmod_plan_set_prog(prog);
+        if (ct_shell_plan_add_program(_self, prog, (-1), 0) != 0) {
+            return _self->__frontend_module_moduleops_vptr->fail(_self, "cannot build the emission plan");
+        }
+    }
     if (backend_emit_ct_emit_program(prog) != 0) {
         why = backend_emit_ct_emit_last_error();
         if (why[0]) {
@@ -3212,6 +3251,101 @@ static int ct_shim_ambiguity(struct frontend_module_Module * m, const struct fro
         }
     }
     (void)(m);
+    return 0;
+}
+static int ct_shell_plan_add_program(struct frontend_module_Module * self, int prog, int unit, int is_header) {
+    struct runtime_arena_Arena * ar = self->arena;
+    int n;
+    const struct frontend_module_Unit * uu = ((unit >= 0) ? (&self->units[unit]) : 0);
+    if (prog < 0) {
+        return 0;
+    }
+    for (n = ar->nodes[prog].a; n >= 0; n = ar->nodes[n].next) {
+        int k = ar->nodes[n].kind;
+        if (k == N_PP) {
+            const char * t = ar->nodes[n].text;
+            int aux = ((strncmp(t, "#include", 8) == 0) ? 1 : 0);
+            if (backend_lir_lmod_plan_shell_add(LPS_PP, unit, n, aux, t) != 0) {
+                return 1;
+            }
+        }
+        else {
+            if (k == N_RAW_TEXT) {
+                if (backend_lir_lmod_plan_shell_add(LPS_RAW, unit, n, 0, 0) != 0) {
+                    return 1;
+                }
+            }
+            else {
+                if (((((k == N_STRUCT) || (k == N_TYPEDEF)) || (k == N_ENUM)) || (k == N_UNION))) {
+                    if (backend_lir_lmod_plan_shell_add(LPS_TYPE, unit, n, ((ar->nodes[n].d == 1) ? 1 : 0), 0) != 0) {
+                        return 1;
+                    }
+                }
+                else {
+                    if (k == N_GLOBAL) {
+                        int aux = (((ar->nodes[n].d == 1) ? 1 : 0) | ((ar->nodes[n].aux == 2) ? 2 : 0));
+                        if (backend_lir_lmod_plan_shell_add(LPS_GLOBAL, unit, n, aux, 0) != 0) {
+                            return 1;
+                        }
+                    }
+                    else {
+                        if (k == N_SASSERT) {
+                            if (backend_lir_lmod_plan_shell_add(LPS_SASSERT, unit, n, 0, 0) != 0) {
+                                return 1;
+                            }
+                        }
+                        else {
+                            if (k == N_FUNC) {
+                                int cur = self->sym->__frontend_sym_symbolops_vptr->find_func(self->sym, ar->nodes[n].text2);
+                                int aux = (((cur >= 0) && (self->sym->funcs[cur].ntparams > 0)) ? 1 : 0);
+                                if (backend_lir_lmod_plan_shell_add(LPS_FUNC, unit, n, aux, 0) != 0) {
+                                    return 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (((!is_header) || (!uu))) {
+        return 0;
+    }
+{
+        int si;
+        for (si = 0; si < self->sym->nstructs; si++) {
+            int has_body = 0;
+            if ((!self->sym->structs[si].uses_drop)) {
+                continue;
+            }
+            if (self->sym->structs[si].is_template) {
+                continue;
+            }
+            if (self->sym->structs[si].is_inst) {
+                continue;
+            }
+            if ((!self->sym->structs[si].is_pub)) {
+                continue;
+            }
+            if (self->sym->structs[si].owner != unit) {
+                continue;
+            }
+            if (self->sym->structs[si].has_drop_impl) {
+                for (n = ar->nodes[self->units[unit].prog].a; n >= 0; n = ar->nodes[n].next) {
+                    if ((((ar->nodes[n].kind == N_IMPL) && (ar->nodes[n].aux == si)) && (strcmp(ar->nodes[n].text2, "Drop") == 0))) {
+                        has_body = 1;
+                        break;
+                    }
+                }
+                if ((!has_body)) {
+                    continue;
+                }
+            }
+            if (backend_lir_lmod_plan_shell_add(LPS_DROP, unit, si, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
     return 0;
 }
 static const char * cycle_file(struct frontend_module_Module * m, int si) {

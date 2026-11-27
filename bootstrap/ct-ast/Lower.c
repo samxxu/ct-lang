@@ -283,6 +283,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -2422,7 +2423,7 @@ static int lw_materialise(struct backend_lir_Lower * w, int * chain, int nchain,
     }
     for (ci = 0; ci < nchain; ci++) {
         struct backend_lir_ct_lscope * s = (&w->l->scopes[(chain[ci] - 1)]);
-        for (k = (s->ncleanups - 1); k >= 0; k--) {
+        for (k = 0; k < s->ncleanups; k++) {
             struct backend_lir_ct_lcleanup * c = (&w->l->cleanups[(s->cleanups[k] - 1)]);
             const char * base;
             int sid;
@@ -2691,6 +2692,9 @@ static int lw_tables_have_long_text(struct backend_lir_Lower * w, struct backend
         }
     }
     for (i = mark->nexprs; i < m->nexprs; i++) {
+        if (((m->exprs[i].kind == TK_STRING_LIT) || (m->exprs[i].kind == TK_RAW))) {
+            continue;
+        }
         if (((lw_text_long(m->exprs[i].text) || lw_text_long(m->exprs[i].member)) || lw_text_long(m->exprs[i].target_key))) {
             return 1;
         }
@@ -3283,6 +3287,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 w->l->stmts[(sid - 1)].name = v->name;
                 w->l->stmts[(sid - 1)].dims = (v->dims ? v->dims : "");
                 w->l->stmts[(sid - 1)].spelling = v->spelling;
+                w->l->stmts[(sid - 1)].attr = v->attr;
                 w->l->stmts[(sid - 1)].aux = (v->is_static ? 1 : 0);
                 w->l->stmts[(sid - 1)].err_edge = (v->is_unused ? 1 : 0);
                 w->l->stmts[(sid - 1)].scope = s->scope;
@@ -3307,12 +3312,8 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                         return 0;
                     }
                 }
-                if (v->has_attr) {
-                    lw_abort(w, "Lattr");
-                    return 0;
-                }
                 sp = backend_tir_tmod_cspell(w->m, v->type);
-                if ((lw_spelling_owns(w, sp, 0) || lw_spelling_glue(w, sp, 0))) {
+                if ((lw_spelling_by_value(sp) && (lw_spelling_owns(w, sp, 0) || lw_spelling_glue(w, sp, 0)))) {
                     lw_abort(w, "Lglue");
                     return 0;
                 }
@@ -3764,6 +3765,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 int step = 0;
                 int body_blk = 0;
                 int kid = 0;
+                int static_init = 0;
                 if ((s->flags & 1)) {
                     int k = s->kids[kid++];
                     if (k <= 0) {
@@ -3773,8 +3775,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                     if (((k <= w->m->nstmts) && (w->m->stmts[(k - 1)].kind == TS_DECL))) {
                         int vi = w->m->stmts[(k - 1)].aux;
                         if ((((vi > 0) && (vi <= w->m->nvars)) && w->m->vars[(vi - 1)].is_static)) {
-                            lw_abort(w, "Lstaticfor");
-                            return 0;
+                            static_init = 1;
                         }
                     }
                     if (lw_one_stmt(w, k, block, (&init)) != 0) {
@@ -3825,6 +3826,7 @@ static int lw_one_stmt(struct backend_lir_Lower * w, int tsid, int block, int * 
                 w->l->stmts[(sid - 1)].cond = cond;
                 w->l->stmts[(sid - 1)].step = step;
                 w->l->stmts[(sid - 1)].body_blk = body_blk;
+                w->l->stmts[(sid - 1)].aux = (static_init ? 1 : 0);
                 (*out) = sid;
                 return 0;
             }
@@ -5636,6 +5638,9 @@ static int lw_pw_decl(struct backend_lir_Lower * w, struct backend_lir_ct_lstmt 
     if (((!inline_form) && s->err_edge)) {
         fputs(" __attribute__((unused))", backend_lir_g_lir_out);
     }
+    if ((s->attr && s->attr[0])) {
+        fprintf(backend_lir_g_lir_out, " %s", s->attr);
+    }
     if ((s->zero_init && (s->expr <= 0))) {
         fputs(" = { 0 }", backend_lir_g_lir_out);
     }
@@ -5993,6 +5998,37 @@ static int lw_pw_stmt(struct backend_lir_Lower * w, int sid, int ind) {
             fputs(") ", backend_lir_g_lir_out);
             return lw_pw_block(w, s->body_blk, ind);
         case LS_FOR:
+            if (s->aux == 1) {
+                struct backend_lir_ct_lstmt * is;
+                if (((s->init_stmt <= 0) || (s->init_stmt > w->l->nstmts))) {
+                    return (-1);
+                }
+                is = (&w->l->stmts[(s->init_stmt - 1)]);
+                if (is->kind != LS_DECL) {
+                    return (-1);
+                }
+                lw_ind(ind);
+                fputs("{\n", backend_lir_g_lir_out);
+                if (lw_pw_decl(w, is, (ind + 1), 0) != 0) {
+                    return (-1);
+                }
+                lw_ind((ind + 1));
+                fputs("for (; ", backend_lir_g_lir_out);
+                if (((s->cond > 0) && (lw_pw_expr(w, s->cond, PW_COND) != 0))) {
+                    return (-1);
+                }
+                fputs("; ", backend_lir_g_lir_out);
+                if (((s->step > 0) && (lw_pw_expr(w, s->step, PW_INLINE) != 0))) {
+                    return (-1);
+                }
+                fputs(") ", backend_lir_g_lir_out);
+                if (lw_pw_block(w, s->body_blk, (ind + 1)) != 0) {
+                    return (-1);
+                }
+                lw_ind(ind);
+                fputs("}\n", backend_lir_g_lir_out);
+                return 0;
+            }
             lw_ind(ind);
             fputs("for (", backend_lir_g_lir_out);
             if (s->init_stmt > 0) {

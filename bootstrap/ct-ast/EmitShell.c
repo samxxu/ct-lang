@@ -30,6 +30,13 @@
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitShell.h.ct"
 #include "EmitShell.shim.h"
+#define LPS_PP          1
+#define LPS_TYPE        3
+#define LPS_GLOBAL      4
+#define LPS_SASSERT     5
+#define LPS_FUNC        6
+#define LPS_DROP        7
+#define LPS_RAW         8
 #define MAX_TEXT 160
 #define N_ENUM 45
 #define N_FUNC 3
@@ -110,6 +117,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -1134,15 +1142,37 @@ int backend_emit_emit_unit_body(struct backend_emit_Emitter * self, int u) {
     if ((*self->line_mode)) {
         fprintf(self->out, "#line 1 \"%s\"\n", self->path);
     }
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (self->arena->nodes[n].kind == N_PP) {
-            if (((self->io_mask & 1) && (strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0))) {
-                continue;
+{
+        int nr = backend_lir_lmod_plan_row_count();
+        int r;
+        if (nr > 0) {
+            for (r = 0; r < nr; r++) {
+                const char * t;
+                if (((backend_lir_lmod_plan_row_kind(r) != LPS_PP) || (backend_lir_lmod_plan_row_unit(r) != u))) {
+                    continue;
+                }
+                t = backend_lir_lmod_plan_row_text(r);
+                if (((self->io_mask & 1) && (strcmp(t, "#include <stdio.h>") == 0))) {
+                    continue;
+                }
+                if (((self->io_mask & 2) && (strcmp(t, "#include <wchar.h>") == 0))) {
+                    continue;
+                }
+                fprintf(self->out, "%s\n", t);
             }
-            if (((self->io_mask & 2) && (strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0))) {
-                continue;
+        }
+        else {
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                if (self->arena->nodes[n].kind == N_PP) {
+                    if (((self->io_mask & 1) && (strcmp(self->arena->nodes[n].text, "#include <stdio.h>") == 0))) {
+                        continue;
+                    }
+                    if (((self->io_mask & 2) && (strcmp(self->arena->nodes[n].text, "#include <wchar.h>") == 0))) {
+                        continue;
+                    }
+                    fprintf(self->out, "%s\n", self->arena->nodes[n].text);
+                }
             }
-            fprintf(self->out, "%s\n", self->arena->nodes[n].text);
         }
     }
     if (self->sym->atomic_used) {
@@ -1160,16 +1190,44 @@ int backend_emit_emit_unit_body(struct backend_emit_Emitter * self, int u) {
     if (self->__backend_emit_emitheader_vptr->emit_vtable_fwd(self, self->units[u].prog) != 0) {
         return (-1);
     }
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (self->arena->nodes[n].kind == N_RAW_TEXT) {
-            if (backend_emit_emit_raw_text(self, n) != 0) {
-                return (-1);
+{
+        int nr = backend_lir_lmod_plan_row_count();
+        int r;
+        if (nr > 0) {
+            for (r = 0; r < nr; r++) {
+                if (backend_lir_lmod_plan_row_unit(r) != u) {
+                    continue;
+                }
+                if (backend_lir_lmod_plan_row_kind(r) == LPS_RAW) {
+                    if (backend_emit_emit_raw_text(self, backend_lir_lmod_plan_row_node(r)) != 0) {
+                        return (-1);
+                    }
+                }
+                else {
+                    if (backend_lir_lmod_plan_row_kind(r) == LPS_TYPE) {
+                        if (((backend_lir_lmod_plan_row_aux(r) & 1) && self->units[u].is_hdr)) {
+                            continue;
+                        }
+                        if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, backend_lir_lmod_plan_row_node(r), 0, 1) != 0) {
+                            return (-1);
+                        }
+                    }
+                }
             }
-            continue;
         }
-        if ((((((self->arena->nodes[n].kind == N_STRUCT) || (self->arena->nodes[n].kind == N_TYPEDEF)) || (self->arena->nodes[n].kind == N_ENUM)) || (self->arena->nodes[n].kind == N_UNION)) && ((self->arena->nodes[n].d != 1) || (!self->units[u].is_hdr)))) {
-            if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, n, 0, 1) != 0) {
-                return (-1);
+        else {
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                if (self->arena->nodes[n].kind == N_RAW_TEXT) {
+                    if (backend_emit_emit_raw_text(self, n) != 0) {
+                        return (-1);
+                    }
+                    continue;
+                }
+                if ((((((self->arena->nodes[n].kind == N_STRUCT) || (self->arena->nodes[n].kind == N_TYPEDEF)) || (self->arena->nodes[n].kind == N_ENUM)) || (self->arena->nodes[n].kind == N_UNION)) && ((self->arena->nodes[n].d != 1) || (!self->units[u].is_hdr)))) {
+                    if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, n, 0, 1) != 0) {
+                        return (-1);
+                    }
+                }
             }
         }
     }
@@ -1196,19 +1254,49 @@ int backend_emit_emit_unit_body(struct backend_emit_Emitter * self, int u) {
             return (-1);
         }
     }
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (self->arena->nodes[n].kind == N_SASSERT) {
-            if (self->__backend_emit_emitexpr_vptr->emit_node(self, n, 0) != 0) {
-                return (-1);
+{
+        int nr = backend_lir_lmod_plan_row_count();
+        int r;
+        if (nr > 0) {
+            for (r = 0; r < nr; r++) {
+                if (((backend_lir_lmod_plan_row_kind(r) == LPS_SASSERT) && (backend_lir_lmod_plan_row_unit(r) == u))) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_node(self, backend_lir_lmod_plan_row_node(r), 0) != 0) {
+                        return (-1);
+                    }
+                }
+            }
+        }
+        else {
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                if (self->arena->nodes[n].kind == N_SASSERT) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_node(self, n, 0) != 0) {
+                        return (-1);
+                    }
+                }
             }
         }
     }
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (((self->arena->nodes[n].kind != N_GLOBAL) || (self->arena->nodes[n].aux == 2))) {
-            continue;
+{
+        int nr = backend_lir_lmod_plan_row_count();
+        int r;
+        if (nr > 0) {
+            for (r = 0; r < nr; r++) {
+                if ((((backend_lir_lmod_plan_row_kind(r) == LPS_GLOBAL) && (backend_lir_lmod_plan_row_unit(r) == u)) && (!(backend_lir_lmod_plan_row_aux(r) & 2)))) {
+                    if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, backend_lir_lmod_plan_row_node(r), 0, 1) != 0) {
+                        return (-1);
+                    }
+                }
+            }
         }
-        if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, n, 0, 1) != 0) {
-            return (-1);
+        else {
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                if (((self->arena->nodes[n].kind != N_GLOBAL) || (self->arena->nodes[n].aux == 2))) {
+                    continue;
+                }
+                if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, n, 0, 1) != 0) {
+                    return (-1);
+                }
+            }
         }
     }
     if (self->__backend_emit_emitdecl_vptr->emit_impls(self, self->units[u].prog) != 0) {
@@ -1217,17 +1305,41 @@ int backend_emit_emit_unit_body(struct backend_emit_Emitter * self, int u) {
     if (self->__backend_emit_emitdecl_vptr->emit_maps(self, u) != 0) {
         return (-1);
     }
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if (self->arena->nodes[n].kind == N_FUNC) {
-            int cur = self->sym->__frontend_sym_symbolops_vptr->find_func(self->sym, self->arena->nodes[n].text2);
-            if (((cur >= 0) && (self->sym->funcs[cur].ntparams > 0))) {
-                continue;
+{
+        int nr = backend_lir_lmod_plan_row_count();
+        int r;
+        if (nr > 0) {
+            for (r = 0; r < nr; r++) {
+                int fn;
+                if (((backend_lir_lmod_plan_row_kind(r) != LPS_FUNC) || (backend_lir_lmod_plan_row_unit(r) != u))) {
+                    continue;
+                }
+                if ((backend_lir_lmod_plan_row_aux(r) & 1)) {
+                    continue;
+                }
+                fn = backend_lir_lmod_plan_row_node(r);
+                if (backend_emit_emit_closures(self, self->arena->nodes[fn].text2, self->arena->nodes[fn].line) != 0) {
+                    return (-1);
+                }
+                if (self->__backend_emit_emitexpr_vptr->emit_node(self, fn, 0) != 0) {
+                    return (-1);
+                }
             }
-            if (backend_emit_emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0) {
-                return (-1);
-            }
-            if (self->__backend_emit_emitexpr_vptr->emit_node(self, n, 0) != 0) {
-                return (-1);
+        }
+        else {
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                if (self->arena->nodes[n].kind == N_FUNC) {
+                    int cur = self->sym->__frontend_sym_symbolops_vptr->find_func(self->sym, self->arena->nodes[n].text2);
+                    if (((cur >= 0) && (self->sym->funcs[cur].ntparams > 0))) {
+                        continue;
+                    }
+                    if (backend_emit_emit_closures(self, self->arena->nodes[n].text2, self->arena->nodes[n].line) != 0) {
+                        return (-1);
+                    }
+                    if (self->__backend_emit_emitexpr_vptr->emit_node(self, n, 0) != 0) {
+                        return (-1);
+                    }
+                }
             }
         }
     }
@@ -1777,37 +1889,76 @@ int backend_emit_write_unit_header_body(struct backend_emit_Emitter * self, int 
     if (self->__backend_emit_emitdecl_vptr->emit_link_externs(self, self->units[u].prog, u) != 0) {
         return (-1);
     }
-    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
-        if ((((((self->arena->nodes[n].kind == N_STRUCT) || (self->arena->nodes[n].kind == N_TYPEDEF)) || (self->arena->nodes[n].kind == N_ENUM)) || (self->arena->nodes[n].kind == N_UNION)) && (self->arena->nodes[n].d == 1))) {
-            if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, n, 0, 1) != 0) {
-                return (-1);
+{
+        int nr = backend_lir_lmod_plan_row_count();
+        int r;
+        if (nr > 0) {
+            for (r = 0; r < nr; r++) {
+                if (backend_lir_lmod_plan_row_unit(r) != u) {
+                    continue;
+                }
+                if (((backend_lir_lmod_plan_row_kind(r) == LPS_TYPE) && (backend_lir_lmod_plan_row_aux(r) & 1))) {
+                    if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, backend_lir_lmod_plan_row_node(r), 0, 1) != 0) {
+                        return (-1);
+                    }
+                }
+                else {
+                    if (((backend_lir_lmod_plan_row_kind(r) == LPS_GLOBAL) && (backend_lir_lmod_plan_row_aux(r) & 3))) {
+                        if (self->__backend_emit_emitdecl_vptr->emit_global_extern(self, backend_lir_lmod_plan_row_node(r)) != 0) {
+                            return (-1);
+                        }
+                    }
+                }
             }
         }
         else {
-            if (((self->arena->nodes[n].kind == N_GLOBAL) && ((self->arena->nodes[n].d == 1) || (self->arena->nodes[n].aux == 2)))) {
-                if (self->__backend_emit_emitdecl_vptr->emit_global_extern(self, n) != 0) {
-                    return (-1);
+            for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+                if ((((((self->arena->nodes[n].kind == N_STRUCT) || (self->arena->nodes[n].kind == N_TYPEDEF)) || (self->arena->nodes[n].kind == N_ENUM)) || (self->arena->nodes[n].kind == N_UNION)) && (self->arena->nodes[n].d == 1))) {
+                    if (self->__backend_emit_emitdecl_vptr->emit_type_decl(self, n, 0, 1) != 0) {
+                        return (-1);
+                    }
+                }
+                else {
+                    if (((self->arena->nodes[n].kind == N_GLOBAL) && ((self->arena->nodes[n].d == 1) || (self->arena->nodes[n].aux == 2)))) {
+                        if (self->__backend_emit_emitdecl_vptr->emit_global_extern(self, n) != 0) {
+                            return (-1);
+                        }
+                    }
                 }
             }
         }
     }
-    for (i = 0; i < self->sym->nstructs; i++) {
-        if ((!self->sym->structs[i].uses_drop)) {
-            continue;
+{
+        int nr = backend_lir_lmod_plan_row_count();
+        int r;
+        if (nr > 0) {
+            for (r = 0; r < nr; r++) {
+                if (((backend_lir_lmod_plan_row_kind(r) != LPS_DROP) || (backend_lir_lmod_plan_row_unit(r) != u))) {
+                    continue;
+                }
+                fprintf(self->out, "void %s_Drop_drop(void *);\n", self->sym->structs[backend_lir_lmod_plan_row_node(r)].name);
+            }
         }
-        if ((self->sym->structs[i].is_template || self->sym->structs[i].is_inst)) {
-            continue;
+        else {
+            for (i = 0; i < self->sym->nstructs; i++) {
+                if ((!self->sym->structs[i].uses_drop)) {
+                    continue;
+                }
+                if ((self->sym->structs[i].is_template || self->sym->structs[i].is_inst)) {
+                    continue;
+                }
+                if ((!self->sym->structs[i].is_pub)) {
+                    continue;
+                }
+                if (self->sym->structs[i].owner != u) {
+                    continue;
+                }
+                if ((self->sym->structs[i].has_drop_impl && (!self->__backend_emit_emitdecl_vptr->unit_has_drop_impl(self, u, i)))) {
+                    continue;
+                }
+                fprintf(self->out, "void %s_Drop_drop(void *);\n", self->sym->structs[i].name);
+            }
         }
-        if ((!self->sym->structs[i].is_pub)) {
-            continue;
-        }
-        if (self->sym->structs[i].owner != u) {
-            continue;
-        }
-        if ((self->sym->structs[i].has_drop_impl && (!self->__backend_emit_emitdecl_vptr->unit_has_drop_impl(self, u, i)))) {
-            continue;
-        }
-        fprintf(self->out, "void %s_Drop_drop(void *);\n", self->sym->structs[i].name);
     }
     if (backend_emit_emit_struct_insts(self, u, 1) != 0) {
         return (-1);

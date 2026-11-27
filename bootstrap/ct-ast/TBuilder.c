@@ -321,6 +321,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -1726,6 +1727,7 @@ static int tb_declare(struct backend_tir_TBuilder * tb, int n, int is_param, int
     m->vars[(vid - 1)].is_static = ((ar->nodes[n].aux == 1) ? 1 : 0);
     m->vars[(vid - 1)].is_unused = (((!is_param) && (ar->nodes[n].aux == 3)) ? 1 : 0);
     m->vars[(vid - 1)].has_attr = ((ar->nodes[n].attr >= 0) ? 1 : 0);
+    m->vars[(vid - 1)].attr = ((ar->nodes[n].attr >= 0) ? runtime_text_ct_intern(ar->__runtime_arena_arenaops_vptr->str_at(ar, ar->nodes[n].attr)) : "");
     if (((tb->func_decl > 0) && (tb->scope > 0))) {
         m->vars[(vid - 1)].decl_stmt = 0;
     }

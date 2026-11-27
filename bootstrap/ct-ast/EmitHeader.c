@@ -93,6 +93,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -854,10 +855,15 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_abi_header(void *s
     unsigned long h;
     FILE * f;
     (void)(_self);
-    if ((((!_self->abi_root) || (!_self->abi_exports)) || (!_self->abi_n))) {
-        return _self->__backend_emit_emitops_vptr->fail(_self, "ABI tables are not bound");
+    root = backend_lir_lmod_plan_abi_root();
+    n = backend_lir_lmod_plan_abi_n();
+    if (((root < 0) || (n <= 0))) {
+        if ((((!_self->abi_root) || (!_self->abi_exports)) || (!_self->abi_n))) {
+            return _self->__backend_emit_emitops_vptr->fail(_self, "ABI tables are not bound");
+        }
+        root = (*_self->abi_root);
+        n = (*_self->abi_n);
     }
-    root = (*_self->abi_root);
     if (((root < 0) || (root >= (*_self->nunits)))) {
         return _self->__backend_emit_emitops_vptr->fail(_self, "bad ABI root unit");
     }
@@ -891,12 +897,14 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_abi_header(void *s
         }
         upper[i] = c;
     }
-    n = (*_self->abi_n);
     if (n > 256) {
         n = 256;
     }
     for (i = 0; i < n; i++) {
-        order[i] = _self->abi_exports[i];
+        order[i] = backend_lir_lmod_plan_abi_export(i);
+        if (order[i] < 0) {
+            order[i] = _self->abi_exports[i];
+        }
     }
     for (i = 0; i < n; i++) {
         for (j = (i + 1); j < n; j++) {

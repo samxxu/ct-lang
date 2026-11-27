@@ -130,6 +130,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -493,7 +494,7 @@ static int lver_expect(struct backend_lir_LModule * l, int * chain, int nchain, 
     }
     for (ci = 0; ci < nchain; ci++) {
         struct backend_lir_ct_lscope * s = (&l->scopes[(chain[ci] - 1)]);
-        for (k = (s->ncleanups - 1); k >= 0; k--) {
+        for (k = 0; k < s->ncleanups; k++) {
             struct backend_lir_ct_lcleanup * c = (&l->cleanups[(s->cleanups[k] - 1)]);
             if ((((c->kind != CL_DROP) && (c->kind != CL_RELEASE)) && (c->kind != CL_HANDBACK))) {
                 continue;

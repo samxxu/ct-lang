@@ -182,6 +182,7 @@ struct backend_lir_ct_lfunc;
 struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
+struct backend_lir_ct_lshellrow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -4427,10 +4428,15 @@ int backend_emit_em_node_func(struct backend_emit_Emitter * self, int n, int ind
     if ((self->arena->nodes[n].aux || ((self->abi_mode && (*self->abi_mode)) && (self->arena->nodes[n].d == 0)))) {
         fputs("static ", self->out);
     }
-    if (((((((self->abi_mode && (*self->abi_mode)) && self->abi_root) && self->abi_exports) && self->abi_n) && (self->cur_unit == (*self->abi_root))) && (self->arena->nodes[n].d == 1))) {
+    if ((((self->abi_mode && (*self->abi_mode)) && (self->cur_unit == backend_lir_lmod_plan_abi_root())) && (self->arena->nodes[n].d == 1))) {
         int ai;
-        for (ai = 0; ai < (*self->abi_n); ai++) {
-            if (strcmp(self->sym->funcs[self->abi_exports[ai]].cname, self->arena->nodes[n].text2) == 0) {
+        int an = backend_lir_lmod_plan_abi_n();
+        for (ai = 0; ai < an; ai++) {
+            int fi = backend_lir_lmod_plan_abi_export(ai);
+            if (fi < 0) {
+                continue;
+            }
+            if (strcmp(self->sym->funcs[fi].cname, self->arena->nodes[n].text2) == 0) {
                 fputs("__attribute__((visibility(\"default\"))) ", self->out);
                 break;
             }
