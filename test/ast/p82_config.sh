@@ -13,6 +13,9 @@
 #     warning class.
 #
 # Usage: sh test/ast/p82_config.sh <ct-ast>
+# S9: the c-boundary assertions below test the real default; do not let
+# the harness temp-allow branch mask it.
+export CT_STRICT_BOUNDARY=1
 set -u
 export CT_C_BOUNDARY=allow
 ctast=${1:?usage: p82_config.sh <ct-ast>}
