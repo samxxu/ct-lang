@@ -414,3 +414,19 @@ v0-PH-52 的 D52-6 指向本条。
 
 > 方向与契约见 [pointer-free-v2](../proposals/pointer-free-v2.md)，裁定见 [D-011](../decisions/D-011.md)，
 > phase 排期见 [pointer-free-phase-plan](pointer-free-phase-plan.md)。实现方案不在本池展开。
+
+## REQ-STD-COVER-1 — 消费者无需为空 shim 付费（std 覆盖）
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-STD-COVER-1` |
+| `what` | `ct-pkg/std` 补齐日常任务所需能力（打印、字符串比较与查找、内存与缓冲、文件读写、时间/环境），使普通消费者在 strict C 边界下完成常见任务时**不需要写 `.shim.h`、也不需要直接调 libc**。 |
+| `why` | strict 的本意是让"直接调 C"留痕，而不是让每个消费者为 `printf`/`strcmp`/`fopen` 各写一个空 shim。2026-11-28 排查 selfhost 时确认：63/66 个 shim 只有 `#include`；同样的成本会落在消费者身上。编译器侧的豁免只解决 selfhost（[D-032](../decisions/D-032.md)），消费者侧的答案是 std 覆盖，而不是放宽 strict。 |
+| `priority` | P2 |
+| `status` | `planned`（待 CTPKG 评估；已随 D-032 提出） |
+| `owner` | CTPKG（包侧实施）；REQ（需求验收） |
+| `last-touched` | 2026-11-28 |
+| `block` | 需先在包仓列出"常见任务 → 现有 std 能力 → 缺口"清单；不阻塞本仓 v1.2 收口 |
+
+> 边界：本条只主张**能力覆盖**，不主张新增语言语法；`#include` 的 strict 默认不变，
+> 补头集合（spec §4.67）也不因本条扩张。缺口清单与 API 形态由 CTPKG 提包提案。
