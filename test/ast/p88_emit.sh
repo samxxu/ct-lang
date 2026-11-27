@@ -43,7 +43,12 @@ cat >"$tmp/check.py" <<'PY'
 import glob, os, re, sys
 
 root = sys.argv[1]
-src = open(os.path.join(root, "selfhost/ct-ast/backend/emit/Emitter.h.ct"), encoding="utf-8").read()
+# v1-PH-2 S8 tail: the five dispatchers live in EmitExpr (expr/node/inline/
+# field) and EmitDecl (type decl) after the D5/D6 pure move; the host keeps
+# the entry points. The inventory reads all three units as one program.
+UNITS = ["Emitter.h.ct", "EmitExpr.h.ct", "EmitDecl.h.ct"]
+src = "\n".join(open(os.path.join(root, "selfhost/ct-ast/backend/emit", u),
+                     encoding="utf-8").read() for u in UNITS)
 arena = open(os.path.join(root, "selfhost/ct-ast/runtime/arena/Arena.h.ct"), encoding="utf-8").read()
 
 # kind -> the helper its arm must call. The 76 entries are the 76 em_*
@@ -228,7 +233,9 @@ for fn, want in EXPECT.items():
                 problems.append("%s: %s arm does not call %s" % (fn, kind, extra))
 
 for name in sorted(seen_helpers):
-    m2 = re.search(r"^static int " + re.escape(name) + r"\(", src, re.M)
+    # require a definition, not the exported prototype: the line ends with `)`
+    # (a prototype ends with `;`), and the body brace follows it
+    m2 = re.search(r"^(?:static|pub) int " + re.escape(name) + r"\([^;]*\)$", src, re.M)
     if not m2:
         problems.append("slice %s is called but not defined" % name)
         continue
@@ -261,7 +268,7 @@ fi
 
 # 2) the inventory must be able to fail: delete the N_NUM arm in a source copy
 #    and require the compiler to reject it at the match (not a silent fallback).
-if python3 - "$src" "$tmp/mut/Emitter.h.ct" <<'PY'
+if python3 - "selfhost/ct-ast/backend/emit/EmitExpr.h.ct" "$tmp/mut/EmitExpr.h.ct" <<'PY'
 import re, sys, os
 src = open(sys.argv[1], encoding="utf-8").read()
 pat = re.compile(r"            NodeKind\.NK_NUM\(\) => \{\n"
@@ -275,7 +282,7 @@ PY
 then
     rm -rf "$tmp/mut/tree" "$tmp/mut/out"
     cp -R selfhost/ct-ast "$tmp/mut/tree"
-    cp "$tmp/mut/Emitter.h.ct" "$tmp/mut/tree/backend/emit/Emitter.h.ct"
+    cp "$tmp/mut/EmitExpr.h.ct" "$tmp/mut/tree/backend/emit/EmitExpr.h.ct"
     mkdir -p "$tmp/mut/out"
     if CT_C_BOUNDARY=allow "$CT" build --emit-c -I "$tmp/mut/tree" \
             "$tmp/mut/tree/main.ct" -o "$tmp/mut/out" \

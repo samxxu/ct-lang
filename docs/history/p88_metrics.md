@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=9872 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=1541 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=91573 io_cap=2048
+     emitted_before=48223 emitted_after=91853 io_cap=2048
      (SH-117 后复测：out/ref owning 赋值点补 release 旧值（sb_assign）并把 ref/out
       形参登记进类型表（sb_push_params），Emitter.h.ct 9814 -> 9830；P-3.5 的
       `String`/`Str` → `char *` 检查与 `ref` 显式 release 硬错在 Expr.h.ct，
@@ -294,6 +294,15 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   发射 C 90652 → 90830（+178：新增 EmitHeader 单元与它的 vtable/初始化形状；
   82 语料与自举 C 树逐字节相同）。切片清单仍为 76（D4 搬的是外壳方法，不是
   `em_*` kind 切片）。
+- **v1-PH-2 S8 尾（D6 + D5 + 外壳 EmitShell）后的 live 校准**：`Emitter.h.ct`
+  9872 → 1541 行（-8331：D6 的五个分发器与 147 个 `em_*` / `sb_*` /
+  `match_*` 自由函数搬入 `EmitExpr.h.ct`；D5 的 `emit_type_decl` /
+  `emit_impls` 与 27 个胶水函数搬入 `EmitDecl.h.ct`；`write_unit_header(_body)` /
+  `emit_unit_body` 与 28 个外壳函数搬入新单元 `EmitShell.h.ct`），发射 C
+  91573 → 91853（+280：三个编写单元的 head / 前置声明、vtable 与单元边界；
+  82 语料与自举 C 树逐字节相同，seed 两轮逐字节）。切片清单仍为 76
+  （34/26/6/8/2），判别式仍各读 1 次，现分布在 `EmitExpr.h.ct`
+  （expr / node / inline / field）与 `EmitDecl.h.ct`（decl）。
 - **v1-PH-2 S7-c（REQ-MEM-2 写入摘要）后的 live 校准**：`Emitter.h.ct` 仍为
   11065 行；新增 `frontend/parse/Mem2Writes.h.ct` 一个单元，发射 C 87080 → 87839
   （+759：定义出口的直接写扫描、一层组合与调用点判定）。发射器与切片清单不变。

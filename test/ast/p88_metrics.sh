@@ -55,11 +55,16 @@ else
     bad "Emitter.h.ct lines are $actual_before -> $actual_after, doc says $emitter_before -> $emitter_after"
 fi
 
-actual_slices=$(( $(grep -c '^static int em_expr_' "$src") \
-                 + $(grep -c '^static int em_node_' "$src") \
-                 + $(grep -c '^static int em_decl_' "$src") \
-                 + $(grep -c '^static int em_inline_' "$src") \
-                 + $(grep -c '^static int em_field_' "$src") ))
+# v1-PH-2 S8 tail: the D5/D6 split moved the slices out of Emitter.h.ct into
+# EmitExpr.h.ct (expr/node/inline/field) and EmitDecl.h.ct (decl), so the
+# inventory counts the emit units, not just the host.
+slice_srcs="selfhost/ct-ast/backend/emit/*.h.ct"
+count_slices() {
+    cat $slice_srcs | grep -E "^(static|pub) int $1" | grep -vc ';$'
+}
+actual_slices=$(( $(count_slices em_expr_) + $(count_slices em_node_) \
+                 + $(count_slices em_decl_) + $(count_slices em_inline_) \
+                 + $(count_slices em_field_) ))
 if [ "$slices" = "76" ] && [ "$actual_slices" = "76" ] \
    && [ "$expr_s" -eq 34 ] && [ "$node_s" -eq 26 ] && [ "$decl_s" -eq 6 ] \
    && [ "$inline_s" -eq 8 ] && [ "$field_s" -eq 2 ]; then

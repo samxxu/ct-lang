@@ -1,11 +1,13 @@
 #!/bin/sh
 # TEST-25 probe: white-box unit tests for ct-ast's pure slice helpers.
 #
-# ct-ast is Ct source; its `em_*` / `ctype_*` / `tc_expr_*` slices are `static`
-# inside one emitted translation unit, and the compiler offers no way to import
-# a unit for testing. So the probe uses the same recipe as the L0 unit layer:
-# build the C tree once, then include the generated unit in a small C harness
-# and link every other unit normally. No gtest and no third-party framework.
+# ct-ast is Ct source; most `ctype_*` / `tc_expr_*` slices are `static` inside
+# one emitted translation unit, and the compiler offers no way to import a unit
+# for testing. So the probe uses the same recipe as the L0 unit layer: build the
+# C tree once, then include the generated unit in a small C harness and link
+# every other unit normally. `em_expr_num` became an exported `pub` function in
+# v1-PH-2 S8 tail, so the emitter harness calls it and links `EmitExpr.o`. No
+# gtest and no third-party framework.
 #
 # The three harnesses live beside this script:
 #   test25_unit_typecheck.c   tc_expr_num / tc_expr_fnum / type_key

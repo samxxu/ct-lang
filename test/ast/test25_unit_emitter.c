@@ -5,11 +5,12 @@
  * `backend_emit_map_clean_type_text` and `backend_emit_map_recipe_callee_text`
  * are the pool-text helpers the static-map path uses (SH-94 S1 moved them to
  * EmitterMapText; S1a-0 C2p-8 removed their fixed 160-byte output rows);
- * `em_expr_num` is still
- * `static` in the emitted `Emitter.c`, so this file
- * includes that translation unit (the L0 test/unit recipe). The harness only
- * touches the two fields each helper reads (`arena`, `out`), never the build
- * driver.
+ * v1-PH-2 S8 tail moved `em_expr_num` to `EmitExpr.h.ct`; it is now a `pub`
+ * free function (`backend_emit_em_expr_num` in the emitted C), so the harness
+ * calls the exported symbol and links `EmitExpr.o` instead of including it.
+ * `Emitter.c` is still included for `backend_emit_g_emit` (the L0 test/unit
+ * recipe). The harness only touches the two fields each helper reads
+ * (`arena`, `out`), never the build driver.
  *
  * Run via test/ast/test25_unit.sh (which passes the generated source tree).
  */
@@ -69,7 +70,7 @@ int main(void)
     /* ---- em_expr_num: value followed by the normalised suffix ---- */
     nodes[0].num = 42;
     nodes[0].text = "UL";
-    if (em_expr_num(&em, 0, 0) != 0) {
+    if (backend_emit_em_expr_num(&em, 0, 0) != 0) {
         printf("  FAIL em_expr_num returned non-zero\n");
         g_failed++;
     } else {
