@@ -117,7 +117,7 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
 defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，Drop 语句
 由 LIR 打印，逐字节不变。
 
-### 当前覆盖率（2026-11-27 S8r2 实测）
+### 当前覆盖率（2026-11-27 S8r2 + S8 尾实测）
 
 - 82 语料 + 自举：`--ir=on` 生成 C 与 `--ir=off`（AST oracle）**全部逐字节相同**，
   0 差异；`test/ast` 的 839 个可编译 `.ct` 夹具也逐字节相同；
@@ -125,8 +125,11 @@ defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，D
   （`bodies printed=355 skipped=0`），23 个 unit `ready=1`。分母包含 S8 起新纳入
   的 10 个 owning/字段胶水样例；这些样例中需要 D-013 retain/release 胶水的函数
   按下方“剩余构造”保守回退，其余函数仍由 LIR 打印；
-- 自举：72 个 `.c` unit 中 **58 个 `ready=1`**，整棵 C 树与 AST oracle 逐字节相同
-  （回退函数集中在 `Emitter` / `Tool` 的 owning 字段与句柄路径）；
+- 自举：73 个 `.c` unit 中 **57 个 `ready=1`**、**1190/1622 个函数体**由 LIR
+  打印，整棵 C 树与 AST oracle 逐字节相同（回退函数集中在 `Emitter` /
+  `Tool` 的 owning 字段与句柄路径）。S8 尾把 `em_*` / 外壳写者拆到
+  `EmitExpr` / `EmitDecl` / `EmitShell` 后，**函数级覆盖率逐项不变**
+  （拆分前后同为 1190/1622、57 个 ready 单元，只改单元边界）；
 - `build` 模式 `test/modules/split` 与 `test/modules/autodrop` 整树逐字节相同。
 
 ### 剩余构造（S8r2 后仍未降级，函数级回退）

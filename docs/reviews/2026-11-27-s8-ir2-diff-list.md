@@ -53,6 +53,11 @@ ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 7 LIR fixtur
   `p81_box` OK、`l29b3`/`l29b5` OK、`p85_{spike,m0}` OK、`p88_emit` OK、
   `p69_fp` 30 units clean、`p86_errors` 342 诊断 0 differ、`c2p_limits` 58/58、
   `intern_pool` 11/11。
+- **S8 尾复跑（D5/D6/外壳拆分后，seed 已重生成）**：`test/ir/run.sh` 15 checks
+  OK；82 语料 0 差异；自举 TIR shadow 78 units C 树逐字节；自举 LIR
+  **1190/1622 个函数体、57 个 ready 单元**，与拆分前逐项相同（拆分只改单元
+  边界：73 个 `.c` unit）；`check-ast` 1741/0/6；`check-seed` 73 `.c` + 140 `.h`
+  两轮逐字节。
 
 ## 3 44 条失败的逐条分诊（清零）
 
