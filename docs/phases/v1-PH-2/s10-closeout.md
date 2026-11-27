@@ -15,7 +15,8 @@
 | S8a（LANG-31，可砍） | **deferred**：未开工，issue 已转 `deferred`；触发条件见卡 §6 E-V3-9d |
 | S8b 剩余 | §3.6 已补 D6 函子、D4（`backend/mem`）、D2 符号表行块、D3a–c；**所有者 2026-11-28 裁定按方案 A 补完**，施工卡 [s8b-remaining-construction](../../design/s8b-remaining-construction.md) |
 | 未关闭 issue | DESIGN-1、TEST-27（`open`） |
-| ADR | `D-030` 已 `accepted`（REVIEW 2026-11-28）；LANG-31 的 `D-031` 待其重评时再立 |
+| ADR | `D-030` 已 `accepted`（REVIEW 2026-11-28）；`D-032`（内部层 C 边界豁免）`proposed`，**待 REV 签收** |
+| 判据 | `E-V3-10` 已由 [CR-V3-1](card.md#8-判据变更记录) 改写为「selfhost/ct-ast 与 lib/core 各一处 manifest allow」；实施卡 [D032-C1](../../design/d032-internal-c-boundary-construction.md) 已交 |
 
 ## 2 开工闸（不清零不进 S10）
 
@@ -125,3 +126,23 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | dist | `ct-linux-x64.tar.gz`（static musl，ELF x86-64）；sha256 `98130730155f88934a2c4b4d0ce82e222bc81fc25e34a6fc0fdcf7736a0e28d3`；不入 git；冒烟 UNVERIFIED（无 QEMU 资产） |
 | 门禁 | `check-all` 8 门、`check-seed`、sanitizers 662、`check-docs`、`g0/g1/g6/g8`、`test/ir` 15 checks |
 | tag/release | **未创建**（按所有者版本纪律）；手工命令见卡 §7.5 |
+
+## 12 收口后队列（2026-11-28）
+
+> 1.2.0 已提交、未打 tag。以下是收口后的排队项，**按前置排序**；写者一栏是唯一可动该文件集的席位。
+> 状态词只用：`待签` / `待开` / `进行中` / `已完成` / `登记`。
+
+| # | 事项 | 状态 | 写者 / 批者 | 前置 | 依据 |
+| --- | --- | --- | --- | --- | --- |
+| Q-1 | D-032 设计签收（内部层 C 边界豁免） | **待签** | REV | 无（ADR 已 `proposed`） | [D-032](../../decisions/D-032.md)、[签收包](../../reviews/2026-11-28-signoff-package.md) |
+| Q-2 | D032-C1 实施 M1（`c_boundary_for` 回退 + 两处 `ct.pkg`） | 待开 | DEV | Q-1 | [施工卡](../../design/d032-internal-c-boundary-construction.md) |
+| Q-3 | D032-C1 实施 M2（selfhost 63 个 shim 退场） | 待开 | DEV | Q-2 | 同上 |
+| Q-4 | D032-C1 实施 M3（lib/core 6 个 shim 退场） | 待开 | DEV | Q-3 | 同上 |
+| Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | 待开 | DEV | 无（与 Q-2 互斥文件集，可先做） | [S8B 施工卡](../../design/s8b-remaining-construction.md) |
+| Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 登记 | DEV | Q-5 与审计表复核 | 同上 §3 |
+| Q-7 | S8「拼写表迁 `LModulePlan`」 | **登记（未立项）** | ARCH / REQ 出 ADR | 无 | 差异清单 §3d；需新 ADR，不属本卡 |
+| Q-8 | I2 接口值下标（四问待所有者裁定） | **登记（未立项）** | 所有者裁定 | 无 | RFC 评估 §3、§4 |
+| Q-9 | dist 冒烟 | 登记 | 所有者 / CI | tag 时 `release.yml` 在 ubuntu 上跑同组冒烟 | 卡 §7.3；本文 §5 |
+| Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
+| Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | REV（状态词） | 证据包 | 本文 §1 |
+| Q-12 | LANG-31（常量键折叠） | 登记（deferred） | 下一窗口重评 | 所有者决定窗口 | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md) |
