@@ -2,7 +2,9 @@
 
 > 中文
 >
-> **状态**：定稿（2026-11-21 REQ 起草）；**v1.0.0 起生效**，v0.88→v1.0 为过渡期。
+> **状态**：定稿（2026-11-21 REQ 起草）；**v1.0.0 起生效**，v0.88→v1.0 为过渡期；
+> **v1.2.0 起**：v1.2 新增语言面（下标协议、函子、`print`/`println`、默认 strict）进入「已冻结」，
+> 此前标「冻结中」且截止已到期的条目按本节末的维护规则转档。
 >
 > **用途**：回答三个问题——哪些能力已经冻结、哪些还能改、改动要谁批。语言语义以
 > [language-spec](language-spec.md) 为准；本文件只定“能不能改、怎么批、什么时候截止”，不重复语法。
@@ -41,12 +43,16 @@
 | ADT 与 `match` 的形态（泛型 ADT 自 S6 起支持；or 模式自 S5 起；泛型 C enum 仍不支持）；ADT/变体/负载计数从初始值倍增到形式上限 `CAP_LIMIT`=65536，不再有 64/96/8 语义上限（S1a-0 C3/C4） | 已冻结 | 同上 | v1.1.0 起（泛型 ADT：v1.2.0 起） | spec §4.73、§7 |
 | 泛型元数（struct / trait 的类型参数个数）：初始 2、倍增到形式上限 `CAP_LIMIT`=65536，不再有“最多两个”语义上限（S1a-0 C3/C4） | 已冻结 | 同上 | v1.1.0 起 | spec §7、§4.51、§4.55 |
 | `Box<T>` / `new` 的语义与规范拼写 | 已冻结 | REQ + ADR；`box<T>` 别名已于 v1.1.0 删除（硬错） | v1.1.0 起 | [D-016](decisions/D-016.md)；LANG-24 |
-| `MAX_FUNCS` 动态增长（初始 512、倍增、`CAP_LIMIT`=65536 安全阀） | 冻结中 | REQ + ADR；只允许扩大形式上限，不收紧 | **当前 pre 窗口（v1.1 前；2026-11-23 提前）** | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |
-| `lib/core` 目录与 `namespace core` 布局 | 冻结中 | REQ + ADR；根拼写兼容一个 MINOR | **v1.0 前（当前 pre 窗口；Stage 1+2）** | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |
-| 泄漏策略 `leaks = warn 或 error` 与 `c-boundary = allow 或 strict` 的键名 | 冻结中 | REQ + ADR | v1.1 冻结 | D-012；spec §4.70 |
+| 用户类型下标协议：`get` / `set` 按方法名 + 参数个数 + 实参静态类型匹配；读写与 `+=` / `++` / `&x[k]` 二值化 | 已冻结 | REQ + ADR；破坏性改动 MINOR + 一个 MINOR 回退 | v1.2.0 起 | spec §4.64；[D-028](decisions/D-028.md) |
+| 函子签名糖 `(A,B) => R`（与 `R (*)(A,B)` 同型，零运行期成本） | 已冻结 | REQ + ADR；语法糖不得引入独立类型 | v1.2.0 起 | spec §4.77；[D-029](decisions/D-029.md) |
+| `Str.print()` / `Str.println()`（stdout，按字节，零分配；`String` 同名转发） | 已冻结 | REQ + ADR；不新增全局 `ct_print*` | v1.2.0 起 | spec §4.78；[D-030](decisions/D-030.md) |
+| `c-boundary` 默认 `strict`（无 `#include` 的普通 `.ct` 不受影响；C 互操作显式 allow） | 已冻结 | REQ + ADR；默认值不得回退，迁移便利例外走 manifest/CLI/shim | v1.2.0 起 | spec §1.2、§4.66；[S9](phases/v1-PH-2/card.md) |
+| `MAX_FUNCS` 动态增长（初始 512、倍增、`CAP_LIMIT`=65536 安全阀） | 已冻结 | REQ + ADR；只允许扩大形式上限，不收紧 | v1.2.0 起（S1a-0 已实现动态增长） | [提案](proposals/ct-max-funcs-growth.md)；[SH-109](../issues/selfhost/sh109-max-funcs-capacity.md) |
+| `lib/core` 目录与 `namespace core` 布局 | 已冻结 | REQ + ADR；根拼写兼容窗已关闭 | v1.2.0 起 | [DOC-87](../issues/docs/doc-87-lib-core-rename.md) |
+| 泄漏策略 `leaks = warn 或 error` 与 `c-boundary = allow 或 strict` 的键名（S9 起默认 strict，显式 allow 仍可用） | 已冻结 | REQ + ADR；默认值不得回退 | v1.2.0 起 | D-012；spec §4.66；S9 |
 | `std` 包导入名与单元命名（`std::str::CharStr` 等） | 冻结中 | 包维护者 + 索引记录；std 0.20.0 起无旧名别名（[D-025](decisions/D-025.md)） | 已随 PKG-22 发布 | [PKG-22](../issues/packages/pkg-22-std-str-charstr-rename.md) |
-| 内建 trait（`Drop` / `Handback`）的可见声明显性化 | 冻结中 | REQ + ADR；不得引入 vtable/vptr | **v1.0 前（当前 pre 窗口；依赖 `lib/core` Stage 1）** | [LANG-23](../issues/lang/lang-23-builtin-trait-declarations.md) |
-| 非 immortal `Str` 视图存入容器的 lint（warn 级） | 冻结中 | REQ + ADR；先 warn，不升硬错；**v1.1 已实现**（compile/build warning，`ct check` error） | v1.1 | [LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
+| 内建 trait（`Drop` / `Handback`）的可见声明显性化 | 已冻结 | REQ + ADR；不得引入 vtable/vptr | v1.2.0 起 | [LANG-23](../issues/lang/lang-23-builtin-trait-declarations.md) |
+| 非 immortal `Str` 视图存入容器的 lint（warn 级） | 已冻结 | REQ + ADR；先 warn，不升硬错；v1.1 已实现（compile/build warning，`ct check` error） | v1.2.0 起 | [LANG-22](../issues/lang/lang-22-nonimmortal-view-store-lint.md) |
 | 编译器内部分层（L0 / L1 / L2 去留、seed cutover） | 1.0 前可改 | REQ 开 issue；语义不变的不需 ADR | `v1-PH-0` 前 | [v1 路线](planning/v1-release-plan.md) §2 |
 | A 检查的默认值（`--check-level` 默认 off/warn/error） | 1.0 前可改 | REQ + ADR（产品契约） | **SH-115 起默认 `warn`；v1-PH-1 S3 起默认 `error`**（FP=0 证据 [SH-118](../issues/selfhost/sh118-full-corpus-fp-zero.md)；`off` 保留逃生，单提交可回退） | [SH-115](../issues/selfhost/sh115-b-plus-strengthening.md)、[v1 路线](planning/v1-release-plan.md) §2.4 |
 | spec 结构（是否拆分、目录与锚点） | 1.0 前可改 | REQ 开 issue；结构不动语义 | v1.1 | [DOC-88](../issues/docs/doc-88-spec-split-decision.md) |

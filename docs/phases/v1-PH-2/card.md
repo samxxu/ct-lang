@@ -5,7 +5,7 @@ version-minor: 2
 
 # v1-PH-2 — v1.2：LIR 先行，欠账清零
 
-> **状态：规划中**（2026-11-25 开卡）。所有者 2026-11-25 裁定：**不再单开 v1.3/v1.4/v1.5**；
+> **状态：完成（v1.2.0，2026-11-27；带剩余登记，见 §6）**（2026-11-25 开卡）。所有者 2026-11-25 裁定：**不再单开 v1.3/v1.4/v1.5**；
 > **IR/LIR 先行**以省掉一次迁回 AST 的成本；存量欠账全部折进本卡；整卡只 bump 一次 MINOR
 > （`v1.2.0`）。
 > **前置**：`v1-PH-1` 收口（`v1.1.0`）；[D-026](../../decisions/D-026.md) 设计阶段验收。
@@ -38,10 +38,10 @@ version-minor: 2
 | 闸 | 内容 | 现状 |
 | --- | --- | --- |
 | 前置 | `v1.1.0` 已发布；D-026 只完成设计验收 | 已完成 |
-| 总闸 | **S1a-0 → S1a-1 → S1b**：S1a-0 放开容量上限；S1a-1 纯搬移收敛单元（SH-94 剩余）；S1b 落 LIR；未过闸，S2–S9 不开工 | 未开工 |
-| 例外 | S0 不依赖 S1a/S1b，可先做并独立切 `v1.1.1` | 未开工 |
-| stage 闸 | 每 stage 独立红证 → 独立合入 → 独立回滚；未过闸不进入下一 stage | 未开工 |
-| 收口闸 | E-V3-* 全绿；`check-all`；seed 两轮逐字节；`v1.2.0` 由所有者手工打 tag | 未开工 |
+| 总闸 | **S1a-0 → S1a-1 → S1b**：S1a-0 放开容量上限；S1a-1 纯搬移收敛单元（SH-94 剩余）；S1b 落 LIR；未过闸，S2–S9 不开工 | 已完成 |
+| 例外 | S0 不依赖 S1a/S1b，可先做并独立切 `v1.1.1` | 已完成（随卡交付，未单切 `v1.1.1`） |
+| stage 闸 | 每 stage 独立红证 → 独立合入 → 独立回滚；未过闸不进入下一 stage | 已完成（各 stage 独立提交） |
+| 收口闸 | E-V3-* 全绿；`check-all`；seed 两轮逐字节；`v1.2.0` 由所有者手工打 tag | 已执行（E-V3-8/9b/9c 部分，见 §6；tag 待所有者） |
 
 ### 1.1 真实依赖矩阵
 
@@ -184,3 +184,136 @@ version-minor: 2
 - [DESIGN-1](../../../issues/selfhost/design-1-v12-design-pack.md)（C 轨道设计包）、[TEST-27](../../../issues/testing/test27-feature-examples-pointer-free.md)（B 轨道样例/文档）
 - [dogfooding](../../planning/dogfooding.md)（S8b）、[capacity-limits](../../planning/capacity-limits.md)（S1a-0）
 - [J-6 证据台账](../../planning/j6-evidence/ledger.md)（P-1.3）
+
+## 6 收口证据（2026-11-27，v1.2.0）
+
+> 判据定义见 §3（未改动）。**「部分」不是「通过」**：未满足的部分在末列逐条登记；本表不把
+> 剩余项并入「通过」。原始命令与输出见 §7.4。
+> **本卡不自动打 tag / 不发 release**：`v1.2.0` 的 annotated tag 与 GitHub release 由所有者
+> 按 §7.5 手工执行（所有者 2026-11-26 版本纪律）。
+
+| 判据 | 结论 | 证据 | 剩余 / 边界 |
+| --- | --- | --- | --- |
+| E-V3-1 | 通过 | [SH-121](../../../issues/selfhost/sh121-abi-enum-forward.md)、[SH-122](../../../issues/selfhost/sh122-abi-union-forward.md) 状态 `verified`；LANG-25 码表 `docs/diagnostics/codes.md` 47 码由 `check-docs` 逐码比对（§7.4）；nightly `tsan` / `asan-stack` job 在 `.github/workflows/nightly.yml`；文档死链 0（`check-docs` 3423 links） | nightly 绿证以 CI 侧为准：本轮不 push、未触发 CI，只登记 job 定义与仓内探针 |
+| E-V3-2a | 通过 | S1a-0 记录见 [capacity-limits](../../planning/capacity-limits.md) §2–§5；`test/ast/c2p_limits.sh` 58/58、`c2n/intern` 11/11、`c2o/limits` 9/9；`tools/limits_sync.py --check` 拒绝镜像漂移；生成物逐字节与 seed 两轮见 §7.2 | 无；深度/错误恢复保护（`MAX_ERRORS` 等）按设计保留，不属容量上限 |
+| E-V3-2b | 通过 | SH-94 剩余拆分见 [sh94-m1-core-layout](../../design/sh94-m1-core-layout.md) §4；`tools/sh94_split_check.py` 校验函数体多重集；`check-ast` 0 失败（§7.4）；环数 0；`ExprOps` 不再顶 `MAX_METHODS` | 无 |
+| E-V3-2 | 通过 | `bash test/ir/run.sh <ct>`：**82 corpus 0 byte-differences**、4 TIR negatives、6 LIR negatives、selfhost TIR shadow 78 units 逐字节、15 checks（§7.4）；`E-IR-1xx` 负例由 `test/ir` 覆盖 | 无 |
+| E-V3-3 | 通过 | [D-028](../../decisions/D-028.md) 已 `accepted`；`test/ast/p52_index.sh`、`index_overload_both`、`jsaccess_overload_both` 覆盖读/写/借写与按实参类型分派；`check-ast` 0 失败；`p52_*` 零回归 | 无；接口值下标、`x[k].field`、多级连写按 D-028 非目标 |
+| E-V3-4 | 通过 | [D-029](../../decisions/D-029.md) 已 `accepted`；`test/ast/p3_functor.sh`、`p3_functor_forms`、`p3_functor_header`；展开与 `R (*)(A,B)` 同型、零运行期成本；spec §4.77 | IDE 语法高亮随编辑器迁到 `samxxu/ct-vscode`（仓外），本轮只登记编译器与 spec 侧 |
+| E-V3-5 | 通过 | `test/ast/303_adt_literal_pattern`、`304_adt_nested_pattern`、`305_adt_struct_pattern` 正例；穷尽性负例在 `p84/errors` 与 `test/ast/errors`（§7.4） | 无 |
+| E-V3-6 | 通过 | `test/ast/306_adt_or_pattern`、`307_adt_guard`；守卫不穷尽、漏分支负例同批（p84/errors） | 无 |
+| E-V3-7 | 通过 | `test/ast/308_adt_generic_option`…`314_adt_shadow_result`；`311_adt_generic_box_vec` 覆盖 `Box`/`Vec` 互操作；布局与实例化随 golden | 无；`enum Option<T>` / `Result<T,E>` 的 S6b unit 遮蔽口径见 §2 注 |
+| E-V3-8 | **部分** | REQ-TYPE-1：`test/ast/p122_types_default.sh` 44/44、FP=0 基线 [s7-evidence-baseline](../../planning/s7-evidence-baseline.md)；`--check-level=off` 逃生保留。REQ-MEM-2：`315_mem2_literal`…`319_mem2_recursion` + `p111_invariants`；写入摘要正负例随 `check-ast` | **P-1.3 迁移 lint 未实现**：[J-6 台账](../../planning/j6-evidence/ledger.md) 的 P-1.3 仍 `阻塞`；所有者 2026-11-23 已裁定迁移 lint 归 v1.x、不阻塞 v1.0/v1.2。本轮**未**伪造三档 dry-run |
+| E-V3-9 | **部分** | S8r2 默认 LIR、10 个 known-gap 清零：[差异清单](../../reviews/2026-11-27-s8-ir2-diff-list.md)（82 corpus、839 个 `test/ast` 夹具、自举 1638/1638、seed 两轮）；[S8 最终收尾](../../reviews/2026-11-27-s8-closeout-lmodule.md)（map/model 六段三段、九个写者选择迁 `LModulePlan`）；`test/ir` 15 checks | **REV 签字未完成**：两份 S8 文档 §7 的 REV 行仍为「待签字」；S8a 见 E-V3-9d |
+| E-V3-9b | **部分** | [dogfooding](../../planning/dogfooding.md) §3.5：D1（Arena/Diag/Pkg/Symbols 方法化）、D2 子集（Sh/Pkg 改 `Vec`）、D5（Intern `Result`/`?`/`errdefer`）已落；用户语料 25/25 逐字节；源码 LOC/计数前后报告入库 | **未做**：D2 符号表大表（34 处 `realloc`）、D3 命名构建（110 处 `snprintf`）、D4 判别式、D6 函子；生成 C 可读性 REVIEW 签字未签。D1/D2/D5 的完整域（emitter/parse/mem）按 §2.1 未纳入本子集 |
+| E-V3-9c | **部分** | [feature-examples-matrix](../../planning/feature-examples-matrix.md) 25 行无 `missing`；S2–S6 各有 ≥1 example；LANG-30 `test/ast/lang30_print.sh` 7/7；E3 类 26 个迁 21、保留 5（逐条理由见 [pointer-free-exemptions](../../planning/pointer-free-exemptions.md) §2.1） | **B-5/B-7 仍进行**：文档可执行片段与 README/tutorial/guide/idioms/snippets 去指针未收口；5 个保留项是「有理由例外」，不等于全部清零 |
+| E-V3-9d | **deferred** | S8a 未实施；[LANG-31](../../../issues/lang/lang-31-const-key-fold.md) 仍 `open`；卡 §2 已授权可砍 | 触发条件：v1.2 窗口不足 → 下一窗口重评；届时补 D-031 + spec 新节，不改本条判据 |
+| E-V3-10 | 通过 | S9 提交 `5c0e6781`；默认 strict 下 `check-all` 8 门绿（§7.4）；`selfhost/`、`lib/core/` 零 allow；普通无 include 的 `.ct` 逐字节不变；`test/c-boundary-allow.tsv` 登记 examples/test 的显式例外；`ct migrate` 旧包夹具在 `check-ast` | `examples`/`test` 的 C 互操作保留 allow 属设计，不是豁免回退 |
+| E-V3-11 | 通过 | `CTC_VERSION 1.2.0`；dist `ct-linux-x64.tar.gz` sha256 `98130730155f88934a2c4b4d0ce82e222bc81fc25e34a6fc0fdcf7736a0e28d3`；`check-all` 8 门、seed 两轮、stable-subset v1.2 冻结（§7） | **tag / release 未创建**：按所有者版本纪律由手工执行，见 §7.5 |
+
+## 7 S10 收口记录（2026-11-27）
+
+### 7.1 版本与版本落点
+
+| 项 | 值 |
+| --- | --- |
+| 源码唯一落点 | `selfhost/ct-ast/main.ct:57` `#define CTC_VERSION "1.2.0"` |
+| 其他落点 | `README.md`（头行 + 两处「v1.2.0 的实测」）、`docs/README.md` 头行、`AGENTS.md` 当前版本行、`docs/roadmap.md` 的 `v1-PH-2` 行、`docs/history/phase-log.md` 的 `v1.2.0` 行、`docs/stable-subset.md` 的 v1.2 冻结行、本卡 |
+| 版本对应 | `MAJOR.MINOR = 1.2` ↔ `v1-PH-2`；`PATCH = 0`（整卡只 bump 一次 MINOR，阶段内 fix 为未发布返工，不占 PATCH） |
+| 核对 ① 落点相等 | 全部落点均为 `1.2.0`（`check-docs` 的版本项与 §7.4 原始输出） |
+| 核对 ② MINOR ↔ phase | `2` ↔ `v1-PH-2`（`version-minor: 2`、`tools/check.sh g8`） |
+| 核对 ③ PATCH vs fix | `PATCH = 0`；本 phase 窗口内没有已发布 fix 占用 PATCH |
+| 核对 ④ CHANGELOG vs tag | `docs/history/phase-log.md` 最新行为 `v1.2.0`；tag 尚未创建，由所有者按 §7.5 建于收口提交，届时二者一致 |
+
+**seed**：`bootstrap/ct-ast` 由 `selfhost/gen-seed.sh` 重生成，共 **73 `.c` + 140 `.h`**。
+跨版本时跑**两遍**：第一遍用 v1.1.0 seed 发射（banner 仍为 1.1.0，`main.c` 宏已 1.2.0）；
+第二遍用 1.2.0 seed 发射，banner 与宏同为 1.2.0，成为冻结不动点。`bootstrap/MANIFEST.sha256`
+随 seed 重生成。`check-seed` 两轮逐字节 + 手改负例红（§7.4）。
+
+**golden/版本串**：`check-goldens-ast.sh` 对 banner 做 `vX` 归一化，25 份静态 golden 无需按
+版本重基线（实测 25/25）；`test/cases/*.expected.{c,h}`、`test/goldens/ast/*.c` 与
+`test/modules/p39_lib/lib.expected.abi.h` 的 banner 仅版本 token 更新；`p80_docs`/`p81_box`/
+`p82_docs` 的版本断言同步到 1.2.0。`p83_*` / `pkg19_20_rows` 的 `1.1.0` 是**包版本夹具**，
+不是编译器版本，未改。
+
+### 7.2 冷 / 热构建（只记录，不立项）
+
+| 项 | 命令 / 结果 |
+| --- | --- |
+| 机器 | Apple M6（arm64），macOS 27.2.1，Apple clang 21.0.0 |
+| 冷构建 | `rm -rf .ctbuild` 后 `ct build -I selfhost/ct-ast selfhost/ct-ast/main.ct -o <tmp>/ct`：**real 4.17s**（user 3.80s / sys 0.35s） |
+| 热构建 | 同树连跑第二次：**real 3.47s**（user 3.14s / sys 0.32s） |
+| 冷/热比 | `3.47 / 4.17 = 0.83`；构建缓存命中后仍要跑 `cc`，故差距有限 |
+| 结论 | 只记录，不设门禁；异常进需求池，不在 S10 修 |
+
+### 7.3 分发产物（Linux x86-64）
+
+| 项 | 值 |
+| --- | --- |
+| 构建 | macOS 主机 `ZIG=<zig 0.17.1> bash selfhost/make-dist.sh --cross <zig>` |
+| 产物 | `dist/ct-linux-x64.tar.gz`（2.0 MB，**不入 git**） |
+| 内容 | `ct` + `ctc -> ct` 符号链接（`tar -tzf`） |
+| 类型 | `ELF 64-bit LSB executable, x86-64, statically linked`（`file`） |
+| sha256 | `98130730155f88934a2c4b4d0ce82e222bc81fc25e34a6fc0fdcf7736a0e28d3`；`sha256sum -c` OK |
+| 版本串 | 提取的 `dist/ct` 内含 `1.2.0`（`strings` 核对） |
+| 冒烟 | **UNVERIFIED**：本机无 `qemu-system-x86_64`、无 Linux 内核/busybox 资产，`run-linux-binary.sh` 退出 77；未伪装通过。所有者可在 Linux 主机或补齐 QEMU 资产后复跑 `sh selfhost/run-linux-binary.sh dist/ct-linux-x64/ct -v` |
+
+### 7.4 门禁原始输出（S10 收口树）
+
+```console
+$ bash selfhost/check-all.sh
+test/run: 4 passed, 0 failed
+test/pkg: 165 passed, 0 failed
+check-ast: 1741 passed, 0 failed, 6 skipped
+check-warnings: 617 ok, 0 failed
+check-docs: OK (3423 relative links in 459 files, v1.2.0, 8 hard gates, 73 phase status)
+check-goldens-ast: 25/25
+check-seed: OK (73 .c + 140 .h, two rebuild rounds byte-identical, hand-edit negative red)
+acceptance: 20 pass, 0 new, 0 pending, 0 regression
+check-all: OK (8 hard gates green)
+
+$ bash selfhost/check-seed.sh
+check-seed: OK (73 .c + 140 .h, two rebuild rounds byte-identical, hand-edit negative red)
+
+$ bash selfhost/check-sanitizers.sh
+check-sanitizers: OK (662 checks, no sanitizer report)
+
+$ MATRIX_STRICT=1 bash tools/check.sh g4
+check-docs: OK (3423 relative links in 459 files, 1757 fragment(s) in 824 Markdown files, v1.2.0, 8 hard gates, ...)
+matrix: OK (every feature row has example/test/doc/status)
+
+$ bash tools/check.sh g0 && bash tools/check.sh g1 && bash tools/check.sh g6 && bash tools/check.sh g8
+g0: OK (block 1.18.0, session-map present)
+g1: OK (phase IDs all v<M>-PH-<n>, window W2; 76 card(s), 76 ledger row(s))
+g1: OK (12 active phase cards: title/status/tasks/exit-criteria/version-minor)
+g6: OK (320 issues; open=4 verified=299 rejected=13 deferred=2 superseded=2)
+g8: OK (PN-2 version coherence; 9 legacy offsets)
+
+$ bash test/ir/run.sh <ct>
+ir: corpus 82 files, 0 byte-differences
+ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 9 LIR fixtures, 2 module builds, selfhost=1, 15 checks)
+```
+
+### 7.5 所有者手工 tag（本卡不执行）
+
+`v1.2.0` 的 annotated tag 与 release **不在本轮创建**。所有者在分支推送后执行：
+
+```console
+$ CLOSEOUT=<收口提交 sha>
+$ git tag -a v1.2.0 -m "v1-PH-2 closeout $(git rev-parse --short "$CLOSEOUT")" "$CLOSEOUT"
+$ git cat-file -t v1.2.0                     # 必须输出 tag（annotated）
+$ test "$(git rev-parse 'v1.2.0^{commit}')" = "$(git rev-parse "$CLOSEOUT")" && echo commit-ok
+$ git branch -r --contains "$CLOSEOUT"       # 非空（分支已推送）
+$ git push origin v1.2.0                     # 四项校验全过后再推
+```
+
+发布（可选，同样由所有者执行）：
+
+```console
+$ gh release create v1.2.0 \
+    dist/ct-linux-x64.tar.gz dist/ct-linux-x64.tar.gz.sha256 \
+    --title "v1.2.0 — v1-PH-2 LIR 先行" --notes-file docs/history/phase-log.md
+```
+
+校验项：① tag 名 `v1.2.0`；② `git cat-file -t` 为 `tag`；③ `rev-parse 'v1.2.0^{commit}'`
+等于收口提交；④ 收口提交已在远端分支上；⑤ release 资产 sha256 与本卡 §7.3 一致。

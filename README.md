@@ -1,7 +1,7 @@
 ![Ct logo](docs/assets/ct-logo.png)
 # Ct — C with Traits 编译器
 
-> **v1.1.0** · 中文 · [English](README.en.md)
+> **v1.2.0** · 中文 · [English](README.en.md)
 
 **Ct** 是一个 **source-to-source 编译器**：把带 trait 语法的 `.ct` 源文件翻译成纯 C 的 `.c` 文件。
 `ct compile` 不做类型检查、不做优化；`ct build` 自 v1-PH-1 S3 起默认以 `--check-level=error` 跑
@@ -27,7 +27,7 @@ B 的静态类型检查（赋值/初值/`return`/`$` 目标/调用实参），�
 下面每条都解决一个具体问题。可执行代码块都带 `// source:`：完整片段在
 [docs/snippets/README/](docs/snippets/README/)，摘录指向 `examples/`，由 `check-docs` 校验来源、
 由 `check-warnings.sh` 的 build 段编译运行；无法独立成文的形态块标 `// shape:`。命令与输出是
-v1.1.0 的实测结果（`cc` 用系统 C 编译器）。
+v1.2.0 的实测结果（`cc` 用系统 C 编译器）。
 
 #### 0.1 HTTP 请求：完整路径的目标形态与当前可跑的静态宿主
 
@@ -44,7 +44,7 @@ int status = "https://api.example.com/users"
                  .status();
 ```
 
-v1.1.0 的实测边界：接口值落变量后逐跳（`Counter d = c.tap(1); d.status()` → `1`）、同一形状压成
+v1.2.0 的实测边界：接口值落变量后逐跳（`Counter d = c.tap(1); d.status()` → `1`）、同一形状压成
 一行链（`c.tap(1)->status()` → `2`）、返回局部接口值（`ct build test/ast/239_local_iface_return/prog.ct`
 → `0 201`）都可用（SH-72/74/75/110）；静态宿主链见 [examples/47](examples/47_chain_factory/src/main.ct)
 （`200 {"users":3}`，rc=0）。

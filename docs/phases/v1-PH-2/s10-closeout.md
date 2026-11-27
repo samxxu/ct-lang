@@ -1,9 +1,10 @@
-# v1-PH-2 · S10 收口清单（草稿）
+# v1-PH-2 · S10 收口清单（已执行，2026-11-27）
 
 > 中文。REQ 起草 2026-11-27，锚点 `3c92e20d`。
 > 依据：[卡 §2 S10](card.md)、[E-V3-11](card.md#3-退出判据)、
 > 卡内「S10 的版本纪律」注。
-> 本文是**施工用清单**，不是新的退出判据；判据以卡为准。勾选状态在 S10 施工中回填。
+> 本文是**施工用清单**，不是新的退出判据；判据以卡为准。**S10 已执行**：结果与原始输出见
+> [卡 §6–§7](card.md)；本文件只保留施工口径与待所有者事项。
 
 ## 1 当前快照（2026-11-27）
 
@@ -11,10 +12,10 @@
 | --- | --- |
 | S0–S8 尾、S8c、S9 | 已入库；S8r2 单文件默认 LIR、known-gap 清零；S8 尾 D5/D6/外壳落盘（`Emitter.h.ct` 9872→1545） |
 | S8 §5 签字 | **缺 DEV 的 S8 尾证据行**，REV 待签（已按流程退回 DEV） |
-| S8a（LANG-31，可砍） | 未开工，issue `open` |
+| S8a（LANG-31，可砍） | **deferred**：未开工，issue `open`；卡已授权，触发条件见卡 §6 E-V3-9d |
 | S8b 剩余 | D2 符号表大表、D3 命名构建、D4 判别式、D6 函子；D1/D2（Sh、Pkg）/D5 已入 |
-| 未关闭 issue | DESIGN-1、TEST-27、LANG-31（`issues/` 内状态 `open`） |
-| ADR | `D-030`（print API）仍 `proposed`，待 REVIEW 签收 |
+| 未关闭 issue | DESIGN-1、TEST-27、LANG-31（`issues/` 内状态 `open`；本轮不改 issue 状态） |
+| ADR | `D-030`（print API）仍 `proposed`，待 REVIEW 签收；本轮不代签 |
 
 ## 2 开工闸（不清零不进 S10）
 
@@ -109,6 +110,18 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 
 | # | 问题 | 影响 |
 | --- | --- | --- |
-| O-1 | S8a（LANG-31）做还是 deferred | 决定 §6.1 与是否要 `D-031`/spec §4.79 |
-| O-2 | S8b 剩余 D2 符号表 / D3 / D4 / D6 做多少 | 决定 §6.2 与收口时间 |
-| O-3 | `v1.2.0` 的 tag 与 release 何时手工执行 | 决定 §5 产物上传时机 |
+| O-1 | S8a（LANG-31）做还是 deferred | **本轮结论：deferred**（卡已授权可砍）；未做 `D-031`，触发条件见卡 §6 |
+| O-2 | S8b 剩余 D2 符号表 / D3 / D4 / D6 做多少 | **本轮结论：未做，如实登记**（卡 §6 E-V3-9b）；不影响 S10 机械门禁 |
+| O-3 | `v1.2.0` 的 tag 与 release 何时手工执行 | **待所有者**；精确命令与校验项见卡 §7.5 |
+
+## 11 执行结果（2026-11-27）
+
+| 项 | 结果 |
+| --- | --- |
+| 版本 | `CTC_VERSION 1.2.0`；README / docs/README / AGENTS / roadmap / phase-log / stable-subset 同步 |
+| seed | 73 `.c` + 140 `.h` 重生成；`check-seed` 两轮逐字节 + 手改负例红 |
+| stable-subset | v1.2 冻结：下标协议、函子、`print`/`println`、默认 strict 入「已冻结」；6 个到期条目转档；保留 1 条「冻结中」 |
+| 冷/热构建 | 4.17s / 3.47s（比值 0.83）；只记录，不设门禁 |
+| dist | `ct-linux-x64.tar.gz`（static musl，ELF x86-64）；sha256 `98130730155f88934a2c4b4d0ce82e222bc81fc25e34a6fc0fdcf7736a0e28d3`；不入 git；冒烟 UNVERIFIED（无 QEMU 资产） |
+| 门禁 | `check-all` 8 门、`check-seed`、sanitizers 662、`check-docs`、`g0/g1/g6/g8`、`test/ir` 15 checks |
+| tag/release | **未创建**（按所有者版本纪律）；手工命令见卡 §7.5 |

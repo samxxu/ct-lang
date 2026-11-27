@@ -14,7 +14,7 @@
 #     the refs the compiler leaves behind) and no cycle detection is claimed;
 #   - E81-6: the same generated code passes ASan/UBSan warning-free, and the
 #     five CTC_VERSION sites / README / spec 4.71 / tutorial 17 / package-guide
-#     / roadmap / D-016 agree with v1.1.0.
+#     / roadmap / D-016 agree with v1.2.0.
 #
 # `new` is contextual: `int new;`, `r.new`, a parameter named `new` and
 # `new = ...` stay identifiers (ctx.ct); the construction form is refused in a
@@ -171,14 +171,14 @@ neg neg_new_static "cannot initialize a static object" "new in a static local"
 
 # E81-6: the written contract and the version落点 stay in step.
 for f in selfhost/ct-ast/main.ct; do
-    if grep -q '#define CTC_VERSION "1.1.0"' "$f"; then
-        ok "$f CTC_VERSION 1.1.0"
+    if grep -q '#define CTC_VERSION "1.2.0"' "$f"; then
+        ok "$f CTC_VERSION 1.2.0"
     else
-        bad "$f CTC_VERSION is not 1.1.0"
+        bad "$f CTC_VERSION is not 1.2.0"
     fi
 done
-if grep -q 'v1\.1\.0' README.md && grep -q 'v1\.1\.0' docs/README.md; then
-    ok "README / docs/README carry v1.1.0"
+if grep -q 'v1\.2\.0' README.md && grep -q 'v1\.2\.0' docs/README.md; then
+    ok "README / docs/README carry v1.2.0"
 else
     bad "README version"
 fi

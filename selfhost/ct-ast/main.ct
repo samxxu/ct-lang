@@ -54,7 +54,7 @@ static const char *main_last_slash(const char *s)
     return r;
 }
 
-#define CTC_VERSION "1.1.0"
+#define CTC_VERSION "1.2.0"
 
 /* Caps, node kinds and token/operator codes are declared by the unit that uses
    them: a macro spans one translation unit only, and every unit here compiles
