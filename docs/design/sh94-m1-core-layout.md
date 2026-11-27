@@ -164,8 +164,10 @@ A1 是 spike：先验证“子单元只 import Core、宿主 import 子单元、
 生命周期状态，纯搬移须先完成外壳的实例判定迁移。D5 已落 13/15 方法 + 3 个
 自由函数到 `EmitDecl.h.ct`（留 `emit_type_decl` / `emit_impls`）。D6 已落
 6 个无 kind 依赖 helper 到 `EmitExpr.h.ct`（留四个 kind 分发器与
-`emit_outconv`）。证据见
-[S8 差异清单 §3c](../reviews/2026-11-27-s8-ir2-diff-list.md)。
+`emit_outconv`）。S8r2 只做单文件默认 LIR 与 known-gap 清零，D4–D6 的剩余边界
+（`write_unit_header(_body)`、`emit_type_decl`、`emit_impls`、四个 kind 分发器、
+`emit_outconv`）未动，外壳仍非“只消费 LModule”。证据见
+[S8 差异清单 §3c/§3d](../reviews/2026-11-27-s8-ir2-diff-list.md)。
 
 ### 4.5.1 D1–D3 施工单（S1a-1 内，IR 之前）
 

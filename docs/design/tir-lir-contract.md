@@ -190,12 +190,13 @@ verifier 从块元数据**重算**应有清理集，与 lowerer 写入的语句�
 `write_abi_header(struct LModule *)`、`write_map(struct LModule *)`。`struct Emitter` 不再持有
 `sym` / `ty` / `lex` / unit 表；S4 之后 `fail_from` 只报 I/O 错误。
 
-**S8 落地边界（2026-11-27）**：函数体的**生命周期判定**已经移出：`ct build` 默认由
-LIR 打印每个函数体，AST body writer 只作 `--ir=off` 的 oracle；`builtin_live_for` 的
-**内建判活**已移入 `TGraph`（不再读源码文本）。仍未迁走的是**外壳**：类型/全局声明、
-泛型实例闭包与胶水、头文件、ABI 导出表、map JSON 仍由 emitter 读 AST/符号表打印。
-`write_header` / `write_abi_header` / `write_map` / `emit_module` 的纯 LModule 化
-留给 S8 之后的切片；单文件编译路径的剩余差异见
+**S8 落地边界（2026-11-27 S8r2）**：函数体的**生命周期判定**已经移出：`ct build`
+**与单文件 `ct <file>.ct`** 默认都由 LIR 打印每个函数体，AST body writer 只作
+`--ir=off` 的 oracle；`builtin_live_for` 的**内建判活**已移入 `TGraph`（不再读源码
+文本）。仍未迁走的是**外壳**：类型/全局声明、泛型实例闭包与胶水、头文件、ABI 导出
+表、map JSON 仍由 emitter 读 AST/符号表打印。`write_header` / `write_abi_header` /
+`write_map` / `emit_module` 的纯 LModule 化留给 S8 之后的切片；单文件路径的 10 个
+known-gap 与 44 条失败已清零（保守回退见清单 §3d），证据见
 [S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md)。
 
 **S8 剩余子集（2026-11-27）**：外壳的写者身份（正在写哪个 unit、`.c` 还是 `.h`）
@@ -212,13 +213,14 @@ D5 的 13 个声明/可见性方法与 3 个自由函数搬入 `EmitDecl.h.ct`�
 
 | 开关 | 行为 | 默认 |
 | --- | --- | --- |
-| `--ir=off` | 只走 AST→C（oracle；一提交可回滚） | 单文件编译路径 |
+| `--ir=off` | 只走 AST→C（oracle；一提交可回滚） | — |
 | `--ir=shadow` | 同时构建 TIR / LIR 并跑 verifier，但**只发射旧路径的字节** | 否 |
-| `--ir=on` | 发射 LIR→C，旧路径只做对照 | `ct build`（S8 起） |
+| `--ir=on` | 发射 LIR→C，旧路径只做对照 | `ct build` 与单文件 `ct <file>.ct`（S8r2 起） |
 
 - S1–S3：`shadow` 下逐 unit `cmp`，差异进差异清单（临时编号、声明顺序、空行），REVIEW 签字；
 - S8：`ct build`（含自举与 seed 生成）默认 LIR 打印，自举 2 轮（tag 前 3 轮）逐字节；
-  单文件编译路径保留 AST 默认，差异清单见 [S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md)；
+  S8r2 起单文件路径也默认 LIR，10 个 known-gap 与 44 条失败清零（不能证明等价的
+  形状按函数/单元保守回退，见 [S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md) §3d）；
 - S4（历史）：连续两轮全绿 + 自举 3 轮不动点后才重基线 `test/goldens/ast/**`，重基线提交与实现提交分开；
 - 任何阶段 `git revert` 后，`check-goldens-ast` 与 `check-seed` 必须仍绿。
 

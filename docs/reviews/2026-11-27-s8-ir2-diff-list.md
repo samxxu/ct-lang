@@ -1,126 +1,155 @@
 # v1-PH-2 S8 IR-2 差异清单（2026-11-27）
 
 > 状态：**DEV 提交，待 REV 签字**。本清单是 E-V3-9「全语料等价或差异清单签字」的
-> 证据表：能证明等价的集合已切换默认，不能证明等价的集合保留 AST 默认并逐条登记。
+> 证据表。S8r2 把**单文件编译路径**也切到 LIR 默认，并把 `--ir=on` 的 10 个
+> known-gap / 44 条失败清零；不能证明等价的形状按函数或单元**保守回退**到 AST
+> body writer，回退函数不冒充“已降级”，逐类列在 §3d。
 > 对应 stage：[v1-PH-2 S8](../phases/v1-PH-2/card.md)；设计：[tir-lir-contract](../design/tir-lir-contract.md) §6–§7。
 
-## 1 切换边界（本轮结论）
+## 1 切换边界（S8r2 结论）
 
 | 路径 | 默认 | 等价证据 |
 | --- | --- | --- |
-| `ct build`（多单元 / 自举） | **LIR 打印函数体** | 自举 3 轮逐字节；79 语料 + 2 个模块工程逐字节；seed 两轮逐字节 |
-| `ct <file>.ct`（单文件编译） | AST（`--ir=on` 可选） | 本清单 §3 的差异未清零，故不切换 |
-| `--ir=off` / `CT_LIR=0` | AST oracle | 一提交可回滚（本文件 §4） |
+| `ct build`（多单元 / 自举 / seed） | **LIR 打印函数体** | 自举 C 树逐字节；82 语料 + 2 个模块工程逐字节；seed 两轮逐字节 |
+| `ct <file>.ct`（单文件编译） | **LIR 打印函数体** | 82 语料、839 个 `test/ast/**` 可编译夹具逐字节；`check-ast` 全绿 |
+| `--ir=off` / `CT_LIR=0` | AST→C oracle | 与切换前逐字节相同（一提交可回滚，§4） |
 
-- 默认只在 `Module::build_main` 入口生效；显式 `--ir=` 或 `CT_LIR` 永远优先。
-- 自举 3 轮：seed → 编译器 → 再发射自身 → 逐字节；见 §2 的命令与输出。
-- 单文件路径不切换不是遗漏：`--ir=on` 在这 37 个夹具上仍有差异（§3，38 条断言），
-  切换会破坏 `check-ast` 门禁；登记后由 S8 后续切片逐条清零。
+- 默认只在 `Module::build_main` / Driver 的编译入口生效；显式 `--ir=` 或 `CT_LIR`
+  永远优先。
+- 默认不会进入的路径（仍由 emitter 拥有，保持 AST）：map / model / ABI / `#line`
+  / `.h.ct` / `.m.ct`、`--freestanding` / `--alloc`、`--runtime-checks`。
+- 默认路径上 LIR/TIR 验证器报错时**静默回退**到 AST（不打印 `E-IR-*`），因此
+  `check-ast` 的诊断与 AST oracle 逐字相同；`--ir=on`（显式）与
+  `CT_LIR_STRICT=1` 仍是致命，供 `test/ir` 的负例使用。
+- 自举 2 轮（tag 前 3 轮）与 seed 两轮逐字节；本轮未打 tag、未 push、未改版本号。
 
 ## 2 已证明等价的集合
 
 ```console
 $ bash test/ir/run.sh ./ct-ast
 ir: 399 mirrored defines agree across the TIR/LIR units
-ir: corpus 79 files, 0 byte-differences
+ir: corpus 82 files, 0 byte-differences
 ir: module builds 2
-ir: self-host ... TIR shadow C tree byte-identical
-ir: self-host LIR ... C tree byte-identical
-ir: LIR corpus 79 files, 0 failures, 79 unit-ready, functions 299/299, bodies printed 299
-ir: OK (79 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 7 LIR fixtures, 2 module builds, selfhost=1, 13 checks)
+ir: self-host 77 units, TIR shadow C tree byte-identical
+ir: self-host LIR 72 units, 58 ready, C tree byte-identical
+ir: LIR corpus 82 files, 0 failures, 23 unit-ready, functions 355/498, bodies printed 355
+ir: LIR 7 fixtures, 0 failures
+ir: LIR builds 2
+ir: build defaults to LIR (lir: bodies printed=7 skipped=0)
+ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 7 LIR fixtures, 2 module builds, selfhost=1, 15 checks)
 ```
 
-- 语料：`test/cases/*.ct` + `examples/*/*.ct`（79 个，方言演示除外）；
-- 自举：`selfhost/ct-ast/main.ct` 的 74 个单元、全部函数体由 LIR 打印；
-- seed：`bootstrap/ct-ast` 由 LIR 默认路径重生成，且与 `CT_LIR=0` 的 AST 产物
-  `diff -r` 只差 `.ctcache/`（即逐字节相同）。
-- 自举 3 轮（tag 前口径，本轮未打 tag）：seed 编译出 `ct1` → `ct2` → `ct3`，
-  每轮重新发射 `selfhost/ct-ast` 的 C；`round1/2/3 identical` 三行均通过。
+- 语料：`test/cases/*.ct` + `examples/*/*.ct`（82 个，方言演示除外），`--ir=on`
+  与 `CT_LIR=0` 逐字节相同；S8 起新纳入的 10 个 owning/字段胶水样例也在内，
+  known-gap 清单已删除。
+- `test/ast/**`：839 个可编译 `.ct` 夹具逐个比较默认与 `CT_LIR=0`，0 差异；
+  其余夹具的编译退出码相同。
+- 自举：72 个 `.c` unit 中 58 个 `ready=1`；回退函数见 §3d，整棵 C 树与 AST
+  oracle 逐字节相同（`diff -r -x .ctcache`）。
+- seed：`bootstrap/ct-ast` 由默认 LIR 路径重生成；`check-seed` 两轮逐字节 +
+  手改负例（72 `.c` + 138 `.h`）。
+- 脚本探针（直接跑）：`p88_metrics` 9/9、`p122_types_default` 44/44、
+  `p111_invariants` 0 failure、`p64_alloc` OK、`p80_{layout,methods,retain}` OK、
+  `p81_box` OK、`l29b3`/`l29b5` OK、`p85_{spike,m0}` OK、`p88_emit` OK、
+  `p69_fp` 30 units clean、`p86_errors` 342 诊断 0 differ、`c2p_limits` 58/58、
+  `intern_pool` 11/11。
 
-## 3 单文件路径剩余差异（38 条断言，AST 默认）
+## 3 44 条失败的逐条分诊（清零）
 
-复现：
+S8r2 起点（文档记录值，`CT_LIR=1 CT_LIR_STRICT=1`）：
 
 ```console
 $ CT_LIR=1 CT_LIR_STRICT=1 bash selfhost/check-ast.sh
-...
-== summary: 1697 passed, 38 failed, 6 skipped ==
+== summary: 1696 passed, 44 failed, 7 skipped ==
 ```
 
-| # | 类别 | 代表夹具 | 现象 | 初步归因 |
+终点：默认 LIR 的 `check-ast`：
+
+```console
+$ bash selfhost/check-ast.sh
+== summary: 1740 passed, 0 failed, 7 skipped ==
+```
+
+`check-all` 8 门全绿；`check-seed` 两轮逐字节；`check-sanitizers` 662 checks、
+无 sanitizer 报告；`check-docs` OK；`g0`/`g1`/`g8` OK。
+分诊按**根因**归并，不逐夹具堆补丁：
+
+| # | 根因 | 代表夹具 | 处置 | 类型 |
 | --- | --- | --- | --- | --- |
-| 1 | 降级丢语句 / 临时名 | `157_into_chain`、`302_adt_match_expr`、`l29b5`、`p44/drop` | `__ct_recv4` / `__ct_mres` 未声明；`into` 链少一条赋值 | lowerer 对 `into` 链、`match` 表达式、`out` 转换的临时声明与语句建模不完整 |
-| 2 | 验证器假阳性 | `21_fnptr`、`p40_return_case`、`224_defer_branches`、`p122 b_void` | `E-IR-102/105/106/109` 拒绝合法程序 | V2/V5/V6/V9 在函数指针、返回临时、分支清理上的判定过严 |
-| 3 | 接口返回 / 派发 | `239_local_iface_return` | 输出值不同 | `vmcall` 返回接口的 `self` 打包形状 |
-| 4 | ADT payload / 影子 | `300_adt_payload_glue`、`313_adt_shadow_option`、`l29b3`、`p81/box` | 生命周期 trace / 未声明 release 符号 | ADT 构造的 owning payload、`Option` 影子实例的胶水未进 LIR |
-| 5 | 容器下标函数指针 | `170`、`171`、`176_vec_subscript_fnptr_field` | 编译失败 / C 语法错误 | 下标糖 + 函数指针字段的组合未降级 |
-| 6 | 内建字符串生命周期 | `p80/layout`、`p80/methods`、`p80/retain` | 运行期 trace 不同 / 崩溃 | SH-102 retain/release 顺序在 LIR 中与 AST 不同 |
-| 7 | 其它输出 / 诊断差异 | `18_struct_array_field`、`34_anon_member`、`37_empty_stmt`、`59_typedef_alias_array`、`62_borrow_handback`、`c2n/intern`、`c2p/limits`、`PH-69-E69-2`、`p86/errors`、`p111 I4` | 退出码 / 输出 / 诊断行不同 | 逐条待分诊；不影响 build 路径的等价性 |
+| 1 | D-013 owning 胶水：by-value owning 形参/结果、owning 字段赋值/初始化、struct 局部 owning 字段 | 10 个 known-gap、`300`、`313`、`l29b3`、`l29b5`、`p80/*`、`p81/box` | lowerer 保守回退（`Lglue` / `Lownfield` / `Lglue*`） | 回退 |
+| 2 | TIR/LIR 验证器假阳性 | `21_fnptr`、`p40_return_case`、`224_defer_branches`、`p122 b_void`、`generic_payload`、`two_dim` | 默认路径静默回退到 AST；显式/strict 仍红 | 回退 |
+| 3 | 多段 `into` 链 | `157_into_chain`、`cap intos` | 单元级预判 `TK_INTO_TARGET`/`TK_INTO_SELF`，不建任何行直接走 AST | 回退 |
+| 4 | 表达式 `match` 的 `__ct_mres` 占位名 | `302_adt_match_expr`、`l29b5` | 在 arm 任意位置识别占位名并降成 `LS_MATCHYIELD`（真修复） | 修复 |
+| 5 | 函数指针返回 struct / 容器下标 | `170`、`171`、`176` | 空 `kids` 防护 + owning/field 回退；`171` 不再崩溃 | 修复 + 回退 |
+| 6 | struct 局部 vptr / Handback / 数组、匿名成员 | `18`、`34`、`59`、`62`、`237`、`239` | 单元/函数级保守回退（`Lglue` / `_iface` 返回） | 回退 |
+| 7 | `for (static …)` / 显式 GNU 局部属性 | `37_empty_stmt`、`56_header_compat` | 函数级回退（`Lstaticfor` / `Lattr`） | 回退 |
+| 8 | 超长标识符/类型拼写（c2p 的 700–2000 字节） | `c2p/limits`、`c2n/intern` | 单元级 `LW_NAME_MAX=256` 检查，超过即 AST | 回退 |
+| 9 | 命名空间 host 的 map 检查只在 emitter | `ns_host_no_map`、`p86/errors` | `TK_BOX` aux bit 2 回退，让 AST 报原文诊断 | 回退 |
+| 10 | 逗号表达式的上下文括号 | `52_assign_value`、自举 `EmitHeader.c` | 按 `PW_INLINE` / `PW_EXPR` 复刻 AST 上下文（真修复） | 修复 |
+| 11 | 闭包绑定 >64 触发 LIR 池 hard 失败 | `cap closure_bind` | 改为函数回退，由 emitter 报 “too many closure bindings” | 回退 |
+| 12 | 其它输出/诊断 | `p85/p88` 语料 hash、`p69/fp`、`p86/errors`、`p111 I4` | 由上述等价性直接转绿；逐脚本复跑 | 验证 |
+| 13 | 特殊模式（freestanding/alloc/runtime-checks/map/model/abi/line/hdr/map） | `p64_alloc`、map/model 夹具 | 默认不进入 LIR（保持 AST） | 边界 |
 
-> 归因是 DEV 分诊结果，不是最终结论；REV 复核时以夹具的实际 diff 为准。
-> 这 37 个条目全部在**单文件编译路径**；`ct build`（含自举与 seed 生成）已经
-> 0 失败（`== summary: 1735 passed, 0 failed`）。切换默认只覆盖 build 路径，
-> 单文件路径保留 AST 默认，直到本表清零。
+> 归因是 DEV 分诊结果，不是最终结论；REV 复核时以夹具的实际 diff 与
+> `CT_LIR=0` 的对照为准。**“回退”不是“已降级”**：这些函数不计入
+> `bodies printed`，也不计入 `ready=1`。
 
-## 3b emitter 契约与 D4–D6 的边界
+## 3b emitter 契约与 D4–D6 的边界（本轮未扩大）
 
-已移出 emitter 的判定（本轮）：
+S8r2 只改 LIR 默认切换与回退，**没有**继续外壳 LModule 化：
 
-| 判定 | 原位置 | 现位置 | 证据 |
-| --- | --- | --- | --- |
-| 内建层判活 | `Module::builtin_live_for` 的整文件文本扫描 | `backend/tir/TGraph.h.ct`（AST 节点区间 + 实例表 + layer-needs） | SH-113 8/8；语料/自举逐字节 |
-| 函数体生命周期 / 类型 / 临时名 | emitter 的 AST body writer | LIR writer（`ct build` 默认） | `bodies printed=N skipped=0`；`--ir=off` 逐字节 |
-| 内建头文件清单 | emitter 循环 `builtin_units` + `builtin_live` | `LModulePlan.bhead[]`（由 module 层填） | 自举 seed 与 AST 产物逐字节 |
+| 判定 | 原位置 | 现状 |
+| --- | --- | --- |
+| 内建层判活 | 文本扫描 | `backend/tir/TGraph.h.ct`（S8，已移） |
+| 函数体生命周期 / 类型 / 临时名 | AST body writer | LIR writer（`ct build` 与单文件默认） |
+| 内建头文件清单 | emitter 循环 | `LModulePlan.bhead[]`（已移） |
+| 类型/全局声明、泛型实例闭包与胶水、`.abi.h`、map JSON | emitter | **仍在外壳** |
+| `write_unit_header(_body)` / `emit_type_decl` / `emit_impls` / `em_*` kind 分发 / `emit_outconv` | emitter | **仍在宿主**（D4–D6 尾部未做） |
 
-仍在外壳的判定（未迁，S8 之后切片）：类型/全局声明、泛型实例闭包与胶水、
-`.abi.h` 导出表、map/model JSON、单文件路径的诊断优先序。四入口
-`emit_module` / `write_header` / `write_abi_header` / `write_map` 的
-**纯 LModule 化**因此尚未完成；它们目前只消费 `LModulePlan` 的判活与头文件。
+四入口 `emit_module` / `write_header` / `write_abi_header` / `write_map` 仍未做到
+“只消费 LModule”。本 stage 不把部分搬移冒充为完整契约。
 
-**D4–D6（EmitHeader / EmitDecl / EmitExpr）未执行**。原因：纯搬移的判据是
-函数体哈希不变，而 `write_unit_header` 经静态助手 `write_unit_header_body`
-与宿主全局 `g_shell_u` / `g_shell_header` 耦合；本语言没有跨单元 `pub` 全局，
-搬移必然改宿主函数体或引入访问器，违反纯搬移。设计 §4.5 也把 D4–D6 排在外壳
-LModule 化之后。记录为剩余项，不在本 stage 用非纯搬移冒充。
+### 3c 施工记录（S8/S8r2）
 
-### 3c S8 剩余子集（2026-11-27，DEV 施工记录）
+| 片 | 交付 | 判据 |
+| --- | --- | --- |
+| S8 判活 + build 默认 | TGraph 判活、`ct build` 默认 LIR、差异清单 | 语料/自举逐字节；`test/ir` 15 checks |
+| 外壳 LModule 第一步 | 写者身份 `g_shell_*` → `LModulePlan.shell_*`；走查状态入 `Emitter` | 单文件 + 自举 C 树逐字节 |
+| D4 EmitHeader（部分） | `backend/emit/EmitHeader.h.ct`、`pub trait EmitHeader`；10 方法 + 自由函数 | body 多重集不变；body sha 同父；cycles 0 |
+| D5 EmitDecl（部分） | `EmitDecl.h.ct`；13 方法 + 3 自由函数 | 同上 |
+| D6 EmitExpr（部分） | `EmitExpr.h.ct`；6 个无 kind 依赖 helper | 同上 |
+| **S8r2 单文件默认 LIR** | Driver 编译入口默认 LIR；默认路径验证器静默回退；D-013/vptr/into/static/attr/长名/闭包容量保守回退；`match` 占位名与逗号上下文修复 | 82 语料 + 839 个 `test/ast` 夹具逐字节；`check-ast` 0 失败；`check-all` 8 门；seed 两轮 |
 
-本表在 S8 之后补齐两个独立片（分支 `issue/s8r`；**未 push、未打 tag、未改版本号**）：
+每片后 `gen-seed.sh` 重生成；本分支**未 push、未打 tag、未改版本号**。
 
-| 片 | 提交 | 交付 | 判据 |
-| --- | --- | --- | --- |
-| 外壳 LModule 第一步 | `d75557fb` | 写者身份 `g_shell_u` / `g_shell_header` → `LModulePlan.shell_u` / `shell_header`（`lmod_plan_set_shell` / `lmod_plan_shell_u` / `lmod_plan_shell_header`）；走查状态 `g_shell_emit_state` / `g_shell_emit_cap` → `struct Emitter` | 82 语料单文件 + 自举 75 单元 C 树逐字节；`test/ir/run.sh` 15 checks；`g0/g1/g8` |
-| D4 EmitHeader | `96dcb656` | `backend/emit/EmitHeader.h.ct`（+ `.shim.h`）、`pub trait EmitHeader`；10 方法 + `adoption_default_only` 纯搬移 | 1585 body 多重集不变；10 方法 body sha 同父提交 `d75557fb`；`sh94_split_check` 6 个唯一名 + 独立脚本 4 个与 `Module` 同名者；cycles 0；unit-name lint；goldens 25/25；`test/ir/run.sh` OK |
-| D5 EmitDecl（部分） | `a6905317` | `backend/emit/EmitDecl.h.ct`；`pub trait EmitDecl`；13 方法 + `unit_init_needed` / `emit_overload_suffix` / `emit_gsub_type_text`（改 pub） | 1585 body 多重集不变；16 个搬移定义 body sha 同父提交；cycles 0；lint；goldens 25/25；ir OK |
-| D6 EmitExpr（部分） | `b6ed12ff` | `backend/emit/EmitExpr.h.ct`；`pub trait EmitExpr`；6 个无 kind 依赖 helper | 1585 body 多重集不变；6 个 body sha 同父提交；cycles 0；lint；goldens 25/25；ir OK |
-| seed | `3f73814e` / `265d62d2` / `4c7b8d77` | 每片后 `gen-seed.sh` 重生成 | `check-seed` 两轮逐字节 + 手改负例（72 .c + 138 .h） |
+### 3d 仍未做（剩余清单）
 
-**D4–D6 的边界（仍未做）**：
-- D4：`write_unit_header` 与 `write_unit_header_body` 留在宿主——后者的实例
-  闭包 / ADT 胶水走查仍读宿主 `g_sb` 生命周期状态；
-- D5：`emit_type_decl`（六个 `em_decl_*` kind 切片）与 `emit_impls`（`g_sb`）
-  留在宿主；
-- D6：`emit_expr` / `emit_node` / `emit_field` / `emit_inline`（`em_*` kind
-  切片，占 Emitter.h.ct 绝大部分）与 `emit_outconv`（`g_oc_bypass_node`）
-  留在宿主；
-- 因此外壳的类型/实例闭包/胶水判定只完成了“写者身份”这一层，
-  `emit_module` / `write_header` / `write_abi_header` / `write_map` 仍未做到
-  “只消费 LModule”。本子集不把部分搬移冒充为完整契约。
-
-**单文件路径**：仍 AST 默认；§3 的 38 条差异**未清零**，`--ir=off` 回滚口径不变。
+1. **外壳完整 LModule 化**（S8 原目标，未完成）：`write_unit_header(_body)` 的
+   实例闭包/ADT 胶水、`.abi.h`、map、类型/全局声明判定仍在 emitter；四个入口
+   仍读 AST/符号表。
+2. **D5 尾**：`emit_type_decl`（六个 `em_decl_*` kind 切片）与 `emit_impls`
+   （`g_sb`）仍在宿主。
+3. **D6 尾**：`emit_expr` / `emit_node` / `emit_field` / `emit_inline`
+   （`em_*` kind 切片主体）与 `emit_outconv`（`g_oc_bypass_node`）仍在宿主。
+4. **回退改真修复**（让覆盖率从 378/529、63/72 回到 100%）：D-013
+   retain/release 与 struct sret、vptr 数组/嵌套/匿名成员胶水、多段 `into`
+   链、静态 `for` init、GNU 局部属性、超长名动态打印、命名空间 host 预检。
+   这些函数当前**字节等价**但不计入 LIR 覆盖率，是本清单的主要技术债。
+5. `test/ir/README.md` 的覆盖率数字随本清单 §2 更新；REV 需签字确认“回退 ≠
+   已降级”。
 
 ## 4 回滚
 
 | 回滚对象 | 动作 | 结果 |
 | --- | --- | --- |
-| 默认切换（本 stage） | `git revert <S8-commit>` | 默认回到 AST；TGraph 判活与 seed 一并回滚 |
+| 单文件默认切换 | `git revert <S8r2-commit>` | 单文件回到 AST；build 默认仍 LIR |
 | 只要 AST oracle | `--ir=off` / `CT_LIR=0` | 与切换前逐字节相同 |
-| TGraph 判活 | 回滚 S8 的首个提交 | `builtin_live_for` 恢复文本扫描；SH-113 仍绿 |
+| 保守回退 | revert `Lower.h.ct` 的 `lw_spelling_*` / 预判块 | 回到“逐条差异”状态；语料不再保证逐字节 |
+| seed | 随源码提交一并 revert | `check-seed` 两轮回到旧种子 |
 
 ## 5 签字
 
 | 角色 | 结论 | 日期 | 依据 |
 | --- | --- | --- | --- |
-| DEV | 提交等价证据与差异清单（§2、§3） | 2026-11-27 | 本文件 + `test/ir/run.sh`、`check-seed.sh` 原始输出 |
-| DEV（S8 剩余子集） | 外壳 LModule 第一步 + D4 完成；§3 的 38 条差异仍在 | 2026-11-27 | §3c + 提交 `d75557fb` / `96dcb656` / `3f73814e` |
-| REV | 待签字 | — | 逐条复核 §3c 的边界与 §3 的分诊 |
+| DEV | 单文件默认 LIR + 44 条失败清零（含 13 类分诊）；外壳/D5/D6 尾部明确留作剩余 | 2026-11-27 | 本文件 §1–§3d；`check-ast 1740/0/7`、`check-all OK (8 gates)`、`check-seed OK`、`check-sanitizers 662 checks`、`check-docs OK`、`g0/g1/g8 OK` |
+| REV | 待签字 | — | 逐条复核 §3 的回退类型与 §3d 的剩余边界 |

@@ -68,10 +68,10 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
 
 | 开关 | 行为 | 默认 |
 | --- | --- | --- |
-| （未设置） | `ct build` 走 LIR；`ct <file>.ct` 走 AST→C | S8 起（build） |
-| `--ir=on` / `CT_LIR=1` | 建 TIR（V1–V4）→ 降级到 LIR → CP2（V5–V10）→ 逐函数打印已覆盖的函数体 | build 默认 |
+| （未设置） | `ct build` 与 `ct <file>.ct` 都走 LIR | S8 起（两条路径） |
+| `--ir=on` / `CT_LIR=1` | 建 TIR（V1–V4）→ 降级到 LIR → CP2（V5–V10）→ 逐函数打印已覆盖的函数体 | 默认 |
 | `--ir=shadow` / `CT_LIR=shadow` | 同上，但只校验，不打印 LIR | 否 |
-| `--ir=off` / `CT_LIR=0` | 同未设置（CLI 优先于环境） | — |
+| `--ir=off` / `CT_LIR=0` | AST→C oracle（CLI 优先于环境） | — |
 | `CT_LIR_REPORT=1` | 每个 unit 打一行 `lir: unit=… ready=… funcs=ok/total …`，发射后打 `lir: bodies printed=N skipped=M` | 否 |
 | `CT_LIR_FAULT=<key>` | 注入一条非法 LIR 行，供 V5–V10 负例使用 | 否 |
 
@@ -117,23 +117,32 @@ S1b-S2 落下 LIR 对象模型（`backend/lir/LModule.h.ct` + `Lower.h.ct`）与
 defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，Drop 语句
 由 LIR 打印，逐字节不变。
 
-### 当前覆盖率（2026-11-27 实测）
+### 当前覆盖率（2026-11-27 S8r2 实测）
 
-- 78 语料 + 自举 65 个 `.c` unit：`--ir=on` 生成 C 与默认路径**全部逐字节相同**；
-- 语料：**78/78 unit `ready=1`**，**295/295 个会被发射的函数体**由 LIR 打印
-  （`bodies printed=295 skipped=0`；分母包含内置层 `String` / `Str` 函数，
-  S2b 时它们因 owning 返回被排除在分母外）；
-- 自举：**72/72 报告 unit `ready=1`**，**1473 个函数体全部由 LIR 打印**
-  （`bodies printed=1473 skipped=0`），整棵 C 树逐字节相同；
+- 82 语料 + 自举：`--ir=on` 生成 C 与 `--ir=off`（AST oracle）**全部逐字节相同**，
+  0 差异；`test/ast` 的 839 个可编译 `.ct` 夹具也逐字节相同；
+- 语料：**355/498 个会被发射的函数体**由 LIR 打印
+  （`bodies printed=355 skipped=0`），23 个 unit `ready=1`。分母包含 S8 起新纳入
+  的 10 个 owning/字段胶水样例；这些样例中需要 D-013 retain/release 胶水的函数
+  按下方“剩余构造”保守回退，其余函数仍由 LIR 打印；
+- 自举：72 个 `.c` unit 中 **58 个 `ready=1`**，整棵 C 树与 AST oracle 逐字节相同
+  （回退函数集中在 `Emitter` / `Tool` 的 owning 字段与句柄路径）；
 - `build` 模式 `test/modules/split` 与 `test/modules/autodrop` 整树逐字节相同。
 
-### 剩余构造（S2c 后仍未降级，函数级回退）
+### 剩余构造（S8r2 后仍未降级，函数级回退）
 
-- `?` 所在函数带活跃 cleanup（defer / errdefer / own）时，失败边还要跑清理链
-  （`L7700`），该函数仍回退；语料与自举都没有此形态，属保守闸；
-- ADT 构造的 payload 是 owning 值且实参是 place（需要 emitter 的 retain，
-  `L7811`）时回退；同样未被语料/自举触发；
-- 顶层声明仍由 emitter 打印（S8 的 emitter 契约阶段迁走）。
+- D-013 胶水：by-value owning 形参（`String` / owning ADT / 含 owning 字段的
+  struct）、owning 结果、owning 字段的赋值/初始化，需要 emitter 的
+  retain/release 与 `__ct_sretN`；这些函数回退（`Lglue*` / `Lownfield`）；
+- struct 局部的 vptr / Handback / 嵌套数组胶水（`#18/#34/#59/#62`）回退；
+- 多段 `into` 链（`#157`）回退：lowerer 未物化每一段的接收者；
+- `for (static int i = …; …)`（`#37`）回退：静态局部要外包一层块；
+- 超过 `LW_NAME_MAX=256` 的标识符/类型拼写（c2p 的 700–2000 字节探针）回退，
+  因为打印器仍有少量有界 scratch 行；
+- 显式 GNU 局部属性（`__attribute__((…))`，`#56`）回退；
+- 默认路径上 LIR 验证器报错时静默回退到 AST（`--ir=on` / `CT_LIR_STRICT=1`
+  仍是致命，供负例使用）；
+- 顶层声明仍由 emitter 打印（S8 的 emitter 契约阶段迁走；本轮未完成）。
 
 ## S8：语义判活（TGraph）与自举切换
 
@@ -141,9 +150,10 @@ defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，D
   （`Unit.node_start/node_end`）、实例注册表与层内声明的 `layer-needs` 边做可达性。
   SH-113 的 6 组 8 条边界断言保持全绿；注释/字符串/前缀不再可能拉活一个单元。
 - 图节点/边枚举与 TIR 共用；`tgraph_has_cycle` 接替 Verifier V4 的实例环 DFS。
-- `ct build` 默认由 LIR 打印函数体（`--ir=off` / `CT_LIR=0` 是 oracle）；单文件编译路径
-  默认仍是 AST，剩余 37 个夹具（38 条断言）登记在
-  [S8 差异清单](../../docs/reviews/2026-11-27-s8-ir2-diff-list.md)。
+- `ct build` **与单文件 `ct <file>.ct`** 默认都由 LIR 打印函数体
+  （`--ir=off` / `CT_LIR=0` 是 oracle）；`--ir=on` 的 10 个 known-gap 与
+  `check-ast` 的 44 条失败已清零，证据见
+  [S8 差异清单](../../docs/reviews/2026-11-27-s8-ir2-diff-list.md) §3–§3d。
 
 ## S1 的已知边界（不声称已覆盖）
 
