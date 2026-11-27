@@ -240,11 +240,13 @@ pub struct Emitter {
     /* PH-64: the bare-metal contract, bound by `ct_emit_bind_flags`. */
     int  *freestanding;
     char *alloc_map;
-    /* PH-64: the split of `--alloc A[,B[,C[,D]]]`; defaults keep libc. */
-    char alloc_m[64];
-    char alloc_f[64];
-    char alloc_r[64];
-    char alloc_c[64];
+    /* PH-64: the split of `--alloc A[,B[,C[,D]]]`; defaults keep libc.
+       S8b D3: the four names are interned texts, not 64-byte rows, so an
+       override can never be silently cut and the defaults are literals. */
+    const char *alloc_m;
+    const char *alloc_f;
+    const char *alloc_r;
+    const char *alloc_c;
     /* Phase 39 R3: set only while the module layer asks for `<base>.abi.h`. */
     int  *abi_mode;
     int  *abi_root;

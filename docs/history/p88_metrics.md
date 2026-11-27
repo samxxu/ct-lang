@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=95127 io_cap=2048
+     emitted_before=48223 emitted_after=95143 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -247,6 +247,11 @@
       新增三个行类型进头文件。Emitter.h.ct 不变（1590），发射 C
       94951 -> 95127 行（+176：行类型定义与列名展开；用户语料生成物逐字节
       不变），切片清单仍为 76)
+     (v1-PH-2 S8b D3 后复测：`Emitter` 的 allocator 名从 64 字节行改
+      驻留文本（`--alloc` 的逗号切分用 `ct_intern_len`，默认值是字面量），
+      去掉 4 个 `snprintf` 与 memcpy；Emitter.h.ct 不变（1590），
+      发射 C 95127 -> 95143 行（+16：结构体字段由数组变指针、切分逻辑；
+      用户语料生成物逐字节不变），切片清单仍为 76)
 -->
 
 ## 1 切片清单

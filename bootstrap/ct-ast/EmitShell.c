@@ -1695,10 +1695,10 @@ int backend_emit_inst_writes_helpers(struct backend_emit_Emitter * self, int u, 
 void backend_emit_sync_alloc(struct backend_emit_Emitter * e) {
     const char * p;
     int which;
-    snprintf(e->alloc_m, sizeof(e->alloc_m), "malloc");
-    snprintf(e->alloc_f, sizeof(e->alloc_f), "free");
-    snprintf(e->alloc_r, sizeof(e->alloc_r), "realloc");
-    snprintf(e->alloc_c, sizeof(e->alloc_c), "calloc");
+    e->alloc_m = "malloc";
+    e->alloc_f = "free";
+    e->alloc_r = "realloc";
+    e->alloc_c = "calloc";
     if (((!e->alloc_map) || (!e->alloc_map[0]))) {
         return;
     }
@@ -1707,11 +1707,27 @@ void backend_emit_sync_alloc(struct backend_emit_Emitter * e) {
     while (which < 4) {
         const char * comma = strchr(p, ',');
         size_t n = (comma ? (size_t)((comma - p)) : strlen(p));
-        char * dst = ((which == 0) ? e->alloc_m : ((which == 1) ? e->alloc_f : ((which == 2) ? e->alloc_r : e->alloc_c)));
-        size_t cap = ((which == 0) ? sizeof(e->alloc_m) : ((which == 1) ? sizeof(e->alloc_f) : ((which == 2) ? sizeof(e->alloc_r) : sizeof(e->alloc_c))));
-        if (((n > 0) && (n < cap))) {
-            memcpy(dst, p, n);
-            dst[n] = 0;
+        if (n > 0) {
+            const char * tok = runtime_text_ct_intern_len(p, (int)(n));
+            if ((!tok)) {
+                return;
+            }
+            if (which == 0) {
+                e->alloc_m = tok;
+            }
+            else {
+                if (which == 1) {
+                    e->alloc_f = tok;
+                }
+                else {
+                    if (which == 2) {
+                        e->alloc_r = tok;
+                    }
+                    else {
+                        e->alloc_c = tok;
+                    }
+                }
+            }
         }
         if ((!comma)) {
             break;

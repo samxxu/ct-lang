@@ -292,10 +292,10 @@ struct backend_emit_Emitter {
     int * runtime_checks;
     int * freestanding;
     char * alloc_map;
-    char alloc_m[64];
-    char alloc_f[64];
-    char alloc_r[64];
-    char alloc_c[64];
+    const char * alloc_m;
+    const char * alloc_f;
+    const char * alloc_r;
+    const char * alloc_c;
     int * abi_mode;
     int * abi_root;
     int * abi_exports;
