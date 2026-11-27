@@ -432,7 +432,7 @@ printf 'ir: LIR builds %d\n' "$ldn"
 default_lir="$work/default-lir"
 rm -rf "$default_lir"
 mkdir -p "$default_lir"
-if CT_LIR_REPORT=1 "$CT" build --emit-c -I "examples/01_greeter" \
+if env -u CT_LIR -u CT_TIR CT_LIR_REPORT=1 "$CT" build --emit-c -I "examples/01_greeter" \
         examples/01_greeter/greeter.ct -o "$default_lir" >"$work/dl.out" 2>"$work/dl.err" \
    && grep -q 'bodies printed=[1-9]' "$work/dl.err"; then
     ok
@@ -443,7 +443,7 @@ fi
 default_off="$work/default-off"
 rm -rf "$default_off"
 mkdir -p "$default_off"
-if CT_LIR=0 CT_LIR_REPORT=1 "$CT" build --emit-c \
+if env -u CT_TIR CT_LIR=0 CT_LIR_REPORT=1 "$CT" build --emit-c \
         -I "examples/01_greeter" examples/01_greeter/greeter.ct \
         -o "$default_off" >"$work/do.out" 2>"$work/do.err" \
    && ! grep -q 'bodies printed=[1-9]' "$work/do.err" \
