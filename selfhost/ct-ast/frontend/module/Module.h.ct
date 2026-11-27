@@ -26,10 +26,14 @@ import backend::verify::Verifier;
 import backend::mem::Memory;
 import frontend::lex::Lexer;
 import frontend::module::Unit;
+import frontend::module::MapTable;
 import frontend::parse::Parser;
 import frontend::parse::Expr;
 import frontend::parse::Mem2Writes;
 import backend::emit::EmitterQuery;
+import backend::emit::EmitterMapText;
+import backend::emit::EmitterText;
+import backend::emit::Init;
 import frontend::sym::Symbols;
 import frontend::sym::Symbols::Adt as Adt;
 import frontend::sym::Symbols::StructTmpl as StructTmpl;
@@ -63,6 +67,38 @@ import frontend::module::ModuleBoundary;
 #define LPS_BOXHELP     17
 #define LPS_ADTLIFE     18
 #define LPS_STRPROTO    19
+#define LPS_STRUCTFWD   20
+#define LPS_TRAITDECL   21
+#define LPS_VTBLFWD     22
+#define LPS_DROPPROTO   23
+#define LPS_HANDBAK     24
+#define LPS_LINKEXTERN  25
+#define LPS_IMPLDEF     26
+#define LPS_MAPDEF      27
+#define LPS_GINIT       28
+#define LPS_UNITINIT    29
+#define LPS_STRLIT      30
+/* S8 closeout: map / model JSON row kinds (mirror of backend/lir/LModule.h.ct). */
+#define LMP_TRAIT          1
+#define LMP_TRAIT_M        2
+#define LMP_STRUCT         3
+#define LMP_STRUCT_USE     4
+#define LMP_FUNC           5
+#define LMP_IMPL           6
+#define LMP_CALL           7
+#define LMP_MAP            8
+#define LMP_MAP_BIND       9
+#define LMP_MSTRUCT       10
+#define LMP_MSTRUCT_FIELD 11
+#define LMP_MENUM         12
+#define LMP_MENUM_M       13
+#define LMP_MFUNC         14
+#define LMP_MFUNC_PARAM   15
+#define LMP_MAP_STATIC     1
+#define LMP_MAP_TYPE_HOST  2
+#define LMP_MAP_NS_HOST    4
+#define LMP_MAP_SHIM       8
+#define LMP_MAP_SHIM_SRC  16
 #define LINC_C_IO       0
 #define LINC_C_PRE      1
 #define LINC_C_POST     2
@@ -84,6 +120,9 @@ import frontend::module::ModuleBoundary;
    values `Arena.h.ct` assigns */
 #define N_STRUCT  20
 #define N_TYPEDEF 21
+#define N_NUM      8
+#define N_STR      9
+#define N_RAW     31
 #define N_GLOBAL  22
 #define N_IMPL    33
 #define N_ENUM    45
@@ -769,6 +808,286 @@ static int ct_shell_plan_add_protos(struct Module *self, int unit)
     return 0;
 }
 
+/* S8 closeout: the remaining writer selections. Everything these writers used
+   to decide by walking the symbol table / AST is a row here; the writer keeps
+   only the rendering (and still reads a symbol row's fields to spell it). */
+
+/* EmitterQuery's predicate, so the module layer and the emitter agree on which
+   vtable is exported. */
+static int ct_vtable_exported(struct Module *self, int si, const char *tname)
+{
+    int t;
+
+    if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0) return 0;
+    t = self->sym->find_trait(tname);
+    if (t < 0 || !self->sym->traits[t].is_pub) return 0;
+    return ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name);
+}
+
+static int ct_map_vtable_exported(struct Module *self, int i)
+{
+    int t;
+
+    t = self->sym->find_trait(self->p->maps[i].trait);
+    if (t < 0 || !self->sym->traits[t].is_pub) return 0;
+    /* a namespace host has no object to be private: `pub trait` is the whole
+       contract (SH-20) */
+    if (self->p->maps[i].ns_host) return 1;
+    return ct_decl_is_pub(self, N_GLOBAL, self->p->maps[i].inst);
+}
+
+/* An all-default trait fills its own slots, so an adoption `impl` with no
+   method bodies still needs the vtable forward declaration. */
+static int ct_adoption_default_only(struct Module *self, int si, const char *tname)
+{
+    int ti, mi;
+
+    ti = self->sym->find_trait(tname);
+    if (ti < 0) return 0;
+    if (backend::emit::impl_exists_anywhere(self->arena, si, tname)) return 0;
+    if (self->sym->traits[ti].nm == 0) return 0;
+    for (mi = 0; mi < self->sym->traits[ti].nm; mi++)
+        if (self->sym->traits[ti].m[mi].body < 0) return 0;
+    return 1;
+}
+
+static int ct_unit_has_drop_impl(struct Module *self, int u, int si)
+{
+    int n;
+
+    if (u < 0 || u >= self->nunits || si < 0) return 0;
+    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
+         n = self->arena->nodes[n].next)
+        if (self->arena->nodes[n].kind == N_IMPL
+            && self->arena->nodes[n].aux == si
+            && strcmp(self->arena->nodes[n].text2, "Drop") == 0)
+            return 1;
+    return 0;
+}
+
+/* One global needing the constructor, the same predicate the emitter used
+   (`unit_init_needed`), with the module layer's arena / type pass. */
+static int ct_unit_init_needed(struct Module *self, int n)
+{
+    struct Arena *a = self->arena;
+    struct Init *init = backend::emit::init_get();
+    const char *lit;
+    int k;
+
+    if (a->nodes[n].kind != N_GLOBAL) return 0;
+    if (!init->type_needs_init(a->nodes[n].text)) return 0;
+    if (!a->nodes[n].text3[0]
+        && !self->ty->type_has_array_init(a->nodes[n].text)) return 0;
+    k = a->nodes[n].a;
+    if (k >= 0 && a->nodes[k].kind == N_RAW && a->nodes[n].text3[0]
+        && init->type_has_vptr(a->nodes[n].text)
+        && !init->type_needs_nested_init(a->nodes[n].text)) {
+        lit = a->nodes[k].aux ? a->str_at((int)a->nodes[k].num)
+                              : a->nodes[k].text;
+        if (backend::emit::init_has_elem_groups(lit)) return 0;
+    }
+    return 1;
+}
+
+static int ct_shell_plan_add_surface(struct Module *self, int prog, int unit,
+                                     int is_header)
+{
+    int n, i, si, trs, tre;
+    const char *tname;
+
+    /* forward declarations: every non-template struct row of the run (every
+       product prints them, so the row is per unit) */
+    for (i = 0; i < self->sym->nstructs; i++) {
+        int ti;
+        if (self->sym->structs[i].is_template) continue;
+        ti = self->sym->find_type(self->sym->structs[i].name);
+        if (ti < 0) continue;
+        if (self->sym->type_kind[ti] != 1 && self->sym->type_kind[ti] != 6)
+            continue;
+        if (backend::lir::lmod_plan_shell_add_stage(
+                LPS_STRUCTFWD, unit, i,
+                self->sym->type_kind[ti] == 6 ? 1 : 0, 0, 0) != 0)
+            return 1;
+    }
+    /* trait vtables: compile mode prints all; a unit's `.c` the private ones
+       and its `.h` the `pub` ones */
+    if (unit < 0) {
+        for (i = 0; i < self->sym->ntraits; i++) {
+            if (self->sym->traits[i].is_static
+                || self->sym->traits[i].ntparams > 0) continue;
+            if (backend::lir::lmod_plan_shell_add_stage(
+                    LPS_TRAITDECL, unit, i, 0, 0, 0) != 0)
+                return 1;
+        }
+    } else {
+        trs = self->units[unit].tr_start;
+        tre = self->units[unit].tr_end;
+        for (i = trs; i < tre; i++) {
+            if (self->sym->traits[i].is_static
+                || self->sym->traits[i].ntparams > 0) continue;
+            if (!self->sym->traits[i].is_pub)
+                if (backend::lir::lmod_plan_shell_add_stage(
+                        LPS_TRAITDECL, unit, i, 2, 0, 0) != 0)
+                    return 1;
+            if (is_header && self->sym->traits[i].is_pub)
+                if (backend::lir::lmod_plan_shell_add_stage(
+                        LPS_TRAITDECL, unit, i, 1, 1, 0) != 0)
+                    return 1;
+        }
+    }
+    /* vtable forwards: impl rows, then all-default adoptions */
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        if (self->arena->nodes[n].kind != N_IMPL) continue;
+        si = self->arena->nodes[n].aux;
+        if (si < 0) continue;
+        if (!self->arena->nodes[n].text2[0]) continue;
+        tname = self->arena->nodes[n].text2;
+        if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
+            continue;
+        if (backend::lir::lmod_plan_shell_add_stage(
+                LPS_VTBLFWD, unit, si, ct_vtable_exported(self, si, tname),
+                0, tname) != 0)
+            return 1;
+    }
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        if (self->arena->nodes[n].kind != N_STRUCT
+            || !self->arena->nodes[n].text2[0]) continue;
+        si = self->sym->find_struct(self->arena->nodes[n].text2);
+        if (si < 0) continue;
+        for (i = 0; i < self->sym->structs[si].nuse; i++) {
+            tname = self->sym->structs[si].use[i];
+            if (!ct_adoption_default_only(self, si, tname)) continue;
+            if (backend::lir::lmod_plan_shell_add_stage(
+                    LPS_VTBLFWD, unit, si, ct_vtable_exported(self, si, tname),
+                    0, tname) != 0)
+                return 1;
+        }
+    }
+    /* `Drop` / `Handback` prototypes: the static/export split is a module
+       decision (PH-48 D48-2) */
+    for (si = 0; si < self->sym->nstructs; si++) {
+        int owner, legacy, kind;
+        if (!self->sym->structs[si].uses_drop
+            || self->sym->structs[si].is_template) continue;
+        owner = self->sym->structs[si].owner;
+        legacy = (unit < 0 || owner < 0);
+        if (unit < 0) {
+            kind = 0;
+        } else if (legacy) {
+            if (self->sym->structs[si].is_inst) continue;
+            kind = 1;
+        } else if (owner == unit) {
+            if (self->sym->structs[si].has_drop_impl
+                && !ct_unit_has_drop_impl(self, unit, si)) continue;
+            kind = 2;
+        } else {
+            kind = 3;
+        }
+        if (backend::lir::lmod_plan_shell_add_stage(LPS_DROPPROTO, unit, si,
+                                                    kind, 0, 0) != 0)
+            return 1;
+    }
+    for (si = 0; si < self->sym->nstructs; si++)
+        if (self->sym->structs[si].has_handback_impl)
+            if (backend::lir::lmod_plan_shell_add_stage(LPS_HANDBAK, unit, si,
+                                                        0, 0, 0) != 0)
+                return 1;
+    /* link-time vtable externs: the `.h` writer only */
+    if (is_header && unit >= 0) {
+        for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+             n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            si = self->arena->nodes[n].aux;
+            if (si < 0) continue;
+            if (!self->arena->nodes[n].text2[0]) continue;
+            tname = self->arena->nodes[n].text2;
+            if (!ct_vtable_exported(self, si, tname)) continue;
+            if (backend::lir::lmod_plan_shell_add_stage(
+                    LPS_LINKEXTERN, unit, si, 0, 1, tname) != 0)
+                return 1;
+        }
+        for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+             n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_STRUCT
+                || !self->arena->nodes[n].text2[0]) continue;
+            si = self->sym->find_struct(self->arena->nodes[n].text2);
+            if (si < 0) continue;
+            for (i = 0; i < self->sym->structs[si].nuse; i++) {
+                tname = self->sym->structs[si].use[i];
+                if (!ct_adoption_default_only(self, si, tname)) continue;
+                if (!ct_vtable_exported(self, si, tname)) continue;
+                if (backend::lir::lmod_plan_shell_add_stage(
+                        LPS_LINKEXTERN, unit, si, 0, 1, tname) != 0)
+                    return 1;
+            }
+        }
+        for (i = 0; i < self->p->nmaps; i++) {
+            if (self->p->maps[i].unit != unit) continue;
+            if (self->p->maps[i].is_static) continue;
+            if (!ct_map_vtable_exported(self, i)) continue;
+            if (backend::lir::lmod_plan_shell_add_stage(
+                    LPS_LINKEXTERN, unit, i, 1, 1,
+                    self->p->maps[i].trait) != 0)
+                return 1;
+        }
+    }
+    /* impl bodies, map wrappers / vtables, generic instances, the constructor
+       and the literal table: the `.c` writer of this product */
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        int k = self->arena->nodes[n].kind;
+        /* aux 1: trait impl body; 2: inherent / ADT impl; 3: a struct whose
+           `use` clause may expand all-default trait methods. */
+        if (k == N_IMPL) {
+            if (self->arena->nodes[n].aux >= 0
+                && self->arena->nodes[n].text2[0]) {
+                if (backend::lir::lmod_plan_shell_add_stage(
+                        LPS_IMPLDEF, unit, n, 1, 0, 0) != 0)
+                    return 1;
+            } else if (!self->arena->nodes[n].text2[0]
+                       && self->arena->nodes[n].aux != -1) {
+                if (backend::lir::lmod_plan_shell_add_stage(
+                        LPS_IMPLDEF, unit, n, 2, 0, 0) != 0)
+                    return 1;
+            }
+        } else if (k == N_STRUCT && self->arena->nodes[n].text2[0]) {
+            if (backend::lir::lmod_plan_shell_add_stage(
+                    LPS_IMPLDEF, unit, n, 3, 0, 0) != 0)
+                return 1;
+        }
+    }
+    for (i = 0; i < self->p->nmaps; i++) {
+        if (unit >= 0 && self->p->maps[i].unit != unit) continue;
+        if (self->p->maps[i].is_static) continue;
+        if (backend::lir::lmod_plan_shell_add_stage(
+                LPS_MAPDEF, unit, i, ct_map_vtable_exported(self, i), 0, 0) != 0)
+            return 1;
+    }
+    for (i = 0; i < self->sym->nginsts; i++) {
+        if (unit >= 0 && self->sym->ginsts[i].owner != unit) continue;
+        if (self->sym->funcs[self->sym->ginsts[i].func].body < 0) continue;
+        if (backend::lir::lmod_plan_shell_add_stage(LPS_GINIT, unit, i, 0, 0,
+                                                    0) != 0)
+            return 1;
+    }
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next)
+        if (ct_unit_init_needed(self, n))
+            if (backend::lir::lmod_plan_shell_add_stage(LPS_UNITINIT, unit, n,
+                                                        0, 0, 0) != 0)
+                return 1;
+    for (n = 0; n < self->arena->nnode; n++) {
+        if (self->arena->nodes[n].kind != N_STR) continue;
+        if (self->arena->nodes[n].aux != 1) continue;
+        if (backend::lir::lmod_plan_shell_add_stage(LPS_STRLIT, unit, n, 0, 0,
+                                                    0) != 0)
+            return 1;
+    }
+    return 0;
+}
+
 /* S8 emitter contract: fill the shell plan for one program (compile mode:
    `unit < 0`; build mode: the unit whose `.c`/`.h` is next). The rows carry
    the decisions the shell used to make by scanning the AST and the symbol
@@ -863,6 +1182,9 @@ static int ct_shell_plan_add_program(struct Module *self, int prog, int unit,
                    "void U16String_release(struct U16String *);\n") != 0)
             return 1;
     }
+    /* the surface rows exist for every product; the `.h`-only rows below are
+       filtered by is_header inside the builder */
+    if (ct_shell_plan_add_surface(self, prog, unit, is_header) != 0) return 1;
     if (!is_header || !uu) return 0;
     /* Exported types and globals are the same rows filtered by the pub bit;
        the Drop surface is its own row because its predicate (a `pub` struct
@@ -890,6 +1212,249 @@ static int ct_shell_plan_add_program(struct Module *self, int prog, int unit,
                                                   si, 0, 0) != 0)
                 return 1;
         }
+    }
+    return 0;
+}
+
+/* S8 closeout: the map / model JSON records. The module layer picks every
+   record and nested list item here -- the predicates the writers used to run
+   themselves -- and the writers render plan rows only (no symbol table, no
+   AST). `parent` is the plan row of the enclosing record, -1 at top level. */
+static int ct_map_plan_add(int kind, int unit, int parent, int line, int a,
+                           int b, const char *t1, const char *t2,
+                           const char *t3, const char *t4, const char *t5)
+{
+    if (backend::lir::lmod_map_plan_add(kind, unit, parent, line, a, b,
+                                        t1, t2, t3, t4, t5) != 0)
+        return 1;
+    return 0;
+}
+
+/* The six `--emit-map` sections for the entry unit (compile mode: `u < 0`,
+   where the ranges are the whole symbol table / call graph). */
+static int ct_map_plan_build(struct Module *self, int prog, int u)
+{
+    struct MapTable *maps = self->p->maps;
+    struct Call *calls = self->p->calls;
+    int nmaps = self->p->nmaps;
+    int trs, tre, fns, fne, cls, cle;
+    int i, j, m, n, si, parent;
+
+    backend::lir::lmod_map_plan_reset();
+    if (u >= 0) {
+        trs = self->units[u].tr_start;
+        tre = self->units[u].tr_end;
+        fns = self->units[u].fn_start;
+        fne = self->units[u].fn_end;
+        cls = self->units[u].call_start;
+        cle = self->units[u].call_end;
+    } else {
+        trs = 0;
+        tre = self->sym->ntraits;
+        fns = 0;
+        fne = self->sym->nfunc;
+        cls = 0;
+        cle = self->p->ncalls;
+    }
+    /* traits, with their method rows */
+    for (i = trs; i < tre; i++) {
+        parent = backend::lir::lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_TRAIT, u, -1, self->sym->traits[i].line,
+                            0, 0, self->sym->traits[i].name,
+                            self->sym->traits[i].name, 0, 0, 0) != 0)
+            return 1;
+        for (m = 0; m < self->sym->traits[i].nm; m++)
+            if (ct_map_plan_add(LMP_TRAIT_M, u, parent, 0,
+                                self->sym->traits[i].m[m].nparams, 0,
+                                self->sym->traits[i].m[m].name,
+                                self->sym->traits[i].m[m].ret, 0, 0, 0) != 0)
+                return 1;
+    }
+    /* structs, with the traits each one uses */
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        if (self->arena->nodes[n].kind != N_STRUCT) continue;
+        parent = backend::lir::lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_STRUCT, u, -1, self->arena->nodes[n].line,
+                            0, 0, self->arena->nodes[n].text2,
+                            self->arena->nodes[n].text2, 0, 0, 0) != 0)
+            return 1;
+        si = self->sym->find_struct(self->arena->nodes[n].text2);
+        if (si >= 0)
+            for (i = 0; i < self->sym->structs[si].nuse; i++)
+                if (ct_map_plan_add(LMP_STRUCT_USE, u, parent, 0, 0, 0,
+                                    self->sym->structs[si].use[i],
+                                    0, 0, 0, 0) != 0)
+                    return 1;
+    }
+    /* functions */
+    for (i = fns; i < fne; i++)
+        if (ct_map_plan_add(LMP_FUNC, u, -1, self->sym->funcs[i].line, 0,
+                            self->sym->funcs[i].nparams,
+                            self->sym->funcs[i].name,
+                            self->sym->funcs[i].ret, 0, 0, 0) != 0)
+            return 1;
+    /* impl rows (inherent blocks and template impls have no row) */
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        const char *tname;
+        if (self->arena->nodes[n].kind != N_IMPL) continue;
+        si = self->arena->nodes[n].aux;
+        if (si < 0) continue;
+        if (!self->arena->nodes[n].text2[0]) continue;
+        tname = self->arena->nodes[n].text2;
+        for (m = self->arena->nodes[n].a; m >= 0;
+             m = self->arena->nodes[m].next) {
+            int count = 0;
+            for (i = self->arena->nodes[m].a; i > 0;
+                 i = self->arena->nodes[i].next) count++;
+            if (ct_map_plan_add(LMP_IMPL, u, -1,
+                                self->arena->nodes[n].line, count, 0,
+                                self->sym->structs[si].name, tname,
+                                self->arena->nodes[m].text2,
+                                self->arena->nodes[m].text, 0) != 0)
+                return 1;
+        }
+    }
+    /* the call graph edges */
+    for (i = cls; i < cle; i++)
+        if (ct_map_plan_add(LMP_CALL, u, -1, calls[i].line, 0, 0,
+                            calls[i].caller, calls[i].callee, 0, 0, 0) != 0)
+            return 1;
+    /* the map table (global, not per unit); `is_binding` rows are conversion
+       registry entries, not trait maps (LANG-29 S4 / B4) */
+    for (i = 0; i < nmaps; i++) {
+        int flags = 0;
+        if (!maps || maps[i].is_binding) continue;
+        if (maps[i].is_static) flags |= LMP_MAP_STATIC;
+        if (maps[i].type_host) flags |= LMP_MAP_TYPE_HOST;
+        else if (maps[i].ns_host) flags |= LMP_MAP_NS_HOST;
+        if (maps[i].is_static) {
+            int su = maps[i].unit;
+            if (su >= 0 && su < self->nunits && self->units[su].has_shim) {
+                flags |= LMP_MAP_SHIM;
+                if (self->units[su].shim_c) flags |= LMP_MAP_SHIM_SRC;
+            }
+        }
+        parent = backend::lir::lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MAP, u, -1, maps[i].line, 0, flags,
+                            maps[i].trait, maps[i].inst,
+                            maps[i].type_host ? maps[i].host_type : 0,
+                            (flags & LMP_MAP_SHIM)
+                                ? self->units[maps[i].unit].shim_h : 0,
+                            (flags & LMP_MAP_SHIM_SRC)
+                                ? self->units[maps[i].unit].shim_c : 0) != 0)
+            return 1;
+        for (j = 0; j < maps[i].nb; j++) {
+            const char *sym;
+            if (maps[i].is_static) {
+                sym = backend::emit::map_recipe_callee_text(maps[i].b[j].call);
+                if (!sym) return 1;
+            } else {
+                sym = maps[i].b[j].direct ? maps[i].b[j].call
+                                          : maps[i].b[j].wrapper;
+            }
+            if (ct_map_plan_add(LMP_MAP_BIND, u, parent, 0, 0,
+                                maps[i].b[j].direct,
+                                maps[i].b[j].method, sym, 0, 0, 0) != 0)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+/* The three `--emit-model` sections. The struct / enum lists are the entry
+   program's own nodes without the built-in layer and the container / handle
+   types the model deliberately leaves out; the functions are the whole symbol
+   table except the built-in helper prefixes. */
+static int ct_model_plan_build(struct Module *self, int prog)
+{
+    int n, i, j, si, bi, bn, skip, parent;
+
+    backend::lir::lmod_map_plan_reset();
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        int k = self->arena->nodes[n].kind;
+        if (k != N_STRUCT && k != N_UNION) continue;
+        skip = 0;
+        for (bi = 0; bi < self->nbuiltin && !skip; bi++) {
+            int bu = self->builtin_units[bi];
+            if (bu < 0 || bu >= self->nunits) continue;
+            for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0;
+                 bn = self->arena->nodes[bn].next)
+                if (bn == n) { skip = 1; break; }
+        }
+        if (skip) continue;
+        if (strcmp(self->arena->nodes[n].text2, "ct_buf") == 0
+            || strcmp(self->arena->nodes[n].text2, "Vec") == 0
+            || strcmp(self->arena->nodes[n].text2, "Map") == 0
+            || strcmp(self->arena->nodes[n].text2, "MapEntry") == 0
+            || strcmp(self->arena->nodes[n].text2, "Option") == 0
+            || strcmp(self->arena->nodes[n].text2, "Result") == 0
+            || strcmp(self->arena->nodes[n].text2, "Str") == 0) continue;
+        parent = backend::lir::lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MSTRUCT, -1, -1, self->arena->nodes[n].line,
+                            0, k == N_UNION,
+                            self->arena->nodes[n].text2, 0, 0, 0, 0) != 0)
+            return 1;
+        si = self->sym->find_struct(self->arena->nodes[n].text2);
+        if (si >= 0)
+            for (i = 0; i < self->sym->structs[si].nfields; i++)
+                if (ct_map_plan_add(LMP_MSTRUCT_FIELD, -1, parent, 0,
+                                    self->sym->structs[si].fields[i].line,
+                                    self->sym->structs[si].fields[i].col,
+                                    self->sym->structs[si].fields[i].name,
+                                    self->sym->structs[si].fields[i].type,
+                                    0, 0, 0) != 0)
+                    return 1;
+    }
+    for (n = (prog >= 0) ? self->arena->nodes[prog].a : -1; n >= 0;
+         n = self->arena->nodes[n].next) {
+        int m;
+        if (self->arena->nodes[n].kind != N_ENUM) continue;
+        /* Phase 84: the model's `enums` list stays C enums; an ADT's layout is
+           documented in the spec, not in this export. */
+        if (self->arena->nodes[n].aux & 2) continue;
+        skip = 0;
+        for (bi = 0; bi < self->nbuiltin && !skip; bi++) {
+            int bu = self->builtin_units[bi];
+            if (bu < 0 || bu >= self->nunits) continue;
+            for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0;
+                 bn = self->arena->nodes[bn].next)
+                if (bn == n) { skip = 1; break; }
+        }
+        if (skip) continue;
+        parent = backend::lir::lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MENUM, -1, -1, self->arena->nodes[n].line,
+                            0, 0, self->arena->nodes[n].text, 0, 0, 0, 0) != 0)
+            return 1;
+        for (m = self->arena->nodes[n].a, i = 0; m >= 0;
+             m = self->arena->nodes[m].next, i++) {
+            int val = 0;
+            if (self->arena->nodes[m].a >= 0
+                && self->arena->nodes[self->arena->nodes[m].a].kind == N_NUM)
+                val = (int)self->arena->nodes[self->arena->nodes[m].a].num;
+            if (ct_map_plan_add(LMP_MENUM_M, -1, parent, 0, val, 0,
+                                self->arena->nodes[m].text2, 0, 0, 0, 0) != 0)
+                return 1;
+        }
+    }
+    for (i = 0; i < self->sym->nfunc; i++) {
+        if (strncmp(self->sym->funcs[i].name, "str_", 4) == 0
+            || strncmp(self->sym->funcs[i].name, "vec_", 4) == 0
+            || strncmp(self->sym->funcs[i].name, "map_", 4) == 0
+            || strncmp(self->sym->funcs[i].name, "option_", 7) == 0
+            || strncmp(self->sym->funcs[i].name, "result_", 7) == 0) continue;
+        parent = backend::lir::lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MFUNC, -1, -1, self->sym->funcs[i].line,
+                            0, 0, self->sym->funcs[i].name,
+                            self->sym->funcs[i].cname,
+                            self->sym->funcs[i].ret, 0, 0) != 0)
+            return 1;
+        for (j = 0; j < self->sym->funcs[i].nparams; j++)
+            if (ct_map_plan_add(LMP_MFUNC_PARAM, -1, parent, 0, 0, 0,
+                                self->sym->funcs[i].ptype[j], 0, 0, 0, 0) != 0)
+                return 1;
     }
     return 0;
 }
@@ -3971,6 +4536,9 @@ cmd_too_long:
     int write_map(const char *dest, int prog, int u)
     {
         const char *why;
+        /* S8 closeout: the module layer selects the six JSON sections; the
+           writer renders plan rows only (no symbol table / AST read). */
+        if (ct_map_plan_build(self, prog, u) != 0) return self->fail("out of memory");
         if (backend::emit::ct_emit_map(dest, prog, u) != 0) {
             why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);
@@ -3982,6 +4550,8 @@ cmd_too_long:
     int write_model(const char *dest, int prog)
     {
         const char *why;
+        /* S8 closeout: same contract for the model's three sections. */
+        if (ct_model_plan_build(self, prog) != 0) return self->fail("out of memory");
         if (backend::emit::ct_emit_model(dest, prog) != 0) {
             why = backend::emit::ct_emit_last_error();
             if (why[0]) return self->fail(why);

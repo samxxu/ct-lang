@@ -3,9 +3,12 @@
  * pure move out of Emitter.h.ct).
  *
  * This is the S8 D4 slice: `header_guard`, the trait and struct forwards,
- * `emit_proto`, `emit_vtable_fwd`, `emit_trait_range`, the JSON map/model
- * writers, the compile-mode header and the ABI header now live here. The
- * bodies are byte-identical to the ones Emitter.h.ct held; the `Emitter` type
+ * `emit_proto`, `emit_vtable_fwd`, the JSON map/model writers, the
+ * compile-mode header and the ABI header now live here. The D4 move kept the
+ * bodies byte-identical; the S8 closeout then made the forwards / vtable
+ * writer read `LModulePlan` rows and turned the map/model writers into row
+ * renderers (their selection moved to `frontend/module/Module.h.ct`). The
+ * `Emitter` type
  * and the `EmitOps` / `EmitHeader` declarations live in EmitterCore.h.ct, so
  * this unit imports Core instead of the host and the import graph stays
  * acyclic. Emitter.h.ct imports this unit for the vtable.
@@ -35,6 +38,7 @@ import backend::emit::EmitterCore;
 import tool::sh::Sh;
 import backend::lir::LModule;
 import backend::lir::LModule::LModulePlan as LModulePlan;
+import backend::lir::LModule::LMapRow as LMapRow;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define TEXT_LIMIT 65536
@@ -45,6 +49,34 @@ import backend::lir::LModule::LModulePlan as LModulePlan;
 #define N_IMPL    33
 #define N_ENUM    45
 #define N_UNION   48
+/* S8 closeout: map / model plan row kinds (mirror of backend/lir/LModule.h.ct). */
+#define LMP_TRAIT          1
+#define LMP_TRAIT_M        2
+#define LMP_STRUCT         3
+#define LMP_STRUCT_USE     4
+#define LMP_FUNC           5
+#define LMP_IMPL           6
+#define LMP_CALL           7
+#define LMP_MAP            8
+#define LMP_MAP_BIND       9
+#define LMP_MSTRUCT       10
+#define LMP_MSTRUCT_FIELD 11
+#define LMP_MENUM         12
+#define LMP_MENUM_M       13
+#define LMP_MFUNC         14
+#define LMP_MFUNC_PARAM   15
+#define LMP_MAP_STATIC     1
+#define LMP_MAP_TYPE_HOST  2
+#define LMP_MAP_NS_HOST    4
+#define LMP_MAP_SHIM       8
+#define LMP_MAP_SHIM_SRC  16
+/* the shell rows these writers now read (mirror of LModule.h.ct) */
+#define LPS_STRUCTFWD  20
+#define LPS_TRAITDECL  21
+#define LPS_VTBLFWD    22
+#define LPS_DROPPROTO  23
+#define LPS_HANDBAK    24
+#define LPS_LINKEXTERN 25
 
 namespace backend::emit;
 /* A stateless unit: the type exists only because a unit file is
@@ -100,130 +132,66 @@ impl EmitHeader for Emitter {
 
     int emit_vtable_fwd(int prog)
     {
-        int n, si;
-        const char *tname;
+        int nr = backend::lir::lmod_plan_row_count(), r;
+        int u = backend::lir::lmod_plan_shell_u();
+        (void)prog;
         (void)self;
 
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if (self->arena->nodes[n].kind != N_IMPL) continue;
-            si = self->arena->nodes[n].aux;
-            if (si < 0) continue;   /* a template impl: no struct row to name */
-            if (!self->arena->nodes[n].text2[0]) continue;   /* P34 S4: inherent, no vtable */
-            tname = self->arena->nodes[n].text2;
-            if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0)
-                continue;   /* no vptr, no vtable */
-            if (self->vtable_exported(si, tname))
-                fprintf(self->out, "const struct %s_vtbl %s_%s_vtable;\n",
-                        tname, self->sym->structs[si].name, tname);
-            else
-                fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
-                        tname, self->sym->structs[si].name, tname);
-        }
-        /* adoptions that need no impl: an all-default trait fills its own
-           slots, so the vtable must be visible to the initialisers below */
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            int ui;
+        /* S8 closeout: impl / adoption vtables, the `Drop` prototypes and the
+           `Handback` prototypes are module-selected rows, printed in order. */
+        for (r = 0; r < nr; r++) {
+            int kind, si;
             const char *tname;
-            if (self->arena->nodes[n].kind != N_STRUCT || !self->arena->nodes[n].text2[0]) continue;
-            si = self->sym->find_struct(self->arena->nodes[n].text2);
-            if (si < 0) continue;
-            for (ui = 0; ui < self->sym->structs[si].nuse; ui++) {
-                tname = self->sym->structs[si].use[ui];
-                if (!adoption_default_only(self, si, tname)) continue;
-                if (self->vtable_exported(si, tname))
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            kind = backend::lir::lmod_plan_row_kind(r);
+            si = backend::lir::lmod_plan_row_node(r);
+            if (kind == LPS_VTBLFWD) {
+                if (si < 0 || si >= self->sym->nstructs) continue;
+                tname = backend::lir::lmod_plan_row_text(r);
+                if (backend::lir::lmod_plan_row_aux(r))
                     fprintf(self->out, "const struct %s_vtbl %s_%s_vtable;\n",
                             tname, self->sym->structs[si].name, tname);
                 else
                     fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
                             tname, self->sym->structs[si].name, tname);
-            }
-        }
-        /* a `delete` in a function body runs before the drop definition below.
-           PH-48 D48-2: in build mode the definition is owned by exactly one
-           unit, so only that unit writes the non-static prototype; every other
-           unit declares `extern` and calls the owner's body (compile mode keeps
-           the old static pair byte for byte, and generic instance rows keep
-           their legacy writer). */
-        for (si = 0; si < self->sym->nstructs; si++) {
-            int owner, legacy;
-            if (!self->sym->structs[si].uses_drop
-                || self->sym->structs[si].is_template) continue;
-            owner = self->sym->structs[si].owner;
-            legacy = (self->cur_unit < 0 || owner < 0);
-            if (self->cur_unit < 0) {
-                fprintf(self->out,
-                        "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
-                        self->sym->structs[si].name);
-            } else if (legacy) {
-                /* the legacy writer emits a static body in every unit; the
-                   instance body is written before its first use, so a static
-                   prototype in a unit that never defines it is only a gcc
-                   -Wunused-function warning (Box in build mode, CI-18). */
-                if (self->sym->structs[si].is_inst) continue;
-                fprintf(self->out,
-                        "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
-                        self->sym->structs[si].name);
-            } else if (owner == self->cur_unit) {
-                /* no local body: the impl lives elsewhere (L48-2, rejected by
-                   the module layer) and a stale prototype would be a lie */
-                if (self->sym->structs[si].has_drop_impl
-                    && !self->unit_has_drop_impl(self->cur_unit, si))
-                    continue;
-                fprintf(self->out, "void %s_Drop_drop(void *self);\n",
-                        self->sym->structs[si].name);
-            } else {
-                fprintf(self->out, "extern void %s_Drop_drop(void *self);\n",
-                        self->sym->structs[si].name);
-            }
-        }
-        /* a `borrow` release runs before the handback definition below */
-        for (si = 0; si < self->sym->nstructs; si++)
-            if (self->sym->structs[si].has_handback_impl)
+            } else if (kind == LPS_DROPPROTO) {
+                if (si < 0 || si >= self->sym->nstructs) continue;
+                if (backend::lir::lmod_plan_row_aux(r) == 2)
+                    fprintf(self->out, "void %s_Drop_drop(void *self);\n",
+                            self->sym->structs[si].name);
+                else if (backend::lir::lmod_plan_row_aux(r) == 3)
+                    fprintf(self->out, "extern void %s_Drop_drop(void *self);\n",
+                            self->sym->structs[si].name);
+                else
+                    fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
+                            self->sym->structs[si].name);
+            } else if (kind == LPS_HANDBAK) {
+                if (si < 0 || si >= self->sym->nstructs) continue;
                 fprintf(self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n",
                         self->sym->structs[si].name);
-        if (self->sym->nstructs) fputs("\n", self->out);
-        return 0;
-    }
-
-    int emit_trait_range(int start, int end, int mode)
-    {
-        int t, m, k;
-        (void)self;
-
-        for (t = start; t < end; t++) {
-            if (self->sym->traits[t].is_static || self->sym->traits[t].ntparams > 0) continue;
-            if (mode == 1 && !self->sym->traits[t].is_pub) continue;
-            if (mode == 2 && self->sym->traits[t].is_pub) continue;
-            fprintf(self->out, "struct %s_vtbl {\n", self->sym->traits[t].name);
-            for (m = 0; m < self->sym->traits[t].nm; m++) {
-                fprintf(self->out, "    %s (*%s)(void *", self->sym->traits[t].m[m].ret,
-                        self->sym->traits[t].m[m].name);
-                for (k = 0; k < self->sym->traits[t].m[m].nparams; k++) {
-                    fprintf(self->out, ", %s", self->sym->traits[t].m[m].ptype[k]);
-                    if (self->sym->traits[t].m[m].pann[k] == 2
-                        || self->sym->traits[t].m[m].pann[k] == 3)
-                        fputs(" *", self->out);
-                }
-                fputs(");\n", self->out);
             }
-            fputs("};\n", self->out);
-            fprintf(self->out, "struct %s_iface {\n    void *self;\n    const struct %s_vtbl *vt;\n};\n\n",
-                    self->sym->traits[t].name, self->sym->traits[t].name);
         }
+        if (self->sym->nstructs) fputs("\n", self->out);
         return 0;
     }
 
     int emit_struct_fwd(void)
     {
-        int i, ti;
+        int nr = backend::lir::lmod_plan_row_count(), r;
+        int u = backend::lir::lmod_plan_shell_u();
         (void)self;
 
-        for (i = 0; i < self->sym->nstructs; i++) {
-            if (self->sym->structs[i].is_template) continue;
-            ti = self->sym->find_type(self->sym->structs[i].name);
-            if (ti < 0) continue;
-            if (self->sym->type_kind[ti] == 1) fprintf(self->out, "struct %s;\n", self->sym->structs[i].name);
-            else if (self->sym->type_kind[ti] == 6) fprintf(self->out, "union %s;\n", self->sym->structs[i].name);
+        /* S8 closeout: the forward declarations are module-selected rows. */
+        for (r = 0; r < nr; r++) {
+            int si;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_STRUCTFWD) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            si = backend::lir::lmod_plan_row_node(r);
+            if (si < 0 || si >= self->sym->nstructs) continue;
+            if (backend::lir::lmod_plan_row_aux(r))
+                fprintf(self->out, "union %s;\n", self->sym->structs[si].name);
+            else
+                fprintf(self->out, "struct %s;\n", self->sym->structs[si].name);
         }
         return 0;
     }
@@ -280,8 +248,9 @@ impl EmitHeader for Emitter {
         if (self->no_write) return 0;
         FILE *f;
         const char *path;
-        int n, i, j, first;
+        int i, j, nrows, first;
         (void)self;
+        (void)prog;
 
         if (strcmp(dest, "-") == 0) {
             f = stdout;
@@ -290,6 +259,9 @@ impl EmitHeader for Emitter {
             if (!f) return self->fail("cannot write the model");
         }
         path = self->path;
+        /* S8 closeout: the three sections are plan rows selected by the module
+           layer; this writer no longer reads the symbol table or the AST. */
+        nrows = backend::lir::lmod_map_plan_count();
         fputs("{\n  \"schema\": \"ct.model\",\n  \"schema_version\": 1,\n", f);
         fputs("  \"compiler\": \"ct v", f);
         self->emit_json_str(f, self->version);
@@ -298,106 +270,79 @@ impl EmitHeader for Emitter {
         fputs("\",\n  \"structs\": [", f);
 
         first = 1;
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            int si, bi, bn, skip = 0;
-            if (self->arena->nodes[n].kind != N_STRUCT
-                && self->arena->nodes[n].kind != N_UNION) continue;
-            for (bi = 0; bi < self->nbuiltin && !skip; bi++) {
-                int bu = self->builtins[bi];
-                if (bu < 0 || bu >= *self->nunits) continue;
-                for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0;
-                     bn = self->arena->nodes[bn].next)
-                    if (bn == n) { skip = 1; break; }
-            }
-            if (skip) continue;
-            if (strcmp(self->arena->nodes[n].text2, "ct_buf") == 0
-                || strcmp(self->arena->nodes[n].text2, "Vec") == 0
-                || strcmp(self->arena->nodes[n].text2, "Map") == 0
-                || strcmp(self->arena->nodes[n].text2, "MapEntry") == 0
-                || strcmp(self->arena->nodes[n].text2, "Option") == 0
-                || strcmp(self->arena->nodes[n].text2, "Result") == 0
-                || strcmp(self->arena->nodes[n].text2, "Str") == 0) continue;
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            int ffirst = 1;
+            if (!r || r->kind != LMP_MSTRUCT) continue;
             if (!first) fputc(',', f);
             fputs("{\"kind\":\"", f);
-            fputs(self->arena->nodes[n].kind == N_UNION ? "union" : "struct", f);
+            fputs(r->b ? "union" : "struct", f);
             fputs("\",\"name\":\"", f);
-            self->emit_json_str(f, self->arena->nodes[n].text2);
+            self->emit_json_str(f, r->t1);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"fields\":[", self->arena->nodes[n].line);
-            si = self->sym->find_struct(self->arena->nodes[n].text2);
-            if (si >= 0) {
-                for (i = 0; i < self->sym->structs[si].nfields; i++) {
-                    if (i > 0) fputc(',', f);
-                    fputs("{\"name\":\"", f);
-                    self->emit_json_str(f, self->sym->structs[si].fields[i].name);
-                    fputs("\",\"type\":\"", f);
-                    self->emit_json_str(f, self->sym->structs[si].fields[i].type);
-                    fputs("\",\"visibility\":\"unknown\",\"loc\":{\"file\":\"", f);
-                    self->emit_json_str(f, path);
-                    fprintf(f, "\",\"line\":%d,\"col\":%d}}",
-                            self->sym->structs[si].fields[i].line,
-                            self->sym->structs[si].fields[i].col);
-                }
+            fprintf(f, "\",\"line\":%d,\"fields\":[", r->line);
+            for (j = 0; j < nrows; j++) {
+                struct LMapRow *c = backend::lir::lmod_map_plan_row(j);
+                if (!c || c->kind != LMP_MSTRUCT_FIELD || c->parent != i) continue;
+                if (!ffirst) fputc(',', f);
+                ffirst = 0;
+                fputs("{\"name\":\"", f);
+                self->emit_json_str(f, c->t1);
+                fputs("\",\"type\":\"", f);
+                self->emit_json_str(f, c->t2);
+                fputs("\",\"visibility\":\"unknown\",\"loc\":{\"file\":\"", f);
+                self->emit_json_str(f, path);
+                fprintf(f, "\",\"line\":%d,\"col\":%d}}", c->a, c->b);
             }
             fputs("]}", f);
             first = 0;
         }
         fputs("],\n  \"enums\": [", f);
         first = 1;
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            int m, bi, bn, skip = 0;
-            if (self->arena->nodes[n].kind != N_ENUM) continue;
-            /* Phase 84: the model's `enums` list stays C enums; an ADT's layout
-               is documented in the spec, not in this export. */
-            if (self->arena->nodes[n].aux & 2) continue;
-            for (bi = 0; bi < self->nbuiltin && !skip; bi++) {
-                int bu = self->builtins[bi];
-                if (bu < 0 || bu >= *self->nunits) continue;
-                for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0;
-                     bn = self->arena->nodes[bn].next)
-                    if (bn == n) { skip = 1; break; }
-            }
-            if (skip) continue;
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            int ffirst = 1;
+            if (!r || r->kind != LMP_MENUM) continue;
             if (!first) fputc(',', f);
             fputs("{\"kind\":\"enum\",\"name\":\"", f);
-            self->emit_json_str(f, self->arena->nodes[n].text);
+            self->emit_json_str(f, r->t1);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"members\":[", self->arena->nodes[n].line);
-            for (m = self->arena->nodes[n].a, i = 0; m >= 0; m = self->arena->nodes[m].next, i++) {
-                int val = 0;
-                if (i > 0) fputc(',', f);
-                if (self->arena->nodes[m].a >= 0
-                    && self->arena->nodes[self->arena->nodes[m].a].kind == N_NUM)
-                    val = (int)self->arena->nodes[self->arena->nodes[m].a].num;
+            fprintf(f, "\",\"line\":%d,\"members\":[", r->line);
+            for (j = 0; j < nrows; j++) {
+                struct LMapRow *c = backend::lir::lmod_map_plan_row(j);
+                if (!c || c->kind != LMP_MENUM_M || c->parent != i) continue;
+                if (!ffirst) fputc(',', f);
+                ffirst = 0;
                 fputs("{\"name\":\"", f);
-                self->emit_json_str(f, self->arena->nodes[m].text2);
-                fprintf(f, "\",\"value\":%d}", val);
+                self->emit_json_str(f, c->t1);
+                fprintf(f, "\",\"value\":%d}", c->a);
             }
             fputs("]}", f);
             first = 0;
         }
         fputs("],\n  \"functions\": [", f);
         first = 1;
-        for (i = 0; i < self->sym->nfunc; i++) {
-            if (strncmp(self->sym->funcs[i].name, "str_", 4) == 0
-                || strncmp(self->sym->funcs[i].name, "vec_", 4) == 0
-                || strncmp(self->sym->funcs[i].name, "map_", 4) == 0
-                || strncmp(self->sym->funcs[i].name, "option_", 7) == 0
-                || strncmp(self->sym->funcs[i].name, "result_", 7) == 0) continue;
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            int ffirst = 1;
+            if (!r || r->kind != LMP_MFUNC) continue;
             if (!first) fputc(',', f);
             fputs("{\"name\":\"", f);
-            self->emit_json_str(f, self->sym->funcs[i].name);
+            self->emit_json_str(f, r->t1);
             fputs("\",\"cname\":\"", f);
-            self->emit_json_str(f, self->sym->funcs[i].cname);
+            self->emit_json_str(f, r->t2);
             fputs("\",\"visibility\":\"unknown\",\"returns\":\"", f);
-            self->emit_json_str(f, self->sym->funcs[i].ret);
-            fprintf(f, "\",\"line\":%d,\"params\":[", self->sym->funcs[i].line);
-            for (j = 0; j < self->sym->funcs[i].nparams; j++) {
-                if (j > 0) fputc(',', f);
+            self->emit_json_str(f, r->t3);
+            fprintf(f, "\",\"line\":%d,\"params\":[", r->line);
+            for (j = 0; j < nrows; j++) {
+                struct LMapRow *c = backend::lir::lmod_map_plan_row(j);
+                if (!c || c->kind != LMP_MFUNC_PARAM || c->parent != i) continue;
+                if (!ffirst) fputc(',', f);
+                ffirst = 0;
                 fputs("{\"type\":\"", f);
-                self->emit_json_str(f, self->sym->funcs[i].ptype[j]);
+                self->emit_json_str(f, c->t1);
                 fputs("\"}", f);
             }
             fputs("]}", f);
@@ -413,9 +358,9 @@ impl EmitHeader for Emitter {
         if (self->no_write) return 0;
         FILE *f;
         const char *path;
-        int trs, tre, fns, fne, cls, cle;
-        int i, j, m, n, first, si, count;
+        int i, j, nrows, first;
         (void)self;
+        (void)prog;
 
         if (strcmp(dest, "-") == 0) {
             f = stdout;
@@ -423,24 +368,10 @@ impl EmitHeader for Emitter {
             f = fopen(dest, "w");
             if (!f) return self->fail("cannot write the map");
         }
-        if (u >= 0) {
-            path = self->units[u].path;
-            trs = self->units[u].tr_start;
-            tre = self->units[u].tr_end;
-            fns = self->units[u].fn_start;
-            fne = self->units[u].fn_end;
-            cls = self->units[u].call_start;
-            cle = self->units[u].call_end;
-        } else {
-            path = self->path;
-            trs = 0;
-            tre = self->sym->ntraits;
-            fns = 0;
-            fne = self->sym->nfunc;
-            cls = 0;
-            cle = (*self->ncalls);
-        }
-
+        path = self->path;
+        /* S8 closeout: the six sections are plan rows selected by the module
+           layer; this writer no longer reads the symbol table or the AST. */
+        nrows = backend::lir::lmod_map_plan_count();
         fputs("{\n", f);
         fprintf(f, "  \"compiler\": \"ct v%s\",\n", self->version);
         fputs("  \"file\": \"", f);
@@ -449,22 +380,28 @@ impl EmitHeader for Emitter {
 
         fputs("  \"traits\": [", f);
         first = 1;
-        for (i = trs; i < tre; i++) {
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            int mfirst = 1;
+            if (!r || r->kind != LMP_TRAIT || r->unit != u) continue;
             if (!first) fputc(',', f);
             fputs("{\"name\":\"", f);
-            self->emit_json_str(f, self->sym->traits[i].name);
+            self->emit_json_str(f, r->t1);
             fputs("\",\"cname\":\"", f);
-            self->emit_json_str(f, self->sym->traits[i].name);
+            self->emit_json_str(f, r->t2);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"methods\":[", self->sym->traits[i].line);
-            for (m = 0; m < self->sym->traits[i].nm; m++) {
-                if (m > 0) fputc(',', f);
+            fprintf(f, "\",\"line\":%d,\"methods\":[", r->line);
+            for (j = 0; j < nrows; j++) {
+                struct LMapRow *c = backend::lir::lmod_map_plan_row(j);
+                if (!c || c->kind != LMP_TRAIT_M || c->parent != i) continue;
+                if (!mfirst) fputc(',', f);
+                mfirst = 0;
                 fputs("{\"name\":\"", f);
-                self->emit_json_str(f, self->sym->traits[i].m[m].name);
+                self->emit_json_str(f, c->t1);
                 fputs("\",\"ret\":\"", f);
-                self->emit_json_str(f, self->sym->traits[i].m[m].ret);
-                fprintf(f, "\",\"params\":%d}", self->sym->traits[i].m[m].nparams);
+                self->emit_json_str(f, c->t2);
+                fprintf(f, "\",\"params\":%d}", c->a);
             }
             fputs("]}", f);
             first = 0;
@@ -473,24 +410,26 @@ impl EmitHeader for Emitter {
 
         fputs("  \"structs\": [", f);
         first = 1;
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if (self->arena->nodes[n].kind != N_STRUCT) continue;
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            int ufirst = 1;
+            if (!r || r->kind != LMP_STRUCT || r->unit != u) continue;
             if (!first) fputc(',', f);
             fputs("{\"name\":\"", f);
-            self->emit_json_str(f, self->arena->nodes[n].text2);
+            self->emit_json_str(f, r->t1);
             fputs("\",\"cname\":\"", f);
-            self->emit_json_str(f, self->arena->nodes[n].text2);
+            self->emit_json_str(f, r->t2);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"uses\":[", self->arena->nodes[n].line);
-            si = self->sym->find_struct(self->arena->nodes[n].text2);
-            if (si >= 0) {
-                for (i = 0; i < self->sym->structs[si].nuse; i++) {
-                    if (i > 0) fputc(',', f);
-                    fputc('"', f);
-                    self->emit_json_str(f, self->sym->structs[si].use[i]);
-                    fputc('"', f);
-                }
+            fprintf(f, "\",\"line\":%d,\"uses\":[", r->line);
+            for (j = 0; j < nrows; j++) {
+                struct LMapRow *c = backend::lir::lmod_map_plan_row(j);
+                if (!c || c->kind != LMP_STRUCT_USE || c->parent != i) continue;
+                if (!ufirst) fputc(',', f);
+                ufirst = 0;
+                fputc('"', f);
+                self->emit_json_str(f, c->t1);
+                fputc('"', f);
             }
             fputs("]}", f);
             first = 0;
@@ -499,86 +438,80 @@ impl EmitHeader for Emitter {
 
         fputs("  \"functions\": [", f);
         first = 1;
-        for (i = fns; i < fne; i++) {
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            if (!r || r->kind != LMP_FUNC || r->unit != u) continue;
             if (!first) fputc(',', f);
             fputs("{\"name\":\"", f);
-            self->emit_json_str(f, self->sym->funcs[i].name);
+            self->emit_json_str(f, r->t1);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"ret\":\"", self->sym->funcs[i].line);
-            self->emit_json_str(f, self->sym->funcs[i].ret);
-            fprintf(f, "\",\"params\":%d}", self->sym->funcs[i].nparams);
+            fprintf(f, "\",\"line\":%d,\"ret\":\"", r->line);
+            self->emit_json_str(f, r->t2);
+            fprintf(f, "\",\"params\":%d}", r->b);
             first = 0;
         }
         fputs("],\n", f);
 
         fputs("  \"impls\": [", f);
         first = 1;
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            const char *tname;
-            if (self->arena->nodes[n].kind != N_IMPL) continue;
-            si = self->arena->nodes[n].aux;
-            if (si < 0) continue;   /* a template impl has no single struct symbol */
-            if (!self->arena->nodes[n].text2[0]) continue;   /* P34 S4: inherent, no trait */
-            tname = self->arena->nodes[n].text2;
-            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
-                if (!first) fputc(',', f);
-                fputs("{\"struct\":\"", f);
-                self->emit_json_str(f, self->sym->structs[si].name);
-                fputs("\",\"trait\":\"", f);
-                self->emit_json_str(f, tname);
-                fputs("\",\"method\":\"", f);
-                self->emit_json_str(f, self->arena->nodes[m].text2);
-                fputs("\",\"symbol\":\"", f);
-                fprintf(f, "%s_%s_%s", self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
-                fputs("\",\"ret\":\"", f);
-                self->emit_json_str(f, self->arena->nodes[m].text);
-                count = 0;
-                for (i = self->arena->nodes[m].a; i > 0; i = self->arena->nodes[i].next) count++;
-                fprintf(f, "\",\"params\":%d,\"file\":\"", count);
-                self->emit_json_str(f, path);
-                fprintf(f, "\",\"line\":%d}", self->arena->nodes[n].line);
-                first = 0;
-            }
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            if (!r || r->kind != LMP_IMPL || r->unit != u) continue;
+            if (!first) fputc(',', f);
+            fputs("{\"struct\":\"", f);
+            self->emit_json_str(f, r->t1);
+            fputs("\",\"trait\":\"", f);
+            self->emit_json_str(f, r->t2);
+            fputs("\",\"method\":\"", f);
+            self->emit_json_str(f, r->t3);
+            fputs("\",\"symbol\":\"", f);
+            fprintf(f, "%s_%s_%s", r->t1, r->t2, r->t3);
+            fputs("\",\"ret\":\"", f);
+            self->emit_json_str(f, r->t4);
+            fprintf(f, "\",\"params\":%d,\"file\":\"", r->a);
+            self->emit_json_str(f, path);
+            fprintf(f, "\",\"line\":%d}", r->line);
+            first = 0;
         }
         fputs("],\n", f);
 
         fputs("  \"calls\": [", f);
-        for (i = cls; i < cle; i++) {
-            if (i > cls) fputc(',', f);
+        first = 1;
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            if (!r || r->kind != LMP_CALL || r->unit != u) continue;
+            if (!first) fputc(',', f);
             fputs("{\"caller\":\"", f);
-            self->emit_json_str(f, (*self->calls)[i].caller);
+            self->emit_json_str(f, r->t1);
             fputs("\",\"callee\":\"", f);
-            self->emit_json_str(f, (*self->calls)[i].callee);
+            self->emit_json_str(f, r->t2);
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d}", (*self->calls)[i].line);
+            fprintf(f, "\",\"line\":%d}", r->line);
+            first = 0;
         }
         fputs("],\n", f);
 
         fputs("  \"maps\": [", f);
         first = 1;
-        for (i = 0; i < (*self->nmaps); i++) {
-            /* LANG-29 S4 / B4: a `map binding` is a conversion registry entry,
-               not a trait map; the `--emit-map` contract stays the Phase 11
-               shape (its own reporting is out of the B4 slice). */
-            if ((*self->maps)[i].is_binding) continue;
+        for (i = 0; i < nrows; i++) {
+            struct LMapRow *r = backend::lir::lmod_map_plan_row(i);
+            int bfirst = 1;
+            if (!r || r->kind != LMP_MAP) continue;
             if (!first) fputc(',', f);
-            first = 0;
             fputs("{\"trait\":\"", f);
-            self->emit_json_str(f, (*self->maps)[i].trait);
-            if ((*self->maps)[i].is_static) {
-                int su = (*self->maps)[i].unit;
+            self->emit_json_str(f, r->t1);
+            if (r->b & LMP_MAP_STATIC) {
                 fputs("\",\"static\":true", f);
-                /* A mapping unit's shim is part of that map's definition, so the
-                   JSON names the files a consumer build has to carry. */
-                if (self->units && su >= 0 && su < *self->nunits
-                    && self->units[su].has_shim) {
+                /* A mapping unit's shim is part of that map's definition, so
+                   the JSON names the files a consumer build has to carry. */
+                if (r->b & LMP_MAP_SHIM) {
                     fputs(",\"shim\":{\"header\":\"", f);
-                    self->emit_json_str(f, self->units[su].shim_h);
-                    if (self->units[su].shim_c) {
+                    self->emit_json_str(f, r->t4);
+                    if (r->b & LMP_MAP_SHIM_SRC) {
                         fputs("\",\"source\":\"", f);
-                        self->emit_json_str(f, self->units[su].shim_c);
+                        self->emit_json_str(f, r->t5);
                     }
                     fputs("\"}", f);
                 }
@@ -586,39 +519,34 @@ impl EmitHeader for Emitter {
             } else {
                 fputs("\",\"instance\":\"", f);
             }
-            self->emit_json_str(f, (*self->maps)[i].inst);
+            self->emit_json_str(f, r->t2);
             fputs("\",\"host\":\"", f);
-            if ((*self->maps)[i].type_host) fputs("type", f);
-            else fputs((*self->maps)[i].ns_host ? "namespace" : "instance", f);
-            if ((*self->maps)[i].type_host) {
+            if (r->b & LMP_MAP_TYPE_HOST) fputs("type", f);
+            else if (r->b & LMP_MAP_NS_HOST) fputs("namespace", f);
+            else fputs("instance", f);
+            if (r->b & LMP_MAP_TYPE_HOST) {
                 fputs("\",\"type\":\"", f);
-                self->emit_json_str(f, (*self->maps)[i].host_type);
+                self->emit_json_str(f, r->t3);
             }
             fputs("\",\"file\":\"", f);
             self->emit_json_str(f, path);
-            fprintf(f, "\",\"line\":%d,\"bindings\":[", (*self->maps)[i].line);
-            for (j = 0; j < (*self->maps)[i].nb; j++) {
-                if (j > 0) fputc(',', f);
+            fprintf(f, "\",\"line\":%d,\"bindings\":[", r->line);
+            for (j = 0; j < nrows; j++) {
+                struct LMapRow *c = backend::lir::lmod_map_plan_row(j);
+                if (!c || c->kind != LMP_MAP_BIND || c->parent != i) continue;
+                if (!bfirst) fputc(',', f);
+                bfirst = 0;
                 fputs("{\"method\":\"", f);
-                self->emit_json_str(f, (*self->maps)[i].b[j].method);
+                self->emit_json_str(f, c->t1);
                 fputs("\",\"symbol\":\"", f);
-                if ((*self->maps)[i].is_static) {
-                    const char *callee;
-                    callee = map_recipe_callee_text((*self->maps)[i].b[j].call);
-                    if (!callee) return self->fail("out of memory");
-                    self->emit_json_str(f, callee);
-                } else {
-                    self->emit_json_str(f, (*self->maps)[i].b[j].direct
-                                              ? (*self->maps)[i].b[j].call
-                                              : (*self->maps)[i].b[j].wrapper);
-                }
-                if ((*self->maps)[i].is_static)
+                self->emit_json_str(f, c->t2);
+                if (r->b & LMP_MAP_STATIC)
                     fputs("\",\"wrapper\":false,\"inline\":true}", f);
                 else
-                    fprintf(f, "\",\"wrapper\":%s}",
-                            (*self->maps)[i].b[j].direct ? "false" : "true");
+                    fprintf(f, "\",\"wrapper\":%s}", c->b ? "false" : "true");
             }
             fputs("]}", f);
+            first = 0;
         }
         fputs("]\n", f);
         fputs("}\n", f);

@@ -451,6 +451,19 @@ pub struct LModule {
 #define LPS_BOXHELP    17   /* node: instance row, Box helpers               */
 #define LPS_ADTLIFE    18   /* node: ADT row, retain/release glue            */
 #define LPS_STRPROTO   19   /* text: the compile-mode String entry prototypes */
+/* S8 closeout: the remaining writer selections. The module layer picks every
+   row (unit / header split included) and the writer only renders it. */
+#define LPS_STRUCTFWD  20   /* node: struct row; aux: 1 = union             */
+#define LPS_TRAITDECL  21   /* node: trait row; aux: 0 all / 1 pub / 2 priv */
+#define LPS_VTBLFWD    22   /* text: trait; node: struct row; aux: exported */
+#define LPS_DROPPROTO  23   /* node: struct; aux: 0 static, 1 legacy static, 2 owner def, 3 extern */
+#define LPS_HANDBAK    24   /* node: struct row                            */
+#define LPS_LINKEXTERN 25   /* text: trait; node: struct, or a map when aux = 1 */
+#define LPS_IMPLDEF    26   /* node: N_IMPL row                            */
+#define LPS_MAPDEF     27   /* node: map row; aux: 1 = vtable exported     */
+#define LPS_GINIT      28   /* node: generic-instance row                  */
+#define LPS_UNITINIT   29   /* node: N_GLOBAL row needing a constructor    */
+#define LPS_STRLIT     30   /* node: N_STR row in the literal table        */
 /* LPS_INC positions inside the product (the shell prints the rows at the
    matching point, so the blank-line grouping stays a module decision). */
 #define LINC_C_IO      0    /* `.c`: after the banner, before stddef       */
@@ -467,6 +480,48 @@ struct ct_lshellrow {
                            LPS_IMPL: instance row; LPS_INC: position */
     int hdr;            /* 1 = the `.h` writer consumes the row, 0 = `.c` */
     const char *text;   /* LPS_PP / LPS_INC: the preprocessor line */
+}
+
+/* S8 closeout: the `--emit-map` / `--emit-model` JSON records. The module layer
+   selects every record (and every nested list item) and the writers only
+   render these rows; neither writer reads the symbol table or the AST any
+   more. `parent` is the row index of the enclosing record inside this table
+   (-1 for a top-level record), so a nested list keeps its order without a
+   second table. Flag bits are per kind and documented on the constants. */
+#define LMP_TRAIT          1   /* t1 name, t2 cname, a line; kids: _M     */
+#define LMP_TRAIT_M        2   /* parent, t1 name, t2 ret, a params      */
+#define LMP_STRUCT         3   /* t1 name, t2 cname, a line; kids: _USE  */
+#define LMP_STRUCT_USE     4   /* parent, t1 use                         */
+#define LMP_FUNC           5   /* t1 name, a line, t2 ret, b params      */
+#define LMP_IMPL           6   /* t1 struct, t2 trait, t3 method, t4 ret, a line, b params */
+#define LMP_CALL           7   /* t1 caller, t2 callee, a line           */
+#define LMP_MAP            8   /* t1 trait, t2 inst, t3 type host, t4/t5 shim, a line, b flags; kids: _BIND */
+#define LMP_MAP_BIND       9   /* parent, t1 method, t2 symbol, b direct */
+#define LMP_MSTRUCT       10   /* t1 name, a line, b 1 = union; kids: _FIELD */
+#define LMP_MSTRUCT_FIELD 11   /* parent, t1 name, t2 type, a line, b col */
+#define LMP_MENUM         12   /* t1 name, a line; kids: _MENUM_M        */
+#define LMP_MENUM_M       13   /* parent, t1 name, a value               */
+#define LMP_MFUNC         14   /* t1 name, t2 cname, t3 ret, a line; kids: _PARAM */
+#define LMP_MFUNC_PARAM   15   /* parent, t1 type                        */
+/* LMP_MAP.b flags */
+#define LMP_MAP_STATIC     1
+#define LMP_MAP_TYPE_HOST  2
+#define LMP_MAP_NS_HOST    4
+#define LMP_MAP_SHIM       8
+#define LMP_MAP_SHIM_SRC  16
+
+pub struct LMapRow {
+    int kind;
+    int unit;           /* -1 = compile mode; else the product's unit */
+    int parent;         /* enclosing record row, -1 at top level */
+    int line;
+    int a;
+    int b;
+    const char *t1;
+    const char *t2;
+    const char *t3;
+    const char *t4;
+    const char *t5;
 }
 
 /* S8 emitter contract: the module-level facts the emitter consumes as input
@@ -500,6 +555,11 @@ pub struct LModulePlan {
     void *srows;
     int nsrows;
     int srowcap;
+    /* S8 closeout: the map / model JSON records (`struct LMapRow *`). One
+       table for both writers; each writer resets it before its own run. */
+    void *mrows;
+    int nmrows;
+    int mrowcap;
     /* S8 ABI contract: the export set is selected by the module layer (the
        driver's ABI checks); the ABI writer only renders it. */
     int abi_root;
@@ -528,6 +588,13 @@ pub int lmod_plan_row_node(int i);
 pub int lmod_plan_row_aux(int i);
 pub int lmod_plan_row_hdr(int i);
 pub const char *lmod_plan_row_text(int i);
+/* S8 closeout: the map / model JSON rows. */
+pub void lmod_map_plan_reset(void);
+pub int lmod_map_plan_add(int kind, int unit, int parent, int line, int a,
+                          int b, const char *t1, const char *t2,
+                          const char *t3, const char *t4, const char *t5);
+pub int lmod_map_plan_count(void);
+pub struct LMapRow *lmod_map_plan_row(int i);
 pub void lmod_plan_set_prog(int prog);
 pub int lmod_plan_prog(void);
 pub void lmod_plan_set_abi(int root, int *exports, int n);
@@ -737,6 +804,50 @@ pub const char *lmod_plan_row_text(int i)
 {
     struct ct_lshellrow *r = lmod_row(i);
     return r ? r->text : "";
+}
+
+/* ------------------------------------------------------------------------- */
+/* Map / model JSON rows (S8 closeout)                                       */
+/* ------------------------------------------------------------------------- */
+pub void lmod_map_plan_reset(void)
+{
+    g_plan.nmrows = 0;
+}
+
+pub int lmod_map_plan_add(int kind, int unit, int parent, int line, int a,
+                          int b, const char *t1, const char *t2,
+                          const char *t3, const char *t4, const char *t5)
+{
+    struct LMapRow *r;
+
+    if (lir_reserve(&g_plan.mrows, &g_plan.mrowcap, g_plan.nmrows + 1,
+                    (int)sizeof(struct LMapRow)) != 0)
+        return -1;
+    r = ((struct LMapRow *)g_plan.mrows) + g_plan.nmrows;
+    r->kind = kind;
+    r->unit = unit;
+    r->parent = parent;
+    r->line = line;
+    r->a = a;
+    r->b = b;
+    r->t1 = (t1 && t1[0]) ? runtime::text::ct_intern(t1) : "";
+    r->t2 = (t2 && t2[0]) ? runtime::text::ct_intern(t2) : "";
+    r->t3 = (t3 && t3[0]) ? runtime::text::ct_intern(t3) : "";
+    r->t4 = (t4 && t4[0]) ? runtime::text::ct_intern(t4) : "";
+    r->t5 = (t5 && t5[0]) ? runtime::text::ct_intern(t5) : "";
+    g_plan.nmrows++;
+    return 0;
+}
+
+pub int lmod_map_plan_count(void)
+{
+    return g_plan.nmrows;
+}
+
+pub struct LMapRow *lmod_map_plan_row(int i)
+{
+    if (i < 0 || i >= g_plan.nmrows) return (struct LMapRow *)0;
+    return ((struct LMapRow *)g_plan.mrows) + i;
 }
 
 pub void lmod_plan_set_prog(int prog)

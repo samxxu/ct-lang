@@ -70,6 +70,8 @@ import backend::lir::LModule::LModulePlan as LModulePlan;
 #define LPS_BOXHELP     17
 #define LPS_ADTLIFE     18
 #define LPS_STRPROTO    19
+#define LPS_GINIT       28
+#define LPS_STRLIT      30
 #define LINC_C_IO       0
 #define LINC_C_PRE      1
 #define LINC_C_POST     2
@@ -636,9 +638,12 @@ pub int emit_adt_life_defs(struct Emitter *self, int u)
 pub int emit_generic_defs(struct Emitter *self, int u)
 {
     int i, t;
-    for (i = 0; i < self->sym->nginsts; i++) {
-        if (u >= 0 && self->sym->ginsts[i].owner != u)
-            continue;
+    int nr = backend::lir::lmod_plan_row_count(), r;
+    /* S8 closeout: which generic instances a product defines is a row. */
+    for (r = 0; r < nr; r++) {
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_GINIT) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        i = backend::lir::lmod_plan_row_node(r);
         t = self->sym->funcs[self->sym->ginsts[i].func].body;
         if (t < 0) continue;
         self->gtparam = frontend::sym::ct_text_rows_reserve(self->gtparam, self->gtcap,
@@ -781,13 +786,17 @@ pub void emit_slice_helpers(struct Emitter *self)
 
 pub int emit_string_literals(struct Emitter *self, int prog)
 {
-    int n, any = 0;
+    int nr = backend::lir::lmod_plan_row_count(), r, any = 0;
+    int u = backend::lir::lmod_plan_shell_u();
     (void)prog;
 
-    for (n = 0; n < self->arena->nnode; n++) {
+    /* S8 closeout: the literal table is a module-selected row set. */
+    for (r = 0; r < nr; r++) {
+        int n;
         const char *lit;
-        if (self->arena->nodes[n].kind != N_STR) continue;
-        if (self->arena->nodes[n].aux != 1) continue;
+        if (backend::lir::lmod_plan_row_kind(r) != LPS_STRLIT) continue;
+        if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+        n = backend::lir::lmod_plan_row_node(r);
         lit = self->arena->str_at((int)self->arena->nodes[n].num);
         if (!any) fputs("\n/* PH-80: immortal String literal headers */\n", self->out);
         fprintf(self->out,
@@ -989,7 +998,7 @@ pub int emit_unit_body(struct Emitter *self, int u)
     if (g_slice_used && *g_slice_used) emit_slice_helpers(self);
 
     if (self->emit_struct_fwd() != 0) return -1;
-    if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 2) != 0) return -1;
+    if (self->emit_trait_decls() != 0) return -1;
     if (self->emit_vtable_fwd(self->units[u].prog) != 0) return -1;
 
     {
@@ -1502,7 +1511,7 @@ pub int write_unit_header_body(struct Emitter *self, int u, const char *guard)
     if (shell_inc_rows(self, u, LINC_H_POST) != 0) return -1;
 
     if (self->emit_struct_fwd() != 0) return -1;
-    if (self->emit_trait_range(self->units[u].tr_start, self->units[u].tr_end, 1) != 0) return -1;
+    if (self->emit_trait_decls() != 0) return -1;
     if (self->emit_link_externs(self->units[u].prog, u) != 0) return -1;
 
     {

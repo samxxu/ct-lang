@@ -46,6 +46,12 @@ import backend::lir::LModule::LModulePlan as LModulePlan;
 #define MAX_TEXT   160
 /* S8 shell finishing: the inherent-prototype row kind (mirror of LModule). */
 #define LPS_INPROTO 11
+/* S8 closeout rows this unit reads (mirror of LModule.h.ct). */
+#define LPS_TRAITDECL  21
+#define LPS_LINKEXTERN 25
+#define LPS_IMPLDEF    26
+#define LPS_MAPDEF     27
+#define LPS_UNITINIT   29
 /* the node kinds these writers filter on (mirror of Emitter.h.ct / Arena) */
 #define N_VAR     10
 #define N_STRUCT  20
@@ -184,18 +190,53 @@ impl EmitDecl for Emitter {
 
     int emit_trait_decls(void)
     {
+        int nr = backend::lir::lmod_plan_row_count(), r;
+        int u = backend::lir::lmod_plan_shell_u();
+        int hdr = backend::lir::lmod_plan_shell_header();
         (void)self;
-        return self->emit_trait_range(0, self->sym->ntraits, 0);
+
+        /* S8 closeout: which traits a product declares (and their `.c` / `.h`
+           split) is a module-selected row; this writer only spells it. */
+        for (r = 0; r < nr; r++) {
+            int t, m, k;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_TRAITDECL) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            if (backend::lir::lmod_plan_row_hdr(r) != hdr) continue;
+            t = backend::lir::lmod_plan_row_node(r);
+            if (t < 0 || t >= self->sym->ntraits) continue;
+            fprintf(self->out, "struct %s_vtbl {\n", self->sym->traits[t].name);
+            for (m = 0; m < self->sym->traits[t].nm; m++) {
+                fprintf(self->out, "    %s (*%s)(void *", self->sym->traits[t].m[m].ret,
+                        self->sym->traits[t].m[m].name);
+                for (k = 0; k < self->sym->traits[t].m[m].nparams; k++) {
+                    fprintf(self->out, ", %s", self->sym->traits[t].m[m].ptype[k]);
+                    if (self->sym->traits[t].m[m].pann[k] == 2
+                        || self->sym->traits[t].m[m].pann[k] == 3)
+                        fputs(" *", self->out);
+                }
+                fputs(");\n", self->out);
+            }
+            fputs("};\n", self->out);
+            fprintf(self->out, "struct %s_iface {\n    void *self;\n    const struct %s_vtbl *vt;\n};\n\n",
+                    self->sym->traits[t].name, self->sym->traits[t].name);
+        }
+        return 0;
     }
 
     int emit_maps(int u)
     {
-        int i, j, k;
+        int j, k;
+        int nr = backend::lir::lmod_plan_row_count(), r;
         (void)self;
 
-        for (i = 0; i < (*self->nmaps); i++) {
-            if (u >= 0 && (*self->maps)[i].unit != u) continue;
-            if ((*self->maps)[i].is_static) continue;
+        /* S8 closeout: which maps a product writes (and whether their vtable
+           is exported) is a module-selected row. */
+        for (r = 0; r < nr; r++) {
+            int i;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_MAPDEF) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            i = backend::lir::lmod_plan_row_node(r);
+            if (i < 0 || i >= (*self->nmaps)) continue;
             for (j = 0; j < (*self->maps)[i].nb; j++) {
                 struct MapBind *b;
                 struct MethodSig *sig;
@@ -225,7 +266,7 @@ impl EmitDecl for Emitter {
             if ((*self->maps)[i].nb > 0) {
                 /* an instance nothing boxes leaves its table unreferenced; a
                    mapped `pub` global is reachable from every importing unit */
-                if (self->map_vtable_exported(i))
+                if (backend::lir::lmod_plan_row_aux(r))
                     fprintf(self->out, "const struct %s_vtbl %s = {\n",
                             (*self->maps)[i].trait, (*self->maps)[i].vtable);
                 else
@@ -246,46 +287,30 @@ impl EmitDecl for Emitter {
 
     int emit_link_externs(int prog, int u)
     {
-        int n, i, si, any;
-        const char *tname;
+        int nr = backend::lir::lmod_plan_row_count(), r, any;
+        (void)prog;
         (void)self;
 
+        /* S8 closeout: the exported vtable externs are module-selected rows. */
         any = 0;
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            if (self->arena->nodes[n].kind != N_IMPL) continue;
-            si = self->arena->nodes[n].aux;
-            if (si < 0) continue;   /* a template impl exports no struct vtable */
-            if (!self->arena->nodes[n].text2[0]) continue;   /* P34 S4: inherent, no vtable */
-            tname = self->arena->nodes[n].text2;
-            if (!self->vtable_exported(si, tname)) continue;
-            fprintf(self->out, "extern const struct %s_vtbl %s_%s_vtable;\n",
-                    tname, self->sym->structs[si].name, tname);
+        for (r = 0; r < nr; r++) {
+            int node;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_LINKEXTERN) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != u) continue;
+            node = backend::lir::lmod_plan_row_node(r);
+            if (backend::lir::lmod_plan_row_aux(r)) {
+                /* a mapped instance's vtable (`text` is the trait) */
+                if (node < 0 || node >= (*self->nmaps)) continue;
+                fprintf(self->out, "extern const struct %s_vtbl %s;\n",
+                        (*self->maps)[node].trait, (*self->maps)[node].vtable);
+            } else {
+                const char *tname = backend::lir::lmod_plan_row_text(r);
+                if (node < 0 || node >= self->sym->nstructs) continue;
+                fprintf(self->out, "extern const struct %s_vtbl %s_%s_vtable;\n",
+                        tname, self->sym->structs[node].name, tname);
+            }
             any = 1;
         }
-        /* an all-default adoption exports its vtable under the same rule */
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
-            int ui;
-            if (self->arena->nodes[n].kind != N_STRUCT || !self->arena->nodes[n].text2[0]) continue;
-            si = self->sym->find_struct(self->arena->nodes[n].text2);
-            if (si < 0) continue;
-            for (ui = 0; ui < self->sym->structs[si].nuse; ui++) {
-                tname = self->sym->structs[si].use[ui];
-                if (!adoption_default_only(self, si, tname)) continue;
-                if (!self->vtable_exported(si, tname)) continue;
-                fprintf(self->out, "extern const struct %s_vtbl %s_%s_vtable;\n",
-                        tname, self->sym->structs[si].name, tname);
-                any = 1;
-            }
-        }
-        if (u >= 0)
-            for (i = 0; i < (*self->nmaps); i++) {
-                if ((*self->maps)[i].unit != u) continue;
-                if ((*self->maps)[i].is_static) continue;
-                if (!self->map_vtable_exported(i)) continue;
-                fprintf(self->out, "extern const struct %s_vtbl %s;\n",
-                        (*self->maps)[i].trait, (*self->maps)[i].vtable);
-                any = 1;
-            }
         if (any) fputs("\n", self->out);
         return 0;
     }
@@ -376,25 +401,33 @@ impl EmitDecl for Emitter {
 
     int emit_unit_init(int prog)
     {
-        int n, any;
+        int nr = backend::lir::lmod_plan_row_count(), r, any;
+        (void)prog;
         (void)self;
 
         /* PH-64: a bare-metal reset path never calls the constructor, so
            `--freestanding` emits none; every object that would have needed one
            is rejected above, with a position. */
         if (self->freestanding && *self->freestanding) return 0;
+        /* S8 closeout: the globals needing the constructor are plan rows. */
         any = 0;
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
-            if (unit_init_needed(self, n)) any = 1;
+        for (r = 0; r < nr; r++) {
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_UNITINIT) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != backend::lir::lmod_plan_shell_u()) continue;
+            any = 1;
+        }
         if (!any) return 0;
         fputs("static void __ct_init(void) __attribute__((constructor));\n", self->out);
         fputs("static void __ct_init(void) {\n", self->out);
         fputs("    unsigned long __ct_i;\n", self->out);
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+        for (r = 0; r < nr; r++) {
+            int n;
             const char *cnt;
             const char *recv;
             size_t ci;
-            if (!unit_init_needed(self, n)) continue;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_UNITINIT) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != backend::lir::lmod_plan_shell_u()) continue;
+            n = backend::lir::lmod_plan_row_node(r);
             if (!self->arena->nodes[n].text3[0]) {
                 /* a scalar object whose struct has array fields */
                 if (self->ty->type_has_array_init(self->arena->nodes[n].text)
@@ -525,17 +558,23 @@ impl EmitDecl for Emitter {
     int emit_impls(int prog)
     {
         int n, m, k, u, body, dm;
+        int nr = backend::lir::lmod_plan_row_count(), r;
         (void)self;
+        (void)prog;
 
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+        /* S8 closeout: the impl rows a product writes are module-selected plan
+           rows (aux 1 = trait impl, 2 = inherent/ADT, 3 = all-default struct
+           adoption); the bodies below still walk the selected node. */
+        for (r = 0; r < nr; r++) {
             int si, ti;
             const char *tname;
             const char *sname;
             const char *mret;
-            if (self->arena->nodes[n].kind != N_IMPL) continue;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_IMPLDEF) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != backend::lir::lmod_plan_shell_u()) continue;
+            if (backend::lir::lmod_plan_row_aux(r) != 1) continue;
+            n = backend::lir::lmod_plan_row_node(r);
             si = self->arena->nodes[n].aux;
-            if (si < 0) continue;   /* template impls are written by emit_struct_impls */
-            if (!self->arena->nodes[n].text2[0]) continue;   /* P34 S4: inherent, no vtable */
             tname = self->arena->nodes[n].text2;
             ti = -1;
             for (k = 0; k < self->sym->ntraits; k++)
@@ -687,15 +726,16 @@ impl EmitDecl for Emitter {
            to the struct pointer; static methods take no receiver. The body's
            `self.field` (N_MEMBER) is rewritten to `_self->field` by the
            self_mode-aware member emitter below. */
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+        for (r = 0; r < nr; r++) {
             int si, type_pub;
             const char *sname;
             const char *tag;
             const char *mret;
-            if (self->arena->nodes[n].kind != N_IMPL) continue;
-            if (self->arena->nodes[n].text2[0]) continue;   /* trait impl: above */
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_IMPLDEF) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != backend::lir::lmod_plan_shell_u()) continue;
+            if (backend::lir::lmod_plan_row_aux(r) != 2) continue;
+            n = backend::lir::lmod_plan_row_node(r);
             si = self->arena->nodes[n].aux;
-            if (si == -1) continue;   /* template impl: emit_struct_impls */
             sname = self->arena->nodes[n].text;
             /* LANG-29 S3 / B2: an ADT impl has no struct row (`aux = -2 - adt`);
                its methods are named and typed by the ADT's C tag just like a
@@ -809,11 +849,14 @@ impl EmitDecl for Emitter {
            The slot bodies are expanded here, once per struct, and the `use`
            clause is the sole adoption. A trait with an abstract method in this
            position is still SH-8 (`trait method 'x' is not implemented`). */
-        for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next) {
+        for (r = 0; r < nr; r++) {
             int si, ti, ui, type_index;
             const char *tname;
             const char *stype;
-            if (self->arena->nodes[n].kind != N_STRUCT || !self->arena->nodes[n].text2[0]) continue;
+            if (backend::lir::lmod_plan_row_kind(r) != LPS_IMPLDEF) continue;
+            if (backend::lir::lmod_plan_row_unit(r) != backend::lir::lmod_plan_shell_u()) continue;
+            if (backend::lir::lmod_plan_row_aux(r) != 3) continue;
+            n = backend::lir::lmod_plan_row_node(r);
             si = self->sym->find_struct(self->arena->nodes[n].text2);
             if (si < 0) continue;
             for (ui = 0; ui < self->sym->structs[si].nuse; ui++) {
