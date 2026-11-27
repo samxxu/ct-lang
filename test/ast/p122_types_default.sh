@@ -28,7 +28,7 @@ bad() { fail=$((fail + 1)); echo "FAIL p122/types-default: $1" >&2; }
 
 # The slice boundary. S7-a lands assignment, S7-b return, S7-c container; each
 # slice commits the source change and flips its own flag here.
-S7B=0
+S7B=1
 S7C=0
 
 cat >"$tmp/legal.ct" <<'CT'
@@ -74,6 +74,29 @@ int f(void)
 int main(void)
 {
     return f();
+}
+CT
+cat >"$tmp/b_missing.ct" <<'CT'
+int f(void)
+{
+    return;
+}
+
+int main(void)
+{
+    return f();
+}
+CT
+cat >"$tmp/b_void.ct" <<'CT'
+void f(void)
+{
+    return 1;
+}
+
+int main(void)
+{
+    f();
+    return 0;
 }
 CT
 cat >"$tmp/c_push.ct" <<'CT'
@@ -128,13 +151,20 @@ neg() {
 # 1) the three classes on the default path, in slice order.
 neg a_init on "initializer: expected 'int', got 'char *'"
 neg a_assign on "assignment: expected 'int', got 'char *'"
-if [ "$S7B" = 1 ]; then neg b_ret on "return: expected 'int', got 'char *'"
-else neg b_ret off "return: expected 'int', got 'char *'"; fi
+if [ "$S7B" = 1 ]; then
+    neg b_ret on "return: expected 'int', got 'char *'"
+    neg b_missing on "return: missing a value (function returns 'int')"
+    neg b_void on "return: a value is not allowed in a void function"
+else
+    neg b_ret off "return: expected 'int', got 'char *'"
+    neg b_missing off "return: missing a value"
+    neg b_void off "a value is not allowed in a void function"
+fi
 if [ "$S7C" = 1 ]; then neg c_push on "argument 1: expected 'int', got 'char *'"
 else neg c_push off "argument 1: expected 'int', got 'char *'"; fi
 
 enabled="a_init a_assign"
-[ "$S7B" = 1 ] && enabled="$enabled b_ret"
+[ "$S7B" = 1 ] && enabled="$enabled b_ret b_missing b_void"
 [ "$S7C" = 1 ] && enabled="$enabled c_push"
 
 # 2) the default path and `ct check --types` judge one case the same way.
