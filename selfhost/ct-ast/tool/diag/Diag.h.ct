@@ -109,6 +109,9 @@ struct Warn {
 }
 
 trait DiagStore {
+    /* S8b D1: the warning store's grower is a method, like the rest of the
+       class; it was the unit's last `struct Diag *self` free function. */
+    int  grow_warns(void);
     int  sem_error(int line, int col, const char *msg, const char *path);
     int  record_sig_warn(int line, int col, const char *method, const char *trait,
                          const char *stype, const char *msg, const char *path);
@@ -199,24 +202,6 @@ struct Diag {
     int  codes;
 } use DiagStore;
 
-/* S1a-0 C1: the warning store grows instead of stopping at MAX_WARNINGS. */
-static int diag_grow_warns(struct Diag *self)
-{
-    int cap;
-    struct Warn *grown;
-    if (self->warns && self->nwarns < self->wcap) return 0;
-    cap = self->wcap > 0 ? self->wcap * 2 : MAX_WARNINGS;
-    if (cap > WARN_LIMIT) {
-        if (self->wcap >= WARN_LIMIT) return -1;
-        cap = WARN_LIMIT;
-    }
-    grown = (struct Warn *)realloc(self->warns, (size_t)cap * sizeof(*self->warns));
-    if (!grown) return -1;
-    self->warns = grown;
-    self->wcap = cap;
-    return 0;
-}
-
 /* S1a-0 C2p: record text goes into the one intern pool; an allocation failure
    is reported by the pool itself and an empty field keeps the printers safe. */
 static const char *diag_intern(const char *s)
@@ -255,6 +240,24 @@ static void diag_loc(FILE *f, const struct Warn *w, int strict)
 }
 
 impl DiagStore for Diag {
+    /* S1a-0 C1: the warning store grows instead of stopping at MAX_WARNINGS. */
+    int grow_warns(void)
+    {
+        int cap;
+        struct Warn *grown;
+        if (self->warns && self->nwarns < self->wcap) return 0;
+        cap = self->wcap > 0 ? self->wcap * 2 : MAX_WARNINGS;
+        if (cap > WARN_LIMIT) {
+            if (self->wcap >= WARN_LIMIT) return -1;
+            cap = WARN_LIMIT;
+        }
+        grown = (struct Warn *)realloc(self->warns, (size_t)cap * sizeof(*self->warns));
+        if (!grown) return -1;
+        self->warns = grown;
+        self->wcap = cap;
+        return 0;
+    }
+
     /* A semantic error in L2's shape (`file:line:col: error: ...`). Reporting is
        followed by resynchronisation in `parse_program`, so the rest of the file
        is still checked; `run`/`build_main` close with L2's summary line. */
@@ -296,7 +299,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 1;
         w->line = line;
@@ -332,7 +335,7 @@ impl DiagStore for Diag {
         }
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 4;
         w->line = line;
@@ -366,7 +369,7 @@ impl DiagStore for Diag {
         }
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 5;
         w->line = line;
@@ -391,7 +394,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 6;
         w->line = line;
@@ -415,7 +418,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 13;
         w->line = line;
@@ -439,7 +442,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 7;
         w->line = line;
@@ -462,7 +465,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 9;
         w->line = line;
@@ -485,7 +488,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 12;
         w->line = line;
@@ -508,7 +511,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 11;
         w->line = line;
@@ -529,7 +532,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 8;
         w->line = line;
@@ -549,7 +552,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = kind;
         w->line = line;
@@ -572,7 +575,7 @@ impl DiagStore for Diag {
     {
         struct Warn *w;
         (void)self;
-        if (diag_grow_warns(self) != 0) return -1;
+        if (self->grow_warns() != 0) return -1;
         w = &self->warns[self->nwarns];
         w->kind = 10;
         w->line = line;

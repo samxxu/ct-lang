@@ -64,6 +64,25 @@ struct DepList {
 /* The package manager (Phase 8, ported in 10.6). `get`/`install` never reach the
    compile core: only `get` may run `git`, and `install` is offline (D42). */
 trait PkgOps {
+    /* S8b D1: the former `struct Pkg *self` helpers, as methods. */
+    int append_words(char **dst, int *cap, const char *src);
+    int lock_reserve(int need);
+    void *owned_alloc(size_t size);
+    void *owned_grow(void *p, size_t size);
+    void owned_free();
+    int text_grow(char **buf, int *cap, int need);
+    int text_begin(char **buf, int *cap);
+    int text_cat(char **buf, int *cap, const char *s);
+    int text_quote(char **buf, int *cap, const char *s);
+    char *text_dupn(const char *s, size_t n);
+    char *text_dup(const char *s);
+    char *row();
+    int text_fgets(char **buf, int *cap, FILE *f);
+    int scrub(const char *in, char **out, int *cap);
+    int git_diag(const char *errfile, const char *cache,
+                        const char *spec);
+    int seen_ensure(int need);
+    int recs_ensure(int need);
     int  read_manifest(const char *dir, const char **name, const char **ver,
                        struct DepList *deps);
     int  version_parse(const char *s, int v[3]);
@@ -124,12 +143,9 @@ static int pkg_index_verify(int argc, char **argv, const char *prog, const char 
    `index_row_check` and `dir_digest` with verify/get, so a generated row is
    accepted by exactly the code that will later consume it. */
 pub int pkg_index_refresh(int argc, char **argv, const char *prog, const char *version);
-static int pkg_append_words(struct Pkg *self, char **dst, int *cap, const char *src);
 static int pkg_check_requires(const char *pkg, const char *req);
 static int pkg_verify_lock(const char *prog, struct LockRow **rows, int *nlock, int *cap);
 static int pkg_lock_keep(char *dst, size_t cap);
-/* S1a-0 C2d: grow the lock accumulator; 0 ok, -1 OOM / over the formal cap. */
-static int pkg_lock_reserve(struct Pkg *self, int need);
 static int pkg_update(const char *prog);
 static int pkg_verify(const char *prog, int strict);
 static int pkg_verify_strict(void);
@@ -252,118 +268,6 @@ struct Pkg {
     const char *version;
 } use PkgOps;
 
-/* --- S1a-0 C2e: on-demand text ------------------------------------------- */
-
-/* Register one heap block with the command scope. The registry grows from
-   MAX_PKG_DEPS, the same initial size the other Pkg tables use. */
-static void *pkg_owned_alloc(struct Pkg *self, size_t size)
-{
-    char *p;
-    char **grown;
-    int cap;
-
-    p = (char *)malloc(size);
-    if (!p) {
-        fprintf(stderr, "ctc: out of memory\n");
-        return (void *)0;
-    }
-    if (self->nowned >= self->ownedcap) {
-        cap = self->ownedcap > 0 ? self->ownedcap * 2 : MAX_PKG_DEPS;
-        grown = (char **)realloc(self->owned, (size_t)cap * sizeof(*grown));
-        if (!grown) {
-            free(p);
-            fprintf(stderr, "ctc: out of memory\n");
-            return (void *)0;
-        }
-        self->owned = grown;
-        self->ownedcap = cap;
-    }
-    self->owned[self->nowned] = p;
-    self->nowned++;
-    return p;
-}
-
-/* Grow one registered block. realloc may move it, so its registry slot is
-   rewritten; the old contents survive, which is all a text builder needs. */
-static void *pkg_owned_grow(struct Pkg *self, void *p, size_t size)
-{
-    char *np;
-    int i;
-
-    if (p == 0) return pkg_owned_alloc(self, size);
-    np = (char *)realloc(p, size);
-    if (!np) {
-        fprintf(stderr, "ctc: out of memory\n");
-        return (void *)0;
-    }
-    for (i = 0; i < self->nowned; i++) {
-        if (self->owned[i] == (char *)p) {
-            self->owned[i] = np;
-            break;
-        }
-    }
-    return np;
-}
-
-static void pkg_owned_free(struct Pkg *self)
-{
-    int i;
-
-    for (i = 0; i < self->nowned; i++) free(self->owned[i]);
-    free(self->owned);
-    self->owned = 0;
-    self->nowned = 0;
-    self->ownedcap = 0;
-}
-
-/* Grows *buf to `need` bytes from the old MAX_PKG_CMD and stops at TEXT_LIMIT.
-   -1 is OOM or over the formal bound; there is no truncation path. */
-static int pkg_text_grow(struct Pkg *self, char **buf, int *cap, int need)
-{
-    int ncap;
-    char *np;
-
-    if (need < 0 || need > TEXT_LIMIT) return -1;
-    if (need <= *cap) return 0;
-    ncap = *cap > 0 ? *cap : MAX_PKG_CMD;
-    while (ncap < need) {
-        if (ncap > TEXT_LIMIT / 2) {
-            ncap = TEXT_LIMIT;
-            break;
-        }
-        ncap = ncap * 2;
-    }
-    if (ncap > TEXT_LIMIT) ncap = TEXT_LIMIT;
-    if (ncap < need) return -1;
-    np = (char *)pkg_owned_grow(self, *buf, (size_t)ncap);
-    if (!np) return -1;
-    *buf = np;
-    *cap = ncap;
-    return 0;
-}
-
-/* Reset a builder to empty, allocating the initial MAX_PKG_CMD block if it is
-   still unset. */
-static int pkg_text_begin(struct Pkg *self, char **buf, int *cap)
-{
-    if (*buf == 0 && pkg_text_grow(self, buf, cap, 1) != 0) return -1;
-    (*buf)[0] = 0;
-    return 0;
-}
-
-static int pkg_text_cat(struct Pkg *self, char **buf, int *cap, const char *s)
-{
-    size_t l, sl;
-
-    if (!s) return 0;
-    l = *buf ? strlen(*buf) : 0;
-    sl = strlen(s);
-    if (l + sl + 1 > (size_t)TEXT_LIMIT) return -1;
-    if (pkg_text_grow(self, buf, cap, (int)(l + sl + 1)) != 0) return -1;
-    memcpy(*buf + l, s, sl + 1);
-    return 0;
-}
-
 /* Append `fmt`/... . The loop is "format, grow, retry", so a long argument is
    never silently cut: the caller sees -1 only on OOM or past TEXT_LIMIT. */
 static int pkg_text_printf(struct Pkg *self, char **buf, int *cap, const char *fmt, ...)
@@ -374,7 +278,7 @@ static int pkg_text_printf(struct Pkg *self, char **buf, int *cap, const char *f
 
     for (;;) {
         if (*buf == 0) {
-            if (pkg_text_grow(self, buf, cap, 1) != 0) return -1;
+            if (self->text_grow(buf, cap, 1) != 0) return -1;
             (*buf)[0] = 0;
         }
         l = strlen(*buf);
@@ -387,40 +291,8 @@ static int pkg_text_printf(struct Pkg *self, char **buf, int *cap, const char *f
            the retry, otherwise the next pass appends the format to its own
            prefix. */
         (*buf)[l] = 0;
-        if (pkg_text_grow(self, buf, cap, (int)(l + (size_t)n + 1)) != 0) return -1;
+        if (self->text_grow(buf, cap, (int)(l + (size_t)n + 1)) != 0) return -1;
     }
-}
-
-/* Append `s` single-quoted. Worst case is 4*strlen+2 characters plus the NUL,
-   so the buffer is sized for that before a byte is written. */
-static int pkg_text_quote(struct Pkg *self, char **buf, int *cap, const char *s)
-{
-    size_t l, sl, i, o;
-
-    if (!s) return -1;
-    sl = strlen(s);
-    if (sl > (size_t)(TEXT_LIMIT - 3) / 4) return -1;
-    l = *buf ? strlen(*buf) : 0;
-    if (pkg_text_grow(self, buf, cap, (int)(l + 4 * sl + 3)) != 0) return -1;
-    o = l;
-    (*buf)[o] = '\'';
-    o++;
-    for (i = 0; i < sl; i++) {
-        if (s[i] == '\'') {
-            (*buf)[o] = '\'';
-            (*buf)[o + 1] = '\\';
-            (*buf)[o + 2] = '\'';
-            (*buf)[o + 3] = '\'';
-            o += 4;
-        } else {
-            (*buf)[o] = s[i];
-            o++;
-        }
-    }
-    (*buf)[o] = '\'';
-    o++;
-    (*buf)[o] = 0;
-    return 0;
 }
 
 /* Reset `*buf` and write `fmt`/... into it: the one writer for the Pkg
@@ -432,7 +304,7 @@ static int pkg_text_setf(struct Pkg *self, char **buf, int *cap, const char *fmt
     size_t l;
     int n;
 
-    if (pkg_text_begin(self, buf, cap) != 0) return -1;
+    if (self->text_begin(buf, cap) != 0) return -1;
     for (;;) {
         l = strlen(*buf);
         va_start(ap, fmt);
@@ -441,7 +313,7 @@ static int pkg_text_setf(struct Pkg *self, char **buf, int *cap, const char *fmt
         if (n < 0) return -1;
         if ((size_t)n < (size_t)(*cap - (int)l)) return 0;
         (*buf)[l] = 0;
-        if (pkg_text_grow(self, buf, cap, (int)(l + (size_t)n + 1)) != 0) return -1;
+        if (self->text_grow(buf, cap, (int)(l + (size_t)n + 1)) != 0) return -1;
     }
 }
 
@@ -461,72 +333,12 @@ static char *pkg_pathf(struct Pkg *self, const char *fmt, ...)
         fprintf(stderr, "ctc: path over 65536 bytes\n");
         return (char *)0;
     }
-    out = (char *)pkg_owned_alloc(self, (size_t)n + 1);
+    out = (char *)self->owned_alloc((size_t)n + 1);
     if (!out) return (char *)0;
     va_start(ap, fmt);
     vsnprintf(out, (size_t)n + 1, fmt, ap);
     va_end(ap);
     return out;
-}
-
-/* Exact-size copy of a `s[0..n)` range (a spec's path half). NULL is OOM /
-   over TEXT_LIMIT. */
-static char *pkg_text_dupn(struct Pkg *self, const char *s, size_t n)
-{
-    char *out;
-    int cap;
-
-    if (n >= (size_t)TEXT_LIMIT) return (char *)0;
-    out = 0;
-    cap = 0;
-    if (pkg_text_printf(self, &out, &cap, "%.*s", (int)n, s) != 0) return (char *)0;
-    return out;
-}
-
-/* A standalone owned copy (package rows keep their URL after the fetch
-   returns). NULL means OOM / over TEXT_LIMIT. */
-static char *pkg_text_dup(struct Pkg *self, const char *s)
-{
-    char *out;
-    int cap;
-
-    out = 0;
-    cap = 0;
-    if (pkg_text_printf(self, &out, &cap, "%s", s ? s : "") != 0) return 0;
-    return out;
-}
-
-/* S1a-0 C2p-11: one run-scoped row at the formal text bound. Callers that
-   used a 160-byte output row pass this and TEXT_LIMIT, so a package
-   name / tag / path longer than the old 160 bytes is kept whole. */
-static char *pkg_row(struct Pkg *self)
-{
-    char *p = (char *)pkg_owned_alloc(self, TEXT_LIMIT);
-    if (!p) return (char *)0;
-    p[0] = 0;
-    return p;
-}
-
-/* One line from `f`, however long (the old `char line[MAX_PKG_CMD]` split a
-   longer line into several). 1 = data, 0 = EOF, -1 = OOM / over the bound. */
-static int pkg_text_fgets(struct Pkg *self, char **buf, int *cap, FILE *f)
-{
-    int n;
-
-    n = 0;
-    for (;;) {
-        if (pkg_text_grow(self, buf, cap, n + 1) != 0) return -1;
-        if (fgets(*buf + n, *cap - n, f) == 0) {
-            (*buf)[n] = 0;
-            return n > 0 ? 1 : 0;
-        }
-        n += (int)strlen(*buf + n);
-        if (n > 0 && (*buf)[n - 1] == '\n') return 1;
-        if (n + 1 < *cap) return 1;     /* short read: EOF without a newline */
-        if (*cap >= TEXT_LIMIT) return -1;
-        if (pkg_text_grow(self, buf, cap, *cap * 2 > TEXT_LIMIT ? TEXT_LIMIT : *cap * 2) != 0)
-            return -1;
-    }
 }
 
 /* --- SHA-256 (FIPS 180-4) -------------------------------------------------
@@ -850,207 +662,6 @@ static int sha_hex_ok(const char *s)
     return 1;
 }
 
-/* PKG-23: redact a URL userinfo (the part before `@`) before a git message or
-   a URL reaches stderr. The rewrite is one-way and never longer than the
-   input, so S1a-0 C2e sizes the owned output from `strlen(in)+1` and cannot
-   truncate; -1 is OOM or over TEXT_LIMIT. */
-static int pkg_scrub(struct Pkg *self, const char *in, char **out, int *cap)
-{
-    const char *p, *q, *at;
-    size_t o;
-
-    if (pkg_text_grow(self, out, cap, (int)strlen(in) + 1) != 0) return -1;
-    o = 0;
-    p = in;
-    while (*p) {
-        if (p[0] == ':' && p[1] == '/' && p[2] == '/') {
-            q = p + 3;
-            at = 0;
-            while (*q && *q != '/' && *q != '?' && *q != '#'
-                   && *q != ' ' && *q != '\'' && *q != '"') {
-                if (*q == '@') { at = q; break; }
-                q++;
-            }
-            if (at != 0) {
-                memcpy(*out + o, "://***@", 7);
-                o += 7;
-                p = at + 1;
-                continue;
-            }
-        }
-        (*out)[o] = *p;
-        o++;
-        p++;
-    }
-    (*out)[o] = 0;
-    return 0;
-}
-
-/* PKG-23: turn the captured git stderr into a cause and an action. The
-   last MAX_PKG_GITERR non-empty lines are printed redacted; the classes are
-   ordered most-specific first so "Authentication failed" is not reported
-   as a generic network error. `spec` is the explicit spelling to retry
-   (`ct/std@0.20.0` for the official pin), `cache` is the checkout path. */
-static int pkg_git_diag(struct Pkg *self, const char *errfile, const char *cache,
-                        const char *spec)
-{
-    FILE *f;
-    /* S1a-0 C2h: the captured line and the last-8 ring grow from MAX_PKG_LINE
-       to TEXT_LIMIT; a git diagnostic line is not cut into pseudo-lines. */
-    char *line;
-    char *ring[MAX_PKG_GITERR];
-    int linecap;
-    int ringcap[MAX_PKG_GITERR];
-    char *scrubbed, *all;
-    int scrubbedcap, allcap, over;
-    size_t ll;
-    int n, i, shown, start, fr, slot;
-    int cache_bad, auth_bad, tag_bad, net_bad;
-
-    scrubbed = 0;
-    scrubbedcap = 0;
-    all = 0;
-    allcap = 0;
-    over = 0;
-    n = 0;
-    line = 0;
-    linecap = 0;
-    for (i = 0; i < MAX_PKG_GITERR; i++) {
-        ring[i] = 0;
-        ringcap[i] = 0;
-    }
-    if (pkg_text_begin(self, &all, &allcap) != 0) {
-        fprintf(stderr, "  git said: (out of memory while collecting git output)\n");
-        remove(errfile);
-        return -1;
-    }
-    f = fopen(errfile, "r");
-    if (f != 0) {
-        while ((fr = pkg_text_fgets(self, &line, &linecap, f)) == 1) {
-            ll = strlen(line);
-            while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
-                ll--;
-                line[ll] = 0;
-            }
-            if (line[0] == 0) continue;
-            slot = n % MAX_PKG_GITERR;
-            if (pkg_text_begin(self, &ring[slot], &ringcap[slot]) != 0
-                || pkg_text_cat(self, &ring[slot], &ringcap[slot], line) != 0) {
-                /* S1a-0 C2h: the ring is bounded by TEXT_LIMIT, not 1024. */
-                if (!over) {
-                    fprintf(stderr, "  git said: (failure output over 65536 bytes; "
-                                    "only the first lines are summarized)\n");
-                    over = 1;
-                }
-            }
-            if (pkg_scrub(self, line, &scrubbed, &scrubbedcap) != 0
-                || pkg_text_cat(self, &all, &allcap, scrubbed) != 0
-                || pkg_text_cat(self, &all, &allcap, "\n") != 0) {
-                /* S1a-0 C2e: the summary stops at TEXT_LIMIT instead of
-                   silently cutting a line; say so once. */
-                if (!over) {
-                    fprintf(stderr, "  git said: (failure output over 65536 bytes; "
-                                    "only the first lines are summarized)\n");
-                    over = 1;
-                }
-            }
-            n++;
-        }
-        if (fr < 0 && !over) {
-            fprintf(stderr, "  git said: (failure output over 65536 bytes; "
-                            "only the first lines are summarized)\n");
-            over = 1;
-        }
-        fclose(f);
-    }
-    shown = n < MAX_PKG_GITERR ? n : MAX_PKG_GITERR;
-    start = n - shown;
-    if (shown > 0) {
-        fprintf(stderr, "  git said (last %d line(s); credentials redacted):\n", shown);
-        for (i = start; i < n; i++) {
-            if (pkg_scrub(self, ring[i % MAX_PKG_GITERR], &scrubbed, &scrubbedcap) == 0)
-                fprintf(stderr, "    %s\n", scrubbed);
-        }
-    }
-    /* No stderr at all from `git config`/`fetch`/`checkout` means git refused
-       before it could describe the failure; the cache is the only party left
-       to blame, and the caller names its path. */
-    cache_bad = n == 0
-                || strstr(all, "not a git repository") != 0
-                || strstr(all, "not a git repo") != 0
-                || strstr(all, "corrupt") != 0
-                || strstr(all, "Corrupt") != 0
-                || strstr(all, "bad config") != 0
-                || strstr(all, "index file corrupt") != 0
-                || strstr(all, "loose object") != 0;
-    auth_bad = strstr(all, "Authentication failed") != 0
-               || strstr(all, "authentication failed") != 0
-               || strstr(all, "could not read Username") != 0
-               || strstr(all, "could not read Password") != 0
-               || strstr(all, "Permission denied") != 0
-               || strstr(all, "publickey") != 0
-               || strstr(all, "returned error: 401") != 0
-               || strstr(all, "returned error: 403") != 0
-               || strstr(all, "Repository not found") != 0
-               || strstr(all, "terminal prompts disabled") != 0
-               || strstr(all, "Invalid username or password") != 0;
-    tag_bad = strstr(all, "did not match any file") != 0
-              || strstr(all, "does not take a path argument") != 0
-              || strstr(all, "pathspec") != 0
-              || strstr(all, "couldn't find remote ref") != 0
-              || strstr(all, "remote ref does not exist") != 0
-              || strstr(all, "not our ref") != 0
-              || strstr(all, "no such remote ref") != 0
-              || strstr(all, "bad object") != 0
-              || strstr(all, "missing object") != 0
-              || strstr(all, "reference is not a tree") != 0
-              || strstr(all, "invalid reference") != 0;
-    net_bad = strstr(all, "Could not resolve host") != 0
-              || strstr(all, "unable to access") != 0
-              || strstr(all, "Failed to connect") != 0
-              || strstr(all, "Couldn't connect") != 0
-              || strstr(all, "Connection refused") != 0
-              || strstr(all, "Connection timed out") != 0
-              || strstr(all, "Operation timed out") != 0
-              || strstr(all, "Network is unreachable") != 0
-              || strstr(all, "No route to host") != 0
-              || strstr(all, "CONNECT tunnel failed") != 0
-              || strstr(all, "proxy") != 0
-              || strstr(all, "Proxy") != 0
-              || strstr(all, "SSL") != 0
-              || strstr(all, "TLS") != 0
-              || strstr(all, "RPC failed") != 0
-              || strstr(all, "early EOF") != 0
-              || strstr(all, "remote end hung up") != 0;
-    if (cache_bad) {
-        fprintf(stderr, "  cause: the package cache is corrupt\n");
-        fprintf(stderr, "  cache: %s\n", cache);
-        fprintf(stderr, "  next: rm -rf '%s' and retry, "
-                        "or run 'ct get --refresh %s'\n", cache, spec);
-    } else if (auth_bad) {
-        fprintf(stderr, "  cause: authentication/permission denied\n");
-        fprintf(stderr, "  next: check the credentials or SSH key for the "
-                        "remote; git runs non-interactively "
-                        "(GIT_TERMINAL_PROMPT=0), then retry\n");
-    } else if (tag_bad) {
-        fprintf(stderr, "  cause: remote tag/object missing\n");
-        fprintf(stderr, "  next: the pinned tag is not present on the "
-                        "remote; check the pin/tag or publish it, then "
-                        "retry with 'ct get %s'\n", spec);
-    } else if (net_bad) {
-        fprintf(stderr, "  cause: network/proxy unreachable\n");
-        fprintf(stderr, "  next: retry; check https_proxy/ALL_PROXY and DNS, "
-                        "or pin explicitly with 'ct get %s'\n", spec);
-    } else {
-        fprintf(stderr, "  cause: unclassified git failure\n");
-        fprintf(stderr, "  next: retry; if it persists run "
-                        "'ct get --refresh %s' or remove the cache '%s'\n",
-                spec, cache);
-    }
-    remove(errfile);
-    return 0;
-}
-
 /* S1a-0 C1/C2k: the package tables grow by doubling from the old 16-row limit
    to CAP_LIMIT. Every growth zeroes the new rows and writes the new base
    back through the caller's slot. A failure returns -1 (the caller reports
@@ -1071,30 +682,6 @@ static int pkg_ptrrows_ensure(char ***rows, int *cap, int need)
     memset(grown + *cap, 0, (size_t)(c - *cap) * sizeof(*grown));
     *rows = grown;
     *cap = c;
-    return 0;
-}
-
-static int pkg_seen_ensure(struct Pkg *self, int need)
-{
-    /* S1a-0 C2p-11: one exact-size identity per row, so a 4000-byte
-       publisher/name pair is compared and deduplicated whole. */
-    return pkg_ptrrows_ensure(&self->seen, &self->seencap, need);
-}
-
-static int pkg_recs_ensure(struct Pkg *self, int need)
-{
-    int c;
-    struct PkgRec *grown;
-    if (need <= self->reccap) return 0;
-    c = self->reccap > 0 ? self->reccap : MAX_PKG_DEPS;
-    while (c < need && c < CAP_LIMIT) c *= 2;
-    if (c > CAP_LIMIT) c = CAP_LIMIT;
-    if (need > c) return -1;
-    grown = (struct PkgRec *)realloc(self->recs, (size_t)c * sizeof(*grown));
-    if (!grown) return -1;
-    memset(grown + self->reccap, 0, (size_t)(c - self->reccap) * sizeof(*grown));
-    self->recs = grown;
-    self->reccap = c;
     return 0;
 }
 
@@ -1162,6 +749,468 @@ static int pkg_lockparsed_ensure(struct LockParsedRow **rows, int *cap, int need
 }
 
 impl PkgOps for Pkg {
+    /* S8b D1: text and pool helpers are methods; the three variadic
+       builders stay free functions (a real trait method cannot be variadic). */
+    /* Append `src` to `dst` with one separating space; an empty `src` is a no-op.
+       S1a-0 C2e: the accumulator is `self`-owned text, so a package's combined
+       flags are never cut at the old 2048 bytes. */
+    int append_words(char **dst, int *cap, const char *src)
+    {
+        if (!src || !src[0]) return 0;
+        if (*dst != 0 && (*dst)[0] != 0) {
+            if (self->text_cat(dst, cap, " ") != 0) return -1;
+        }
+        return self->text_cat(dst, cap, src);
+    }
+
+    /* S1a-0 C2d: the lock text doubles from MAX_LOCK to CAP_LIMIT. A need over
+       the formal bound and a failed realloc both return -1; callers print the
+       "too large" / OOM message. The block belongs to `self` until the process
+       ends, like the other unit-wide tables. */
+    int lock_reserve(int need)
+    {
+        int cap;
+        char *grown;
+
+        if (need <= self->lockcap) return 0;
+        cap = self->lockcap > 0 ? self->lockcap : MAX_LOCK;
+        while (cap < need && cap < CAP_LIMIT) cap *= 2;
+        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
+        if (need > cap) return -1;
+        grown = (char *)realloc(self->lock, (size_t)cap);
+        if (!grown) return -1;
+        self->lock = grown;
+        self->lockcap = cap;
+        return 0;
+    }
+
+    /* Register one heap block with the command scope. The registry grows from
+       MAX_PKG_DEPS, the same initial size the other Pkg tables use. */
+    void *owned_alloc(size_t size)
+    {
+        char *p;
+        char **grown;
+        int cap;
+
+        p = (char *)malloc(size);
+        if (!p) {
+            fprintf(stderr, "ctc: out of memory\n");
+            return (void *)0;
+        }
+        if (self->nowned >= self->ownedcap) {
+            cap = self->ownedcap > 0 ? self->ownedcap * 2 : MAX_PKG_DEPS;
+            grown = (char **)realloc(self->owned, (size_t)cap * sizeof(*grown));
+            if (!grown) {
+                free(p);
+                fprintf(stderr, "ctc: out of memory\n");
+                return (void *)0;
+            }
+            self->owned = grown;
+            self->ownedcap = cap;
+        }
+        self->owned[self->nowned] = p;
+        self->nowned++;
+        return p;
+    }
+
+    /* Grow one registered block. realloc may move it, so its registry slot is
+       rewritten; the old contents survive, which is all a text builder needs. */
+    void *owned_grow(void *p, size_t size)
+    {
+        char *np;
+        int i;
+
+        if (p == 0) return self->owned_alloc(size);
+        np = (char *)realloc(p, size);
+        if (!np) {
+            fprintf(stderr, "ctc: out of memory\n");
+            return (void *)0;
+        }
+        for (i = 0; i < self->nowned; i++) {
+            if (self->owned[i] == (char *)p) {
+                self->owned[i] = np;
+                break;
+            }
+        }
+        return np;
+    }
+
+    void owned_free()
+    {
+        int i;
+
+        for (i = 0; i < self->nowned; i++) free(self->owned[i]);
+        free(self->owned);
+        self->owned = 0;
+        self->nowned = 0;
+        self->ownedcap = 0;
+    }
+
+    /* Grows *buf to `need` bytes from the old MAX_PKG_CMD and stops at TEXT_LIMIT.
+       -1 is OOM or over the formal bound; there is no truncation path. */
+    int text_grow(char **buf, int *cap, int need)
+    {
+        int ncap;
+        char *np;
+
+        if (need < 0 || need > TEXT_LIMIT) return -1;
+        if (need <= *cap) return 0;
+        ncap = *cap > 0 ? *cap : MAX_PKG_CMD;
+        while (ncap < need) {
+            if (ncap > TEXT_LIMIT / 2) {
+                ncap = TEXT_LIMIT;
+                break;
+            }
+            ncap = ncap * 2;
+        }
+        if (ncap > TEXT_LIMIT) ncap = TEXT_LIMIT;
+        if (ncap < need) return -1;
+        np = (char *)self->owned_grow(*buf, (size_t)ncap);
+        if (!np) return -1;
+        *buf = np;
+        *cap = ncap;
+        return 0;
+    }
+
+    /* Reset a builder to empty, allocating the initial MAX_PKG_CMD block if it is
+       still unset. */
+    int text_begin(char **buf, int *cap)
+    {
+        if (*buf == 0 && self->text_grow(buf, cap, 1) != 0) return -1;
+        (*buf)[0] = 0;
+        return 0;
+    }
+
+    int text_cat(char **buf, int *cap, const char *s)
+    {
+        size_t l, sl;
+
+        if (!s) return 0;
+        l = *buf ? strlen(*buf) : 0;
+        sl = strlen(s);
+        if (l + sl + 1 > (size_t)TEXT_LIMIT) return -1;
+        if (self->text_grow(buf, cap, (int)(l + sl + 1)) != 0) return -1;
+        memcpy(*buf + l, s, sl + 1);
+        return 0;
+    }
+
+    /* Append `s` single-quoted. Worst case is 4*strlen+2 characters plus the NUL,
+       so the buffer is sized for that before a byte is written. */
+    int text_quote(char **buf, int *cap, const char *s)
+    {
+        size_t l, sl, i, o;
+
+        if (!s) return -1;
+        sl = strlen(s);
+        if (sl > (size_t)(TEXT_LIMIT - 3) / 4) return -1;
+        l = *buf ? strlen(*buf) : 0;
+        if (self->text_grow(buf, cap, (int)(l + 4 * sl + 3)) != 0) return -1;
+        o = l;
+        (*buf)[o] = '\'';
+        o++;
+        for (i = 0; i < sl; i++) {
+            if (s[i] == '\'') {
+                (*buf)[o] = '\'';
+                (*buf)[o + 1] = '\\';
+                (*buf)[o + 2] = '\'';
+                (*buf)[o + 3] = '\'';
+                o += 4;
+            } else {
+                (*buf)[o] = s[i];
+                o++;
+            }
+        }
+        (*buf)[o] = '\'';
+        o++;
+        (*buf)[o] = 0;
+        return 0;
+    }
+
+    /* Exact-size copy of a `s[0..n)` range (a spec's path half). NULL is OOM /
+       over TEXT_LIMIT. */
+    char *text_dupn(const char *s, size_t n)
+    {
+        char *out;
+        int cap;
+
+        if (n >= (size_t)TEXT_LIMIT) return (char *)0;
+        out = 0;
+        cap = 0;
+        if (pkg_text_printf(self, &out, &cap, "%.*s", (int)n, s) != 0) return (char *)0;
+        return out;
+    }
+
+    /* A standalone owned copy (package rows keep their URL after the fetch
+       returns). NULL means OOM / over TEXT_LIMIT. */
+    char *text_dup(const char *s)
+    {
+        char *out;
+        int cap;
+
+        out = 0;
+        cap = 0;
+        if (pkg_text_printf(self, &out, &cap, "%s", s ? s : "") != 0) return 0;
+        return out;
+    }
+
+    /* S1a-0 C2p-11: one run-scoped row at the formal text bound. Callers that
+       used a 160-byte output row pass this and TEXT_LIMIT, so a package
+       name / tag / path longer than the old 160 bytes is kept whole. */
+    char *row()
+    {
+        char *p = (char *)self->owned_alloc(TEXT_LIMIT);
+        if (!p) return (char *)0;
+        p[0] = 0;
+        return p;
+    }
+
+    /* One line from `f`, however long (the old `char line[MAX_PKG_CMD]` split a
+       longer line into several). 1 = data, 0 = EOF, -1 = OOM / over the bound. */
+    int text_fgets(char **buf, int *cap, FILE *f)
+    {
+        int n;
+
+        n = 0;
+        for (;;) {
+            if (self->text_grow(buf, cap, n + 1) != 0) return -1;
+            if (fgets(*buf + n, *cap - n, f) == 0) {
+                (*buf)[n] = 0;
+                return n > 0 ? 1 : 0;
+            }
+            n += (int)strlen(*buf + n);
+            if (n > 0 && (*buf)[n - 1] == '\n') return 1;
+            if (n + 1 < *cap) return 1;     /* short read: EOF without a newline */
+            if (*cap >= TEXT_LIMIT) return -1;
+            if (self->text_grow(buf, cap, *cap * 2 > TEXT_LIMIT ? TEXT_LIMIT : *cap * 2) != 0)
+                return -1;
+        }
+    }
+
+    /* PKG-23: redact a URL userinfo (the part before `@`) before a git message or
+       a URL reaches stderr. The rewrite is one-way and never longer than the
+       input, so S1a-0 C2e sizes the owned output from `strlen(in)+1` and cannot
+       truncate; -1 is OOM or over TEXT_LIMIT. */
+    int scrub(const char *in, char **out, int *cap)
+    {
+        const char *p, *q, *at;
+        size_t o;
+
+        if (self->text_grow(out, cap, (int)strlen(in) + 1) != 0) return -1;
+        o = 0;
+        p = in;
+        while (*p) {
+            if (p[0] == ':' && p[1] == '/' && p[2] == '/') {
+                q = p + 3;
+                at = 0;
+                while (*q && *q != '/' && *q != '?' && *q != '#'
+                       && *q != ' ' && *q != '\'' && *q != '"') {
+                    if (*q == '@') { at = q; break; }
+                    q++;
+                }
+                if (at != 0) {
+                    memcpy(*out + o, "://***@", 7);
+                    o += 7;
+                    p = at + 1;
+                    continue;
+                }
+            }
+            (*out)[o] = *p;
+            o++;
+            p++;
+        }
+        (*out)[o] = 0;
+        return 0;
+    }
+
+    /* PKG-23: turn the captured git stderr into a cause and an action. The
+       last MAX_PKG_GITERR non-empty lines are printed redacted; the classes are
+       ordered most-specific first so "Authentication failed" is not reported
+       as a generic network error. `spec` is the explicit spelling to retry
+       (`ct/std@0.20.0` for the official pin), `cache` is the checkout path. */
+    int git_diag(const char *errfile, const char *cache,
+                            const char *spec)
+    {
+        FILE *f;
+        /* S1a-0 C2h: the captured line and the last-8 ring grow from MAX_PKG_LINE
+           to TEXT_LIMIT; a git diagnostic line is not cut into pseudo-lines. */
+        char *line;
+        char *ring[MAX_PKG_GITERR];
+        int linecap;
+        int ringcap[MAX_PKG_GITERR];
+        char *scrubbed, *all;
+        int scrubbedcap, allcap, over;
+        size_t ll;
+        int n, i, shown, start, fr, slot;
+        int cache_bad, auth_bad, tag_bad, net_bad;
+
+        scrubbed = 0;
+        scrubbedcap = 0;
+        all = 0;
+        allcap = 0;
+        over = 0;
+        n = 0;
+        line = 0;
+        linecap = 0;
+        for (i = 0; i < MAX_PKG_GITERR; i++) {
+            ring[i] = 0;
+            ringcap[i] = 0;
+        }
+        if (self->text_begin(&all, &allcap) != 0) {
+            fprintf(stderr, "  git said: (out of memory while collecting git output)\n");
+            remove(errfile);
+            return -1;
+        }
+        f = fopen(errfile, "r");
+        if (f != 0) {
+            while ((fr = self->text_fgets(&line, &linecap, f)) == 1) {
+                ll = strlen(line);
+                while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) {
+                    ll--;
+                    line[ll] = 0;
+                }
+                if (line[0] == 0) continue;
+                slot = n % MAX_PKG_GITERR;
+                if (self->text_begin(&ring[slot], &ringcap[slot]) != 0
+                    || self->text_cat(&ring[slot], &ringcap[slot], line) != 0) {
+                    /* S1a-0 C2h: the ring is bounded by TEXT_LIMIT, not 1024. */
+                    if (!over) {
+                        fprintf(stderr, "  git said: (failure output over 65536 bytes; "
+                                        "only the first lines are summarized)\n");
+                        over = 1;
+                    }
+                }
+                if (self->scrub(line, &scrubbed, &scrubbedcap) != 0
+                    || self->text_cat(&all, &allcap, scrubbed) != 0
+                    || self->text_cat(&all, &allcap, "\n") != 0) {
+                    /* S1a-0 C2e: the summary stops at TEXT_LIMIT instead of
+                       silently cutting a line; say so once. */
+                    if (!over) {
+                        fprintf(stderr, "  git said: (failure output over 65536 bytes; "
+                                        "only the first lines are summarized)\n");
+                        over = 1;
+                    }
+                }
+                n++;
+            }
+            if (fr < 0 && !over) {
+                fprintf(stderr, "  git said: (failure output over 65536 bytes; "
+                                "only the first lines are summarized)\n");
+                over = 1;
+            }
+            fclose(f);
+        }
+        shown = n < MAX_PKG_GITERR ? n : MAX_PKG_GITERR;
+        start = n - shown;
+        if (shown > 0) {
+            fprintf(stderr, "  git said (last %d line(s); credentials redacted):\n", shown);
+            for (i = start; i < n; i++) {
+                if (self->scrub(ring[i % MAX_PKG_GITERR], &scrubbed, &scrubbedcap) == 0)
+                    fprintf(stderr, "    %s\n", scrubbed);
+            }
+        }
+        /* No stderr at all from `git config`/`fetch`/`checkout` means git refused
+           before it could describe the failure; the cache is the only party left
+           to blame, and the caller names its path. */
+        cache_bad = n == 0
+                    || strstr(all, "not a git repository") != 0
+                    || strstr(all, "not a git repo") != 0
+                    || strstr(all, "corrupt") != 0
+                    || strstr(all, "Corrupt") != 0
+                    || strstr(all, "bad config") != 0
+                    || strstr(all, "index file corrupt") != 0
+                    || strstr(all, "loose object") != 0;
+        auth_bad = strstr(all, "Authentication failed") != 0
+                   || strstr(all, "authentication failed") != 0
+                   || strstr(all, "could not read Username") != 0
+                   || strstr(all, "could not read Password") != 0
+                   || strstr(all, "Permission denied") != 0
+                   || strstr(all, "publickey") != 0
+                   || strstr(all, "returned error: 401") != 0
+                   || strstr(all, "returned error: 403") != 0
+                   || strstr(all, "Repository not found") != 0
+                   || strstr(all, "terminal prompts disabled") != 0
+                   || strstr(all, "Invalid username or password") != 0;
+        tag_bad = strstr(all, "did not match any file") != 0
+                  || strstr(all, "does not take a path argument") != 0
+                  || strstr(all, "pathspec") != 0
+                  || strstr(all, "couldn't find remote ref") != 0
+                  || strstr(all, "remote ref does not exist") != 0
+                  || strstr(all, "not our ref") != 0
+                  || strstr(all, "no such remote ref") != 0
+                  || strstr(all, "bad object") != 0
+                  || strstr(all, "missing object") != 0
+                  || strstr(all, "reference is not a tree") != 0
+                  || strstr(all, "invalid reference") != 0;
+        net_bad = strstr(all, "Could not resolve host") != 0
+                  || strstr(all, "unable to access") != 0
+                  || strstr(all, "Failed to connect") != 0
+                  || strstr(all, "Couldn't connect") != 0
+                  || strstr(all, "Connection refused") != 0
+                  || strstr(all, "Connection timed out") != 0
+                  || strstr(all, "Operation timed out") != 0
+                  || strstr(all, "Network is unreachable") != 0
+                  || strstr(all, "No route to host") != 0
+                  || strstr(all, "CONNECT tunnel failed") != 0
+                  || strstr(all, "proxy") != 0
+                  || strstr(all, "Proxy") != 0
+                  || strstr(all, "SSL") != 0
+                  || strstr(all, "TLS") != 0
+                  || strstr(all, "RPC failed") != 0
+                  || strstr(all, "early EOF") != 0
+                  || strstr(all, "remote end hung up") != 0;
+        if (cache_bad) {
+            fprintf(stderr, "  cause: the package cache is corrupt\n");
+            fprintf(stderr, "  cache: %s\n", cache);
+            fprintf(stderr, "  next: rm -rf '%s' and retry, "
+                            "or run 'ct get --refresh %s'\n", cache, spec);
+        } else if (auth_bad) {
+            fprintf(stderr, "  cause: authentication/permission denied\n");
+            fprintf(stderr, "  next: check the credentials or SSH key for the "
+                            "remote; git runs non-interactively "
+                            "(GIT_TERMINAL_PROMPT=0), then retry\n");
+        } else if (tag_bad) {
+            fprintf(stderr, "  cause: remote tag/object missing\n");
+            fprintf(stderr, "  next: the pinned tag is not present on the "
+                            "remote; check the pin/tag or publish it, then "
+                            "retry with 'ct get %s'\n", spec);
+        } else if (net_bad) {
+            fprintf(stderr, "  cause: network/proxy unreachable\n");
+            fprintf(stderr, "  next: retry; check https_proxy/ALL_PROXY and DNS, "
+                            "or pin explicitly with 'ct get %s'\n", spec);
+        } else {
+            fprintf(stderr, "  cause: unclassified git failure\n");
+            fprintf(stderr, "  next: retry; if it persists run "
+                            "'ct get --refresh %s' or remove the cache '%s'\n",
+                    spec, cache);
+        }
+        remove(errfile);
+        return 0;
+    }
+
+    int seen_ensure(int need)
+    {
+        /* S1a-0 C2p-11: one exact-size identity per row, so a 4000-byte
+           publisher/name pair is compared and deduplicated whole. */
+        return pkg_ptrrows_ensure(&self->seen, &self->seencap, need);
+    }
+
+    int recs_ensure(int need)
+    {
+        int c;
+        struct PkgRec *grown;
+        if (need <= self->reccap) return 0;
+        c = self->reccap > 0 ? self->reccap : MAX_PKG_DEPS;
+        while (c < need && c < CAP_LIMIT) c *= 2;
+        if (c > CAP_LIMIT) c = CAP_LIMIT;
+        if (need > c) return -1;
+        grown = (struct PkgRec *)realloc(self->recs, (size_t)c * sizeof(*grown));
+        if (!grown) return -1;
+        memset(grown + self->reccap, 0, (size_t)(c - self->reccap) * sizeof(*grown));
+        self->recs = grown;
+        self->reccap = c;
+        return 0;
+    }
+
     /* Parse `<dir>/ct.pkg`. Line-oriented: `#` starts a comment, `key = value`,
        and `dep` may repeat. A missing name or version is an error. */
     int read_manifest(const char *dir, const char **name, const char **ver,
@@ -1184,7 +1233,7 @@ impl PkgOps for Pkg {
         for (i = 0; i < deps->n; i++) free(deps->spec[i]);
         deps->n = 0;
         ok = 1;
-        while (pkg_text_fgets(self, &line, &linecap, f) == 1) {
+        while (self->text_fgets(&line, &linecap, f) == 1) {
             char *ls, *le, *eq, *k, *v, *ve;
             size_t kl, vl, ll;
             ll = strlen(line);
@@ -1208,10 +1257,10 @@ impl PkgOps for Pkg {
             kl = (size_t)(k - ls);
             vl = (size_t)(ve - v);
             if (kl == 4 && strncmp(ls, "name", 4) == 0) {
-                *name = pkg_text_dupn(self, v, vl);
+                *name = self->text_dupn(v, vl);
                 if (!*name) { ok = 0; break; }
             } else if (kl == 7 && strncmp(ls, "version", 7) == 0) {
-                *ver = pkg_text_dupn(self, v, vl);
+                *ver = self->text_dupn(v, vl);
                 if (!*ver) { ok = 0; break; }
             } else if (kl == 3 && strncmp(ls, "dep", 3) == 0) {
                 char *spec;
@@ -1312,7 +1361,7 @@ impl PkgOps for Pkg {
             vl = (size_t)(p - q);
             if (vl == 0) return 0;
             if (vl == 1 && q[0] == '*') continue;
-            verstr = pkg_text_dupn(self, q, vl);
+            verstr = self->text_dupn(q, vl);
             if (!verstr) return 0;
             if (self->version_parse(verstr, lo) != 0) return 0;
             rc = self->version_cmp(v, lo);
@@ -1462,13 +1511,13 @@ impl PkgOps for Pkg {
         if (!at) {
             /* S1a-0 C2i: both halves are exact-size owned strings; the path is
                no longer refused at MAX_PKG_PATH. */
-            *path = pkg_text_dup(self, spec);
-            *range = pkg_text_dup(self, "");
+            *path = self->text_dup(spec);
+            *range = self->text_dup("");
             return (*path && *range) ? 0 : -1;
         }
         n = (size_t)(at - spec);
-        *path = pkg_text_dupn(self, spec, n);
-        *range = pkg_text_dup(self, at + 1);
+        *path = self->text_dupn(spec, n);
+        *range = self->text_dup(at + 1);
         return (*path && *range) ? 0 : -1;
     }
 
@@ -1490,16 +1539,16 @@ impl PkgOps for Pkg {
         (void)self;
 
         if (strstr(spec, "://")) {
-            if (pkg_text_begin(self, url, ucap) != 0) return -1;
-            return pkg_text_cat(self, url, ucap, spec);
+            if (self->text_begin(url, ucap) != 0) return -1;
+            return self->text_cat(url, ucap, spec);
         }
         if (strchr(spec, '/')) {
-            if (pkg_text_begin(self, url, ucap) != 0) return -1;
+            if (self->text_begin(url, ucap) != 0) return -1;
             return pkg_text_printf(self, url, ucap, "https://%s", spec);
         }
         reg = getenv("CT_REGISTRY");
         if (!reg || !reg[0]) reg = "https://github.com/ct-pkg";
-        if (pkg_text_begin(self, url, ucap) != 0) return -1;
+        if (self->text_begin(url, ucap) != 0) return -1;
         return pkg_text_printf(self, url, ucap, "%s/%s", reg, spec);
     }
 
@@ -1535,9 +1584,9 @@ impl PkgOps for Pkg {
        is the same one `tool/sh/Sh.h.ct` spells for `ct build`'s cc line. */
     int sh_quote(const char *s, char **out, int *cap)
     {
-        if (*out == 0 && pkg_text_grow(self, out, cap, 1) != 0) return -1;
+        if (*out == 0 && self->text_grow(out, cap, 1) != 0) return -1;
         (*out)[0] = 0;
-        return pkg_text_quote(self, out, cap, s);
+        return self->text_quote(out, cap, s);
     }
 
     /* The one subprocess call site. CI-9: a network fetch must not hang the
@@ -1637,11 +1686,11 @@ impl PkgOps for Pkg {
         n = 0;
         f = fopen(path, "r");
         if (!f) return -1;
-        if (pkg_text_grow(self, buf, cap, 1) != 0) { fclose(f); return -1; }
+        if (self->text_grow(buf, cap, 1) != 0) { fclose(f); return -1; }
         c = fgetc(f);
         while (c != EOF && c != '\n' && c != '\r') {
             if (n + 2 > (size_t)(*cap)) {
-                if (pkg_text_grow(self, buf, cap, (int)(n + 2)) != 0) {
+                if (self->text_grow(buf, cap, (int)(n + 2)) != 0) {
                     fclose(f);
                     return -1;
                 }
@@ -1694,7 +1743,7 @@ impl PkgOps for Pkg {
             char *ls, *le, *vp;
             const char *tmp;
             size_t vl, tl, ll;
-            fr = pkg_text_fgets(self, &line, &linecap, f);
+            fr = self->text_fgets(&line, &linecap, f);
             if (fr < 0) { fclose(f); return -1; }
             if (fr == 0) break;
             ll = strlen(line);
@@ -1714,7 +1763,7 @@ impl PkgOps for Pkg {
                 vl = vl - 1;
             }
             if (vl == 0) continue;
-            tmp = pkg_text_dupn(self, vp, vl);
+            tmp = self->text_dupn(vp, vl);
             if (!tmp) continue;
             if (self->version_parse(tmp, v) != 0) continue;
             if (!self->range_match(range, tmp)) continue;
@@ -1784,7 +1833,7 @@ impl PkgOps for Pkg {
         commit = 0;
         commitcap = 0;
         if (self->giterr != 0) self->giterr[0] = 0;
-        if (pkg_scrub(self, url, &surl, &surlcap) != 0) return -1;
+        if (self->scrub(url, &surl, &surlcap) != 0) return -1;
 
         deps.spec = 0;
         deps.n = 0;
@@ -1859,7 +1908,7 @@ impl PkgOps for Pkg {
                                    "%s", url) != 0) {
             return -1;
         }
-        if (pkg_scrub(self, diag_spec, &sdiag, &sdiagcap) != 0) return -1;
+        if (self->scrub(diag_spec, &sdiag, &sdiagcap) != 0) return -1;
 
         fresh = 0;
         if (stat(gitdir, &st) != 0) fresh = 1;
@@ -1869,7 +1918,7 @@ impl PkgOps for Pkg {
                clone leaves a non-empty directory that a fresh clone refuses. */
             if (stat(cache, &st) == 0) {
                 if (self->sh_quote(cache, &q2, &q2cap) != 0) return -1;
-                if (pkg_text_begin(self, &cmd, &cmdcap) != 0
+                if (self->text_begin(&cmd, &cmdcap) != 0
                     || pkg_text_printf(self, &cmd, &cmdcap, "rm -rf %s", q2) != 0)
                     return -1;
                 if (system(cmd) != 0) {
@@ -1885,7 +1934,7 @@ impl PkgOps for Pkg {
             origin = 0;
             origincap = 0;
             if (self->sh_quote(cache, &q2, &q2cap) != 0) return -1;
-            if (pkg_text_begin(self, &cmd, &cmdcap) != 0
+            if (self->text_begin(&cmd, &cmdcap) != 0
                 || pkg_text_printf(self, &cmd, &cmdcap,
                                    "git -C %s config --get remote.origin.url", q2) != 0)
                 return -1;
@@ -1893,7 +1942,7 @@ impl PkgOps for Pkg {
             if (orc != 0) {
                 fprintf(stderr, "ctc: cannot inspect the package cache '%s' "
                                 "(its .git is unreadable)\n", cache);
-                pkg_git_diag(self, self->giterr, cache, sdiag);
+                self->git_diag(self->giterr, cache, sdiag);
                 return -1;
             }
             remove(self->giterr);
@@ -1910,7 +1959,7 @@ impl PkgOps for Pkg {
                 int oscap;
                 os = 0;
                 oscap = 0;
-                if (pkg_scrub(self, origin, &os, &oscap) != 0) return -1;
+                if (self->scrub(origin, &os, &oscap) != 0) return -1;
                 fprintf(stderr, "ctc: cache for '%s/%s' has a different origin\n",
                         cache_pub && cache_pub[0] ? cache_pub : "?", name);
                 fprintf(stderr, "  expected: %s\n", surl);
@@ -1924,23 +1973,23 @@ impl PkgOps for Pkg {
         if (self->sh_quote(url, &q1, &q1cap) != 0) return -1;
         if (self->sh_quote(cache, &q2, &q2cap) != 0) return -1;
         if (fresh) {
-            if (pkg_text_begin(self, &cmd, &cmdcap) != 0
+            if (self->text_begin(&cmd, &cmdcap) != 0
                 || pkg_text_printf(self, &cmd, &cmdcap,
                                    "git clone --quiet %s %s", q1, q2) != 0)
                 return -1;
             if (self->git_run(cmd, NULL) != 0) {
                 fprintf(stderr, "ctc: git clone of '%s' failed\n", surl);
-                pkg_git_diag(self, self->giterr, cache, sdiag);
+                self->git_diag(self->giterr, cache, sdiag);
                 return -1;
             }
         } else {
-            if (pkg_text_begin(self, &cmd, &cmdcap) != 0
+            if (self->text_begin(&cmd, &cmdcap) != 0
                 || pkg_text_printf(self, &cmd, &cmdcap,
                                    "git -C %s fetch --quiet --tags --force", q2) != 0)
                 return -1;
             if (self->git_run(cmd, NULL) != 0) {
                 fprintf(stderr, "ctc: git fetch of '%s' failed\n", surl);
-                pkg_git_diag(self, self->giterr, cache, sdiag);
+                self->git_diag(self->giterr, cache, sdiag);
                 return -1;
             }
         }
@@ -1951,7 +2000,7 @@ impl PkgOps for Pkg {
             tag = pin_tag;
             rc = 0;
         } else {
-            char *picked = pkg_row(self);
+            char *picked = self->row();
             if (!picked) return -1;
             rc = self->git_pick_tag(cache, range, picked, TEXT_LIMIT);
             tag = picked;
@@ -1959,20 +2008,20 @@ impl PkgOps for Pkg {
         if (rc == 0) {
             if (self->sh_quote(cache, &q2, &q2cap) != 0) return -1;
             if (self->sh_quote(tag, &q1, &q1cap) != 0) return -1;
-            if (pkg_text_begin(self, &cmd, &cmdcap) != 0
+            if (self->text_begin(&cmd, &cmdcap) != 0
                 || pkg_text_printf(self, &cmd, &cmdcap,
                                    "git -C %s checkout --quiet --detach %s", q2, q1) != 0)
                 return -1;
             if (self->git_run(cmd, NULL) != 0) {
                 fprintf(stderr, "ctc: git checkout of '%s' failed\n", tag);
-                pkg_git_diag(self, self->giterr, cache, sdiag);
+                self->git_diag(self->giterr, cache, sdiag);
                 return -1;
             }
             remove(self->giterr);
         } else if (rc == -2) {
             if (!fresh) {
                 if (self->sh_quote(cache, &q2, &q2cap) != 0) return -1;
-                if (pkg_text_begin(self, &cmd, &cmdcap) != 0
+                if (self->text_begin(&cmd, &cmdcap) != 0
                     || pkg_text_printf(self, &cmd, &cmdcap,
                                        "git -C %s reset --hard --quiet origin/HEAD", q2) != 0)
                     return -1;
@@ -1986,13 +2035,13 @@ impl PkgOps for Pkg {
         }
 
         if (self->sh_quote(cache, &q2, &q2cap) != 0) return -1;
-        if (pkg_text_begin(self, &cmd, &cmdcap) != 0
+        if (self->text_begin(&cmd, &cmdcap) != 0
             || pkg_text_printf(self, &cmd, &cmdcap,
                                "git -C %s rev-parse --verify HEAD", q2) != 0)
             return -1;
         if (self->git_run(cmd, out) != 0) {
             fprintf(stderr, "ctc: git cannot resolve a commit for '%s'\n", name);
-            pkg_git_diag(self, self->giterr, cache, sdiag);
+            self->git_diag(self->giterr, cache, sdiag);
             return -1;
         }
         remove(self->giterr);
@@ -2037,7 +2086,7 @@ impl PkgOps for Pkg {
             if (!ident) return -1;
             for (i = 0; i < self->nseen; i++)
                 if (strcmp(self->seen[i], ident) == 0) return 0;
-            if (pkg_seen_ensure(self, self->nseen + 1) != 0) {
+            if (self->seen_ensure(self->nseen + 1) != 0) {
                 fprintf(stderr, "ctc: out of memory\n");
                 return -1;
             }
@@ -2086,7 +2135,7 @@ impl PkgOps for Pkg {
         if (stat(store, &st) == 0) existed = 1;
         store = pkg_store_commit(cache, publisher, mname, mver, nsroot, dig);
         if (!store) return -1;
-        if (pkg_lock_reserve(self, self->locklen + 1) != 0) {
+        if (self->lock_reserve(self->locklen + 1) != 0) {
             fprintf(stderr, "ctc: ct.lock is too large to merge\n");
             return -1;
         }
@@ -2097,14 +2146,14 @@ impl PkgOps for Pkg {
                          publisher, mname, mver, url, commit, nsroot, dig);
             if (w < 0) return -1;
             if (w < self->lockcap - self->locklen) break;
-            if (pkg_lock_reserve(self, self->locklen + w + 1) != 0) {
+            if (self->lock_reserve(self->locklen + w + 1) != 0) {
                 fprintf(stderr, "ctc: ct.lock is too large to merge\n");
                 return -1;
             }
         }
         self->locklen += w;
         self->nlocks++;
-        if (pkg_recs_ensure(self, self->nrecs + 1) != 0) {
+        if (self->recs_ensure(self->nrecs + 1) != 0) {
             fprintf(stderr, "ctc: out of memory\n");
             return -1;
         }
@@ -2116,9 +2165,9 @@ impl PkgOps for Pkg {
             rec->version = mver;
             rec->publisher = publisher;
             snprintf(rec->kind, sizeof rec->kind, "git");
-            rec->url = pkg_text_dup(self, url);
+            rec->url = self->text_dup(url);
             if (rec->url == 0) return -1;
-            rec->store = pkg_text_dup(self, store);
+            rec->store = self->text_dup(store);
             if (rec->store == 0) return -1;
             rec->tag = tag[0] ? tag : "-";
             snprintf(rec->commit, sizeof rec->commit, "%s", commit);
@@ -2133,8 +2182,8 @@ impl PkgOps for Pkg {
     {
         char *url;
         int urlcap;
-        char *name = pkg_row(self);
-        char *publisher = pkg_row(self);
+        char *name = self->row();
+        char *publisher = self->row();
         const char *slash;
 
         if (!name || !publisher) return -1;
@@ -2171,9 +2220,9 @@ impl PkgOps for Pkg {
         char *path, *range, *full;
         char *url;
         int urlcap;
-        char *tag = pkg_row(self);
+        char *tag = self->row();
         char sha[80];
-        char *pub = pkg_row(self);
+        char *pub = self->row();
         char pver[32];
         const char *ix;
         int rc;
@@ -2249,9 +2298,9 @@ impl PkgOps for Pkg {
             return self->get_git(path, range, depth);
         }
         if (strncmp(path, "file://", 7) == 0) {
-            full = pkg_text_dup(self, path + 7);
+            full = self->text_dup(path + 7);
         } else if (path[0] == '/') {
-            full = pkg_text_dup(self, path);
+            full = self->text_dup(path);
         } else {
             full = pkg_pathf(self, "%s/%s", base, path);
         }
@@ -2301,7 +2350,7 @@ impl PkgOps for Pkg {
             if (!ident) return -1;
             for (i = 0; i < self->nseen; i++)
                 if (strcmp(self->seen[i], ident) == 0) return 0;
-            if (pkg_seen_ensure(self, self->nseen + 1) != 0) {
+            if (self->seen_ensure(self->nseen + 1) != 0) {
                 fprintf(stderr, "ctc: out of memory\n");
                 return -1;
             }
@@ -2344,7 +2393,7 @@ impl PkgOps for Pkg {
         if (stat(store, &st) == 0) existed = 1;
         store = pkg_store_commit(dir, publisher, name, ver, nsroot, dig);
         if (!store) return -1;
-        if (pkg_lock_reserve(self, self->locklen + 1) != 0) {
+        if (self->lock_reserve(self->locklen + 1) != 0) {
             fprintf(stderr, "ctc: ct.lock is too large to merge\n");
             return -1;
         }
@@ -2354,14 +2403,14 @@ impl PkgOps for Pkg {
                          "%s/%s %s dir %s - %s %s\n", publisher, name, ver, dir, nsroot, dig);
             if (w < 0) return -1;
             if (w < self->lockcap - self->locklen) break;
-            if (pkg_lock_reserve(self, self->locklen + w + 1) != 0) {
+            if (self->lock_reserve(self->locklen + w + 1) != 0) {
                 fprintf(stderr, "ctc: ct.lock is too large to merge\n");
                 return -1;
             }
         }
         self->locklen += w;
         self->nlocks++;
-        if (pkg_recs_ensure(self, self->nrecs + 1) != 0) {
+        if (self->recs_ensure(self->nrecs + 1) != 0) {
             fprintf(stderr, "ctc: out of memory\n");
             return -1;
         }
@@ -2373,9 +2422,9 @@ impl PkgOps for Pkg {
             rec->version = ver;
             rec->publisher = publisher;
             snprintf(rec->kind, sizeof rec->kind, "dir");
-            rec->url = pkg_text_dup(self, dir);
+            rec->url = self->text_dup(dir);
             if (rec->url == 0) return -1;
-            rec->store = pkg_text_dup(self, store);
+            rec->store = self->text_dup(store);
             if (rec->store == 0) return -1;
             rec->tag = "-";
             snprintf(rec->commit, sizeof rec->commit, "-");
@@ -2393,8 +2442,8 @@ impl PkgOps for Pkg {
            scratch truncated / rejected one over 4096); the formal bound is
            still enforced so a runaway file is a named error. */
         char *buf;
-        char *newname = pkg_row(self);
-        char *cn = pkg_row(self);
+        char *newname = self->row();
+        char *cn = self->row();
         char *cur;
         char *p, *end;
         long sz;
@@ -2461,7 +2510,7 @@ impl PkgOps for Pkg {
             if (have_name) {
                 /* S1a-0 C2j: compare the same package spelled differently at
                    the spec's length, not a 512-byte truncation. */
-                cur = pkg_text_dupn(self, v, vl);
+                cur = self->text_dupn(v, vl);
                 if (!cur) {
                     free(buf);
                     fprintf(stderr, "ctc: out of memory\n");
@@ -2509,9 +2558,9 @@ impl PkgOps for Pkg {
         if (self->split_spec(spec, &path, &range) != 0) return -1;
         if (self->is_git_ref(path)) return self->git_name(path, name, cap);
         if (strncmp(path, "file://", 7) == 0) {
-            full = pkg_text_dup(self, path + 7);
+            full = self->text_dup(path + 7);
         } else if (path[0] == '/') {
-            full = pkg_text_dup(self, path);
+            full = self->text_dup(path);
         } else {
             full = pkg_pathf(self, "./%s", path);
         }
@@ -2545,7 +2594,7 @@ impl PkgOps for Pkg {
         self->nrecs = 0;
         self->nlocks = 0;
         self->check_requires = 1;
-        if (pkg_lock_reserve(self, 1) != 0) {
+        if (self->lock_reserve(1) != 0) {
             fprintf(stderr, "ctc: out of memory\n");
             return 1;
         }
@@ -2586,7 +2635,7 @@ impl PkgOps for Pkg {
                 int linecap, fr;
                 line = 0;
                 linecap = 0;
-                while ((fr = pkg_text_fgets(self, &line, &linecap, f)) == 1)
+                while ((fr = self->text_fgets(&line, &linecap, f)) == 1)
                     if (strncmp(line, "std/std ", 8) == 0) legacy = 1;
                 fclose(f);
             }
@@ -2623,7 +2672,7 @@ impl PkgOps for Pkg {
             return 1;
         }
         klen = strlen(kept);
-        if (pkg_lock_reserve(self, self->locklen + (int)klen + 1) != 0) {
+        if (self->lock_reserve(self->locklen + (int)klen + 1) != 0) {
             fprintf(stderr, "ctc: ct.lock is too large to merge\n");
             free(kept);
             return 1;
@@ -2698,10 +2747,10 @@ impl PkgOps for Pkg {
         char *allcf, *alldf, *qcf, *qlf;
         int allcfcap, alldfcap, qcfcap, qlfcap;
         char *dpath, *drange;
-        char *dname = pkg_row(self);
+        char *dname = self->row();
         char *iline;
         int ilinecap;
-        char *imp = pkg_row(self);
+        char *imp = self->row();
         char *rel, *cand;
         int nlock, lockcap, i, j, rc, units, seen;
         size_t nl;
@@ -2771,7 +2820,7 @@ impl PkgOps for Pkg {
             vdir = pkg_store_pkgdir(lrows[i].name, lrows[i].ver);
             if (!vdir) return 1;
             if (strcmp(lrows[i].ns, ".") == 0)
-                lrows[i].ipath = pkg_text_dup(self, vdir);
+                lrows[i].ipath = self->text_dup(vdir);
             else
                 lrows[i].ipath = pkg_pathf(self, "%s/%s", vdir, lrows[i].ns);
             if (!lrows[i].ipath) return 1;
@@ -2787,8 +2836,8 @@ impl PkgOps for Pkg {
                 }
                 fprintf(stderr, "ctc: continuing despite the requires mismatch (--force)\n");
             }
-            if (pkg_append_words(self, &allcf, &allcfcap, cf) != 0
-                || pkg_append_words(self, &alldf, &alldfcap, lf) != 0) {
+            if (self->append_words(&allcf, &allcfcap, cf) != 0
+                || self->append_words(&alldf, &alldfcap, lf) != 0) {
                 fprintf(stderr, "ctc: package flags are too long\n");
                 return 1;
             }
@@ -2807,7 +2856,7 @@ impl PkgOps for Pkg {
                 if (nl <= 3 || strcmp(e->d_name + nl - 3, ".ct") != 0) continue;
                 f = fopen(e->d_name, "r");
                 if (f == NULL) continue;
-                while (pkg_text_fgets(self, &iline, &ilinecap, f) == 1) {
+                while (self->text_fgets(&iline, &ilinecap, f) == 1) {
                     char *p = iline, *q = imp;
                     while (*p == ' ' || *p == '\t') p++;
                     if (strncmp(p, "import", 6) != 0) continue;
@@ -2824,7 +2873,7 @@ impl PkgOps for Pkg {
                     /* S1a-0 C2k: `rel` is an exact-size copy of the import,
                        and every candidate is a `pkg_pathf` string, so the
                        store prefix may be longer than 512 bytes. */
-                    rel = pkg_text_dup(self, imp);
+                    rel = self->text_dup(imp);
                     if (!rel) { rc = 1; continue; }
                     {
                         char *r = rel;
@@ -2928,7 +2977,7 @@ impl PkgOps for Pkg {
                     return 1;
                 }
                 i++;
-                self->index = pkg_text_dup(self, argv[i]);
+                self->index = self->text_dup(argv[i]);
                 if (!self->index) return 1;
                 self->have_index = 1;
                 continue;
@@ -2969,12 +3018,12 @@ impl PkgOps for Pkg {
         char *cdir, *cpath;
         char *cline;
         int clinecap;
-        char *cname = pkg_row(self);
-        char *cpub = pkg_row(self);
-        char *cver = pkg_row(self);
-        char *cns = pkg_row(self);
-        char *ckey = pkg_row(self);
-        char *cval = pkg_row(self);
+        char *cname = self->row();
+        char *cpub = self->row();
+        char *cver = self->row();
+        char *cns = self->row();
+        char *ckey = self->row();
+        char *cval = self->row();
         char *cp, *ck, *cv, *cq;
         /* S1a-0 C2k: the walk queue holds one exact-size owned path per entry;
            it still grows from 32 slots, there is no 512-byte field any more. */
@@ -3025,7 +3074,7 @@ impl PkgOps for Pkg {
                 return 1;
             }
             cname[0] = 0; cpub[0] = 0; cver[0] = 0; cns[0] = 0;
-            while (pkg_text_fgets(self, &cline, &clinecap, cf) == 1) {
+            while (self->text_fgets(&cline, &clinecap, cf) == 1) {
                 cp = cline;
                 while (*cp == ' ' || *cp == '\t') cp++;
                 if (*cp == '#' || *cp == '\n' || *cp == '\r' || *cp == 0) continue;
@@ -3079,7 +3128,7 @@ impl PkgOps for Pkg {
                 fprintf(stderr, "ctc: out of memory\n");
                 return 1;
             }
-            cqueue[cqt] = pkg_text_dup(self, argv[1]);
+            cqueue[cqt] = self->text_dup(argv[1]);
             if (!cqueue[cqt]) return 1;
             cqt++;
             while (cqh < cqt && !cfound) {
@@ -3100,7 +3149,7 @@ impl PkgOps for Pkg {
                                 fprintf(stderr, "ctc: out of memory\n");
                                 return 1;
                             }
-                            cqueue[cqt] = pkg_text_dup(self, cpath);
+                            cqueue[cqt] = self->text_dup(cpath);
                             if (!cqueue[cqt]) return 1;
                             cqt++;
                             continue;
@@ -3111,7 +3160,7 @@ impl PkgOps for Pkg {
                             continue;
                         cf = fopen(cpath, "r");
                         if (cf == NULL) continue;
-                        while (pkg_text_fgets(self, &cline, &clinecap, cf) == 1) {
+                        while (self->text_fgets(&cline, &clinecap, cf) == 1) {
                             for (cp = cline; (cp = strstr(cp, "-I")) != NULL; cp += 2) {
                                 if (cp != cline && cp[-1] != ' ' && cp[-1] != '\t'
                                     && cp[-1] != '"' && cp[-1] != '\'') continue;
@@ -3169,27 +3218,6 @@ impl PkgOps for Pkg {
    instead of through a struct accessor. */
 static struct Pkg g_pkg;
 
-/* S1a-0 C2d: the lock text doubles from MAX_LOCK to CAP_LIMIT. A need over
-   the formal bound and a failed realloc both return -1; callers print the
-   "too large" / OOM message. The block belongs to `self` until the process
-   ends, like the other unit-wide tables. */
-static int pkg_lock_reserve(struct Pkg *self, int need)
-{
-    int cap;
-    char *grown;
-
-    if (need <= self->lockcap) return 0;
-    cap = self->lockcap > 0 ? self->lockcap : MAX_LOCK;
-    while (cap < need && cap < CAP_LIMIT) cap *= 2;
-    if (cap > CAP_LIMIT) cap = CAP_LIMIT;
-    if (need > cap) return -1;
-    grown = (char *)realloc(self->lock, (size_t)cap);
-    if (!grown) return -1;
-    self->lock = grown;
-    self->lockcap = cap;
-    return 0;
-}
-
 /* --- PH-77 official pins -------------------------------------------------- */
 
 /* The official packages this compiler trusts without a network round-trip.
@@ -3225,8 +3253,8 @@ static int pkg_pin_lookup(const char *name, const char *range,
         if (strlen(pvers[i]) >= vcap
             || strlen(ptags[i]) >= tcap || strlen(pshas[i]) >= scap)
             return -1;
-        if (pkg_text_begin(&g_pkg, url, ucap) != 0
-            || pkg_text_cat(&g_pkg, url, ucap, purls[i]) != 0)
+        if (g_pkg.text_begin(url, ucap) != 0
+            || g_pkg.text_cat(url, ucap, purls[i]) != 0)
             return -1;
         snprintf(ver, vcap, "%s", pvers[i]);
         snprintf(tag, tcap, "%s", ptags[i]);
@@ -3241,9 +3269,9 @@ static int pkg_pin_lookup(const char *name, const char *range,
 static int pkg_official_resolve(const char *name, char **url, int *ucap,
                                 char *tag, size_t tcap, char *sha, size_t scap)
 {
-    char *full = pkg_row(&g_pkg);
+    char *full = g_pkg.row();
     char ver[32];
-    char *ipub = pkg_row(&g_pkg);
+    char *ipub = g_pkg.row();
     const char *ix;
     int rc;
 
@@ -3282,7 +3310,7 @@ static int pkg_read_identity(const char *dir, const char **publisher,
     if (!path) return -1;
     f = fopen(path, "r");
     if (!f) return -1;
-    while (pkg_text_fgets(&g_pkg, &line, &linecap, f) == 1) {
+    while (g_pkg.text_fgets(&line, &linecap, f) == 1) {
         char *ls, *eq, *v, *ve;
         size_t kl, vl;
         ls = line;
@@ -3299,15 +3327,15 @@ static int pkg_read_identity(const char *dir, const char **publisher,
         while (eq > ls && (eq[-1] == ' ' || eq[-1] == '\t')) eq--;
         kl = (size_t)(eq - ls);
         if (kl == 9 && strncmp(ls, "publisher", 9) == 0) {
-            *publisher = pkg_text_dupn(&g_pkg, v, vl);
+            *publisher = g_pkg.text_dupn(v, vl);
             if (!*publisher) { fclose(f); return -1; }
         } else if (kl == 7 && strncmp(ls, "ns-root", 7) == 0) {
-            *nsroot = pkg_text_dupn(&g_pkg, v, vl);
+            *nsroot = g_pkg.text_dupn(v, vl);
             if (!*nsroot) { fclose(f); return -1; }
         }
     }
     fclose(f);
-    if (!*nsroot) *nsroot = pkg_text_dup(&g_pkg, "");
+    if (!*nsroot) *nsroot = g_pkg.text_dup("");
     return *nsroot ? 0 : -1;
 }
 
@@ -3320,7 +3348,7 @@ static char *pkg_store_root(void)
     const char *ct, *home;
 
     ct = getenv("CT_HOME");
-    if (ct && ct[0]) return pkg_text_dup(&g_pkg, ct);
+    if (ct && ct[0]) return g_pkg.text_dup(ct);
     home = getenv("HOME");
     if (!home || !home[0]) {
         fprintf(stderr, "ctc: cannot locate the package store (HOME and CT_HOME are unset)\n");
@@ -3356,7 +3384,7 @@ static int pkg_mkdirs(const char *path)
     size_t i, n;
     struct stat st;
 
-    tmp = pkg_text_dup(&g_pkg, path);
+    tmp = g_pkg.text_dup(path);
     if (!tmp) return -1;
     n = strlen(tmp);
     for (i = 1; i <= n; i++) {
@@ -3447,7 +3475,7 @@ static char *pkg_store_commit(const char *src, const char *publisher, const char
     if (pkg_identity_check(src, publisher, name, nsroot) != 0) return (char *)0;
     store = pkg_store_dir(publisher, name, ver);
     if (!store) return (char *)0;
-    parent = pkg_text_dup(&g_pkg, store);
+    parent = g_pkg.text_dup(store);
     if (!parent) return (char *)0;
     n = strlen(parent);
     while (n > 0 && parent[n - 1] != '/') n--;
@@ -3500,7 +3528,7 @@ static int pkg_read_meta(const char *dir, const char **cflags,
     f = fopen(path, "r");
     if (!f) return 0;
     ok = 1;
-    while (pkg_text_fgets(&g_pkg, &line, &linecap, f) == 1) {
+    while (g_pkg.text_fgets(&line, &linecap, f) == 1) {
         char *ls, *le, *eq, *k, *v, *ve;
         size_t kl, vl, ll;
         ll = strlen(line);
@@ -3524,13 +3552,13 @@ static int pkg_read_meta(const char *dir, const char **cflags,
         kl = (size_t)(k - ls);
         vl = (size_t)(ve - v);
         if (kl == 6 && strncmp(ls, "cflags", 6) == 0) {
-            *cflags = pkg_text_dupn(&g_pkg, v, vl);
+            *cflags = g_pkg.text_dupn(v, vl);
             if (!*cflags) { ok = 0; break; }
         } else if (kl == 7 && strncmp(ls, "ldflags", 7) == 0) {
-            *ldflags = pkg_text_dupn(&g_pkg, v, vl);
+            *ldflags = g_pkg.text_dupn(v, vl);
             if (!*ldflags) { ok = 0; break; }
         } else if (kl == 8 && strncmp(ls, "requires", 8) == 0) {
-            *req = pkg_text_dupn(&g_pkg, v, vl);
+            *req = g_pkg.text_dupn(v, vl);
             if (!*req) { ok = 0; break; }
         }
     }
@@ -3649,9 +3677,9 @@ static int pkg_index_lookup(const char *name, const char *range, char **url, int
     char *line;
     char *bestmsg;
     int linecap, bestmsgcap;
-    char *ambb = pkg_row(&g_pkg);
-    char *bestpub = pkg_row(&g_pkg);
-    char *bestver = pkg_row(&g_pkg);
+    char *ambb = g_pkg.row();
+    char *bestpub = g_pkg.row();
+    char *bestver = g_pkg.row();
     char bestkind[32];
     const char *ip;
     const char *slash;
@@ -3689,7 +3717,7 @@ static int pkg_index_lookup(const char *name, const char *range, char **url, int
     bad = 0;
     amb = 0;
     ambb[0] = 0;
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *tok[8];
         const char *publisher, *rurl, *rtag, *rsha;
         int ntok, match, legacy;
@@ -3768,8 +3796,8 @@ static int pkg_index_lookup(const char *name, const char *range, char **url, int
                 best_legacy = legacy;
                 best_line = lineno;
                 if (!legacy) {
-                    if (pkg_text_begin(&g_pkg, url, ucap) != 0
-                        || pkg_text_cat(&g_pkg, url, ucap, rurl) != 0)
+                    if (g_pkg.text_begin(url, ucap) != 0
+                        || g_pkg.text_cat(url, ucap, rurl) != 0)
                         return -1;
                     snprintf(tag, tcap, "%s", rtag);
                     snprintf(sha, scap, "%s", rsha);
@@ -3922,7 +3950,7 @@ static int pkg_index_verify(int argc, char **argv, const char *prog, const char 
     rows = 0;
     valid = 0;
     lineno = 0;
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *tok[8];
         char kind[32];
         char *msg;
@@ -3962,7 +3990,7 @@ static int pkg_index_verify(int argc, char **argv, const char *prog, const char 
             seen = np;
             cseen = nc;
         }
-        seen[nseen] = pkg_text_dup(&g_pkg, key);
+        seen[nseen] = g_pkg.text_dup(key);
         if (seen[nseen] == 0) goto oom;
         nseen++;
         valid++;
@@ -4105,7 +4133,7 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
                 fprintf(stderr, "%s: --packages needs a file\n", prog);
                 return 2;
             }
-            list_path = pkg_text_dup(&g_pkg, argv[ai]);
+            list_path = g_pkg.text_dup(argv[ai]);
             if (!list_path) return 2;
             have_list = 1;
             continue;
@@ -4116,7 +4144,7 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
                 fprintf(stderr, "%s: --out needs a file\n", prog);
                 return 2;
             }
-            out_path = pkg_text_dup(&g_pkg, argv[ai]);
+            out_path = g_pkg.text_dup(argv[ai]);
             if (!out_path) return 2;
             have_out = 1;
             continue;
@@ -4169,7 +4197,7 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
     nrows = 0;
     seen = 0;
     lineno = 0;
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, lf)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, lf)) == 1) {
         char *tok[8];
         struct IndexRow *r;
 
@@ -4209,7 +4237,7 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
         /* S1a-0 C2i: the row's directory is an exact-size owned string; a long
            package path is walked whole instead of being refused at 512. */
         if (tok[0][0] == '/') {
-            r->dir = pkg_text_dup(&g_pkg, tok[0]);
+            r->dir = g_pkg.text_dup(tok[0]);
         } else {
             r->dir = pkg_pathf(&g_pkg, "%s/%s", list_dir, tok[0]);
         }
@@ -4221,7 +4249,7 @@ int pkg_index_refresh(int argc, char **argv, const char *prog, const char *versi
         }
         /* S1a-0 C2k: the git-url is an exact-size owned string; only the tag
            keeps a fixed field (it is a version label, not a path). */
-        r->url = pkg_text_dup(&g_pkg, tok[1]);
+        r->url = g_pkg.text_dup(tok[1]);
         if (!r->url) {
             if (index_err_add(&errs, &nerr, &cerr, lineno, "list",
                               "out of memory or git-url over 65536 bytes") != 0)
@@ -4485,18 +4513,6 @@ refresh_oom:
     return 2;
 }
 
-/* Append `src` to `dst` with one separating space; an empty `src` is a no-op.
-   S1a-0 C2e: the accumulator is `self`-owned text, so a package's combined
-   flags are never cut at the old 2048 bytes. */
-static int pkg_append_words(struct Pkg *self, char **dst, int *cap, const char *src)
-{
-    if (!src || !src[0]) return 0;
-    if (*dst != 0 && (*dst)[0] != 0) {
-        if (pkg_text_cat(self, dst, cap, " ") != 0) return -1;
-    }
-    return pkg_text_cat(self, dst, cap, src);
-}
-
 /* `requires = ct >= x.y.z`: a mismatch blocks `ct install`, because an
    incompatible package would only fail later inside the generated C. */
 static int pkg_check_requires(const char *pkg, const char *req)
@@ -4564,7 +4580,7 @@ static int pkg_verify_lock(const char *prog, struct LockRow **rows, int *nlock, 
         fprintf(stderr, "ctc: ct.lock is v1 (no '# ct-lock 2' header); run 'ct migrate'\n");
         return 1;
     }
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *tok[12];
         char *p;
         int ntok;
@@ -4601,14 +4617,14 @@ static int pkg_verify_lock(const char *prog, struct LockRow **rows, int *nlock, 
             return 1;
         }
         /* v2: <publisher>/<name> <ver> <type> <locator> <commit|-> <ns-root> <digest> */
-        (*rows)[*nlock].name = pkg_text_dup(&g_pkg, tok[0]);
+        (*rows)[*nlock].name = g_pkg.text_dup(tok[0]);
         if (!(*rows)[*nlock].name) {
             fprintf(stderr, "ctc: out of memory\n");
             fclose(f);
             return 1;
         }
         snprintf((*rows)[*nlock].ver, 32, "%s", tok[1]);
-        (*rows)[*nlock].ns = pkg_text_dup(&g_pkg, tok[5]);
+        (*rows)[*nlock].ns = g_pkg.text_dup(tok[5]);
         if (!(*rows)[*nlock].ns) {
             fprintf(stderr, "ctc: out of memory\n");
             fclose(f);
@@ -4678,7 +4694,7 @@ static int pkg_lock_keep(char *dst, size_t cap)
     dst[0] = 0;
     f = fopen("./ct.lock", "r");
     if (!f) return 0;
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *p;
 
         p = line;
@@ -4742,7 +4758,7 @@ static int pkg_update_v2(const char *prog)
     struct LockRow *lrows;
     char *url;
     int urlcap;
-    char *tag = pkg_row(&g_pkg);
+    char *tag = g_pkg.row();
     char sha[80], oldver[32], newver[32];
     int nlock, lockcap, i, j, seen, rc, outlen, legacy, official;
 
@@ -4769,7 +4785,7 @@ static int pkg_update_v2(const char *prog)
     rc = 0;
     for (i = 0; i < pdeps.n; i++) {
         char *path, *range;
-        char *dname = pkg_row(&g_pkg);
+        char *dname = g_pkg.row();
         char *spec;
         if (!dname) return 1;
         spec = pdeps.spec[i];
@@ -4876,7 +4892,7 @@ static int pkg_update_v2(const char *prog)
     g_pkg.nlocks = 0;
     g_pkg.nseen = 0;
     g_pkg.nrecs = 0;
-    if (pkg_lock_reserve(&g_pkg, 1) != 0) {
+    if (g_pkg.lock_reserve(1) != 0) {
         free(buf);
         fprintf(stderr, "ctc: out of memory\n");
         return 1;
@@ -4971,7 +4987,7 @@ static int manifest_strict_default(void)
     linecap = 0;
     f = fopen("./ct.pkg", "r");
     if (f == NULL) return 0;
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *p = line;
         char *eq;
         size_t kl;
@@ -5024,7 +5040,7 @@ static int pkg_verify_strict(void)
         fclose(f);
         return 1;
     }
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *tok[12];
         char *p;
         int ntok;
@@ -5077,7 +5093,7 @@ static int pkg_migrate(const char *prog)
     const char *publisher;
     char *nsroot, *src, *store;
     char dig[80], cdig[80];
-    char *name = pkg_row(&g_pkg);
+    char *name = g_pkg.row();
     char ver[32], typ[16], commit[64];
     struct stat st;
 
@@ -5117,7 +5133,7 @@ static int pkg_migrate(const char *prog)
     }
     nrow = 0;
     rc = 0;
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *tok[12];
         char *p;
         int ntok, w;
@@ -5359,7 +5375,7 @@ int ct_pkg_lock_roots(const char *prog, int locked, char ***roots, int *nroots,
     nrow = 0;
     rowcap = 0;
     lrows = NULL;
-    while ((fr = pkg_text_fgets(&g_pkg, &line, &linecap, f)) == 1) {
+    while ((fr = g_pkg.text_fgets(&line, &linecap, f)) == 1) {
         char *tok[12];
         char *p;
         struct LockParsedRow *row;
@@ -5392,10 +5408,10 @@ int ct_pkg_lock_roots(const char *prog, int locked, char ***roots, int *nroots,
             return 1;
         }
         row = &lrows[nrow];
-        row->full = pkg_text_dup(&g_pkg, tok[0]);
+        row->full = g_pkg.text_dup(tok[0]);
         {
             const char *ls = strrchr(tok[0], '/');
-            row->bare = pkg_text_dup(&g_pkg, ls ? ls + 1 : tok[0]);
+            row->bare = g_pkg.text_dup(ls ? ls + 1 : tok[0]);
             if (!row->bare) {
                 fprintf(stderr, "ctc: out of memory\n");
                 fclose(f);
@@ -5404,13 +5420,13 @@ int ct_pkg_lock_roots(const char *prog, int locked, char ***roots, int *nroots,
         }
         snprintf(row->ver, 32, "%s", tok[1]);
         row->typ[0] = 0;
-        row->loc = pkg_text_dup(&g_pkg, "");
-        row->nsr = pkg_text_dup(&g_pkg, "");
+        row->loc = g_pkg.text_dup("");
+        row->nsr = g_pkg.text_dup("");
         row->dig[0] = 0;
         if (ntok >= 7) {
             snprintf(row->typ, 16, "%s", tok[2]);
-            row->loc = pkg_text_dup(&g_pkg, tok[3]);
-            row->nsr = pkg_text_dup(&g_pkg, tok[5]);
+            row->loc = g_pkg.text_dup(tok[3]);
+            row->nsr = g_pkg.text_dup(tok[5]);
             snprintf(row->dig, 80, "%s", tok[6]);
         }
         if (!row->full || !row->loc || !row->nsr) {
@@ -5453,7 +5469,7 @@ int ct_pkg_lock_roots(const char *prog, int locked, char ***roots, int *nroots,
                 return 1;
             }
             if (strcmp(lrows[i].nsr, ".") == 0)
-                (*roots)[*nroots] = pkg_text_dup(&g_pkg, lrows[i].loc);
+                (*roots)[*nroots] = g_pkg.text_dup(lrows[i].loc);
             else
                 (*roots)[*nroots] = pkg_pathf(&g_pkg, "%s/%s",
                                               lrows[i].loc, lrows[i].nsr);
@@ -5487,7 +5503,7 @@ int ct_pkg_lock_roots(const char *prog, int locked, char ***roots, int *nroots,
                 return 1;
             }
             if (strcmp(lrows[i].nsr, ".") == 0)
-                (*roots)[*nroots] = pkg_text_dup(&g_pkg, sdir);
+                (*roots)[*nroots] = g_pkg.text_dup(sdir);
             else
                 (*roots)[*nroots] = pkg_pathf(&g_pkg, "%s/%s", sdir, lrows[i].nsr);
             if (!(*roots)[*nroots]) {
@@ -5519,7 +5535,7 @@ int ct_pkg_get(int argc, char **argv, const char *prog, const char *version)
     g_pkg.have_index = 0;
     rc = g_pkg.get_main(argc, argv);
     /* S1a-0 C2e: the command is over; release every dynamic text it grew. */
-    pkg_owned_free(&g_pkg);
+    g_pkg.owned_free();
     return rc;
 }
 
@@ -5531,7 +5547,7 @@ int ct_pkg_install(int argc, char **argv, const char *prog, const char *version)
     g_pkg.prog = prog;
     g_pkg.version = version;
     rc = g_pkg.install_main(argc, argv);
-    pkg_owned_free(&g_pkg);
+    g_pkg.owned_free();
     return rc;
 }
 
@@ -5561,7 +5577,7 @@ int ct_pkg_update(int argc, char **argv, const char *prog, const char *version)
         return 1;
     }
     ai = pkg_update(prog);
-    pkg_owned_free(&g_pkg);
+    g_pkg.owned_free();
     return ai;
 }
 
@@ -5596,7 +5612,7 @@ int ct_pkg_verify(int argc, char **argv, const char *prog, const char *version)
     }
     if (!strict && manifest_strict_default()) strict = 1;
     ai = pkg_verify(prog, strict);
-    pkg_owned_free(&g_pkg);
+    g_pkg.owned_free();
     return ai;
 }
 
@@ -5625,7 +5641,7 @@ int ct_pkg_migrate(int argc, char **argv, const char *prog, const char *version)
         return 1;
     }
     ai = pkg_migrate(prog);
-    pkg_owned_free(&g_pkg);
+    g_pkg.owned_free();
     return ai;
 }
 
@@ -5635,7 +5651,7 @@ int ct_index_verify(int argc, char **argv, const char *prog, const char *version
     int rc;
 
     rc = pkg_index_verify(argc, argv, prog, version);
-    pkg_owned_free(&g_pkg);
+    g_pkg.owned_free();
     return rc;
 }
 
@@ -5647,6 +5663,6 @@ int ct_index_refresh(int argc, char **argv, const char *prog, const char *versio
     int rc;
 
     rc = pkg_index_refresh(argc, argv, prog, version);
-    pkg_owned_free(&g_pkg);
+    g_pkg.owned_free();
     return rc;
 }

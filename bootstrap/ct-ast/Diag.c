@@ -134,6 +134,7 @@ struct tool_pkg_Sha256;
 struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 struct tool_diag_DiagStore_vtbl {
+    int (*grow_warns)(void *);
     int (*sem_error)(void *, int, int, const char *, const char *);
     int (*record_sig_warn)(void *, int, int, const char *, const char *, const char *, const char *, const char *);
     int (*record_arity_warn)(void *, int, int, const char *, const char *, const char *);
@@ -195,7 +196,6 @@ struct tool_diag_Diag {
 };
 const char * tool_diag_ct_diag_code_for_error(const char *);
 const char * tool_diag_ct_diag_warn_code(int);
-static int diag_grow_warns(struct tool_diag_Diag *);
 static const char * diag_intern(const char *);
 static char * diag_dup(const char *);
 static void diag_loc(FILE *, const struct tool_diag_Warn *, int);
@@ -230,6 +230,29 @@ void tool_diag_ct_diag_set_codes(int);
 int tool_diag_ct_type_fail(int, int, const char *, const char *);
 void tool_diag_ct_diag_reset(void);
 static struct tool_diag_Diag tool_diag_g_diag = { .__tool_diag_diagstore_vptr = &tool_diag_Diag_tool_diag_DiagStore_vtable };
+static int tool_diag_Diag_tool_diag_DiagStore_grow_warns(void *self) {
+    struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
+    int cap;
+    struct tool_diag_Warn * grown;
+    if ((_self->warns && (_self->nwarns < _self->wcap))) {
+        return 0;
+    }
+    cap = ((_self->wcap > 0) ? (_self->wcap * 2) : MAX_WARNINGS);
+    if (cap > WARN_LIMIT) {
+        if (_self->wcap >= WARN_LIMIT) {
+            return (-1);
+        }
+        cap = WARN_LIMIT;
+    }
+    grown = (struct tool_diag_Warn *)(realloc(_self->warns, ((size_t)(cap) * sizeof((*_self->warns)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    _self->warns = grown;
+    _self->wcap = cap;
+    return 0;
+}
+
 static int tool_diag_Diag_tool_diag_DiagStore_sem_error(void *self, int line, int col, const char * msg, const char * path) {
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     const char * code;
@@ -267,7 +290,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_sig_warn(void *self, int li
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -302,7 +325,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_arity_warn(void *self, int 
     }
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -340,7 +363,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_type_warn(void *self, int l
     }
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -364,7 +387,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_amb_warn(void *self, int li
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -388,7 +411,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_recv_warn(void *self, int l
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -412,7 +435,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_loop_warn(void *self, int l
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -436,7 +459,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_slice_warn(void *self, int 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -460,7 +483,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_deprecated(void *self, int 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -484,7 +507,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_str_warn(void *self, int li
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -508,7 +531,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_std_shadow(void *self, int 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -532,7 +555,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_leak(void *self, int kind, 
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -556,7 +579,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_record_cycle(void *self, int line,
     struct tool_diag_Diag *_self = (struct tool_diag_Diag *)self;
     struct tool_diag_Warn * w;
     (void)(_self);
-    if (diag_grow_warns(_self) != 0) {
+    if (_self->__tool_diag_diagstore_vptr->grow_warns(_self) != 0) {
         return (-1);
     }
     w = (&_self->warns[_self->nwarns]);
@@ -975,6 +998,7 @@ static void tool_diag_Diag_tool_diag_DiagStore_reset(void *self) {
 }
 
 static const struct tool_diag_DiagStore_vtbl tool_diag_Diag_tool_diag_DiagStore_vtable __attribute__((unused)) = {
+    .grow_warns = tool_diag_Diag_tool_diag_DiagStore_grow_warns,
     .sem_error = tool_diag_Diag_tool_diag_DiagStore_sem_error,
     .type_fail = tool_diag_Diag_tool_diag_DiagStore_type_fail,
     .record_sig_warn = tool_diag_Diag_tool_diag_DiagStore_record_sig_warn,
@@ -1126,27 +1150,6 @@ const char * tool_diag_ct_diag_warn_code(int kind) {
         return "W-LANG-001";
     }
     return "";
-}
-static int diag_grow_warns(struct tool_diag_Diag * self) {
-    int cap;
-    struct tool_diag_Warn * grown;
-    if ((self->warns && (self->nwarns < self->wcap))) {
-        return 0;
-    }
-    cap = ((self->wcap > 0) ? (self->wcap * 2) : MAX_WARNINGS);
-    if (cap > WARN_LIMIT) {
-        if (self->wcap >= WARN_LIMIT) {
-            return (-1);
-        }
-        cap = WARN_LIMIT;
-    }
-    grown = (struct tool_diag_Warn *)(realloc(self->warns, ((size_t)(cap) * sizeof((*self->warns)))));
-    if ((!grown)) {
-        return (-1);
-    }
-    self->warns = grown;
-    self->wcap = cap;
-    return 0;
 }
 static const char * diag_intern(const char * s) {
     const char * p = runtime_text_ct_intern((s ? s : ""));
