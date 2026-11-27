@@ -29,7 +29,7 @@ bad() { fail=$((fail + 1)); echo "FAIL p122/types-default: $1" >&2; }
 # The slice boundary. S7-a lands assignment, S7-b return, S7-c container; each
 # slice commits the source change and flips its own flag here.
 S7B=1
-S7C=0
+S7C=1
 
 cat >"$tmp/legal.ct" <<'CT'
 struct Point { int x; int y; }
