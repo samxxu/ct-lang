@@ -1,0 +1,14 @@
+#include <string.h>
+#include <stdlib.h>
+
+static int c_length(const char *s) { return (int)strlen(s); }
+
+int main(void)
+{
+    String greet = str_concat("hello, ", "ct");
+    char *view = greet.cstr();
+    printf("%d %s\n", c_length(view), view);
+    free(view);
+    greet.release();
+    return 0;
+}

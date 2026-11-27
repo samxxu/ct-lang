@@ -133,7 +133,7 @@ enum Msg {
 
 match (m) {
     Msg.Text(body) => {
-        printf("%s\n", body.cstr());
+        body.println();          /* LANG-30：不分配、不经过 cstr() */
         body.release();
     }
     Msg.Empty() => {

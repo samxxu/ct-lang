@@ -22,6 +22,11 @@
 
 ## 核心范式：字符串起手 → 工厂藏构建 → 对象方法链
 
+> **C 互操作边界（B-7）**：本节与 §9 的 `char *` / `map trait` 是 **C 映射单元的 ABI**（factory
+> 挂在映射后的宿主上），不是普通 Ct 字符串写法。日常代码用 §1–§8、§15–§23 的 `String` / `Str` /
+> `Vec` / `Map` / `Box` / 切片 / `ref`·`out`；边界的逐文件理由见
+> [pointer-free-exemptions](planning/pointer-free-exemptions.md)。
+
 Ct 最主要的编程范式只有一句话，三段顺序固定：
 
 1. **起点是字符串**，不是构造器。
@@ -273,35 +278,46 @@ GCC ≥ 8 用户不必手工加 `-Wno-format-truncation`，脚本会自己探测
 
 ## 1. 第一个程序：一个 trait、一个 struct、一次实现
 
-`.ct` 文件就是「普通 C 代码 + 几个声明式构造」的混合体。下面这个文件只多了 `trait` 与 `impl` 两种构造
-（完整版见 [examples/01_greeter/greeter.ct](../examples/01_greeter/greeter.ct)）：
+`.ct` 文件就是「普通 C 代码 + 几个声明式构造」的混合体。下面这个文件只多了 `trait`、`impl`
+与一个工厂（完整版见 [examples/01_greeter/greeter.ct](../examples/01_greeter/greeter.ct)）：
 
 ```c
-#include <stdio.h>
-
 trait Greeter {
     void greet();
-    void greet_name(char *name);
+    void greet_name(String name);
 }
 
 struct Person {
-    char *name;
+    String name;
     int age;
 } use Greeter;
 
 impl Greeter for Person {
     void greet() {
-        printf("Hello, I'm %s, age %d\n", self->name, self->age);
+        printf("Hello, I'm ");
+        self->name.print();
+        printf(", age %d\n", self->age);
     }
-    void greet_name(char *name) {
-        printf("Hello %s, I'm %s\n", name, self->name);
+    void greet_name(String name) {
+        printf("Hello ");
+        name.print();
+        printf(", I'm ");
+        self->name.print();
+        printf("\n");
     }
 }
 
+/* 工厂：字段顺序与默认值属于实现，调用点只给业务参数。 */
+static Person person(String name, int age) {
+    Person p = { .name = name, .age = age };
+    return p;
+}
+
 int main() {
-    Person p = { .name = "Tom", .age = 36 };
+    Person p = person("Tom", 36);
+    String jerry = "Jerry";
     p.greet();
-    p.greet_name("Jerry");
+    p.greet_name(jerry);
     return 0;
 }
 ```
@@ -324,6 +340,8 @@ Hello Jerry, I'm Tom
 1. **`self` 是隐式的**。`impl` 里的方法体直接写 `self->name`，不用声明参数，也不用强转。
 2. **`use Greeter` 放在 struct 收尾处**，决定这个 struct 带哪些 vptr 字段。
 3. **`impl` 必须实现 trait 的每一个方法**，少一个就编译期报错。
+4. **`name` 用 `String` 而不是 `char *`**：字符串字段要拥有数据；只借用时写 `Str`（§22）。
+   打印走 `print()` / `println()`，不再把字段塞给 `printf("%s")`。
 
 ## 2. 看懂生成物：命名契约
 
@@ -367,8 +385,8 @@ vptr 调用**，没有类型检查、没有特例。这就是它「不做优化�
 trait Purse { int balance(); int spend(int amount); void earn(int amount); }
 trait Reporter { void report(); }
 
-struct Trader { char *name; int coins; } use Purse, Reporter;
-struct Shop   { char *name; int price; int units; int coins; } use Purse, Reporter;
+struct Trader { String name; int coins; } use Purse, Reporter;
+struct Shop   { String name; int price; int units; int coins; } use Purse, Reporter;
 
 impl Purse for Trader {
     int spend(int amount) {
@@ -381,7 +399,9 @@ impl Purse for Trader {
 
 impl Purse for Shop {
     int spend(int amount) {
-        printf("shop %s never spends %d\n", self->name, amount);
+        printf("shop ");
+        self->name.print();
+        printf(" never spends %d\n", amount);
         return 0;                                 /* 店家永远不花钱 */
     }
     ...
@@ -392,6 +412,10 @@ impl Purse for Shop {
 之间流转，每一跳都按各自的 vtable 派发。trait 在这里的作用是**约束形状**，不是继承。
 
 ## 5. 组合、数组与堆对象
+
+> **B-7 边界（先读）**：本节演示的 `Person *` / `malloc` 是**结构体引用与生命周期**形态
+> （E4/E2 例外），不是日常首选。单对象堆分配优先 §17 的 `Box<T>` + `new`；只有接 C、或样例的
+> 课题就是 `delete` / `own` 的释放时点时，才保留 §5 的指针写法。
 
 struct 字段可以直接用别的 struct 的**指针**；数组、堆对象的 vptr 由编译器补
 （[language-spec §4.4 / §4.7](language-spec.md)；下面片段沿用第 1 章的 `Person` / `Greeter`）：
@@ -525,6 +549,10 @@ ct build --emit-c -I . main.ct -o build   # 只发 C：每单元 .c/.h，并打�
 
 ## 8. 内存：Drop、delete、own、泄漏告警
 
+> **日常首选**：单对象堆分配用 §17 的 `Box<T>` + `new`，释放用 `.release()`；本节保留
+> `malloc` / `own T *` / `delete`，因为它们是**句柄协议与泄漏告警的行为本体**（E2 生命周期例外），
+> 也是 C 互操作的逃生通道。不要为了“去指针”把本节样例改成 `Box`——那会删掉被演示的释放时点。
+
 三种释放手段，按需要选（`test/modules/autodrop`、`test/modules/leak`）。
 完整的所有权、工厂与池化实践见 [memory-guide](memory-guide.md)（其中记录了 AutoDrop 缺陷 SH-33 已于 0.16.0 修复）。
 
@@ -600,6 +628,9 @@ int read_file(const char *path)
 可运行样例见 `examples/42_defer`。
 
 ## 9. `map` 与 bindings：把 trait 绑到已有的 C 库
+
+> **C 互操作边界（B-7）**：整节都是 Ct↔C 接缝，`char *`、`->`、`#include` 是库/ABI 的一部分；
+> 不要在这里按“去指针”改写签名。普通 Ct 代码的写法见 §1–§8、§15–§23。
 
 不想为了用 C 库而改库的代码，就用 `map` 把一个**已声明的全局实例**绑定成 trait 实现。
 这是把假 HAL 接进 Ct 的官方做法（[test/bindings/mock-hal/uart.h.ct](../test/bindings/mock-hal/uart.h.ct)）：
@@ -1369,7 +1400,7 @@ impl<T> Stack<T> {
 int main(void)
 {
     Vec<int> v;
-    Map<char *, int> ages;
+    Map<String, int> ages;
     Stack<int> st;
 
     v.h = 0;
@@ -1382,10 +1413,13 @@ int main(void)
 
     ages.h = 0;
     ages.entries = 0;
-    ages.put("bo", 31);
-    ages.put("amy", 24);
+    Str bo = "bo";
+    Str amy = "amy";
+    ages.put(bo, 31);
+    ages.put(amy, 24);
     foreach (ages) {
-        printf("%s=%d\n", item.key, item.value);
+        item.key.print();
+        printf("=%d\n", item.value);
     }
 
     st.n = 0;
@@ -1437,6 +1471,7 @@ Vec<Vec<int>> rows = {};
 Vec<int> row = {1, 2};
 rows.push(row);
 
+/* 字面量键的常量表用 C 字符串键：不复制、零分配（普通词表用 Map<String, V>） */
 Map<char *, int> counts = {"a": 1, "b": 2};
 counts.put("c", 3);
 int n = rows[0].len();      /* v[i] / m[k] 只读，等价于 get */
@@ -2066,7 +2101,8 @@ v0.84 先落最小集合（名义和类型、负载、穷尽检查、变量绑�
 补上字面量 / 嵌套 / 结构体模式、or / 守卫与泛型 ADT。完整可跑样例见
 [examples/67_adt_patterns](../examples/67_adt_patterns/prog.ct)、
 [examples/68_adt_guards](../examples/68_adt_guards/prog.ct) 与
-[examples/69_generic_adt](../examples/69_generic_adt/prog.ct)。
+[examples/69_generic_adt](../examples/69_generic_adt/prog.ct)。一个覆盖 S4/S5/S6 的可执行片段见
+[README §0.12](../README.md#012-adt-模式扩展与泛型-adts4--s5--s6)（`docs/snippets/README/0.12_adt_tour.ct`）。
 
 ```ct
 enum Shape {
@@ -2180,7 +2216,8 @@ match (s) {
 **泛型 ADT（S6）**：`enum Opt<T> { Some(T v), None() }` 的负载可写类型参数；实例化
 `Opt<int>` 是独立布局，构造与模式可写全名 `Opt<int>.Some(7)`，也可由主语类型推断成
 `Opt.Some(v)`；泛型实例可再作类型实参（`Opt<Opt<int>>`）。完整用法见
-[examples/69_generic_adt](../examples/69_generic_adt/prog.ct)。
+[examples/69_generic_adt](../examples/69_generic_adt/prog.ct)。一个覆盖 S4/S5/S6 的可执行片段见
+[README §0.12](../README.md#012-adt-模式扩展与泛型-adts4--s5--s6)（`docs/snippets/README/0.12_adt_tour.ct`）。
 
 **边界**：`match` 的主语是 ADT、结构体或整数族值（普通 `int` 必须带字面量臂与 `_`；
 ADT 主语之外仍保留 `match needs an ADT value` 的旧诊断文案）；

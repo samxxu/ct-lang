@@ -1,0 +1,67 @@
+struct Point { int x; int y; }
+
+enum Shape {
+    At(Point p),
+    Circle(int r),
+}
+
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
+static int at(Shape s)
+{
+    match (s) {
+        Shape.At(Point { x: 0, y: 0 }) => { return 1; }
+        Shape.At(Point { x: 0, y }) => { return y; }
+        Shape.At(Point { x, y: 2 }) => { return x + 40; }
+        Shape.At(p) => { return p.x + p.y + 70; }
+        Shape.Circle(0) => { return -3; }
+        Shape.Circle(r) => { return r; }
+    }
+}
+
+static int gated(Shape s, int limit)
+{
+    match (s) {
+        Shape.Circle(r) if r > limit => { return 100 + r; }
+        Shape.Circle(r) => { return r; }
+        Shape.At(p) if p.x > limit => { return 200 + p.x; }
+        Shape.At(p) => { return p.y; }
+    }
+    return -1;
+}
+
+static int small(int n)
+{
+    match (n) {
+        0 | 1 => { return 1; }
+        _ => { return 0; }
+    }
+}
+
+static int unwrap_or(Opt<int> o, int fallback)
+{
+    int v = match (o) {
+        Opt.Some(x) => x,
+        Opt.None() => fallback
+    };
+    return v;
+}
+
+int main(void)
+{
+    Point origin = { 0, 0 };
+    Point on_y = { 0, 9 };
+    Point on_x2 = { 7, 2 };
+    Opt<int> o = Opt<int>.Some(7);
+    Opt<int> n = Opt<int>.None();
+
+    printf("%d %d %d %d\n", at(Shape.At(origin)), at(Shape.At(on_y)),
+           at(Shape.At(on_x2)), gated(Shape.Circle(3), 2));
+    printf("%d %d %d\n", gated(Shape.Circle(1), 2), unwrap_or(o, -1),
+           unwrap_or(n, -1));
+    printf("%d %d %d\n", small(0), small(1), small(2));
+    return 0;
+}

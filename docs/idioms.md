@@ -18,7 +18,8 @@ C 的表达式、语句与类型核心按原语法可用；**v1.0 起不再自�
 1. **`new` 是上下文关键字**：`int new;`、`r.new` 仍是标识符；只有 `new T { … }` 是构造（[§4.71](language-spec.md)）。
 2. **`T a[]` 只在形参 / 字段 / 无初始化声明中弃用**：改 `T[]` 或 `T a[N]`；v0.x 警告，v1.0 起硬错（[§4.69](language-spec.md)）。
 3. **字符串字面量的裸类型仍是 `char *`**：要 owning 写 `String s = "x";`，要借用写 `Str v = "x";`（[§4.70](language-spec.md)）。
-4. **`String` / `Str` 传给 `printf` 需要 `cstr()`**：`.data` 不保证 NUL 结尾（[§4.70](language-spec.md)）。
+4. **字符串输出优先 `print()` / `println()`**（LANG-30，字节语义、零分配）；只有把字符串交给 C 的
+   `%s` / 形参时才用 `cstr()`——它分配且调用方负责 `free`，`.data` 不保证 NUL 结尾（[§4.70](language-spec.md)）。
 
 ## 2. 所有权：先问“谁负责释放”
 

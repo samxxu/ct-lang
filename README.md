@@ -31,6 +31,12 @@ v1.2.0 的实测结果（`cc` 用系统 C 编译器）。
 
 #### 0.1 HTTP 请求：完整路径的目标形态与当前可跑的静态宿主
 
+> **C 互操作边界（B-7）**：本节与 §0.2 的 `char *` 是 **C 映射单元/Trait 映射的 ABI**——factory
+> 挂在映射后的 `char *` 宿主上，属于“必须指针”的接缝，不是普通 Ct 字符串用法。纯 Ct 代码优先
+> §0.3 / §0.5 / §0.7 的 `String` / `Str` / trait 形态；边界清单见
+> [c-interop-semantics-matrix](docs/c-interop-semantics-matrix.md) 与
+> [pointer-free-exemptions](docs/planning/pointer-free-exemptions.md)。
+
 完整路径的目标形态是一条链：字符串起手 → `char *` 上的 factory 返回 trait 定义的对象 →
 配置方法返回同一接口类型 → `send()` 换响应接口。调用点只写这一条：
 
@@ -56,6 +62,10 @@ v1.2.0 的实测边界：接口值落变量后逐跳（`Counter d = c.tap(1); d.
 [examples/47 的 shim](examples/47_chain_factory/src/http/http.shim.h)。
 
 #### 0.2 字符串切分：轻量路径
+
+> **C 互操作边界（B-7）**：`char *` 上的方法来自 std 包对 C 字符串函数的映射（`CharStr`），
+> 本节的“轻量路径”是 **C 宿主 + 方法映射**，不是 Ct 值类型的默认写法。纯 Ct 字符串用 `String`
+> / `Str`（§0.5、§0.6、tutorial §22），只有接 C 函数时才回到 `char *`。
 
 没有状态、只有一种实现时，不要把转换包成对象：把方法直接挂在 `char *` 上，方法返回 `char *`
 就能继续链。调用点只有一行：
@@ -106,29 +116,35 @@ int main(void)
 
 #### 0.4 词频统计：`Map` 按插入序出报告
 
-`Map<char *, int>` 直接表达「词 → 次数」，`get` 命中就加一，不命中就 `put`；`foreach` 给出插入序，
-报告顺序稳定，不需要额外的索引表。核心循环如下（完整程序见
-[examples/25_wordcount](examples/25_wordcount/wordcount.ct)）：
+`Map<String, int>` 直接表达「词 → 次数」：键是 owning `String`，`put(Str, …)` 会复制一份，
+`get` 命中就加一，不命中就 `put`；`foreach` 给出插入序，报告顺序稳定，不需要额外的索引表。
+核心循环如下（完整程序见 [examples/25_wordcount](examples/25_wordcount/wordcount.ct)）：
 
 ```c
 // source: examples/25_wordcount/wordcount.ct
-Map<char *, int> counts;
+Map<String, int> counts;
 counts.h = 0;
-foreach (words) {
-    int *slot = counts.get(item);
+
+void add(Str word)
+{
+    int *slot = counts.get(word);
     if (slot != 0) {
         *slot = *slot + 1;
     } else {
-        counts.put(item, 1);
+        counts.put(word, 1);
     }
 }
+
 foreach (counts) {
-    printf("%s=%d\n", item.key, item.value);
+    item.key.print();
+    printf("=%d\n", item.value);
 }
 counts.release();
 ```
 
-`ct build` 实测输出 `go=3` / `ct=2` / `rust=1`。
+键类型不再是指针：`Map<char *, V>` 是 C 指针键（不复制字符串），普通词表用 `Map<String, V>`。
+`ct build examples/25_wordcount/wordcount.ct -o /tmp/wc && /tmp/wc` 实测输出
+`go=3` / `ct=2` / `rust=1`。
 
 #### 0.5 新句柄速览：ref/out、切片、String/Str、Box/new、ADT/match
 
@@ -272,7 +288,11 @@ int main(void)
 #### 0.8 可选链 `?.` 与自定义下标
 
 `x[k]` 走固有 `get` / `set`（S2 起按**参数类型**匹配，`int` 键与 `char *` 键可以并存）；
-`p?.f` 在空指针时读作 `0`，接收者只求值一次：
+`p?.f` 在空指针时读作 `0`，接收者只求值一次。
+
+> **语言当前边界（B-7）**：`?.` 目前作用于**结构体指针**；`Box<T>` 的字段自动解引用走 `b.f`，
+> 但 `Box` 上的可选链尚未开放，所以本节样例仍用 `struct Cell *`。`char *` 键只用于 C 字符串键；
+> 普通键用 `int` 或 `String`（`Map<Str,V>` 是硬错）。
 
 ```ct
 // source: docs/snippets/README/0.8_optional_index.ct
@@ -411,6 +431,9 @@ int main(void)
 
 #### 0.11 `map` 绑定：把 trait 挂到改不动的实例上
 
+> **C 互操作边界（B-7）**：本节是整篇最明确的“必须指针”段——`char *` 与 `->` 来自被映射的 C
+> 函数签名；Ct 侧只负责把实例装箱成 trait 值。不要为了去指针而改写这段 ABI。
+
 `map trait ... for instance` 给一个已有全局实例生成 trait 包装与 vtable；调用点仍按接口写：
 
 ```ct
@@ -479,13 +502,24 @@ int main(void) {
 
 v1-PH-2 把 `match` 的模式文法扩到字面量、嵌套、结构体、or 与守卫，并让 `enum` 能带类型参数；
 规范口径见 [spec §4.73](docs/language-spec.md#473-最小-adt-与-matchphase-84仅-ct-ast) 的三个小节。
-三个完整样例：[67_adt_patterns](examples/67_adt_patterns/prog.ct)、
-[68_adt_guards](examples/68_adt_guards/prog.ct)、[69_generic_adt](examples/69_generic_adt/prog.ct)。
-
-字面量 + 嵌套 + 结构体模式（S4）：
+下面一个程序同时覆盖三档能力（完整样例：
+[67_adt_patterns](examples/67_adt_patterns/prog.ct)、[68_adt_guards](examples/68_adt_guards/prog.ct)、
+[69_generic_adt](examples/69_generic_adt/prog.ct)）：
 
 ```ct
-// source: examples/67_adt_patterns/prog.ct
+// source: docs/snippets/README/0.12_adt_tour.ct
+struct Point { int x; int y; }
+
+enum Shape {
+    At(Point p),
+    Circle(int r),
+}
+
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
 static int at(Shape s)
 {
     match (s) {
@@ -493,48 +527,97 @@ static int at(Shape s)
         Shape.At(Point { x: 0, y }) => { return y; }
         Shape.At(Point { x, y: 2 }) => { return x + 40; }
         Shape.At(p) => { return p.x + p.y + 70; }
-        Shape.Away() => { return -2; }
+        Shape.Circle(0) => { return -3; }
+        Shape.Circle(r) => { return r; }
     }
 }
-```
 
-or 模式与守卫（S5）；守卫不计入穷尽，未带守卫的臂仍须覆盖变体：
-
-```ct
-// source: examples/68_adt_guards/prog.ct
 static int gated(Shape s, int limit)
 {
     match (s) {
         Shape.Circle(r) if r > limit => { return 100 + r; }
         Shape.Circle(r) => { return r; }
-        Shape.Square(x) => { return x; }
-        Shape.Rect(w, h) if w > h => { return w; }
-        Shape.Rect(w, h) => { return h; }
+        Shape.At(p) if p.x > limit => { return 200 + p.x; }
+        Shape.At(p) => { return p.y; }
     }
     return -1;
 }
-```
 
-泛型 ADT（S6）：构造与模式可写 `Opt<int>.Some(7)`，也可由主语类型推断成 `Opt.Some(v)`：
-
-```ct
-// source: examples/69_generic_adt/prog.ct
-enum Opt<T> {
-    Some(T v),
-    None(),
+static int small(int n)
+{
+    match (n) {
+        0 | 1 => { return 1; }
+        _ => { return 0; }
+    }
 }
 
 static int unwrap_or(Opt<int> o, int fallback)
 {
-    return match (o) {
-        Opt.Some(v) => v,
+    int v = match (o) {
+        Opt.Some(x) => x,
         Opt.None() => fallback
     };
+    return v;
+}
+
+int main(void)
+{
+    Point origin = { 0, 0 };
+    Point on_y = { 0, 9 };
+    Point on_x2 = { 7, 2 };
+    Opt<int> o = Opt<int>.Some(7);
+    Opt<int> n = Opt<int>.None();
+
+    printf("%d %d %d %d\n", at(Shape.At(origin)), at(Shape.At(on_y)),
+           at(Shape.At(on_x2)), gated(Shape.Circle(3), 2));
+    printf("%d %d %d\n", gated(Shape.Circle(1), 2), unwrap_or(o, -1),
+           unwrap_or(n, -1));
+    printf("%d %d %d\n", small(0), small(1), small(2));
+    return 0;
 }
 ```
 
-`ct build examples/67_adt_patterns/prog.ct -o /tmp/p67 && /tmp/p67` 实测
-`10 11 12 99` / `0 100 200` / `1 9 47 72` / `-2` / `0 37 60`；`68` 与 `69` 同法。
+`ct build docs/snippets/README/0.12_adt_tour.ct --c-boundary=allow -o /tmp/adt && /tmp/adt`
+实测 `1 9 47 103` / `1 7 -1` / `1 1 0`：S4 的字面量 + 嵌套 + 结构体模式、S5 的 or 模式与守卫
+（守卫不计入穷尽，未带守卫的臂仍须覆盖变体）、S6 的 `Opt<int>` 构造与 `Opt.Some(v)` 推断都在
+这一个程序里。
+
+#### 0.13 C 互操作对照：哪一行必须保留指针
+
+B-7 的目标不是“文档里一个指针都没有”，而是**普通 Ct 代码不写指针，C 边界显式说明为什么必须写**。
+同一件事两种写法：
+
+| 位置 | 普通 Ct（默认） | C 边界（必须指针） |
+| --- | --- | --- |
+| 字符串 | `String` 拥有 / `Str` 借用，`print()` / `println()` | `char *` + `.cstr()` + `free`（C 函数要 NUL 字符串） |
+| 堆单对象 | `Box<T>` + `new T { … }` + `.release()` | `malloc` / `free`，`own T *`（生命周期就是课题） |
+| 结构体字段访问 | `b.f`（`Box` 自动解引用） | `p->f`（C 结构体指针） |
+| 多返回值 | `ref` / `out` / `Result<T,E>` | 出参 `T *`（C ABI） |
+| 数组传参 | `T[]` + `.len` | `T *` + 长度参数（C ABI） |
+
+下面这个可执行片段只演示**边界那一列**：`cstr()` 分配 NUL 字符串交给 C 的 `strlen`，用完由调用方
+`free`。它需要 `--c-boundary=allow`，且已登记在 `test/c-boundary-allow.tsv`：
+
+```ct
+// source: docs/snippets/README/0.13_c_boundary.ct
+#include <string.h>
+#include <stdlib.h>
+
+static int c_length(const char *s) { return (int)strlen(s); }
+
+int main(void)
+{
+    String greet = str_concat("hello, ", "ct");
+    char *view = greet.cstr();
+    printf("%d %s\n", c_length(view), view);
+    free(view);
+    greet.release();
+    return 0;
+}
+```
+
+`ct build docs/snippets/README/0.13_c_boundary.ct --c-boundary=allow -o /tmp/cb && /tmp/cb`
+实测 `9 hello, ct`。普通 Ct 代码不要照抄这段：`String.println()` 已经覆盖非边界场景。
 
 ### 1. 快速开始
 

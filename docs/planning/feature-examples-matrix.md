@@ -1,6 +1,6 @@
 # 语言特性样例矩阵（特性 × example × test × docs）
 
-> 状态：**S8c 收口版（2026-11-27）**，对应 [TEST-27](../../issues/testing/test27-feature-examples-pointer-free.md)
+> 状态：**S8c 收口版（2026-11-28；B-5/B-7 补齐）**，对应 [TEST-27](../../issues/testing/test27-feature-examples-pointer-free.md)
 > 的 A 轨道交付。每一行是一个语言特性；`状态` 只有 `有` / `薄` 两档，**不允许 `缺` / `待实现`**
 > （S2–S6 落地后已全部补样例）。
 > 一致性由 `python3 tools/check-feature-matrix.py` 断言（先 `warn`，`--strict` 转硬）：
@@ -11,6 +11,8 @@
 - 一行的 `example` 给**代表目录**（完整清单见 [examples/README](../../examples/README.md)），
   `test` 给**代表夹具**（`test/ast/<name>`，脚本夹具写 `.sh`）；
 - `doc` 给规范节号与 README 小节；README 的代码块带 `// source:`，由 `check-docs` 校验；
+- README 的**独立可执行片段**在 `docs/snippets/README/`（2026-11-28：10 个 `.ct` + `.expected.out`，
+  覆盖 trait / 泛型 / String / 切片 / ref·out / Box / ADT / match / S4–S6 / C 边界对照）；
 - `有` = example ≥ 3 且 test ≥ 5；`薄` = example 1–2 或 test < 5；两者都算**有覆盖**；
 - 计数的复现口径（文件数）：
   ```sh
@@ -64,15 +66,18 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | B-2 | `match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例 | `60`–`65`；defer / errdefer 升「有」，其余按需补反例 | 已补 |
 | B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 去 `cstr` + `free`，改 `as_str()`；`48_string_steps` 判为 C 类型宿主例外并注明理由 | 已补 |
 | B-4 | 非 C 互操作用例的指针 | 逐文件判定见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写；2026-11-27 LANG-30 落地后 E3 迁 21、保留 5（逐条理由见该文件 §2.1） | 部分 |
-| B-5 | 文档可执行片段偏少 | README 现有 13 个 `// source:` 片段（`0.1`–`0.12`；`check-docs` 实测）；H1–H4 见 [TEST-27 §8](../../issues/testing/test27-feature-examples-pointer-free.md) | 部分 |
+| B-5 | 文档可执行片段偏少 | README 现有 12 个 `// source:` 来源（10 个 `docs/snippets/README/` standalone + 2 个 examples 摘录）；新增 `0.12_adt_tour`（S4/S5/S6）与 `0.13_c_boundary`（C 边界对照），矩阵 25 行的 doc 单元全部落到 README 小节；`check-docs` 12 sources、`check-warnings` 逐片段编译运行（H1–H4 逐片表仍在 TEST-27 §8，issue 状态由 REV 复核；本轮按指示不改 issue） | 已补 |
 | B-6 | S2 下标协议、S3 函子、S4–S6 模式 | `59`（S2）、`66`（S3）、`67`（S4）、`68`（S5）、`69`（S6）各 ≥1 个 example | 已补 |
-| B-7 | 文档去指针 | README / tutorial / guide / idioms / snippets 的 C 互操作段保留并标注；非互操作段优先 `String` / `Str` / `Vec` / `Map` / `Box` / 切片 / `ref`·`out` | 进行中 |
+| B-7 | 文档去指针 | README / tutorial / guide / idioms 的非互操作段改 `String` / `Str` / `Vec` / `Map` / `Box` / 切片 / `ref`·`out`；C 互操作段（README §0.1/§0.2/§0.11/§0.13、tutorial §0/§9、guide §1.1/§10、idioms §11.1）保留并逐段标注理由；`Map<char *, V>` 词表改 `Map<String, V>` | 已补 |
 
 ## 3 保留的 C 互操作例外（不要求去指针）
 
 `examples/55_c_boundary_shim`、`examples/c-superset/**`、`examples/54_freestanding_alloc`、
 `examples/tour/**` 的 shim 段、`.m.ct` / `.shim.*` / `#ct-raw` 相关夹具——每条例外都要在
 改写提交里写明「为什么必须指针」。逐文件分类与理由见 [pointer-free-exemptions](pointer-free-exemptions.md)。
+
+文档侧的 C 互操作段是**显式对照**，不是遗漏：README §0.13 给出「普通 Ct / C 边界」逐行对照，
+`docs/snippets/README/0.13_c_boundary.ct` 是可编译的边界样例（`test/c-boundary-allow.tsv` 已登记）。
 
 ## 4 指针现数（S8c 收口实测）
 
@@ -86,7 +91,19 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 新增的 `67`–`69` 三个样例零 `char *` / `->` / `malloc`。E3 类 26 个文件已由
 [LANG-30](../../issues/lang/lang-30-str-print-api.md) 解锁：21 个改成 `print()` / `println()`，
 5 个（`18` / `19` / `21` / `23` / `tour/11_variadic/forward`）因泛型 struct 实例化或 C 互操作
-保留，理由见 [pointer-free-exemptions](pointer-free-exemptions.md) §2.1；不得用 `cstr()` + `free` 假删。
+保留，逐条编号登记见 [pointer-free-exemptions](pointer-free-exemptions.md) §2.2；不得用 `cstr()` + `free` 假删。
+
+文档指针现数（本次改动后，`grep -o` 计数；`self->` 不计入箭头）：
+
+| 文档 | `char *` | 非 `self->` 箭头 | `malloc` | 说明 |
+| --- | --- | --- | --- | --- |
+| `README.md` | 16 | 34 | 0 | 集中在 §0.1/§0.2/§0.8/§0.11/§0.13 的标注边界或对照表；§0.4 已改 `Map<String,int>`，§2/§3 只剩命令占位符与类型名说明 |
+| `docs/tutorial.md` | 69 | 49 | 7 | 集中在 §0 核心范式与 §9 map/bindings（已标注 C 互操作），§8 生命周期（E2），以及诊断文本里的 `got 'char *'` |
+| `docs/guide-for-c-programmers.md` | 17 | 5 | 3 | 全部在 §1.1 C 对照左列与 §10 C 互操作 |
+| `docs/idioms.md` | 7 | 2 | 0 | §1 语言事实与 §11.1 C 互操作表 |
+
+去指针不是“把计数压到 0”：`README` 新增的 §0.13 与 `char *` 计数是**显式 C 边界对照**，
+这正是 B-7 要求的“保留 C 互操作段并说明”。
 
 ## 5 关联
 

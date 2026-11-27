@@ -76,6 +76,23 @@ LANG-30（`Str.print()` / `println()`，[spec §4.78](../language-spec.md)、[D-
 > 它们的 `#include <string.h>` 是 `strcmp` / `memset` 行为本体，不是打印阻碍。
 > `18` / `19` 的 `char *` 是样例主题；`tour/11_variadic/forward` 的 `char *` 是变参 ABI。
 
+### 2.2 E3 五个保留项逐条登记（S8c 收口，2026-11-28）
+
+E3 的 26 个文件里 21 个已迁；下面 5 个是**有编号的保留例外**，不是“待办”。每条都写明
+所属类别、为什么当前必须保留、重判触发条件与登记位置，评审按编号核对。
+
+| 编号 | 文件 | 类别 | 为什么必须保留（当前） | 重判触发条件 | 登记位置 |
+| --- | --- | --- | --- | --- | --- |
+| E3-1 | `examples/18_generic_string_table` | 泛型自由函数、结构体类型实参不可用 | 课题是 `nth<char *>` / `count_if<char *>` 的显式实例化；`nth<Str>` 报 `cannot convert 'Str' to 'struct Str *'`，改成具体类型会删掉教学点 | 泛型自由函数支持结构体类型实参（`nth<Str>` / `count_if<Str>` 可编译） | 本表；矩阵 §3；`char *` 是主题 |
+| E3-2 | `examples/19_container_each_generic` | 同上 + `(fn, env)` 回调 | `walk<char *>` 的实例化与回调环境是课题；`T=Str` 的自由函数实例化同样不可用 | 同 E3-1 | 本表；矩阵 §3 |
+| E3-3 | `examples/21_generic_bound` | `strcmp` 是行为本体 | `Word.char *s` 用 `strcmp` 比较，`strcmp` 是“约束泛型调用 C 函数”的课题；`Str` 不能作 struct 字段（§4.70 硬错） | `Str` 可作字段且约束泛型可直接比较视图 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
+| E3-4 | `examples/23_generic_stack` | 泛型 struct/impl 结构体实参不可用 | 课题是 `Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段；`Stack<String>` 能生成布局，但 `impl<T> Stack<T>` 没有 String 实例（`no method 'push'`） | 泛型 struct/impl 的结构体实参可用 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
+| E3-5 | `examples/tour/11_variadic/forward` | C 变参 ABI | `va_list` 转 `vprintf` / `vsnprintf`；`char *fmt` 是 C 变参 ABI 的 NUL 结尾格式串契约 | 不重判：属 E1 C 互操作，不是 E3 打印阻碍 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
+
+> 判定口径：E3-1…E3-4 的 `char *` 不是“打印没入口”（LANG-30 已落地），而是**泛型实例化能力**
+> 或**行为本体**；E3-5 实际是 E1 边界。E3-1/E3-2 未登记 allow 行，因为它们不 `#include` C 头，
+> 只在纯 Ct 代码里用 `char *` 作类型实参。
+
 ## 3 保留类：E1 / E2 / E4（67 个）
 
 ### 3.1 E1 C 互操作与边界（41 个）
@@ -131,7 +148,7 @@ Ct 目前没有「结构体引用」这一形态，`ref struct` 只在形参位�
 | `48_string_steps` 标注「为什么必须指针」 | ✅ 2026-11-27（C 类型宿主 + shim，代码不动） |
 | `67_adt_patterns` / `68_adt_guards` / `69_generic_adt` | ✅ 2026-11-27（S4/S5/S6 样例，零 `char *` / `->` / `malloc`） |
 | E1/E2/E4 的 C 边界显式 allow | ✅ S9 M4 起登记在 `test/c-boundary-allow.tsv`（逐路径 + 理由），不再用文件内注释；`--c-boundary=allow` 只对这些路径生效 |
-| E3 的 26 个文件 | ✅ 2026-11-27：迁 21（`print()` / `println()`），保留 5（§2.1 逐条理由） |
+| E3 的 26 个文件 | ✅ 2026-11-27：迁 21（`print()` / `println()`），保留 5（§2.1 理由 + §2.2 逐条编号 E3-1…E3-5） |
 
 ## 6 建议的下一步
 
