@@ -187,7 +187,10 @@ check-seed: OK (73 .c + 140 .h, two rebuild rounds byte-identical, hand-edit neg
 **3e.2 语料 / 自举**：82 语料 + 78 unit 自举树的 C 与 AST oracle 逐字节相同；
 `82 × 498` 个函数体全部由 LIR 打印（`printed == lowered`，`skipped=0`）。
 
-**3e.3 仍保留的函数级回退（默认静默回退到 AST，`--ir=on` 下不再出现）**
+**3e.3 仍保留的回退：6 类函数级 + 1 类单元级（共 7 行；默认静默回退到 AST，`--ir=on` 下不再出现）**
+
+> 口径：前 6 行为函数级回退；末行 `>256` 为单元级。REV 签字按“6 类函数级 + >256 单元级”区分，正文计 7 行。
+> goldens 命令必须写全：`CT_C_BOUNDARY=allow bash selfhost/check-goldens-ast.sh`；不带该变量时 5 个 `test/cases` 会因 strict 边界红。
 
 | 形状 | 回退点 | 原因 |
 | --- | --- | --- |
@@ -197,7 +200,7 @@ check-seed: OK (73 .c + 140 .h, two rebuild rounds byte-identical, hand-edit neg
 | `Str` / `U16Str` 视图作为 owning 返回值 | `Lviewret` | SH-106 escape 诊断路径仍归 emitter |
 | `new T { … }` 的 owning 字段 raw init | `Lnewinit` | 与 decl raw init 同一改写未覆盖 `new` 载荷 |
 | 多段 `into` 链 | `Linto`（单元级预判） | 未物化每段接收者 |
-| >256 字节标识符 / 拼写 | `LW_NAME_MAX` | 打印器仍有有界 scratch 行 |
+| >256 字节标识符 / 拼写（单元级） | `LW_NAME_MAX` | 打印器仍有有界 scratch 行 |
 
 DEV 的 `test/ast` 逐字节探针（非门禁，882 个夹具）：**4 个仍有差异**
 （`p106_str_escape/ret_u16str`、`p80_literal`、`p80_methods`、

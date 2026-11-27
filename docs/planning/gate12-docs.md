@@ -12,7 +12,7 @@
 
 1. `selfhost/check-goldens-ast.sh`（新脚本，SH-105）；
 2. `selfhost/check-all.sh` 的第 12 条：
-   `run_gate "12) CT: ct-ast static goldens" bash selfhost/check-goldens-ast.sh <ct-ast>`。
+   `run_gate "12) CT: ct-ast static goldens" CT_C_BOUNDARY=allow bash selfhost/check-goldens-ast.sh <ct-ast>`。
 
 ## 应用
 

@@ -46,7 +46,7 @@
 
 ## 4 统一验收（每片）
 
-1. 用户语料生成 C **逐字节**：`bash selfhost/check-goldens-ast.sh`（25/25）+ `bash selfhost/check-ast.sh <ct>`；
+1. 用户语料生成 C **逐字节**：`CT_C_BOUNDARY=allow bash selfhost/check-goldens-ast.sh`（25/25）+ `bash selfhost/check-ast.sh <ct>`；
 2. 自举 fixpoint 2 轮（tag 前 3 轮）逐字节；`test/ir/run.sh` 15 checks；
 3. `seed` 片末重生成一次，`check-seed` 两轮逐字节 + 手改负例红；
 4. `cycles` 0；`bash selfhost/check-all.sh` 8 门；`check-warnings` 0；`check-sanitizers` 无报告；

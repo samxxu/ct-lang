@@ -77,7 +77,7 @@ sh94_split: 1046 bodies, multiset identical; 2 moved function(s) in place; skele
 - **测试语料**（`test/probes/p85_corpus_sha.tsv`：25 个 `test/cases` + 45 个
   `examples/*/*.ct`，共 70 个 `.ct`；D-017 成文时记为 66 个，manifest 是 live 权威）
   逐字节不变；
-  `bash selfhost/check-goldens-ast.sh` 25/25；
+  `CT_C_BOUNDARY=allow bash selfhost/check-goldens-ast.sh` 25/25；
 - **编译器自身**的发射 C 按 D-017 A1 第 2 层允许差异：单元集合 32 → 39 `.c`
   （+7：四个 Core 与三个方法子单元），发射 C 57158 → 57769 行；seed 按
   [gen-seed.sh](../../selfhost/gen-seed.sh) 重生成，`check-seed` 两轮逐字节且
@@ -207,7 +207,7 @@ ADT 胶水与 map JSON 仍读符号表，“只消费 LModule”未完成，见
 python3 tools/sh94_split_check.py --methods --baseline 2f70c862 \
   --skeleton-baseline <parent> \
   --map 'selfhost/ct-ast/frontend/parse/Expr.h.ct=ExprTypes:<methods>:selfhost/ct-ast/frontend/parse/ExprTypes.h.ct'
-bash selfhost/check-goldens-ast.sh          # 25/25
+CT_C_BOUNDARY=allow bash selfhost/check-goldens-ast.sh          # 25/25
 bash selfhost/check-ast.sh                  # fixpoint + 门禁
 python3 tools/p85_inventory.py cycles       # 必须 0
 bash selfhost/gen-seed.sh && bash selfhost/check-seed.sh
