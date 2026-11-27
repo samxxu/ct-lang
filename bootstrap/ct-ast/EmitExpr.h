@@ -7,10 +7,19 @@
 
 #include "EmitExpr.shim.h"
 
-#include "Lexer.h"
+#include "SymbolsTypeText.h"
+#include "Init.h"
 #include "MapTable.h"
-#include "Unit.h"
+#include "Expr.h"
+#include "ExprTypeText.h"
 #include "Symbols.h"
+#include "EmitterTry.h"
+#include "EmitInvariant.h"
+#include "EmitHoist.h"
+#include "EmitInit.h"
+#include "EmitHeader.h"
+#include "Lexer.h"
+#include "Unit.h"
 #include "TypeCheck.h"
 #include "Arena.h"
 #include "Intern.h"
@@ -18,7 +27,6 @@
 #include "EmitterQuery.h"
 #include "EmitterMapText.h"
 #include "EmitterCore.h"
-#include "EmitDecl.h"
 #include "Sh.h"
 #include "LModule.h"
 
@@ -156,5 +164,192 @@ extern const struct backend_emit_EmitExpr_vtbl backend_emit_Emitter_backend_emit
 struct backend_emit_EmitExpr {
     int unused;
 };
+struct backend_emit_FldSnap {
+    int n;
+    const char * path[128];
+    int owner[128];
+    int defined[128];
+};
+struct backend_emit_StrRetain {
+    int n;
+    const char * name[256];
+    const char * type[256];
+    int own[256];
+    int blk[256];
+    int bkind[256];
+    int nblk;
+    int pending;
+    int loop_pending;
+    int switch_pending;
+    int nfield;
+    const char * fpath[128];
+    int fowner[128];
+    int fdepth[128];
+    int fmaybe[128];
+    int branch_hold;
+    int ln;
+    const char * lname[512];
+    const char * ltype[512];
+    int lblk[256];
+    int hitparam;
+    const char * method;
+    const char * recv;
+};
+extern struct backend_emit_StrRetain backend_emit_g_sb;
+extern int (*backend_emit_g_body_hook)(const char *, void *, int, int, int *, int);
+struct backend_emit_EmitBuf {
+    char * p;
+    int len;
+    int cap;
+};
+int backend_emit_eb_put(struct backend_emit_EmitBuf *, const char *, int);
+const char * backend_emit_adt_base_type_text(struct backend_emit_Emitter *, const char *);
+int backend_emit_adt_own_kind(struct backend_emit_Emitter *, const char *, int);
+int backend_emit_adt_owns(struct backend_emit_Emitter *, int, int);
+int backend_emit_adt_row_for_emit(struct backend_emit_Emitter *, const char *);
+const char * backend_emit_base_type_text(const char *);
+int backend_emit_closure_var_lookup(struct backend_emit_Emitter *, const char *);
+int backend_emit_eb_int(struct backend_emit_EmitBuf *, int);
+int backend_emit_eb_row(struct backend_emit_EmitBuf *, int, const char *, const char *, int);
+int backend_emit_eb_rows(struct backend_emit_EmitBuf *, int, const char *, const char *, int);
+int backend_emit_eb_str(struct backend_emit_EmitBuf *, const char *);
+int backend_emit_em_expr_addr(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_adtctor(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_arrow(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_assign(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_bin(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_bin_comma(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_box(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_call(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_cast(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_compound(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_deref(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_fnum(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_index(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_into(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_into_self(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_mcall(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_member(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_newobj(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_num(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_offsetof(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_opt(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_post(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_pre(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_raw(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_sizeof(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_slice_get(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_slice_index(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_slice_range(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_str(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_tern(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_try(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_unary(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_vaarg(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_expr_var(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_field_field_union(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_field_fields(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_inline_assign(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_inline_bin_comma(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_inline_decl_field(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_inline_decls(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_inline_expr(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_inline_field_bitfield(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_inline_post(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_inline_try(struct backend_emit_Emitter *, int, int);
+int backend_emit_em_node_block(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_break(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_case(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_cont(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_decl(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_decls(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_defer(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_defer_run(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_delete(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_dowhile(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_empty(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_expr_matseq(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_expression_statement(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_for(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_foreach(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_func(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_goto(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_if(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_label(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_loop(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_match(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_matseq(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_ret(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_sassert(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_switch(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_em_node_while(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_emit_arm_conds(struct backend_emit_Emitter *, int, int, int *);
+int backend_emit_emit_closure_arg(struct backend_emit_Emitter *, int);
+int backend_emit_emit_closure_decl(struct backend_emit_Emitter *, int);
+int backend_emit_emit_closure_env(struct backend_emit_Emitter *, int);
+int backend_emit_emit_closure_fn(struct backend_emit_Emitter *, int);
+int backend_emit_emit_closure_values(struct backend_emit_Emitter *, int);
+int backend_emit_emit_cond_row(struct backend_emit_Emitter *, int, const char *, const char *, int, int, int *);
+int backend_emit_emit_cond_rows(struct backend_emit_Emitter *, int, const char *, const char *, int, int *);
+int backend_emit_emit_find_group(const char *, int, const char * *, const char * *);
+int backend_emit_emit_match_arm(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_emit_match_arm_ext(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_emit_recipe(struct backend_emit_Emitter *, struct frontend_module_MapTable *, struct frontend_module_MapBind *, int, int, int);
+int backend_emit_emit_recipe_impl(struct backend_emit_Emitter *, struct frontend_module_MapTable *, struct frontend_module_MapBind *, int, int, int, int *, int *);
+int backend_emit_ensure_reach(struct backend_emit_Emitter *, int);
+int backend_emit_fail_unknown_statement(struct backend_emit_Emitter *, int);
+int backend_emit_map_actual_slots(struct backend_emit_Emitter *, int);
+int backend_emit_map_actual_span(struct backend_emit_Emitter *, int, int, int, int, int *);
+const char * backend_emit_map_copy_brackets(struct backend_emit_Emitter *, const char *);
+int backend_emit_map_emit_actual(struct backend_emit_Emitter *, int, int);
+const char * backend_emit_map_param_type_text(struct backend_emit_Emitter *, struct frontend_module_MapTable *, struct frontend_module_MapBind *, int);
+int backend_emit_map_subst_arg(struct backend_emit_Emitter *, const char *, struct frontend_module_MapTable *, struct frontend_module_MapBind *, int *, int *);
+int backend_emit_map_visible(struct backend_emit_Emitter *, int);
+int backend_emit_match_bind_emit(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_match_bind_one(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_match_bind_text(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_match_expr_emit(struct backend_emit_Emitter *, int);
+int backend_emit_match_extended(struct backend_emit_Emitter *, int);
+const char * backend_emit_path_base_ptr(const char *);
+int backend_emit_sb_assign(struct backend_emit_Emitter *, int, int);
+int backend_emit_sb_container_view(const char *);
+int backend_emit_sb_decl(struct backend_emit_Emitter *, int, int);
+const char * backend_emit_sb_expr_type_text(struct backend_emit_Emitter *, int);
+int backend_emit_sb_field_find(struct backend_emit_Emitter *, int, const char *, const char *);
+void backend_emit_sb_field_if_merge(struct backend_emit_Emitter *, struct backend_emit_FldSnap *, struct backend_emit_FldSnap *, struct backend_emit_FldSnap *);
+int backend_emit_sb_field_key(struct backend_emit_Emitter *, int, const char * *, const char * *, int *);
+int backend_emit_sb_field_loop_unsafe(struct backend_emit_Emitter *, int);
+void backend_emit_sb_field_mark(struct backend_emit_Emitter *, const char *, const char *, int);
+void backend_emit_sb_field_merge(struct backend_emit_Emitter *, int, int);
+void backend_emit_sb_field_restore(struct backend_emit_Emitter *, struct backend_emit_FldSnap *);
+void backend_emit_sb_field_snap(struct backend_emit_Emitter *, struct backend_emit_FldSnap *);
+int backend_emit_sb_field_state(struct backend_emit_Emitter *, int, const char *, const char *, int *);
+int backend_emit_sb_find(struct backend_emit_Emitter *, const char *);
+int backend_emit_sb_is_place(struct backend_emit_Emitter *, int);
+int backend_emit_sb_is_tparam(struct backend_emit_Emitter *, const char *);
+int backend_emit_sb_jump_base(struct backend_emit_Emitter *, int);
+int backend_emit_sb_jump_release(struct backend_emit_Emitter *, int, int);
+int backend_emit_sb_lfind(struct backend_emit_Emitter *, const char *);
+const char * backend_emit_sb_life_prefix_text(struct backend_emit_Emitter *, const char *);
+void backend_emit_sb_lpush(struct backend_emit_Emitter *, const char *, const char *);
+void backend_emit_sb_mark_aggregate(struct backend_emit_Emitter *, int);
+const char * backend_emit_sb_norm_own_type_text(struct backend_emit_Emitter *, const char *);
+const char * backend_emit_sb_norm_text(struct backend_emit_Emitter *, const char *);
+int backend_emit_sb_owning_struct_type(struct backend_emit_Emitter *, const char *);
+int backend_emit_sb_path_is(const char *, const char *, const char *);
+void backend_emit_sb_push(struct backend_emit_Emitter *, const char *, const char *, int);
+int backend_emit_sb_push_params(struct backend_emit_Emitter *, int, int);
+const char * backend_emit_sb_raw_text(struct backend_emit_Emitter *, int);
+int backend_emit_sb_release_from(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_sb_ret_mentions(struct backend_emit_Emitter *, int, const char *);
+int backend_emit_sb_ret_move(struct backend_emit_Emitter *, int);
+int backend_emit_sb_ret_release(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_sb_retain_params(struct backend_emit_Emitter *, int);
+int backend_emit_sb_rhs_fresh(struct backend_emit_Emitter *, int);
+int backend_emit_sb_snap_find(struct backend_emit_FldSnap *, int, const char *);
+int backend_emit_sb_struct_assign_check(struct backend_emit_Emitter *, int);
+int backend_emit_sb_value_type_owns(struct backend_emit_Emitter *, const char *);
+const char * backend_emit_emit_gsub_type_text(struct backend_emit_Emitter *, const char *);
+const char * backend_emit_emit_overload_suffix(struct backend_emit_Emitter *, int, int);
 
 #endif

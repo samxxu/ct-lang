@@ -147,20 +147,20 @@ struct tool_driver_Driver;
 struct backend_emit_EmitOps_vtbl {
     int (*emit_program)(void *, int);
     int (*emit_unit)(void *, int);
-    int (*write_unit_header)(void *, int);
-    int (*emit_node)(void *, int, int);
-    int (*emit_field)(void *, int, int);
-    int (*emit_inline)(void *, int);
-    int (*emit_expr)(void *, int);
-    int (*emit_outconv)(void *, int);
-    int (*emit_type_decl)(void *, int, int, int);
-    int (*emit_impls)(void *, int);
     int (*fail)(void *, const char *);
     int (*fail_from)(void *, int, const char *);
 };
 struct backend_emit_EmitOps_iface {
     void *self;
     const struct backend_emit_EmitOps_vtbl *vt;
+};
+
+struct backend_emit_EmitShell_vtbl {
+    int (*write_unit_header)(void *, int);
+};
+struct backend_emit_EmitShell_iface {
+    void *self;
+    const struct backend_emit_EmitShell_vtbl *vt;
 };
 
 struct backend_emit_EmitHeader_vtbl {
@@ -181,6 +181,8 @@ struct backend_emit_EmitHeader_iface {
 };
 
 struct backend_emit_EmitDecl_vtbl {
+    int (*emit_type_decl)(void *, int, int, int);
+    int (*emit_impls)(void *, int);
     int (*emit_global_decl)(void *, int);
     int (*emit_global_extern)(void *, int);
     int (*decl_is_pub)(void *, int, const char *);
@@ -201,6 +203,11 @@ struct backend_emit_EmitDecl_iface {
 };
 
 struct backend_emit_EmitExpr_vtbl {
+    int (*emit_node)(void *, int, int);
+    int (*emit_field)(void *, int, int);
+    int (*emit_inline)(void *, int);
+    int (*emit_expr)(void *, int);
+    int (*emit_outconv)(void *, int);
     int (*emit_type_name)(void *, const char *, const char *);
     int (*emit_type_name_dims)(void *, const char *, const char *, const char *);
     int (*emit_ref_arg)(void *, int);
@@ -330,6 +337,7 @@ struct backend_emit_Emitter {
     const char * gtname;
     const char * ginst;
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
+    const struct backend_emit_EmitShell_vtbl *__backend_emit_emitshell_vptr;
     const struct backend_emit_EmitHeader_vtbl *__backend_emit_emitheader_vptr;
     const struct backend_emit_EmitDecl_vtbl *__backend_emit_emitdecl_vptr;
     const struct backend_emit_EmitExpr_vtbl *__backend_emit_emitexpr_vptr;

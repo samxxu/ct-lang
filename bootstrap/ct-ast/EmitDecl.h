@@ -21,6 +21,7 @@
 #include "EmitterMapText.h"
 #include "EmitterCore.h"
 #include "EmitHeader.h"
+#include "EmitExpr.h"
 #include "Sh.h"
 #include "LModule.h"
 
@@ -158,8 +159,33 @@ extern const struct backend_emit_EmitDecl_vtbl backend_emit_Emitter_backend_emit
 struct backend_emit_EmitDecl {
     int unused;
 };
-const char * backend_emit_emit_gsub_type_text(struct backend_emit_Emitter *, const char *);
-const char * backend_emit_emit_overload_suffix(struct backend_emit_Emitter *, int, int);
 int backend_emit_unit_init_needed(struct backend_emit_Emitter *, int);
+int backend_emit_adt_emit_instance(struct backend_emit_Emitter *, int);
+int backend_emit_adt_layout_closure(struct backend_emit_Emitter *, int, int);
+int backend_emit_closure_owned(struct backend_emit_Emitter *, const char *, const char *);
+int backend_emit_elem_plain_owner(struct backend_emit_Emitter *, const char *);
+int backend_emit_em_decl_enum(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_enum_adt(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_global(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_struct(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_typedef(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_union(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_emit_adt_decl(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_emit_adt_layout_body(struct backend_emit_Emitter *, int, int, const char *, const char *, int, int);
+int backend_emit_emit_closures(struct backend_emit_Emitter *, const char *, int);
+int backend_emit_emit_default_method(struct backend_emit_Emitter *, int, const char *, int, int, int);
+int backend_emit_ensure_adt_layout_state(int);
+int backend_emit_ensure_inst_layout_state(int);
+int backend_emit_ensure_shell_emit_state(struct backend_emit_Emitter *, int);
+int backend_emit_inst_elem_foreign(struct backend_emit_Emitter *, int);
+int backend_emit_inst_emit_one(struct backend_emit_Emitter *, int);
+int backend_emit_inst_layout_closure(struct backend_emit_Emitter *, int, int);
+int backend_emit_inst_visible_in_unit(struct backend_emit_Emitter *, int);
+int backend_emit_preemit_adt_payload(struct backend_emit_Emitter *, int);
+int backend_emit_preemit_insts_for(struct backend_emit_Emitter *, const char *);
+int backend_emit_sb_end_body(struct backend_emit_Emitter *, int);
+int backend_emit_shell_owned_here(struct backend_emit_Emitter *, int);
+int backend_emit_shell_preemit(struct backend_emit_Emitter *, int, int);
+int backend_emit_type_layout_closure(struct backend_emit_Emitter *, const char *, int);
 
 #endif

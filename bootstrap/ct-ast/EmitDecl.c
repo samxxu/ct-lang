@@ -15,6 +15,7 @@
 #include "EmitterMapText.h"
 #include "EmitterCore.h"
 #include "EmitHeader.h"
+#include "EmitExpr.h"
 #include "Sh.h"
 #include "LModule.h"
 #include "Vec.h"
@@ -30,6 +31,19 @@
 #define N_RAW     31
 #define N_IMPL    33
 #define N_DEFER_RUN 70
+#define CAP_LIMIT 65536
+#define MAX_LAYOUT_ADTS 64
+#define MAX_LAYOUT_DEPTH 32
+#define MAX_LAYOUT_INSTS 128
+#define N_ENUM    45
+#define N_FIELD   23
+#define N_INIT_RANGE 61
+#define N_MEMBER  24
+#define N_TYPEDEF 21
+#define N_UNION   48
+#define MAX_LAYOUT_DEPTH 32
+#define MAX_LAYOUT_ADTS 64
+#define MAX_LAYOUT_INSTS 128
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -160,9 +174,38 @@ const struct backend_emit_EmitDecl_vtbl backend_emit_Emitter_backend_emit_EmitDe
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
-const char * backend_emit_emit_gsub_type_text(struct backend_emit_Emitter *, const char *);
-const char * backend_emit_emit_overload_suffix(struct backend_emit_Emitter *, int, int);
 int backend_emit_unit_init_needed(struct backend_emit_Emitter *, int);
+int backend_emit_adt_emit_instance(struct backend_emit_Emitter *, int);
+int backend_emit_adt_layout_closure(struct backend_emit_Emitter *, int, int);
+int backend_emit_closure_owned(struct backend_emit_Emitter *, const char *, const char *);
+int backend_emit_elem_plain_owner(struct backend_emit_Emitter *, const char *);
+int backend_emit_em_decl_enum(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_enum_adt(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_global(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_struct(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_typedef(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_em_decl_union(struct backend_emit_Emitter *, int, int, int, int);
+int backend_emit_emit_adt_decl(struct backend_emit_Emitter *, int, int, int);
+int backend_emit_emit_adt_layout_body(struct backend_emit_Emitter *, int, int, const char *, const char *, int, int);
+int backend_emit_emit_closures(struct backend_emit_Emitter *, const char *, int);
+int backend_emit_emit_default_method(struct backend_emit_Emitter *, int, const char *, int, int, int);
+int backend_emit_ensure_adt_layout_state(int);
+int backend_emit_ensure_inst_layout_state(int);
+int backend_emit_ensure_shell_emit_state(struct backend_emit_Emitter *, int);
+int backend_emit_inst_elem_foreign(struct backend_emit_Emitter *, int);
+int backend_emit_inst_emit_one(struct backend_emit_Emitter *, int);
+int backend_emit_inst_layout_closure(struct backend_emit_Emitter *, int, int);
+int backend_emit_inst_visible_in_unit(struct backend_emit_Emitter *, int);
+int backend_emit_preemit_adt_payload(struct backend_emit_Emitter *, int);
+int backend_emit_preemit_insts_for(struct backend_emit_Emitter *, const char *);
+int backend_emit_sb_end_body(struct backend_emit_Emitter *, int);
+int backend_emit_shell_owned_here(struct backend_emit_Emitter *, int);
+int backend_emit_shell_preemit(struct backend_emit_Emitter *, int, int);
+int backend_emit_type_layout_closure(struct backend_emit_Emitter *, const char *, int);
+static int * backend_emit_g_adt_layout_state;
+static int backend_emit_g_adt_layout_cap;
+static int * backend_emit_g_inst_layout_state;
+static int backend_emit_g_inst_layout_cap;
 static int backend_emit_Emitter_backend_emit_EmitDecl_emit_global_decl(void *self, int n) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     const char * cn;
@@ -575,6 +618,767 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_unit_init(void *self,
     return 0;
 }
 
+static int backend_emit_Emitter_backend_emit_EmitDecl_emit_type_decl(void *self, int n, int ind, int with_semi) {
+    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
+    int nk;
+    (void)(_self);
+    nk = _self->arena->nodes[n].kind;
+    struct runtime_arena_NodeKind __ct_match12 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match12.tag == 0) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 1) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 2) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 3) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 4) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 5) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 6) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 7) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 8) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 9) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 10) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 11) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 12) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 13) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 14) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 15) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 16) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 17) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 18) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 19) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 20) {
+        return backend_emit_em_decl_struct(_self, n, ind, with_semi, N_STRUCT);
+    }
+    else if (__ct_match12.tag == 21) {
+        return backend_emit_em_decl_typedef(_self, n, ind, with_semi, N_TYPEDEF);
+    }
+    else if (__ct_match12.tag == 22) {
+        return backend_emit_em_decl_global(_self, n, ind, with_semi, N_GLOBAL);
+    }
+    else if (__ct_match12.tag == 23) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 24) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 25) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 26) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 27) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 28) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 29) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 30) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 31) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 32) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 33) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 34) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 35) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 36) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 37) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 38) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 39) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 40) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 41) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 42) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 43) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 44) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 45) {
+        if ((_self->arena->nodes[n].aux & 2)) {
+            return backend_emit_em_decl_enum_adt(_self, n, ind, with_semi, N_ENUM);
+        }
+        return backend_emit_em_decl_enum(_self, n, ind, with_semi, N_ENUM);
+    }
+    else if (__ct_match12.tag == 46) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 47) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 48) {
+        return backend_emit_em_decl_union(_self, n, ind, with_semi, N_UNION);
+    }
+    else if (__ct_match12.tag == 49) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 50) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 51) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 52) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 53) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 54) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 55) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 56) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 57) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 58) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 59) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 60) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 61) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 62) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 63) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 64) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 65) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 66) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 67) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 68) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 69) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 70) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 71) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 72) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 73) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 74) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 75) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 76) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 77) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 78) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 79) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 80) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 81) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else if (__ct_match12.tag == 82) {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+    else {
+        return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
+    }
+}
+
+static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int prog) {
+    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
+    int n;
+    int m;
+    int k;
+    int u;
+    int body;
+    int dm;
+    (void)(_self);
+    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
+        int si;
+        int ti;
+        const char * tname;
+        const char * sname;
+        const char * mret;
+        if (_self->arena->nodes[n].kind != N_IMPL) {
+            continue;
+        }
+        si = _self->arena->nodes[n].aux;
+        if (si < 0) {
+            continue;
+        }
+        if ((!_self->arena->nodes[n].text2[0])) {
+            continue;
+        }
+        tname = _self->arena->nodes[n].text2;
+        ti = (-1);
+        for (k = 0; k < _self->sym->ntraits; k++) {
+            if (strcmp(_self->sym->traits[k].name, tname) == 0) {
+                ti = k;
+            }
+        }
+        if ((((ti < 0) && (strcmp(tname, "Drop") != 0)) && (strcmp(tname, "Handback") != 0))) {
+            return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "impl of an unknown trait");
+        }
+        sname = _self->arena->nodes[n].text;
+        for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
+            const char * owner;
+            mret = (_self->arena->nodes[m].text3[0] ? _self->arena->nodes[m].text3 : _self->arena->nodes[m].text);
+            owner = runtime_text_ct_internf("%s_%s_%s", _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
+            if ((!owner)) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            if (backend_emit_emit_closures(_self, owner, _self->arena->nodes[m].line) != 0) {
+                return (-1);
+            }
+            _self->nclvar = 0;
+            _self->closure_ci = 0;
+            if (((strcmp(tname, "Drop") == 0) && (_self->cur_unit >= 0))) {
+                fprintf(_self->out, "%s ", mret);
+            }
+            else {
+                fprintf(_self->out, "static %s ", mret);
+                if (((strcmp(tname, "Drop") == 0) || (strcmp(tname, "Handback") == 0))) {
+                    fputs("__attribute__((unused)) ", _self->out);
+                }
+            }
+            fprintf(_self->out, "%s_%s_%s(void *self", _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
+            k = _self->arena->nodes[m].a;
+            while (k > 0) {
+                fputs(", ", _self->out);
+                if (((_self->arena->nodes[k].aux == 2) || (_self->arena->nodes[k].aux == 3))) {
+                    const char * pbuf;
+                    pbuf = tool_sh_ct_scratch_fmt("%s *", _self->arena->nodes[k].text);
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                        return (-1);
+                    }
+                }
+                else {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                        return (-1);
+                    }
+                }
+                k = _self->arena->nodes[k].next;
+            }
+            fputs(") {\n", _self->out);
+            fprintf(_self->out, "    %s *_self = (%s *)self;\n", sname, sname);
+            backend_emit_g_sb.method = runtime_text_ct_intern(_self->arena->nodes[m].text2);
+            backend_emit_g_sb.recv = runtime_text_ct_intern(sname);
+            if (((!backend_emit_g_sb.method) || (!backend_emit_g_sb.recv))) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            backend_emit_sb_push_params(_self, _self->arena->nodes[m].a, 0);
+            backend_emit_sb_retain_params(_self, 1);
+            _self->sym->self_mode = 1;
+            _self->cur_ret = runtime_text_ct_intern(mret);
+            if ((!_self->cur_ret)) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            body = _self->arena->nodes[m].b;
+            for (k = _self->arena->nodes[m].a; k > 0; k = _self->arena->nodes[k].next) {
+                if ((!_self->__backend_emit_emitdecl_vptr->node_mentions(_self, body, _self->arena->nodes[k].text2))) {
+                    fprintf(_self->out, "    (void)%s;\n", _self->arena->nodes[k].text2);
+                }
+            }
+            if ((!_self->__backend_emit_emitdecl_vptr->node_mentions(_self, body, "self"))) {
+                fputs("    (void)_self;\n", _self->out);
+            }
+{
+                int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
+                int printed = 0;
+                if (body_hook) {
+                    const char * key = tool_sh_ct_scratch_fmt("%s_%s%s%s", _self->sym->structs[si].name, tname, ((tname && tname[0]) ? "_" : ""), _self->arena->nodes[m].text2);
+                    int new_ntmp = _self->ntmp;
+                    int hr = (*body_hook)(key, _self->out, 1, _self->ntmp, (&new_ntmp), 1);
+                    if (hr < 0) {
+                        _self->sym->self_mode = 0;
+                        return (-1);
+                    }
+                    if (hr > 0) {
+                        _self->ntmp = new_ntmp;
+                        printed = 1;
+                    }
+                }
+                if ((!printed)) {
+                    k = _self->arena->nodes[body].a;
+                    while (k >= 0) {
+                        if (_self->__backend_emit_emitexpr_vptr->emit_node(_self, k, 1) != 0) {
+                            _self->sym->self_mode = 0;
+                            return (-1);
+                        }
+                        k = _self->arena->nodes[k].next;
+                    }
+                }
+            }
+            backend_emit_sb_end_body(_self, 1);
+            _self->sym->self_mode = 0;
+            fputs("}\n\n", _self->out);
+        }
+        if (ti >= 0) {
+            for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
+                if (_self->sym->traits[ti].m[dm].body < 0) {
+                    continue;
+                }
+                if (backend_emit_impl_writes(_self->arena, n, _self->sym->traits[ti].m[dm].name)) {
+                    continue;
+                }
+                if (backend_emit_emit_default_method(_self, si, sname, ti, dm, n) != 0) {
+                    return (-1);
+                }
+            }
+        }
+        if (((strcmp(tname, "Drop") != 0) && (strcmp(tname, "Handback") != 0))) {
+            if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
+                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable = {\n", tname, _self->sym->structs[si].name, tname);
+            }
+            else {
+                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", tname, _self->sym->structs[si].name, tname);
+            }
+            u = 0;
+            for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
+                if (u > 0) {
+                    fputs(",\n", _self->out);
+                }
+                fprintf(_self->out, "    .%s = %s_%s_%s", _self->arena->nodes[m].text2, _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
+                u++;
+            }
+            if (ti >= 0) {
+                for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
+                    if (_self->sym->traits[ti].m[dm].body < 0) {
+                        continue;
+                    }
+                    if (backend_emit_impl_writes(_self->arena, n, _self->sym->traits[ti].m[dm].name)) {
+                        continue;
+                    }
+                    if (u > 0) {
+                        fputs(",\n", _self->out);
+                    }
+                    fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->structs[si].name, tname, _self->sym->traits[ti].m[dm].name);
+                    u++;
+                }
+            }
+            fputs("\n};\n\n", _self->out);
+        }
+    }
+    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
+        int si;
+        int type_pub;
+        const char * sname;
+        const char * tag;
+        const char * mret;
+        if (_self->arena->nodes[n].kind != N_IMPL) {
+            continue;
+        }
+        if (_self->arena->nodes[n].text2[0]) {
+            continue;
+        }
+        si = _self->arena->nodes[n].aux;
+        if (si == (-1)) {
+            continue;
+        }
+        sname = _self->arena->nodes[n].text;
+        if (si <= (-2)) {
+            struct frontend_sym_Adt * adts;
+            int nadts;
+            int type_adt = ((-2) - si);
+            adts = frontend_sym_ct_adts((&nadts));
+            if (((!adts) || (type_adt >= nadts))) {
+                return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "the ADT row is missing");
+            }
+            tag = adts[type_adt].full;
+            type_pub = adts[type_adt].is_pub;
+        }
+        else {
+            tag = _self->sym->structs[si].name;
+            type_pub = _self->__backend_emit_emitdecl_vptr->decl_is_pub(_self, N_STRUCT, tag);
+        }
+        for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
+            const char * owner;
+            const char * suf;
+            int is_static;
+            mret = (_self->arena->nodes[m].text[0] ? _self->arena->nodes[m].text : "void");
+            is_static = _self->arena->nodes[m].c;
+            suf = backend_emit_emit_overload_suffix(_self, n, m);
+            if ((!suf)) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            owner = runtime_text_ct_internf("%s_%s%s", tag, _self->arena->nodes[m].text2, suf);
+            if ((!owner)) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            if (backend_emit_emit_closures(_self, owner, _self->arena->nodes[m].line) != 0) {
+                return (-1);
+            }
+            _self->nclvar = 0;
+            _self->closure_ci = 0;
+            if (((!type_pub) || (_self->arena->nodes[m].d != 1))) {
+                fputs("static __attribute__((unused)) ", _self->out);
+            }
+            fprintf(_self->out, "%s %s_%s%s(", mret, tag, _self->arena->nodes[m].text2, suf);
+            if ((!is_static)) {
+                fprintf(_self->out, "struct %s *self", tag);
+            }
+            k = _self->arena->nodes[m].a;
+            while (k > 0) {
+                if (((!is_static) || (k != _self->arena->nodes[m].a))) {
+                    fputs(", ", _self->out);
+                }
+                if (((_self->arena->nodes[k].aux == 2) || (_self->arena->nodes[k].aux == 3))) {
+                    const char * pbuf;
+                    pbuf = tool_sh_ct_scratch_fmt("%s *", _self->arena->nodes[k].text);
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, pbuf, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                        return (-1);
+                    }
+                }
+                else {
+                    if (_self->__backend_emit_emitexpr_vptr->emit_type_name_dims(_self, _self->arena->nodes[k].text, _self->arena->nodes[k].text2, _self->arena->nodes[k].text3) != 0) {
+                        return (-1);
+                    }
+                }
+                k = _self->arena->nodes[k].next;
+            }
+            fputs(") {\n", _self->out);
+            if ((!is_static)) {
+                fprintf(_self->out, "    %s *_self = (%s *)self;\n", sname, sname);
+            }
+            backend_emit_g_sb.method = runtime_text_ct_intern(_self->arena->nodes[m].text2);
+            backend_emit_g_sb.recv = runtime_text_ct_intern(sname);
+            if (((!backend_emit_g_sb.method) || (!backend_emit_g_sb.recv))) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            backend_emit_sb_push_params(_self, _self->arena->nodes[m].a, 0);
+            backend_emit_sb_retain_params(_self, 1);
+            _self->sym->self_mode = (is_static ? 0 : 1);
+            _self->cur_ret = runtime_text_ct_intern(mret);
+            if ((!_self->cur_ret)) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            body = _self->arena->nodes[m].b;
+            for (k = _self->arena->nodes[m].a; k > 0; k = _self->arena->nodes[k].next) {
+                if ((!_self->__backend_emit_emitdecl_vptr->node_mentions(_self, body, _self->arena->nodes[k].text2))) {
+                    fprintf(_self->out, "    (void)%s;\n", _self->arena->nodes[k].text2);
+                }
+            }
+            if (((!is_static) && (!_self->__backend_emit_emitdecl_vptr->node_mentions(_self, body, "self")))) {
+                fputs("    (void)_self;\n", _self->out);
+            }
+{
+                int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
+                int printed = 0;
+                if (body_hook) {
+                    const char * key = tool_sh_ct_scratch_fmt("%s_%s%s", tag, _self->arena->nodes[m].text2, suf);
+                    int new_ntmp = _self->ntmp;
+                    int hr = (*body_hook)(key, _self->out, 1, _self->ntmp, (&new_ntmp), 1);
+                    if (hr < 0) {
+                        _self->sym->self_mode = 0;
+                        return (-1);
+                    }
+                    if (hr > 0) {
+                        _self->ntmp = new_ntmp;
+                        printed = 1;
+                    }
+                }
+                if ((!printed)) {
+                    k = _self->arena->nodes[body].a;
+                    while (k >= 0) {
+                        if (_self->__backend_emit_emitexpr_vptr->emit_node(_self, k, 1) != 0) {
+                            _self->sym->self_mode = 0;
+                            return (-1);
+                        }
+                        k = _self->arena->nodes[k].next;
+                    }
+                }
+            }
+            backend_emit_sb_end_body(_self, 1);
+            _self->sym->self_mode = 0;
+            fputs("}\n\n", _self->out);
+        }
+    }
+    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
+        int si;
+        int ti;
+        int ui;
+        int type_index;
+        const char * tname;
+        const char * stype;
+        if (((_self->arena->nodes[n].kind != N_STRUCT) || (!_self->arena->nodes[n].text2[0]))) {
+            continue;
+        }
+        si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[n].text2);
+        if (si < 0) {
+            continue;
+        }
+        for (ui = 0; ui < _self->sym->structs[si].nuse; ui++) {
+            tname = _self->sym->structs[si].use[ui];
+            ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tname);
+            if (ti < 0) {
+                continue;
+            }
+            if (backend_emit_impl_exists_anywhere(_self->arena, si, tname)) {
+                continue;
+            }
+            if (_self->sym->traits[ti].nm == 0) {
+                continue;
+            }
+            for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
+                if (_self->sym->traits[ti].m[dm].body < 0) {
+                    const char * emsg;
+                    emsg = tool_sh_ct_scratch_fmt("trait method '%s' is not implemented for struct '%s'", _self->sym->traits[ti].m[dm].name, _self->sym->structs[si].name);
+                    return _self->__backend_emit_emitops_vptr->fail_from(_self, n, emsg);
+                }
+            }
+            type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->structs[si].name);
+            if (((type_index >= 0) && (_self->sym->type_kind[type_index] == 1))) {
+                stype = tool_sh_ct_scratch_fmt("struct %s", _self->sym->structs[si].name);
+            }
+            else {
+                stype = tool_sh_ct_scratch_dup(_self->sym->structs[si].name);
+            }
+            for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
+                if (backend_emit_emit_default_method(_self, si, stype, ti, dm, n) != 0) {
+                    return (-1);
+                }
+            }
+            if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
+                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable = {\n", tname, _self->sym->structs[si].name, tname);
+            }
+            else {
+                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", tname, _self->sym->structs[si].name, tname);
+            }
+            for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
+                if (dm > 0) {
+                    fputs(",\n", _self->out);
+                }
+                fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->structs[si].name, tname, _self->sym->traits[ti].m[dm].name);
+            }
+            fputs("\n};\n\n", _self->out);
+        }
+    }
+{
+        int si;
+        for (si = 0; si < _self->sym->nstructs; si++) {
+            int has = 0;
+            int fi;
+            int used = 0;
+            int legacy;
+            int host_hidden = 0;
+            const char * sname;
+            if ((!_self->sym->structs[si].uses_drop)) {
+                continue;
+            }
+            if (_self->sym->structs[si].is_template) {
+                continue;
+            }
+            legacy = (((_self->cur_unit < 0) || (_self->sym->structs[si].owner < 0)) || _self->sym->structs[si].is_inst);
+            if ((!legacy)) {
+                if (_self->sym->structs[si].owner != _self->cur_unit) {
+                    continue;
+                }
+                if (_self->sym->structs[si].has_drop_impl) {
+                    continue;
+                }
+            }
+            else {
+                has = _self->sym->structs[si].has_drop_impl;
+                if ((!has)) {
+                    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
+                        if ((((_self->arena->nodes[n].kind == N_IMPL) && (_self->arena->nodes[n].aux == si)) && (strcmp(_self->arena->nodes[n].text2, "Drop") == 0))) {
+                            has = 1;
+                        }
+                    }
+                }
+                if (has) {
+                    continue;
+                }
+            }
+            if ((_self->sym->structs[si].is_inst && (_self->cur_unit >= 0))) {
+                int hi = frontend_sym_ct_inst_find(_self->sym->structs[si].name);
+                if (((hi < 0) || (!backend_emit_inst_visible_in_unit(_self, hi)))) {
+                    host_hidden = 1;
+                }
+            }
+            sname = _self->sym->structs[si].name;
+            if (legacy) {
+                fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self) {\n", sname);
+            }
+            else {
+                fprintf(_self->out, "void %s_Drop_drop(void *self) {\n", sname);
+            }
+            fprintf(_self->out, "    struct %s *_self = (struct %s *)self;\n", sname, sname);
+            if (host_hidden) {
+                fputs("    (void)_self;\n}\n\n", _self->out);
+                continue;
+            }
+            for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
+                const char * base;
+                const char * ft = _self->sym->structs[si].fields[fi].type;
+                int stars = 0;
+                const char * q;
+                size_t bl;
+                int ci;
+                if (strchr(ft, '<')) {
+                    const char * sub = backend_emit_sb_norm_text(_self, ft);
+                    if (sub) {
+                        ft = sub;
+                    }
+                }
+                for (q = ft; (*q); q++) {
+                    if ((*q) == '*') {
+                        stars++;
+                    }
+                }
+                if (((stars > 0) && _self->sym->structs[si].fields[fi].dims[0])) {
+                    continue;
+                }
+                if ((((stars == 0) && (!_self->sym->structs[si].fields[fi].dims[0])) && frontend_sym_ct_is_container_type(ft))) {
+                    const char * cn = ((strncmp(ft, "struct ", 7) == 0) ? (ft + 7) : ft);
+                    bl = strlen(cn);
+                    while (((bl > 0) && ((cn[(bl - 1)] == ' ') || (cn[(bl - 1)] == '\t')))) {
+                        bl--;
+                    }
+                    base = runtime_text_ct_intern_len(cn, (int)(bl));
+                    if ((!base)) {
+                        return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+                    }
+                    ci = frontend_sym_ct_inst_find(base);
+                    if (((ci < 0) || (!backend_emit_inst_visible_in_unit(_self, ci)))) {
+                        continue;
+                    }
+                    fprintf(_self->out, "    if (_self->%s.h != 0) (void)%s_release(&_self->%s);\n", _self->sym->structs[si].fields[fi].name, base, _self->sym->structs[si].fields[fi].name);
+                    used = 1;
+                    continue;
+                }
+                if (strncmp(ft, "struct ", 7) == 0) {
+                    ft += 7;
+                }
+                bl = strlen(ft);
+                while (((bl > 0) && ((ft[(bl - 1)] == '*') || (ft[(bl - 1)] == ' ')))) {
+                    bl--;
+                }
+                base = runtime_text_ct_intern_len(ft, (int)(bl));
+                if ((!base)) {
+                    return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+                }
+                ci = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
+                if (((ci < 0) || (!_self->sym->structs[ci].uses_drop))) {
+                    continue;
+                }
+                if (stars == 1) {
+                    fprintf(_self->out, "    if (_self->%s) %s_Drop_drop(_self->%s);\n", _self->sym->structs[si].fields[fi].name, _self->sym->structs[ci].name, _self->sym->structs[si].fields[fi].name);
+                    used = 1;
+                }
+                else {
+                    if (stars == 0) {
+                        fprintf(_self->out, "    %s_Drop_drop(&_self->%s);\n", _self->sym->structs[ci].name, _self->sym->structs[si].fields[fi].name);
+                        used = 1;
+                    }
+                }
+            }
+            if ((!used)) {
+                fputs("    (void)_self;\n", _self->out);
+            }
+            fputs("}\n\n", _self->out);
+        }
+    }
+    return 0;
+}
+
 const struct backend_emit_EmitDecl_vtbl backend_emit_Emitter_backend_emit_EmitDecl_vtable = {
     .emit_global_decl = backend_emit_Emitter_backend_emit_EmitDecl_emit_global_decl,
     .emit_global_extern = backend_emit_Emitter_backend_emit_EmitDecl_emit_global_extern,
@@ -588,7 +1392,9 @@ const struct backend_emit_EmitDecl_vtbl backend_emit_Emitter_backend_emit_EmitDe
     .drop_visible = backend_emit_Emitter_backend_emit_EmitDecl_drop_visible,
     .node_mentions = backend_emit_Emitter_backend_emit_EmitDecl_node_mentions,
     .emit_inherent_protos = backend_emit_Emitter_backend_emit_EmitDecl_emit_inherent_protos,
-    .emit_unit_init = backend_emit_Emitter_backend_emit_EmitDecl_emit_unit_init
+    .emit_unit_init = backend_emit_Emitter_backend_emit_EmitDecl_emit_unit_init,
+    .emit_type_decl = backend_emit_Emitter_backend_emit_EmitDecl_emit_type_decl,
+    .emit_impls = backend_emit_Emitter_backend_emit_EmitDecl_emit_impls
 };
 
 static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
@@ -601,87 +1407,6 @@ static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
     (void)_self;
 }
 
-const char * backend_emit_emit_gsub_type_text(struct backend_emit_Emitter * self, const char * type) {
-    const char * cur;
-    int i;
-    if (self->gtntparam <= 0) {
-        return (const char *)(0);
-    }
-    cur = (type ? type : "");
-    for (i = 0; i < self->gtntparam; i++) {
-        if (((!self->gtparam[i]) || (!self->gtparam[i][0]))) {
-            continue;
-        }
-        if ((!self->gtarg[i])) {
-            continue;
-        }
-        cur = frontend_sym_ct_generic_subst_text(cur, self->gtparam[i], self->gtarg[i]);
-        if ((!cur)) {
-            return (const char *)(0);
-        }
-    }
-    if (strchr(cur, '<')) {
-        char * res = (char *)(malloc(TEXT_LIMIT));
-        const char * pooled;
-        if ((!res)) {
-            return (const char *)(0);
-        }
-        if (frontend_sym_ct_inst_resolve(cur, res, TEXT_LIMIT) != 0) {
-            free(res);
-            return (const char *)(0);
-        }
-        pooled = runtime_text_ct_intern(res);
-        free(res);
-        return pooled;
-    }
-    return cur;
-}
-const char * backend_emit_emit_overload_suffix(struct backend_emit_Emitter * self, int impl_node, int m) {
-    char * buf = 0;
-    int cap = 0;
-    int n;
-    int pos;
-    int p;
-    const char * out;
-    if ((((impl_node < 0) || (m < 0)) || (m >= self->arena->nnode))) {
-        return "";
-    }
-    n = frontend_parse_ct_overload_count(impl_node, self->arena->nodes[m].text2);
-    if (n <= 1) {
-        return "";
-    }
-    pos = frontend_parse_ct_overload_pos(impl_node, m);
-    if (pos <= 0) {
-        return "";
-    }
-    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
-        return (const char *)(0);
-    }
-    for (p = self->arena->nodes[m].a; p > 0; p = self->arena->nodes[p].next) {
-        const char * ty = backend_emit_emit_gsub_type_text(self, self->arena->nodes[p].text);
-        const char * ek;
-        if ((!ty)) {
-            ty = self->arena->nodes[p].text;
-        }
-        ek = frontend_parse_ct_overload_key_text(ty);
-        if ((!ek)) {
-            goto fail;
-        }
-        if (tool_sh_ct_text_cat((&buf), (&cap), "$") != 0) {
-            goto fail;
-        }
-        if (tool_sh_ct_text_cat((&buf), (&cap), ek) != 0) {
-            goto fail;
-        }
-    }
-    out = runtime_text_ct_intern(buf);
-    tool_sh_ct_text_free((&buf), (&cap));
-    return (out ? out : "");
-    fail:
-        ;
-        tool_sh_ct_text_free((&buf), (&cap));
-        return (const char *)(0);
-}
 int backend_emit_unit_init_needed(struct backend_emit_Emitter * e, int n) {
     const char * lit;
     int a;
@@ -702,4 +1427,1077 @@ int backend_emit_unit_init_needed(struct backend_emit_Emitter * e, int n) {
         }
     }
     return 1;
+}
+int backend_emit_adt_emit_instance(struct backend_emit_Emitter * self, int adi) {
+    int i;
+    int n_inst;
+    int n;
+    struct frontend_sym_Adt * adts;
+    adts = frontend_sym_ct_adts((&n));
+    if ((((!adts) || (adi < 0)) || (adi >= n))) {
+        return 0;
+    }
+    if ((adts[adi].is_template || (adts[adi].tmpl < 0))) {
+        return 0;
+    }
+    if (adts[adi].emitted) {
+        return 0;
+    }
+    n_inst = 0;
+    (void)(frontend_sym_ct_insts((&n_inst)));
+    if (((backend_emit_ensure_adt_layout_state(n) != 0) || (backend_emit_ensure_inst_layout_state(n_inst) != 0))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    for (i = 0; i < n; i++) {
+        backend_emit_g_adt_layout_state[i] = 0;
+    }
+    for (i = 0; i < n_inst; i++) {
+        backend_emit_g_inst_layout_state[i] = 0;
+    }
+    if (backend_emit_adt_layout_closure(self, adi, 0) != 0) {
+        return (-1);
+    }
+    if (backend_emit_preemit_adt_payload(self, adi) != 0) {
+        return (-1);
+    }
+    adts = frontend_sym_ct_adts((&n));
+    if (((!adts) || (adi >= n))) {
+        return (-1);
+    }
+    adts[adi].emitted = 1;
+    return backend_emit_emit_adt_layout_body(self, adi, (-1), adts[adi].full, "", 0, 0);
+}
+int backend_emit_adt_layout_closure(struct backend_emit_Emitter * self, int adi, int depth) {
+    int v;
+    int f;
+    int nadts;
+    struct frontend_sym_Adt * adts;
+    adts = frontend_sym_ct_adts((&nadts));
+    if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
+        return 0;
+    }
+    if (backend_emit_ensure_adt_layout_state(nadts) != 0) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    if (depth > MAX_LAYOUT_DEPTH) {
+        return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH));
+    }
+    if (backend_emit_g_adt_layout_state[adi] == 2) {
+        return 0;
+    }
+    if (backend_emit_g_adt_layout_state[adi] == 1) {
+        return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("ADT '%s' is recursive by value; store a pointer or a container instead", adts[adi].name));
+    }
+    backend_emit_g_adt_layout_state[adi] = 1;
+    for (v = 0; v < adts[adi].nvariants; v++) {
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            if (backend_emit_type_layout_closure(self, adts[adi].variants[v].fields[f].type, (depth + 1)) != 0) {
+                return (-1);
+            }
+        }
+    }
+    backend_emit_g_adt_layout_state[adi] = 2;
+    return 0;
+}
+int backend_emit_closure_owned(struct backend_emit_Emitter * self, const char * owner, const char * cname) {
+    int fi;
+    const char * mangled;
+    if (strcmp(owner, cname) == 0) {
+        return 1;
+    }
+    fi = self->sym->__frontend_sym_symbolops_vptr->find_func(self->sym, owner);
+    if (((fi >= 0) && (strcmp(self->sym->funcs[fi].cname, cname) == 0))) {
+        return 1;
+    }
+    if ((self->gprefix && self->gprefix[0])) {
+        mangled = runtime_text_ct_intern_join(self->gprefix, owner);
+        if ((mangled && (strcmp(mangled, cname) == 0))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+int backend_emit_elem_plain_owner(struct backend_emit_Emitter * self, const char * ctype) {
+    const char * base;
+    int si;
+    if (strncmp(ctype, "struct ", 7) != 0) {
+        return (-1);
+    }
+    base = (ctype + 7);
+    if (frontend_sym_ct_inst_find(base) >= 0) {
+        return (-1);
+    }
+    si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
+    if (si < 0) {
+        return (-1);
+    }
+    return self->sym->structs[si].owner;
+}
+int backend_emit_em_decl_enum(struct backend_emit_Emitter * self, int n, int ind, int with_semi, int nk) {
+    (void)(with_semi);
+    (void)(nk);
+    int m;
+    (void)(m);
+    if ((self->arena->nodes[n].aux & 1)) {
+        if (self->arena->nodes[n].text3[0]) {
+            fprintf(self->out, "typedef enum %s {\n", self->arena->nodes[n].text3);
+        }
+        else {
+            fputs("typedef enum {\n", self->out);
+        }
+    }
+    else {
+        fprintf(self->out, "enum %s {\n", self->arena->nodes[n].text2);
+    }
+    for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+        fputs(self->arena->nodes[m].text, self->out);
+        if (self->arena->nodes[m].a >= 0) {
+            fputs(" = ", self->out);
+            if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[m].a) != 0) {
+                return (-1);
+            }
+        }
+        if (self->arena->nodes[m].next >= 0) {
+            fputs(",", self->out);
+        }
+        fputs("\n", self->out);
+    }
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
+    fputs("}", self->out);
+    if (self->arena->nodes[n].attr >= 0) {
+        fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
+    }
+    if (self->arena->nodes[n].aux) {
+        fprintf(self->out, " %s", self->arena->nodes[n].text2);
+    }
+    fputs(";\n", self->out);
+    return 0;
+}
+int backend_emit_em_decl_enum_adt(struct backend_emit_Emitter * self, int n, int ind, int with_semi, int nk) {
+    (void)(nk);
+    return backend_emit_emit_adt_decl(self, n, ind, with_semi);
+}
+int backend_emit_em_decl_global(struct backend_emit_Emitter * self, int n, int ind, int with_semi, int nk) {
+    (void)(nk);
+    self->cur_ret = "";
+    if ((self->init->__backend_emit_initops_vptr->type_needs_init(self->init, self->arena->nodes[n].text) && (backend_emit_dims_depth(self->arena->nodes[n].text3) > 1))) {
+        return self->__backend_emit_emitops_vptr->fail_from(self, n, "a multi-dimensional array cannot hold trait-carrying values");
+    }
+    if (((self->freestanding && (*self->freestanding)) && backend_emit_unit_init_needed(self, n))) {
+        return self->__backend_emit_emitops_vptr->fail_from(self, n, "this file-scope object needs a constructor to fill its vptrs, ""which --freestanding does not emit; give it an initialiser");
+    }
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
+    if (self->arena->nodes[n].aux == 1) {
+        fputs("static ", self->out);
+    }
+    if (self->__backend_emit_emitdecl_vptr->emit_global_decl(self, n) != 0) {
+        return (-1);
+    }
+    if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_INIT_RANGE))) {
+        if (self->__backend_emit_emitinit_vptr->emit_range_init(self, self->arena->nodes[n].a) != 0) {
+            return (-1);
+        }
+    }
+    else {
+        if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_RAW))) {
+            if (self->__backend_emit_emitinit_vptr->emit_raw_init(self, self->arena->nodes[n].a, self->arena->nodes[n].text, self->arena->nodes[n].text3, 1) != 0) {
+                return (-1);
+            }
+        }
+        else {
+            if (self->arena->nodes[n].a >= 0) {
+                fputs(" = ", self->out);
+                if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
+                    return (-1);
+                }
+            }
+            else {
+                if ((self->init->__backend_emit_initops_vptr->type_needs_init(self->init, self->arena->nodes[n].text) && (!self->arena->nodes[n].text3[0]))) {
+                    fputs(" = { ", self->out);
+                    if (self->init->__backend_emit_initops_vptr->emit_vptr_items(self->init, "", self->arena->nodes[n].text) != 0) {
+                        return (-1);
+                    }
+                    if (self->init->__backend_emit_initops_vptr->emit_field_vptrs(self->init, self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ((strncmp(self->arena->nodes[n].text, "struct ", 7) == 0) ? (self->arena->nodes[n].text + 7) : self->arena->nodes[n].text)), self->init->__backend_emit_initops_vptr->type_has_vptr(self->init, self->arena->nodes[n].text), 0) != 0) {
+                        return (-1);
+                    }
+                    fputs(" }", self->out);
+                }
+            }
+        }
+    }
+    if (with_semi) {
+        fputs(";\n", self->out);
+    }
+    return 0;
+}
+int backend_emit_em_decl_struct(struct backend_emit_Emitter * self, int n, int ind, int with_semi, int nk) {
+    (void)(with_semi);
+    (void)(nk);
+    int m;
+    (void)(m);
+    int si;
+    int u;
+    si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
+    if (((si >= 0) && self->sym->structs[si].is_template)) {
+        return 0;
+    }
+    for (u = self->arena->nodes[n].a; u >= 0; u = self->arena->nodes[u].next) {
+        if (self->arena->nodes[u].kind == N_FIELD) {
+            if (backend_emit_preemit_insts_for(self, self->arena->nodes[u].text) != 0) {
+                return (-1);
+            }
+        }
+    }
+    if (self->arena->nodes[n].aux) {
+        if (self->arena->nodes[n].text[0]) {
+            fprintf(self->out, "typedef struct %s {\n", self->arena->nodes[n].text);
+        }
+        else {
+            fputs("typedef struct {\n", self->out);
+        }
+    }
+    else {
+        fprintf(self->out, "struct %s {\n", self->arena->nodes[n].text2);
+    }
+{
+        int si_p = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
+        int privp = 0;
+        int m2;
+        if (((si_p >= 0) && (self->sym->structs[si_p].nuse == 0))) {
+            int has_pub = 0;
+            int has_priv = 0;
+            for (m2 = 0; m2 < self->sym->structs[si_p].nfields; m2++) {
+                if (self->sym->structs[si_p].fields[m2].is_pub) {
+                    has_pub = 1;
+                }
+                else {
+                    has_priv = 1;
+                }
+            }
+            privp = (has_pub && has_priv);
+        }
+        if (privp) {
+            fputs("#ifdef CT_UNIT_PRIVATE\n", self->out);
+        }
+        for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+            if (self->__backend_emit_emitexpr_vptr->emit_field(self, m, (ind + 1)) != 0) {
+                return (-1);
+            }
+            fputs(";\n", self->out);
+        }
+        if (privp) {
+            fputs("#else\n", self->out);
+            for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                if (((self->arena->nodes[m].kind == N_FIELD) && (!self->arena->nodes[m].d))) {
+                    continue;
+                }
+                self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+                if (self->__backend_emit_emitexpr_vptr->emit_field(self, m, (ind + 1)) != 0) {
+                    return (-1);
+                }
+                fputs(";\n", self->out);
+            }
+        }
+        if (privp) {
+            fputs("#endif\n", self->out);
+        }
+    }
+    si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
+    if (si >= 0) {
+        for (u = 0; u < self->sym->structs[si].nuse; u++) {
+            const char * use = self->sym->structs[si].use[u];
+            size_t ul = strlen(use);
+            char * low = tool_sh_ct_scratch_alloc(((int)(ul) + 1));
+            int i;
+            for (i = 0; i < (int)(ul); i++) {
+                char c = use[i];
+                if (((c >= 'A') && (c <= 'Z'))) {
+                    c = (char)(((c - 'A') + 'a'));
+                }
+                low[i] = c;
+            }
+            low[i] = 0;
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+            fprintf(self->out, "const struct %s_vtbl *__%s_vptr;\n", use, low);
+        }
+    }
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
+    fputs("}", self->out);
+    if (self->arena->nodes[n].attr >= 0) {
+        fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
+    }
+    if (self->arena->nodes[n].aux) {
+        fprintf(self->out, " %s", self->arena->nodes[n].text2);
+    }
+    fputs(";\n", self->out);
+    return 0;
+}
+int backend_emit_em_decl_typedef(struct backend_emit_Emitter * self, int n, int ind, int with_semi, int nk) {
+    (void)(ind);
+    (void)(with_semi);
+    (void)(nk);
+    fputs("typedef ", self->out);
+    if (self->__backend_emit_emitexpr_vptr->emit_type_name_dims(self, self->arena->nodes[n].text, self->arena->nodes[n].text2, self->arena->nodes[n].text3) != 0) {
+        return (-1);
+    }
+    if (self->arena->nodes[n].attr >= 0) {
+        fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
+    }
+    fputs(";\n", self->out);
+    return 0;
+}
+int backend_emit_em_decl_union(struct backend_emit_Emitter * self, int n, int ind, int with_semi, int nk) {
+    (void)(with_semi);
+    (void)(nk);
+    int m;
+    (void)(m);
+    if (self->arena->nodes[n].aux) {
+        if (self->arena->nodes[n].text[0]) {
+            fprintf(self->out, "typedef union %s {\n", self->arena->nodes[n].text);
+        }
+        else {
+            fputs("typedef union {\n", self->out);
+        }
+    }
+    else {
+        fprintf(self->out, "union %s {\n", self->arena->nodes[n].text2);
+    }
+    for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+        if (self->__backend_emit_emitexpr_vptr->emit_field(self, m, (ind + 1)) != 0) {
+            return (-1);
+        }
+        fputs(";\n", self->out);
+    }
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
+    fputs("}", self->out);
+    if (self->arena->nodes[n].attr >= 0) {
+        fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
+    }
+    if (self->arena->nodes[n].aux) {
+        fprintf(self->out, " %s", self->arena->nodes[n].text2);
+    }
+    fputs(";\n", self->out);
+    return 0;
+}
+int backend_emit_emit_adt_decl(struct backend_emit_Emitter * self, int n, int ind, int with_semi) {
+    int adi;
+    int i;
+    int n_inst;
+    struct frontend_sym_Adt * adts;
+    int nadts;
+    const char * tag;
+    const char * alias;
+    int is_typedef;
+    (void)(with_semi);
+    adi = ((int)(self->arena->nodes[n].num) - 1);
+    adts = frontend_sym_ct_adts((&nadts));
+    if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
+        return self->__backend_emit_emitops_vptr->fail_from(self, n, "the ADT row is missing");
+    }
+    if (adts[adi].is_template) {
+        return 0;
+    }
+    n_inst = 0;
+    (void)(frontend_sym_ct_insts((&n_inst)));
+    if (((backend_emit_ensure_adt_layout_state(nadts) != 0) || (backend_emit_ensure_inst_layout_state(n_inst) != 0))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    for (i = 0; i < nadts; i++) {
+        backend_emit_g_adt_layout_state[i] = 0;
+    }
+    for (i = 0; i < n_inst; i++) {
+        backend_emit_g_inst_layout_state[i] = 0;
+    }
+    if (backend_emit_adt_layout_closure(self, adi, 0) != 0) {
+        return (-1);
+    }
+    if (backend_emit_preemit_adt_payload(self, adi) != 0) {
+        return (-1);
+    }
+    is_typedef = ((self->arena->nodes[n].aux & 1) ? 1 : 0);
+    tag = adts[adi].full;
+    alias = self->arena->nodes[n].text2;
+    return backend_emit_emit_adt_layout_body(self, adi, n, tag, alias, is_typedef, ind);
+}
+int backend_emit_emit_adt_layout_body(struct backend_emit_Emitter * self, int adi, int n, const char * tag, const char * alias, int is_typedef, int ind) {
+    int v;
+    int f;
+    struct frontend_sym_Adt * adts;
+    int nadts;
+    adts = frontend_sym_ct_adts((&nadts));
+    if ((((!adts) || (adi < 0)) || (adi >= nadts))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "the ADT row is missing");
+    }
+    if (is_typedef) {
+        fprintf(self->out, "typedef struct %s {\n", tag);
+    }
+    else {
+        fprintf(self->out, "struct %s {\n", tag);
+    }
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+    fputs("int tag;\n", self->out);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+    fputs("union {\n", self->out);
+    for (v = 0; v < adts[adi].nvariants; v++) {
+        if (adts[adi].variants[v].nfields == 0) {
+            continue;
+        }
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
+        fputs("struct {\n", self->out);
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 3));
+            fprintf(self->out, "%s %s;\n", adts[adi].variants[v].fields[f].type, adts[adi].variants[v].fields[f].name);
+        }
+        self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 2));
+        fprintf(self->out, "} %s;\n", adts[adi].variants[v].cname);
+    }
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, (ind + 1));
+    fputs("} u;\n", self->out);
+    self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
+    fputs("}", self->out);
+    if (is_typedef) {
+        fprintf(self->out, " %s", alias);
+    }
+    if (((n >= 0) && (self->arena->nodes[n].attr >= 0))) {
+        fprintf(self->out, " %s", self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, self->arena->nodes[n].attr));
+    }
+    fputs(";\n", self->out);
+    fprintf(self->out, "_Static_assert(offsetof(struct %s, tag) == 0, \"%s: the tag must come first\");\n", tag, tag);
+    fprintf(self->out, "_Static_assert(offsetof(struct %s, u) >= sizeof(int), \"%s: the payload union must follow the tag\");\n", tag, tag);
+    fprintf(self->out, "_Static_assert(offsetof(struct %s, u) >= offsetof(struct %s, tag) + sizeof(int), \"%s: the tag must end before the payload union\");\n", tag, tag, tag);
+    fprintf(self->out, "_Static_assert(sizeof(struct %s) >= offsetof(struct %s, u) + sizeof(((struct %s *)0)->u), \"%s: the payload must fit\");\n", tag, tag, tag, tag);
+    if (backend_emit_adt_owns(self, adi, 0)) {
+        int link = ((adts[adi].is_pub && (!backend_lir_lmod_plan_shell_header())) ? 0 : 1);
+        fputs((link ? "static " : ""), self->out);
+        fprintf(self->out, "struct %s %s_retain(struct %s *);\n", tag, tag, tag);
+        fputs((link ? "static " : ""), self->out);
+        fprintf(self->out, "void %s_release(struct %s *);\n", tag, tag);
+    }
+    return 0;
+}
+int backend_emit_emit_closures(struct backend_emit_Emitter * self, const char * owner, int restore_line) {
+    int ci;
+    int k;
+    int wrote;
+    int pass;
+    int base_cl;
+    const char * save_ret;
+    wrote = 0;
+    for (pass = 0; pass < 3; pass++) {
+        for (ci = 0; ci < self->sym->nclosure; ci++) {
+            struct frontend_sym_Closure * c = (&self->sym->closures[ci]);
+            if ((!c->ret[0])) {
+                continue;
+            }
+            if ((!backend_emit_closure_owned(self, c->owner, owner))) {
+                continue;
+            }
+            wrote = 1;
+            if (pass == 0) {
+                if ((*self->line_mode)) {
+                    fprintf(self->out, "#line %d \"%s\"\n", c->line, self->path);
+                }
+                fprintf(self->out, "/* closure at %s:%d */\n", self->path, c->line);
+                fprintf(self->out, "struct __ct_cl_env_%d {\n", ci);
+                if (c->ncap == 0) {
+                    fputs("    char __ct_cl_pad;\n", self->out);
+                }
+                for (k = 0; k < c->ncap; k++) {
+                    fprintf(self->out, "    %s %s;\n", c->cap_type[k], c->cap_name[k]);
+                }
+                fputs("};\n", self->out);
+                continue;
+            }
+            if (pass == 1) {
+                fprintf(self->out, "static %s __attribute__((unused)) __ct_cl_tramp_%d(void *self", c->ret, ci);
+                for (k = 0; k < c->nparams; k++) {
+                    fprintf(self->out, ", %s %s", c->ptype[k], c->pname[k]);
+                }
+                fputs(");\n", self->out);
+                continue;
+            }
+            if ((*self->line_mode)) {
+                fprintf(self->out, "#line %d \"%s\"\n", c->line, self->path);
+            }
+            fprintf(self->out, "static %s __attribute__((unused)) __ct_cl_tramp_%d(void *self", c->ret, ci);
+            for (k = 0; k < c->nparams; k++) {
+                fprintf(self->out, ", %s %s", c->ptype[k], c->pname[k]);
+            }
+            fputs(")\n{\n", self->out);
+            if (c->ncap > 0) {
+                fprintf(self->out, "    struct __ct_cl_env_%d *__ct_cl_e = self;\n", ci);
+            }
+            else {
+                fputs("    (void)self;\n", self->out);
+            }
+            for (k = 0; k < c->nparams; k++) {
+                if ((!self->__backend_emit_emitdecl_vptr->node_mentions(self, c->body, c->pname[k]))) {
+                    fprintf(self->out, "    (void)%s;\n", c->pname[k]);
+                }
+            }
+            self->closure_ci = (ci + 1);
+            base_cl = self->nclvar;
+            save_ret = self->cur_ret;
+            self->cur_ret = "";
+            if (c->is_block) {
+                int s;
+                for (s = self->arena->nodes[c->body].a; s >= 0; s = self->arena->nodes[s].next) {
+                    if (self->__backend_emit_emitexpr_vptr->emit_node(self, s, 1) != 0) {
+                        self->nclvar = base_cl;
+                        self->closure_ci = 0;
+                        return (-1);
+                    }
+                }
+            }
+            else {
+                if (strcmp(c->ret, "void") == 0) {
+                    fputs("    ", self->out);
+                    if (self->__backend_emit_emitexpr_vptr->emit_expr(self, c->body) != 0) {
+                        self->nclvar = base_cl;
+                        self->closure_ci = 0;
+                        return (-1);
+                    }
+                    fputs(";\n", self->out);
+                }
+                else {
+                    fputs("    return ", self->out);
+                    if (self->__backend_emit_emitexpr_vptr->emit_expr(self, c->body) != 0) {
+                        self->nclvar = base_cl;
+                        self->closure_ci = 0;
+                        return (-1);
+                    }
+                    fputs(";\n", self->out);
+                }
+            }
+            self->cur_ret = save_ret;
+            self->nclvar = base_cl;
+            self->closure_ci = 0;
+            fputs("}\n", self->out);
+        }
+    }
+    if ((wrote && (*self->line_mode))) {
+        fprintf(self->out, "#line %d \"%s\"\n", restore_line, self->path);
+    }
+    return 0;
+}
+int backend_emit_emit_default_method(struct backend_emit_Emitter * e, int si, const char * stype, int ti, int mi, int at) {
+    struct frontend_sym_MethodSig * sig;
+    int p;
+    int k;
+    int ai;
+    char uname[32];
+    const char * fld;
+    const char * msg;
+    sig = (&e->sym->traits[ti].m[mi]);
+    fld = backend_emit_default_missing_field_text(e->arena, sig->body, e->sym, si);
+    if (fld) {
+        msg = tool_sh_ct_scratch_fmt("trait %s::%s (declared at %s:%d) cannot be expanded for struct %s: no field '%s'", e->sym->traits[ti].name, sig->name, e->sym->traits[ti].path, sig->line, e->sym->structs[si].name, fld);
+        return e->__backend_emit_emitops_vptr->fail_from(e, at, msg);
+    }
+    fprintf(e->out, "static %s ", sig->ret);
+    fprintf(e->out, "%s_%s_%s(void *self", e->sym->structs[si].name, e->sym->traits[ti].name, sig->name);
+    ai = 0;
+    for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
+        fputs(", ", e->out);
+        if (e->arena->nodes[p].text2[0]) {
+            if (((e->arena->nodes[p].aux == 2) || (e->arena->nodes[p].aux == 3))) {
+                const char * pbuf;
+                pbuf = tool_sh_ct_scratch_fmt("%s *", e->arena->nodes[p].text);
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, pbuf, e->arena->nodes[p].text2, e->arena->nodes[p].text3) != 0) {
+                    return (-1);
+                }
+            }
+            else {
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, e->arena->nodes[p].text, e->arena->nodes[p].text2, e->arena->nodes[p].text3) != 0) {
+                    return (-1);
+                }
+            }
+        }
+        else {
+            snprintf(uname, sizeof(uname), "__arg%d", ai);
+            if (((e->arena->nodes[p].aux == 2) || (e->arena->nodes[p].aux == 3))) {
+                const char * pbuf;
+                pbuf = tool_sh_ct_scratch_fmt("%s *", e->arena->nodes[p].text);
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, pbuf, uname, e->arena->nodes[p].text3) != 0) {
+                    return (-1);
+                }
+            }
+            else {
+                if (e->__backend_emit_emitexpr_vptr->emit_type_name_dims(e, e->arena->nodes[p].text, uname, e->arena->nodes[p].text3) != 0) {
+                    return (-1);
+                }
+            }
+        }
+        ai++;
+    }
+    fputs(") {\n", e->out);
+    fprintf(e->out, "    %s *_self = (%s *)self;\n", stype, stype);
+    backend_emit_g_sb.method = runtime_text_ct_intern(sig->name);
+    backend_emit_g_sb.recv = runtime_text_ct_intern(stype);
+    if (((!backend_emit_g_sb.method) || (!backend_emit_g_sb.recv))) {
+        return e->__backend_emit_emitops_vptr->fail(e, "out of memory");
+    }
+    backend_emit_sb_push_params(e, sig->pnode, 1);
+    backend_emit_sb_retain_params(e, 1);
+    e->sym->self_mode = 1;
+    ai = 0;
+    for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
+        if (e->arena->nodes[p].text2[0]) {
+            if ((!e->__backend_emit_emitdecl_vptr->node_mentions(e, sig->body, e->arena->nodes[p].text2))) {
+                fprintf(e->out, "    (void)%s;\n", e->arena->nodes[p].text2);
+            }
+        }
+        else {
+            snprintf(uname, sizeof(uname), "__arg%d", ai);
+            fprintf(e->out, "    (void)%s;\n", uname);
+        }
+        ai++;
+    }
+    if ((!e->__backend_emit_emitdecl_vptr->node_mentions(e, sig->body, "self"))) {
+        fputs("    (void)_self;\n", e->out);
+    }
+    e->cur_ret = runtime_text_ct_intern(sig->ret);
+    if ((!e->cur_ret)) {
+        return e->__backend_emit_emitops_vptr->fail(e, "out of memory");
+    }
+    k = e->arena->nodes[sig->body].a;
+    while (k >= 0) {
+        if (e->__backend_emit_emitexpr_vptr->emit_node(e, k, 1) != 0) {
+            e->sym->self_mode = 0;
+            return (-1);
+        }
+        k = e->arena->nodes[k].next;
+    }
+    backend_emit_sb_end_body(e, 1);
+    e->sym->self_mode = 0;
+    fputs("}\n\n", e->out);
+    return 0;
+}
+int backend_emit_ensure_adt_layout_state(int need) {
+    int cap;
+    int * grown;
+    if (need <= backend_emit_g_adt_layout_cap) {
+        return 0;
+    }
+    cap = ((backend_emit_g_adt_layout_cap > 0) ? backend_emit_g_adt_layout_cap : MAX_LAYOUT_ADTS);
+    while (((cap < need) && (cap < CAP_LIMIT))) {
+        cap *= 2;
+    }
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (int *)(realloc(backend_emit_g_adt_layout_state, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + backend_emit_g_adt_layout_cap), 0, ((size_t)((cap - backend_emit_g_adt_layout_cap)) * sizeof((*grown))));
+    backend_emit_g_adt_layout_state = grown;
+    backend_emit_g_adt_layout_cap = cap;
+    return 0;
+}
+int backend_emit_ensure_inst_layout_state(int need) {
+    int cap;
+    int * grown;
+    if (need <= backend_emit_g_inst_layout_cap) {
+        return 0;
+    }
+    cap = ((backend_emit_g_inst_layout_cap > 0) ? backend_emit_g_inst_layout_cap : MAX_LAYOUT_INSTS);
+    while (((cap < need) && (cap < CAP_LIMIT))) {
+        cap *= 2;
+    }
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (int *)(realloc(backend_emit_g_inst_layout_state, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + backend_emit_g_inst_layout_cap), 0, ((size_t)((cap - backend_emit_g_inst_layout_cap)) * sizeof((*grown))));
+    backend_emit_g_inst_layout_state = grown;
+    backend_emit_g_inst_layout_cap = cap;
+    return 0;
+}
+int backend_emit_ensure_shell_emit_state(struct backend_emit_Emitter * self, int need) {
+    int cap;
+    int * grown;
+    if (need <= self->shell_emit_cap) {
+        return 0;
+    }
+    cap = ((self->shell_emit_cap > 0) ? self->shell_emit_cap : MAX_LAYOUT_INSTS);
+    while (((cap < need) && (cap < CAP_LIMIT))) {
+        cap *= 2;
+    }
+    if (cap > CAP_LIMIT) {
+        cap = CAP_LIMIT;
+    }
+    if (need > cap) {
+        return (-1);
+    }
+    grown = (int *)(realloc(self->shell_emit_state, ((size_t)(cap) * sizeof((*grown)))));
+    if ((!grown)) {
+        return (-1);
+    }
+    memset((grown + self->shell_emit_cap), 0, ((size_t)((cap - self->shell_emit_cap)) * sizeof((*grown))));
+    self->shell_emit_state = grown;
+    self->shell_emit_cap = cap;
+    return 0;
+}
+int backend_emit_inst_elem_foreign(struct backend_emit_Emitter * self, int ii) {
+    int n;
+    int tn;
+    int tmpl;
+    int o1;
+    int o2;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tps;
+    struct frontend_parse_Expr * ex;
+    const char * e1;
+    const char * e2;
+    ins = frontend_sym_ct_insts((&n));
+    tps = frontend_sym_ct_tmpls((&tn));
+    if (((((!ins) || (!tps)) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    if (backend_emit_inst_is_builtin_Box(ins[ii].name)) {
+        return 1;
+    }
+    if ((((((strcmp(ins[ii].tmpl, "Vec") != 0) && (strcmp(ins[ii].tmpl, "Map") != 0)) && (strcmp(ins[ii].tmpl, "MapEntry") != 0)) && (strcmp(ins[ii].tmpl, "Option") != 0)) && (strcmp(ins[ii].tmpl, "Result") != 0))) {
+        return 0;
+    }
+    tmpl = ins[ii].tmpl_row;
+    if (((tmpl < 0) || (tps[tmpl].owner < 0))) {
+        return 0;
+    }
+    e1 = ins[ii].ctype[0];
+    e2 = ((((strcmp(ins[ii].tmpl, "Map") == 0) || (strcmp(ins[ii].tmpl, "MapEntry") == 0)) && (ins[ii].nargs > 1)) ? ins[ii].ctype[1] : 0);
+    ex = frontend_parse_expr_get();
+    if (ex->__frontend_parse_exprinstantiate_vptr->container_elem_foreign(ex, e1, tmpl)) {
+        return 1;
+    }
+    if (((e2 != 0) && ex->__frontend_parse_exprinstantiate_vptr->container_elem_foreign(ex, e2, tmpl))) {
+        return 1;
+    }
+    o1 = backend_emit_elem_plain_owner(self, e1);
+    if (((o1 >= 0) && (o1 != tps[tmpl].owner))) {
+        return 1;
+    }
+    o2 = ((e2 != 0) ? backend_emit_elem_plain_owner(self, e2) : (-1));
+    return ((o2 >= 0) && (o2 != tps[tmpl].owner));
+}
+int backend_emit_inst_emit_one(struct backend_emit_Emitter * self, int ii) {
+    int ti;
+    int j;
+    int v;
+    int n;
+    struct frontend_sym_StructInst * insts;
+    insts = frontend_sym_ct_insts((&n));
+    if ((((!insts) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    if (insts[ii].emitted) {
+        return 0;
+    }
+{
+        int adi = frontend_sym_ct_adt_find(insts[ii].name);
+        int nadts = 0;
+        struct frontend_sym_Adt * adts = frontend_sym_ct_adts((&nadts));
+        if ((((adts && (adi >= 0)) && (adi < nadts)) && (adts[adi].tmpl >= 0))) {
+            insts[ii].emitted = 1;
+            return backend_emit_adt_emit_instance(self, adi);
+        }
+    }
+    ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, insts[ii].name);
+    if (ti < 0) {
+        return 0;
+    }
+    insts[ii].emitted = 1;
+    fprintf(self->out, "struct %s {\n", self->sym->structs[ti].name);
+    for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+        fputs("    ", self->out);
+{
+            const char * ft = self->sym->structs[ti].fields[j].type;
+            if (strchr(ft, '<')) {
+                char * res = (char *)(malloc(TEXT_LIMIT));
+                if ((res && (frontend_sym_ct_inst_resolve(ft, res, TEXT_LIMIT) == 0))) {
+                    const char * pooled = runtime_text_ct_intern(res);
+                    if (pooled) {
+                        ft = pooled;
+                    }
+                }
+                free(res);
+            }
+            fprintf(self->out, "%s %s%s;\n", ft, self->sym->structs[ti].fields[j].name, self->sym->structs[ti].fields[j].dims);
+        }
+    }
+    for (v = 0; v < self->sym->structs[ti].nuse; v++) {
+        const char * use = self->sym->structs[ti].use[v];
+        size_t ul = strlen(use);
+        char * low = tool_sh_ct_scratch_alloc(((int)(ul) + 1));
+        int k;
+        for (k = 0; k < (int)(ul); k++) {
+            char c = use[k];
+            if (((c >= 'A') && (c <= 'Z'))) {
+                c = (char)(((c - 'A') + 'a'));
+            }
+            low[k] = c;
+        }
+        low[k] = 0;
+        fprintf(self->out, "    const struct %s_vtbl *__%s_vptr;\n", use, low);
+    }
+    fputs("};\n\n", self->out);
+    return 0;
+}
+int backend_emit_inst_layout_closure(struct backend_emit_Emitter * self, int ii, int depth) {
+    int ti;
+    int j;
+    int n;
+    struct frontend_sym_StructInst * ins;
+    ins = frontend_sym_ct_insts((&n));
+    if (((((!ins) || (ii < 0)) || (ii >= n)) || (ii >= MAX_LAYOUT_INSTS))) {
+        return 0;
+    }
+    if (depth > MAX_LAYOUT_DEPTH) {
+        return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH));
+    }
+    if (backend_emit_g_inst_layout_state[ii] == 2) {
+        return 0;
+    }
+    if (backend_emit_g_inst_layout_state[ii] == 1) {
+        return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("generic instance '%s' is recursive by value; store a pointer instead", ins[ii].name));
+    }
+    backend_emit_g_inst_layout_state[ii] = 1;
+    ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ins[ii].name);
+    if (ti >= 0) {
+        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+            if (backend_emit_type_layout_closure(self, self->sym->structs[ti].fields[j].type, (depth + 1)) != 0) {
+                return (-1);
+            }
+        }
+    }
+    backend_emit_g_inst_layout_state[ii] = 2;
+    return 0;
+}
+int backend_emit_inst_visible_in_unit(struct backend_emit_Emitter * self, int ii) {
+    char * reach;
+    int n;
+    int tn;
+    int tmpl;
+    int d;
+    int k;
+    int changed;
+    int owner;
+    int bi;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tps;
+    if (self->cur_unit < 0) {
+        return 1;
+    }
+    ins = frontend_sym_ct_insts((&n));
+    if ((((!ins) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    tmpl = ins[ii].tmpl_row;
+    tps = frontend_sym_ct_tmpls((&tn));
+    if ((!(((((tps && (tmpl >= 0)) && tps[tmpl].is_pub) && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr) && (!backend_emit_inst_elem_foreign(self, ii))))) {
+        return (ins[ii].owner == self->cur_unit);
+    }
+    owner = tps[tmpl].owner;
+    if (owner == self->cur_unit) {
+        return 1;
+    }
+    for (bi = 0; bi < self->nbuiltin; bi++) {
+        if (self->builtins[bi] == owner) {
+            return 1;
+        }
+    }
+    if (backend_emit_ensure_reach(self, (*self->nunits)) != 0) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    reach = self->reach;
+    for (d = 0; d < (*self->nunits); d++) {
+        reach[d] = 0;
+    }
+    reach[self->cur_unit] = 1;
+    changed = 1;
+    while (changed) {
+        changed = 0;
+        for (d = 0; d < (*self->nunits); d++) {
+            if ((!reach[d])) {
+                continue;
+            }
+            for (k = 0; k < self->units[d].ndep; k++) {
+                int dep = self->units[d].depu[k];
+                if ((((dep >= 0) && (dep < (*self->nunits))) && (!reach[dep]))) {
+                    reach[dep] = 1;
+                    changed = 1;
+                }
+            }
+        }
+    }
+    return reach[owner];
+}
+int backend_emit_preemit_adt_payload(struct backend_emit_Emitter * self, int adi) {
+    int v;
+    int f;
+    int i;
+    int n;
+    int nadts;
+    struct frontend_sym_Adt * adts;
+    struct frontend_sym_StructInst * ins;
+    adts = frontend_sym_ct_adts((&nadts));
+    ins = frontend_sym_ct_insts((&n));
+    if (((((!adts) || (!ins)) || (adi < 0)) || (adi >= nadts))) {
+        return 0;
+    }
+    if (backend_emit_ensure_shell_emit_state(self, n) != 0) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    for (i = 0; i < n; i++) {
+        self->shell_emit_state[i] = 0;
+    }
+    for (v = 0; v < adts[adi].nvariants; v++) {
+        for (f = 0; f < adts[adi].variants[v].nfields; f++) {
+            const char * ft = adts[adi].variants[v].fields[f].type;
+            if (((ft && (!strchr(ft, '*'))) && (!strchr(ft, '[')))) {
+                int dep = frontend_sym_ct_adt_from_type(ft);
+                if ((((((dep >= 0) && (dep != adi)) && (dep < nadts)) && (adts[dep].tmpl >= 0)) && (!adts[dep].emitted))) {
+                    if (backend_emit_adt_emit_instance(self, dep) != 0) {
+                        return (-1);
+                    }
+                }
+            }
+            adts = frontend_sym_ct_adts((&nadts));
+            for (i = 0; i < n; i++) {
+                if ((!backend_emit_type_needs_layout(adts[adi].variants[v].fields[f].type, ins[i].name))) {
+                    continue;
+                }
+                if (backend_emit_shell_preemit(self, i, 0) != 0) {
+                    return (-1);
+                }
+            }
+        }
+    }
+    return 0;
+}
+int backend_emit_preemit_insts_for(struct backend_emit_Emitter * self, const char * type) {
+    int i;
+    int n;
+    struct frontend_sym_StructInst * insts;
+    char pat[MAX_TEXT + 16];
+    insts = frontend_sym_ct_insts((&n));
+    if ((!insts)) {
+        return 0;
+    }
+    for (i = 0; i < n; i++) {
+        if (insts[i].emitted) {
+            continue;
+        }
+        snprintf(pat, sizeof(pat), "struct %s", insts[i].name);
+        if (strstr(type, pat)) {
+            if (backend_emit_inst_emit_one(self, i) != 0) {
+                return (-1);
+            }
+        }
+    }
+    return 0;
+}
+int backend_emit_sb_end_body(struct backend_emit_Emitter * self, int ind) {
+    int r;
+    r = backend_emit_sb_release_from(self, 0, (-1), ind);
+    backend_emit_g_sb.n = 0;
+    backend_emit_g_sb.ln = 0;
+    backend_emit_g_sb.nblk = 0;
+    return r;
+}
+int backend_emit_shell_owned_here(struct backend_emit_Emitter * self, int ii) {
+    int tmpl;
+    int tn;
+    int n;
+    int already;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tps;
+    ins = frontend_sym_ct_insts((&n));
+    tps = frontend_sym_ct_tmpls((&tn));
+    if (((((!ins) || (!tps)) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    tmpl = ins[ii].tmpl_row;
+    if (tmpl < 0) {
+        return 0;
+    }
+    already = (((tps[tmpl].is_pub && (tps[tmpl].owner >= 0)) && self->units[tps[tmpl].owner].is_hdr) && (!backend_emit_inst_elem_foreign(self, ii)));
+    if (((already && backend_lir_lmod_plan_shell_header()) && (tps[tmpl].owner == backend_lir_lmod_plan_shell_u()))) {
+        already = 0;
+    }
+    if (already) {
+        return 0;
+    }
+    if (backend_lir_lmod_plan_shell_u() < 0) {
+        return 1;
+    }
+    return (ins[ii].owner == backend_lir_lmod_plan_shell_u());
+}
+int backend_emit_shell_preemit(struct backend_emit_Emitter * self, int ii, int depth) {
+    int ti;
+    int j;
+    int n;
+    struct frontend_sym_StructInst * ins;
+    ins = frontend_sym_ct_insts((&n));
+    if ((((!ins) || (ii < 0)) || (ii >= n))) {
+        return 0;
+    }
+    if (((backend_emit_ensure_inst_layout_state(n) != 0) || (backend_emit_ensure_shell_emit_state(self, n) != 0))) {
+        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+    }
+    if (depth > MAX_LAYOUT_DEPTH) {
+        return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("a by-value ADT payload nests deeper than %d; use a pointer or a container", MAX_LAYOUT_DEPTH));
+    }
+    if (self->shell_emit_state[ii] == 2) {
+        return 0;
+    }
+    if (self->shell_emit_state[ii] == 1) {
+        return self->__backend_emit_emitops_vptr->fail(self, tool_sh_ct_scratch_fmt("generic instance '%s' is recursive by value; store a pointer instead", ins[ii].name));
+    }
+    self->shell_emit_state[ii] = 1;
+    ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ins[ii].name);
+    if (ti >= 0) {
+        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+            int dep = backend_emit_type_inst_index(self->sym->structs[ti].fields[j].type);
+            if (((dep >= 0) && (backend_emit_shell_preemit(self, dep, (depth + 1)) != 0))) {
+                return (-1);
+            }
+        }
+    }
+    if (((!ins[ii].emitted) && backend_emit_shell_owned_here(self, ii))) {
+        if (backend_emit_inst_emit_one(self, ii) != 0) {
+            return (-1);
+        }
+    }
+    self->shell_emit_state[ii] = 2;
+    return 0;
+}
+int backend_emit_type_layout_closure(struct backend_emit_Emitter * self, const char * type, int depth) {
+    int ai;
+    int ii;
+    if (((((!type) || (!type[0])) || strchr(type, '*')) || strchr(type, '('))) {
+        return 0;
+    }
+    ai = frontend_sym_ct_adt_from_type(type);
+    if (ai >= 0) {
+        return backend_emit_adt_layout_closure(self, ai, depth);
+    }
+    ii = backend_emit_type_inst_index(type);
+    if (ii >= 0) {
+        return backend_emit_inst_layout_closure(self, ii, depth);
+    }
+    return 0;
 }

@@ -474,7 +474,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
         _self->__backend_emit_emitexpr_vptr->emit_indent(_self, ind);
         fprintf(_self->out, "%s %s = ", hty, _self->arena->nodes[_self->hoist_calls[i]].text3);
         _self->raw_call = _self->hoist_calls[i];
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->hoist_calls[i]) != 0) {
+        if (_self->__backend_emit_emitexpr_vptr->emit_expr(_self, _self->hoist_calls[i]) != 0) {
             _self->raw_call = (-1);
             return (-1);
         }
@@ -492,7 +492,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
         else {
             fprintf(_self->out, "%s %s = ", _self->arena->nodes[k].text, _self->arena->nodes[k].text3);
         }
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[k].a) != 0) {
+        if (_self->__backend_emit_emitexpr_vptr->emit_expr(_self, _self->arena->nodes[k].a) != 0) {
             return (-1);
         }
         if (cat == 2) {
@@ -502,7 +502,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
         save = _self->ninto;
         _self->ninto = 0;
         for (s = _self->arena->nodes[k].b; s >= 0; s = _self->arena->nodes[s].next) {
-            if (_self->__backend_emit_emitops_vptr->emit_node(_self, s, ind) != 0) {
+            if (_self->__backend_emit_emitexpr_vptr->emit_node(_self, s, ind) != 0) {
                 return (-1);
             }
         }

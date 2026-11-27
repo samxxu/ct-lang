@@ -355,7 +355,7 @@ static int backend_emit_Emitter_backend_emit_EmitInit_emit_range_init(void *self
         }
         _self->range_k = (int)(k);
         _self->range_depth = (save_depth + 1);
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[n].a) != 0) {
+        if (_self->__backend_emit_emitexpr_vptr->emit_expr(_self, _self->arena->nodes[n].a) != 0) {
             return (-1);
         }
     }
@@ -389,7 +389,7 @@ static int backend_emit_Emitter_backend_emit_EmitInit_emit_brace_init(void *self
         if (e != _self->arena->nodes[n].a) {
             fputs(", ", _self->out);
         }
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, e) != 0) {
+        if (_self->__backend_emit_emitexpr_vptr->emit_expr(_self, e) != 0) {
             return (-1);
         }
     }
@@ -417,11 +417,11 @@ static int backend_emit_Emitter_backend_emit_EmitInit_emit_map_brace_init(void *
             fputs(", ", _self->out);
         }
         fputc('{', _self->out);
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[it].a) != 0) {
+        if (_self->__backend_emit_emitexpr_vptr->emit_expr(_self, _self->arena->nodes[it].a) != 0) {
             return (-1);
         }
         fputs(", ", _self->out);
-        if (_self->__backend_emit_emitops_vptr->emit_expr(_self, _self->arena->nodes[it].b) != 0) {
+        if (_self->__backend_emit_emitexpr_vptr->emit_expr(_self, _self->arena->nodes[it].b) != 0) {
             return (-1);
         }
         fputc('}', _self->out);

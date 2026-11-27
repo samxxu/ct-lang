@@ -30,6 +30,7 @@
 #include "EmitHeader.h"
 #include "EmitDecl.h"
 #include "EmitExpr.h"
+#include "EmitShell.h"
 #include "LModule.h"
 
 #include "Vec.h"
@@ -163,37 +164,6 @@ struct tool_pkg_ShaPaths;
 struct tool_driver_Driver;
 extern const struct backend_emit_EmitOps_vtbl backend_emit_Emitter_backend_emit_EmitOps_vtable;
 
-struct backend_emit_FldSnap {
-    int n;
-    const char * path[128];
-    int owner[128];
-    int defined[128];
-};
-struct backend_emit_StrRetain {
-    int n;
-    const char * name[256];
-    const char * type[256];
-    int own[256];
-    int blk[256];
-    int bkind[256];
-    int nblk;
-    int pending;
-    int loop_pending;
-    int switch_pending;
-    int nfield;
-    const char * fpath[128];
-    int fowner[128];
-    int fdepth[128];
-    int fmaybe[128];
-    int branch_hold;
-    int ln;
-    const char * lname[512];
-    const char * ltype[512];
-    int lblk[256];
-    int hitparam;
-    const char * method;
-    const char * recv;
-};
 void backend_emit_ct_emit_bind(void *, void *, void *, void *, const char *, char * *, const char *);
 void backend_emit_ct_emit_bind_tables(void *, int *, void *, int *, void *, int *, int *, int *, int *, int *, int *, int *, int *);
 void backend_emit_ct_emit_bind_units(void *);
