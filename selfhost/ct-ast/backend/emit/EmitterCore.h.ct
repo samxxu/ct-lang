@@ -40,22 +40,6 @@ pub trait EmitOps {
 
     int  write_unit_header(int u);
 
-    int  emit_struct_fwd(void);
-
-    int  emit_trait_range(int start, int end, int mode);
-
-    int  emit_proto(int i);
-
-    int  emit_vtable_fwd(int prog);
-
-    int  header_guard(const char *base, char **out);
-
-    int  write_map(const char *dest, int prog, int u);
-
-    int  write_model(const char *dest, int prog);
-
-    int  emit_json_str(FILE *f, const char *s);
-
     int  emit_node(int n, int ind);
 
     int  emit_field(int n, int ind);
@@ -119,13 +103,35 @@ pub trait EmitOps {
 
     int  emit_unit_init(int prog);
 
-    int  write_header(const char *outc);
-
-    int  write_abi_header(const char *path);
-
     int  fail(const char *msg);
 
     int  fail_from(int n, const char *msg);
+}
+
+/* S8 D4: the header / map / ABI writers. The trait lives here with the rest of
+   the Emitter surface; the bodies are in `EmitHeader.h.ct` (pure move). The
+   `.c`-side unit-header writer, `write_unit_header`, stays on `EmitOps` until
+   its instance-closure helper moves out of the host. */
+pub trait EmitHeader {
+    int  emit_struct_fwd(void);
+
+    int  emit_trait_range(int start, int end, int mode);
+
+    int  emit_proto(int i);
+
+    int  emit_vtable_fwd(int prog);
+
+    int  header_guard(const char *base, char **out);
+
+    int  write_map(const char *dest, int prog, int u);
+
+    int  write_model(const char *dest, int prog);
+
+    int  emit_json_str(FILE *f, const char *s);
+
+    int  write_header(const char *outc);
+
+    int  write_abi_header(const char *path);
 }
 
 pub trait EmitInit {
@@ -329,4 +335,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;
+} use EmitOps, EmitHeader, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;
