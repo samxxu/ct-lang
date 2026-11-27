@@ -17,7 +17,9 @@
 
 **签什么**：[D-032](../decisions/D-032.md) 设计——内部层（`selfhost/ct-ast` + `lib/core`）
 用两处显式 manifest `c-boundary = allow`；消费者默认 strict 不变；
-`c_boundary_for` 增加"单元自身目录 manifest"回退（与 `leaks_for` 对齐）。
+`c_boundary_for` 增加"单元自身目录 manifest"回退（与 `leaks_for` 对齐）；
+`lib/core/utf16` 保留 2 个 include-only shim（不为 2 个文件再加第三处 `ct.pkg`，
+也不把回退改成"最近祖先"）。
 
 **签完改哪两行**（只改这两行 + 可加一行签收日期）：
 
@@ -40,7 +42,7 @@ ls selfhost/ct-ast/ct.pkg lib/core/ct.pkg 2>/dev/null || echo "absent (expected)
 
 # 3) shim 计数与"只有 include"的事实
 find selfhost/ct-ast -name '*.shim.h' | wc -l          # 66
-find lib/core -name '*.shim.h' | wc -l                 # 6
+find lib/core -name '*.shim.h' | wc -l                 # 8（6 顶层 + utf16 2）
 find bootstrap/ct-ast -name '*.shim.h' | wc -l         # 68
 
 # 4) 判据与 ADR 一致（E-V3-10 新文 = CR-V3-1 新判据列）
@@ -57,7 +59,7 @@ grep -n "CR-V3-1" docs/phases/v1-PH-2/card.md
 | --- | --- | --- |
 | 1 | DEV | M1：`c_boundary_for` 回退 + 两处 `ct.pkg`（[施工卡](../design/d032-internal-c-boundary-construction.md)） |
 | 2 | DEV | M2/M3：69 个 include-only shim 退场 + seed 重生成 |
-| 3 | REV | 实施后**只读**复核：四个 `--show-c-boundary`（两正两负）、门禁末行、shim 72 → 3 |
+| 3 | REV | 实施后**只读**复核：四个 `--show-c-boundary`（selfhost/lib/core 两正、utf16 一负、删文件一负）、门禁末行、shim 74 → 5（selfhost 3 + utf16 2） |
 
 ## 5 交付
 

@@ -12,7 +12,7 @@
 | `c_boundary_for` 增加"单元自身目录 manifest"回退（与 `leaks_for` 对齐） | 不新增"路径前缀自动 allow"的特判 |
 | `selfhost/ct-ast/ct.pkg`、`lib/core/ct.pkg` 各写 `c-boundary = allow` | 不改 `c-boundary` 键名/取值，不新增语法 |
 | 删 69 个 include-only shim，include 移回对应 `.h.ct` | 不改消费者默认（strict 仍是默认） |
-| 保留 3 个有 C 原型的 shim | 不扩 §4.67 补头集合 |
+| 保留 3 个有 C 原型的 shim + `lib/core/utf16` 的 2 个 | 不扩 §4.67 补头集合 |
 | seed 重生成与对齐 | 不改版本号、不打 tag、不动 `examples`/`test` |
 
 ## 2 基线（2026-11-28 实测）
@@ -21,8 +21,9 @@
 | --- | --- |
 | `selfhost/ct-ast/**/*.shim.h` | 66（63 个只有 `#include`） |
 | `lib/core/*.shim.h` | 6（全部只有 `#include`） |
+| `lib/core/utf16/*.shim.h` | 2（`U16Str` / `U16String`，全部只有 `#include`；**保留**） |
 | `bootstrap/ct-ast/*.shim.h` | 68 |
-| 需保留的 shim | `frontend/module/Module.shim.h`、`frontend/module/ModuleBoundary.shim.h`、`tool/pkg/Pkg.shim.h` |
+| 需保留的 shim | selfhost：`Module`、`ModuleBoundary`、`Pkg`（有原型）；lib/core：`utf16/U16Str`、`utf16/U16String`（不在 manifest 目录内） |
 
 ## 3 切片
 
@@ -46,11 +47,15 @@
    `check-ast` fixpoint 0 失败；自举 2 轮；seed 两轮；`check-all` 8 门；`check-warnings` 0。
 4. 报告：66 → 3；逐文件列出"删了哪个 shim → 哪个 `.h.ct` 接收了哪些 include"。
 
-### M3 lib/core shim 退场
+### M3 lib/core shim 退场（8 → 2）
 
-1. 删 6 个 shim；include 移进 `Box` / `Option` / `Result` / `Str` / `String` / `Vec` 的 `.h.ct`。
-2. 注意 `.h.ct` 的 include 会进公开头；以 `check-warnings` 证明生成 C 零告警。
-3. 判据同 M2；另：`bootstrap/ct-ast/*.shim.h` 68 → 3。
+1. 删 6 个**顶层** shim；include 移进 `Box` / `Option` / `Result` / `Str` / `String` / `Vec` 的 `.h.ct`。
+2. **保留 `lib/core/utf16/U16Str.shim.h` 与 `U16String.shim.h`**：utf16 是 `lib/core` 的子目录，
+   manifest 回退只看单元自身目录，`lib/core/ct.pkg` 不覆盖它；不为 2 个文件再加第三处 `ct.pkg`
+   （D-032 §3 的 B2/B3 已记录不采纳理由）。
+3. 负例：`ct --show-c-boundary lib/core/utf16/<任一单元>` 必须报 `strict`。
+4. 注意 `.h.ct` 的 include 会进公开头；以 `check-warnings` 证明生成 C 零告警。
+5. 判据同 M2；另：`bootstrap/ct-ast/*.shim.h` 68 → 3（utf16 不在编译器闭包内，seed 里本来就没有）。
 
 ## 4 统一门禁（每片）
 
