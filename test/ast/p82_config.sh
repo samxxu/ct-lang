@@ -141,13 +141,13 @@ fi
 
 # 7) c-boundary: v1-PH-2 S9 flipped the no-key default to strict, so a
 #    leaks-only manifest is strict too; an explicit key still wins.
-got=$(env -u CT_C_BOUNDARY "$ctast" build -I "$work/err" --show-c-boundary "$work/err/prog.ct" 2>"$work/err.cb")
+got=$(env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 "$ctast" build -I "$work/err" --show-c-boundary "$work/err/prog.ct" 2>"$work/err.cb")
 if [ "$got" = "strict" ]; then
     ok "c-boundary: a leaks-only manifest is strict by default (S9)"
 else
     bad "c-boundary leaks-only" "want 'strict', got '$got' ($(head -1 "$work/err.cb"))"
 fi
-got=$(env -u CT_C_BOUNDARY "$ctast" build -I "$work/strict" --show-c-boundary "$work/strict/prog.ct" 2>"$work/strict.cb")
+got=$(env -u CT_C_BOUNDARY CT_STRICT_BOUNDARY=1 "$ctast" build -I "$work/strict" --show-c-boundary "$work/strict/prog.ct" 2>"$work/strict.cb")
 if [ "$got" = "strict" ]; then
     ok "c-boundary: an explicit c-boundary = strict still wins"
 else
