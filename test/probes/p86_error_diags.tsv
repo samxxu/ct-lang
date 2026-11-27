@@ -1,3 +1,7 @@
+# S7 REQ-TYPE-1 rebaseline (2026-11-27): 8 rows below were updated because the
+# default compile path now runs the §4.53 class judgements (5 x p45: 0 -> 1;
+# p44_error_type / p44_operand: same message, precise position; p49_own_addr:
+# initializer mismatch preempts L49-1). The other rows are byte-identical.
 test/ast/errors/L31_10_vec_global_brace.ct	1	11ba258b3309764ba7bfc8bbc8baf69aae039a0dde8798c5160734dcaaad06f2
 test/ast/errors/L31_11_vec_brace_assign.ct	1	354b03f81edbd2057bae668bb49ae5d76a38093afd8808734ee6abd756a9a9e3
 test/ast/errors/L31_13_foreach_release.ct	1	f1f34f1e0ed1a905cf9e80195c17a1e198f231d7da77b43dab21a6d7f0d014fd
@@ -241,8 +245,8 @@ test/ast/errors/p43_err_return_int/prog.ct	1	9ce91d644b9e70cec9ffeeee8d200b92e4b
 test/ast/errors/p43_err_return_ptr/prog.ct	1	ce72e813f8e85a5b73989de9c274691be264e8b126786e4524ba364ed37deb3b
 test/ast/errors/p43_err_return_result/prog.ct	1	7515045a6daaf226023308595567d153e1ceb86d57aa493c4171c69df7298497
 test/ast/errors/p43_err_return_struct/prog.ct	1	0e94d6490ca6db763aa48353325c42ef7a8138ac4360bf758053b8b305d18091
-test/ast/errors/p44_error_type/prog.ct	1	e3bb78651e8bcae2a9bb24b06447952145afe9a4a57223e1ac05e28319851368
-test/ast/errors/p44_operand/prog.ct	1	67148499a3a11edbe2d553442a8751f9427f714bf4a55d91a9b5a29ff0d312bc
+test/ast/errors/p44_error_type/prog.ct	1	0fb53df960ae115f48a7e2b25849ed6eec8afe3b04ad64ae2280eec6ec41b79d
+test/ast/errors/p44_operand/prog.ct	1	88a4488876f97e03276772062279d4638148dfb9c43f4a270110d1d9f732fc5a
 test/ast/errors/p44_outer/prog.ct	1	89b3b71787e93e645106696bd218126b2589525c8073f14f544535e7e5315f26
 test/ast/errors/p44_pos_closure/prog.ct	1	ef6921b484be58a675285b8cb80eccfe55209966d057dd886ca6af395c5e3387
 test/ast/errors/p44_pos_cond/prog.ct	1	a695c9076093f0444832ad900d7ac29df094e908cc3e3762d2cb58570e5db036
@@ -252,13 +256,13 @@ test/ast/errors/p44_pos_into/prog.ct	1	cb6de09c06945431f500487df0ff5d78114850ab3
 test/ast/errors/p44_pos_short/prog.ct	1	fefe3ede7742d4e3c8a5cd65dbc347607e65ae2a4e7d8214e5c95a3446a3a043
 test/ast/errors/p44_pos_ternary/prog.ct	1	d649cfb825b49cb65992c1428e044a6aa7e93ce8f63e0c0dfa6543d6a1a17419
 test/ast/errors/p44_pos_terncond/prog.ct	1	4e3b64c0f616e8a58e7f7fdadd856df03620418e2683e6f85db772bd0341d707
-test/ast/errors/p45_assign/prog.ct	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-test/ast/errors/p45_container/prog.ct	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-test/ast/errors/p45_depth/prog.ct	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-test/ast/errors/p45_init/prog.ct	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-test/ast/errors/p45_return/prog.ct	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+test/ast/errors/p45_assign/prog.ct	1	35c20fdd09ce88e5ba45f6726096ae54667d8d69b9c6b71b526349c83174db0d
+test/ast/errors/p45_container/prog.ct	1	246c391df5bfc5a6531aac31205ea75802508a62199a283d3e944d852736ea4a
+test/ast/errors/p45_depth/prog.ct	1	0ae4382a81c8dc837337598ed286d7aefad5a3675a8597b69d37405b6aced8ba
+test/ast/errors/p45_init/prog.ct	1	7cb5b3d6a5892071fdedf8681f187e5df03889049d0cd6eb2009d432f24ca57c
+test/ast/errors/p45_return/prog.ct	1	1400c01cd9f21cc4633fe52ea1f807caf453ef2e0ce21f12db6d7d5c044fb635
 test/ast/errors/p47_map_struct_key.ct	1	79bd412e6d9243d65d9012d02fec46c73509ecef06bf7dff0929c23919b549f9
-test/ast/errors/p49_own_addr.ct	1	c5ceef1f6efe0198ada862575d2ca6f67ceae386e19a209f2a0b9bc4aa411147
+test/ast/errors/p49_own_addr.ct	1	e3eae4bb65a4dfaecca4bf10372fc566fa6afef4b60347a924ab50646b41b9e4
 test/ast/errors/p49_own_dup.ct	1	e6c0d572304963898bc84f5404316787b0baa039b0a687e6bf247d9665b787ef
 test/ast/errors/p49_own_int_addr.ct	1	af8bf85ff9845ade4f4c27c58c3c019713b2d64ba665cb4bec99a471044e4a30
 test/ast/errors/p49_own_return.ct	1	e64f468247ea6e565e2427ba9c6f598fdfb3922f668d770a6db359c1786a378d

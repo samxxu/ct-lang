@@ -161,8 +161,13 @@ neg() {
         bad "$name" "missing diagnostic '$pattern': $(head -2 "$work/$name.log")"
     fi
 }
+# SH-102's own wording for this shape ("cannot return a borrowed view as an
+# owning string") is an emitter-pass finding; the parse-time §4.53 return
+# judgement now wins on the default path, exactly as `ct build` has since
+# v1-PH-1 S3 (the bare compile path catches up here). The fixture is still
+# rejected with the same `file:line:col` type mismatch.
 neg neg_escape test/ast/p80_retain/neg_escape.ct \
-    "cannot return a borrowed view as an owning string" "escape of a borrowed view"
+    "return: expected 'struct String', got 'struct Str'" "escape of a borrowed view (type mismatch)"
 neg neg_double_free test/ast/p80_retain/neg_double_free.ct \
     "cannot release a borrowed container view" "double free of a borrowed element"
 neg neg_goto test/ast/p80_retain/neg_goto.ct \

@@ -114,7 +114,12 @@ p49_neg() {
         ok_msg "$name ($wpos)"
     fi
 }
-p49_neg p49_own_addr "'own' requires a malloc, calloc or factory call returning 'struct P *'" 14:1
+# E49-3: a non-malloc pointer expression stays rejected. v1-PH-2 S7 puts the
+# §4.53 initializer judgement on the default path, so this fixture (whose
+# initializer also has the wrong type: `&x` is `int *` for a `struct P *`
+# target) reports the type mismatch first. The L49-1 contract itself stays
+# pinned by p49_own_int_addr below, whose initializer is type-compatible.
+p49_neg p49_own_addr "initializer: expected 'struct P *', got 'int *'" 14:23
 p49_neg p49_own_int_addr "'own' requires a malloc or calloc initialiser" 6:1
 p49_neg p49_own_dup "duplicate 'own' binding for 'p'" 16:1
 p49_neg p49_own_return "'own' in a return type is not supported; mark the call site instead: 'own struct <T> *p = factory();'" 10:1
