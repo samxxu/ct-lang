@@ -682,7 +682,12 @@ static int lver_tmp_prefix_ok(const char * nm) {
                                     p += 5;
                                 }
                                 else {
-                                    return 0;
+                                    if (strncmp(p, "sold", 4) == 0) {
+                                        p += 4;
+                                    }
+                                    else {
+                                        return 0;
+                                    }
                                 }
                             }
                         }

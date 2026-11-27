@@ -314,6 +314,7 @@ pub struct ct_tstmt {
     int kcap;
     int aux;
     int err_edge;       /* `return err:` / `break err:` / `continue err:` */
+    int is_borrow;      /* assignment / return value is a borrowed view (sflags bit 2) */
     int flags;          /* per-kind child-shape bitmask (S1b-S2, see TBuilder) */
     const char *text;   /* goto / label name (S1b-S2) */
     const char *text2;  /* foreach: the container's C unit name */
@@ -349,6 +350,7 @@ pub struct ct_tvar {
     const char *spelling; /* the declaration's own type spelling */
     int is_static;      /* a function-local with static storage duration */
     int is_unused;      /* a match binding: `__attribute__((unused))` */
+    int is_borrow;      /* the initialiser is a borrowed view (sflags bit 2) */
     int has_attr;       /* an explicit GNU attribute on the declaration */
     const char *attr;   /* the attribute spelling, verbatim (`__attribute__((…))`) */
 }

@@ -225,6 +225,7 @@ struct backend_tir_ct_tstmt {
     int kcap;
     int aux;
     int err_edge;
+    int is_borrow;
     int flags;
     const char * text;
     const char * text2;
@@ -255,6 +256,7 @@ struct backend_tir_ct_tvar {
     const char * spelling;
     int is_static;
     int is_unused;
+    int is_borrow;
     int has_attr;
     const char * attr;
 };

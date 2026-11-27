@@ -176,10 +176,15 @@ struct backend_lir_ct_lstmt {
     const char * spelling;
     const char * attr;
     const char * member;
+    const char * text;
     const char * count;
     const char * vptr;
     int vptr_loop;
     int zero_init;
+    int retain_rhs;
+    const char * retain_pfx;
+    int sold_temp;
+    const char * value_type;
     int expr;
     int rhs;
     int cond;
@@ -214,6 +219,8 @@ struct backend_lir_ct_lblock {
     int term_scope;
     int ret_expr;
     int ret_temp;
+    int ret_retain;
+    const char * ret_pfx;
     int term_err;
     int * term_cleanups;
     int ntermc;

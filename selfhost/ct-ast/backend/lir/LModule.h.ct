@@ -143,6 +143,8 @@ namespace backend::lir;
 #define LS_MATCHYIELD      26
 #define LS_RETBLOCK        27
 #define LS_DO              28
+#define LS_RETAINPARAM     29
+#define LS_MATCHWRAP       30
 
 /* Jump kinds. */
 #define LJ_BREAK            1
@@ -177,6 +179,7 @@ namespace backend::lir;
 #define LTK_NEW             6
 #define LTK_Q               7
 #define LTK_MATCH           8
+#define LTK_SOLD            9
 
 /* RawC origins (contract §4.1). */
 #define LR_INCLUDE          1
@@ -247,10 +250,15 @@ pub struct ct_lstmt {
     const char *spelling; /* LS_DECL: the source type spelling, verbatim */
     const char *attr;     /* LS_DECL: the explicit GNU attribute, verbatim */
     const char *member;   /* LS_MATCHBIND: the payload field name */
+    const char *text;     /* LS_MATCHBIND / LS_MATCH: the arm's cond encoding */
     const char *count;  /* LS_DECL: the array's element count for a vptr loop */
     const char *vptr;   /* LS_DECL: generated vptr statements, one per line */
     int vptr_loop;      /* LS_DECL: 1 = the vptr lines sit inside a for loop */
     int zero_init;      /* LS_DECL: an owning string local starts `= { 0 }` */
+    int retain_rhs;     /* LS_DECL/LS_ASSIGN: wrap the value in `<pfx>_retain(&(...))` */
+    const char *retain_pfx; /* LS_DECL/LS_ASSIGN: retain/release prefix */
+    int sold_temp;      /* LS_ASSIGN: `__ct_soldN` materialisation, 0 = none */
+    const char *value_type; /* LS_ASSIGN: the owning C type for `__ct_sold` */
     int expr;           /* init / lhs / value / condition / subject */
     int rhs;            /* assignment rhs */
     int cond;
@@ -286,6 +294,8 @@ pub struct ct_lblock {
     int term_scope;     /* target scope of the terminator (0 = function root) */
     int ret_expr;       /* LT_RETURN value expression, 0 for `return;` */
     int ret_temp;       /* LTemp id materialising the value, 0 = none */
+    int ret_retain;     /* LT_RETURN: the materialised value takes a reference */
+    const char *ret_pfx;/* LT_RETURN: retain/release prefix for that value */
     int term_err;       /* LT_RETURN uses the error edge */
     int *term_cleanups;
     int ntermc;
@@ -954,6 +964,7 @@ static const char *lir_tmp_prefix(int kind)
         case LTK_NEW: return "__ct_new";
         case LTK_Q: return "__ct_q";
         case LTK_MATCH: return "__ct_match";
+        case LTK_SOLD: return "__ct_sold";
         default: return "__ct_tmp";
     }
 }

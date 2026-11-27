@@ -1726,6 +1726,7 @@ static int tb_declare(struct backend_tir_TBuilder * tb, int n, int is_param, int
     m->vars[(vid - 1)].spelling = runtime_text_ct_intern(spelling);
     m->vars[(vid - 1)].is_static = ((ar->nodes[n].aux == 1) ? 1 : 0);
     m->vars[(vid - 1)].is_unused = (((!is_param) && (ar->nodes[n].aux == 3)) ? 1 : 0);
+    m->vars[(vid - 1)].is_borrow = ((ar->nodes[n].sflags & 2) ? 1 : 0);
     m->vars[(vid - 1)].has_attr = ((ar->nodes[n].attr >= 0) ? 1 : 0);
     m->vars[(vid - 1)].attr = ((ar->nodes[n].attr >= 0) ? runtime_text_ct_intern(ar->__runtime_arena_arenaops_vptr->str_at(ar, ar->nodes[n].attr)) : "");
     if (((tb->func_decl > 0) && (tb->scope > 0))) {
@@ -1927,6 +1928,13 @@ static int tb_stmt_match_arm(struct backend_tir_TBuilder * tb, int n) {
     if (tb_arm_bindings(tb, n) != 0) {
         return (-1);
     }
+    if (ar->nodes[n].d >= 0) {
+        int g = tb_expr(tb, ar->nodes[n].d, 0);
+        if (g <= 0) {
+            return (-1);
+        }
+        tb->m->stmts[(sid - 1)].guard = g;
+    }
     if (ar->nodes[n].c >= 0) {
         int ye = tb_expr(tb, ar->nodes[n].c, 0);
         if (ye > 0) {
@@ -1989,6 +1997,7 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
             if (sid < 0) {
                 return (-1);
             }
+            m->stmts[(sid - 1)].is_borrow = ((ar->nodes[n].sflags & 2) ? 1 : 0);
             backend_tir_tmod_stmt_add_kid(m, sid, tb_expr(tb, n, 0));
             return sid;
         case N_RET:
@@ -1998,6 +2007,7 @@ static int tb_stmt(struct backend_tir_TBuilder * tb, int n) {
             }
             m->stmts[(sid - 1)].aux = ar->nodes[n].aux;
             m->stmts[(sid - 1)].err_edge = (ar->nodes[n].text2[0] ? 1 : 0);
+            m->stmts[(sid - 1)].is_borrow = ((ar->nodes[n].sflags & 2) ? 1 : 0);
             if (ar->nodes[n].b >= 0) {
                 for (c = ar->nodes[n].b; c >= 0; c = ar->nodes[c].next) {
                     t = tb_stmt(tb, c);

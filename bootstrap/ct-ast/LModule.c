@@ -103,6 +103,8 @@
 #define LS_MATCHYIELD      26
 #define LS_RETBLOCK        27
 #define LS_DO              28
+#define LS_RETAINPARAM     29
+#define LS_MATCHWRAP       30
 #define LJ_BREAK            1
 #define LJ_CONTINUE         2
 #define LB_ROOT             1
@@ -128,6 +130,7 @@
 #define LTK_NEW             6
 #define LTK_Q               7
 #define LTK_MATCH           8
+#define LTK_SOLD            9
 #define LR_INCLUDE          1
 #define LR_RECIPE           2
 #define LR_INTRINSIC        3
@@ -764,6 +767,8 @@ static const char * lir_tmp_prefix(int kind) {
             return "__ct_q";
         case LTK_MATCH:
             return "__ct_match";
+        case LTK_SOLD:
+            return "__ct_sold";
         default:
             return "__ct_tmp";
     }

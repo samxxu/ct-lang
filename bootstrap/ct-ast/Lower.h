@@ -194,9 +194,15 @@ struct backend_lir_Lower {
     int sb_block[64];
     int sb_kind[64];
     const char * sb_prefix[64];
+    int sb_own[64];
+    int sb_notail[64];
     int sb_n;
     int expr_depth;
     int hoist_depth;
+    int p_n;
+    const char * p_name[64];
+    const char * p_prefix[64];
+    int p_kind[64];
     int cv_ci[64];
     const char * cv_name[64];
     int cv_n;
