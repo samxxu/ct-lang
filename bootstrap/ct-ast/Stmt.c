@@ -784,8 +784,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
             if (((is_err && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "void") != 0))) {
                 return tool_diag_ct_sem_error(rline, rcol, "an error return needs a value", _self->mem->path);
             }
-            if (((((_self->ex->types_mode && (*_self->ex->types_mode)) && (_self->ex->ncl_stack == 0)) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "void") != 0))) {
-                if (tool_diag_ct_type_warn(rline, rcol, "", tool_sh_ct_scratch_fmt("return: missing a value (function returns '%s')", _self->sym->ret_type), _self->sup->mem->path) != 0) {
+            if ((((((_self->ex->types_mode && (*_self->ex->types_mode)) || tool_diag_ct_type_class_return()) && (_self->ex->ncl_stack == 0)) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "void") != 0))) {
+                if (tool_diag_ct_type_class_warn(rline, rcol, "", tool_sh_ct_scratch_fmt("return: missing a value (function returns '%s')", _self->sym->ret_type), _self->sup->mem->path) != 0) {
                     return (-1);
                 }
             }
@@ -874,9 +874,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                 return (-1);
             }
         }
-        if ((((_self->ex->ncl_stack == 0) && _self->sym->ret_type[0]) && (is_err || (_self->ex->types_mode && (*_self->ex->types_mode))))) {
+        if ((((_self->ex->ncl_stack == 0) && _self->sym->ret_type[0]) && ((is_err || (_self->ex->types_mode && (*_self->ex->types_mode))) || tool_diag_ct_type_class_return()))) {
             if (strcmp(_self->sym->ret_type, "void") == 0) {
-                if (tool_diag_ct_type_warn(eline, ecol, "", "return: a value is not allowed in a void function", _self->sup->mem->path) != 0) {
+                if (tool_diag_ct_type_class_warn(eline, ecol, "", "return: a value is not allowed in a void function", _self->sup->mem->path) != 0) {
                     return (-1);
                 }
             }
