@@ -13,9 +13,9 @@
 | S0–S8 尾、S8c、S9 | 已入库；S8r2 单文件默认 LIR、known-gap 清零；S8 尾 D5/D6/外壳落盘（`Emitter.h.ct` 9872→1545）；S8 收尾 D-013 真 lowering（自举 1638/1638、语料 498/498）与外壳行化（882 夹具 0 差异） |
 | S8 §5 签字 | **已完成（`0e2edb15`，2026-11-28）**：两份 S8 文档 REV 均「复核通过」，dogfooding §3.7 可读性通过，`D-030` 转 `accepted` |
 | S8a（LANG-31，可砍） | **deferred**：未开工，issue 已转 `deferred`；触发条件见卡 §6 E-V3-9d |
-| S8b 剩余 | §3.6 已补 D6 函子、D4（`backend/mem`）、D2 符号表行块、D3a–c；**所有者 2026-11-28 裁定按方案 A 补完**，施工卡 [s8b-remaining-construction](../../design/s8b-remaining-construction.md) |
+| S8b 剩余 | §3.6 已补 D6/D4/D2 行块/D3a–c；**R1/R2 已完成**（`6ba2a627` Pkg 53→51、`1d93fd77` Symbols 41→24；审计表 `docs/design/s8b-rem-audit.tsv`）；R3/R4/R5–R7/R8 待开 |
 | 未关闭 issue | DESIGN-1、TEST-27（`open`） |
-| ADR | `D-030` 已 `accepted`（REVIEW 2026-11-28）；`D-032`（内部层 C 边界豁免）`proposed`，**待 REV 签收** |
+| ADR | `D-030` 已 `accepted`（REVIEW 2026-11-28）；`D-032` 已 `accepted`（REVIEW 2026-11-28，`bdc505fe`） |
 | 判据 | `E-V3-10` 已由 [CR-V3-1](card.md#8-判据变更记录) 改写为「selfhost/ct-ast 与 lib/core 各一处 manifest allow」；实施卡 [D032-C1](../../design/d032-internal-c-boundary-construction.md) 已交 |
 
 ## 2 开工闸（不清零不进 S10）
@@ -134,12 +134,12 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 
 | # | 事项 | 状态 | 写者 / 批者 | 前置 | 依据 |
 | --- | --- | --- | --- | --- | --- |
-| Q-1 | D-032 设计签收（内部层 C 边界豁免） | **待签** | REV | 无（ADR 已 `proposed`） | [D-032](../../decisions/D-032.md)、[签收包](../../reviews/2026-11-28-signoff-package.md) |
+| Q-1 | D-032 设计签收（内部层 C 边界豁免） | **已完成** | REV | 无（ADR 已 `proposed`） | [D-032](../../decisions/D-032.md)、[签收包](../../reviews/2026-11-28-signoff-package.md) |
 | Q-2 | D032-C1 实施 M1（`c_boundary_for` 回退 + 两处 `ct.pkg`） | 待开 | DEV | Q-1 | [施工卡](../../design/d032-internal-c-boundary-construction.md) |
 | Q-3 | D032-C1 实施 M2（selfhost 63 个 shim 退场） | 待开 | DEV | Q-2 | 同上 |
 | Q-4 | D032-C1 实施 M3（lib/core 8 个 shim 退场，含 utf16 子树） | 待开 | DEV | Q-3 | 同上 |
-| Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | 待开 | DEV | 无（与 Q-2 互斥文件集，可先做） | [S8B 施工卡](../../design/s8b-remaining-construction.md) |
-| Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 登记 | DEV | Q-5 与审计表复核 | 同上 §3 |
+| Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | **已完成**（`6ba2a627`、`1d93fd77`） | DEV | 无 | [S8B 施工卡](../../design/s8b-remaining-construction.md)、[审计表](../../design/s8b-rem-audit.tsv) |
+| Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | Q-5 与审计表复核 | 同上 §3 |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **登记（未立项）** | ARCH / REQ 出 ADR | 无 | 差异清单 §3d；需新 ADR，不属本卡 |
 | Q-8 | I2 接口值下标（四问待所有者裁定） | **登记（未立项）** | 所有者裁定 | 无 | RFC 评估 §3、§4 |
 | Q-9 | dist 冒烟 | 登记 | 所有者 / CI | tag 时 `release.yml` 在 ubuntu 上跑同组冒烟 | 卡 §7.3；本文 §5 |
