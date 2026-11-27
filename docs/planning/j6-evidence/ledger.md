@@ -17,9 +17,10 @@
 > `外部` 必须写明外部归属。
 > SH-117 收尾（2026-11-24，实现提交 `0469dd01` / `0c9b29d1`）：P-3.5 / P-5.2–P-5.6 的夹具与 J-4b 契约已入库，
 > 本仓段 0 缺失 / 0 部分。
-> 台账当前结论：**本仓段 28 已过 / 0 部分 / 0 缺失 / 1 阻塞；外部段 5 项已转 std 包**。
+> 台账当前结论：**本仓段 29 已过 / 0 部分 / 0 缺失 / 0 阻塞；外部段 5 项已转 std 包**。
+> P-1.3 于 2026-11-28（v1-PH-2 S7-e）补上迁移 lint 三档 dry-run，见 [p1_3_lint.md](p1_3_lint.md)。
 >
-> <!-- j6:counts passed=28 partial=0 missing=0 blocked=1 external=5 -->
+> <!-- j6:counts passed=29 partial=0 missing=0 blocked=0 external=5 -->
 
 ## P-1 语料测量（J-6a）
 
@@ -27,7 +28,7 @@
 | --- | --- | --- | --- | --- |
 | P-1.1 固定基线 | 声明扫描范围 + 一条可复跑命令 + 计数一致 | `examples test lib`：1381 个 `.ct` / 31,400 行；字面量 2,321（含 24 处 `#include "…"`）、`char *` 627、`T a[] =` 37、`T a[]` 后缀 38、`ref/out` 16、`new` 54（`3e3c52ad`，命令见下） | 已过 | REQ |
 | P-1.2 按特性分类 | 每文件 6 个布尔列的 CSV（路径 + 字面量 / `char *` 形参 / `T a[]` 形参 / `T a[] =` / `ref/out` 标识符 / `new` 标识符），入库可重跑 | [p1_2.csv](p1_2.csv)（1381 行 + 表头，6 列布尔）；生成器 [gen_p1_2.py](gen_p1_2.py)：`python3 docs/planning/j6-evidence/gen_p1_2.py > docs/planning/j6-evidence/p1_2.csv` | 已过 | REQ |
-| P-1.3 自动化率 | 迁移 lint dry-run 的「可自动 / 需人工 / 语义需确认」三档百分比 | 阻塞：迁移 lint 尚未实现，无法 dry-run；所有者 2026-11-23 裁定：迁移 lint 归 v1.x，不阻塞 v1.0 | 阻塞 | DEV |
+| P-1.3 自动化率 | 迁移 lint dry-run 的「可自动 / 需人工 / 语义需确认」三档百分比 | 工具 [`tools/migrate_lint.py`](../../../tools/migrate_lint.py)（`--selftest` 13 例）对 `examples test lib` 的 1,532 个 `.ct` 做 dry-run：**可自动 17（2.9%）/ 需人工 414（69.5%）/ 语义需确认 165（27.7%）**，可迁移站点 596，C 边界保留 1,365；清单 [p1_3_lint_files.tsv](p1_3_lint_files.tsv)，报告 [p1_3_lint.md](p1_3_lint.md)；复跑命令见下 | 已过 | DEV |
 | P-1.4 快照回放 | 基线 sha + 复跑命令 + 计数与 P-1.1 一致 | `3e3c52ad` + 下方命令；与 P-1.1 同一命令 | 已过 | REQ |
 
 ```sh
@@ -113,14 +114,15 @@ find examples test lib -name '*.ct' -print0 | xargs -0 grep -hoE '\bnew\b' | wc 
 
 ## 结论
 
-- **本仓段已过**：28 已过 / 0 部分 / 0 缺失 / 1 阻塞（J 表另计；`<!-- j6:counts -->` 与逐行计数由 check-docs 校验）。
+- **本仓段已过**：29 已过 / 0 部分 / 0 缺失 / 0 阻塞（J 表另计；`<!-- j6:counts -->` 与逐行计数由 check-docs 校验）。
 - **外部段已转出**：P-3.6、P-6.1–P-6.4 共 5 项标 `外部`，归 std 包；不计入本仓 v1.0 门禁。
 - 上一轮闭合：P-1.2（[p1_2.csv](p1_2.csv) + 生成器）、P-3.7 / P-3.8 / P-4.3（SH-106）/ P-4.5（guide §7.1）/ P-5.7。
 - SH-117 本轮闭合（2026-11-24）：P-3.5（`String`/`Str` → `char *` 四个值位置硬错）、
   P-5.2 / P-5.3（out/ref owning 赋值点 release 旧值 + `ref` 显式 release 硬错）、
   P-5.4（错误路径 out 赋值生效）、P-5.5（`out Str` / `ref int[]` 白名单与负例）、
   P-5.6（同组夹具并入 ASan/UBSan）、J-4b（spec 逃逸契约 + 存储负例）。
-- **P-1.3**（迁移 lint dry-run）仍 `阻塞`：迁移 lint 归 v1.x；所有者 2026-11-23 已裁定
-  v1.0 可带此 `阻塞` 发布。
+- **P-1.3 已闭合（2026-11-28）**：迁移 lint 三档 dry-run 落库（[p1_3_lint.md](p1_3_lint.md)，
+  工具 `tools/migrate_lint.py`）；可自动 2.9% / 需人工 69.5% / 语义需确认 27.7%（596 个可迁移
+  站点）。文本级 lint，不含编译器内建；边界见报告 §5。
 - **J-4a 判据需修订**：照原文写“容器硬错”会与 v0.88 实测冲突；按实测改判据，风险由 LANG-22 承接。
 - **J-4b** 已写契约与存储负例：类型系统不硬禁逃逸，靠 lint + ASan 兜底（`escape_ref_store.ct` 为灵敏度负例）。

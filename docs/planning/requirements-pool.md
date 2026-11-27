@@ -407,10 +407,10 @@ v0-PH-52 的 D52-6 指向本条。
 | `what` | 让日常 `.ct` 代码不再直接写指针：堆单对象、多返回、数组传递、字符串、回调五类场景各有值类型/句柄入口；指针、`own`、`defer`、`errdefer` 保留为逃生通道，不被禁止。 |
 | `why` | 五类日常用途仍要求用户直接管指针与生命周期，和 Ct 的句柄/值类型方向不一致；希望把悬垂与泄漏路径收窄到可文档化、可机检的借用视图契约。 |
 | `priority` | P1 |
-| `status` | `planned`（主体已交付；余 P-1.3 归 `v1-PH-2` S7） |
+| `status` | `planned`（主体已交付；P-1.3 迁移 lint 已于 2026-11-28 落库） |
 | `owner` | REQ（待指派） |
 | `last-touched` | 2026-11-25 |
-| `block` | 本仓段 J-6 已 28 通过 / 0 缺失 / 0 部分；余 P-1.3 迁移 lint；外部 5 项归 std 包 |
+| `block` | 本仓段 J-6 已 29 通过 / 0 缺失 / 0 部分；P-1.3 迁移 lint 三档 dry-run 已落库；外部 5 项归 std 包 |
 
 > 方向与契约见 [pointer-free-v2](../proposals/pointer-free-v2.md)，裁定见 [D-011](../decisions/D-011.md)，
 > phase 排期见 [pointer-free-phase-plan](pointer-free-phase-plan.md)。实现方案不在本池展开。

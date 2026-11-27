@@ -140,7 +140,7 @@ FP=0（2026-11-27，冻结 seed 构建的编译器）：
 2. **S7-b**：`check --types` 与默认路径共用同一判据（消除「`check` error / `build` warning」双口径）——只对 §3 之外的族生效；
 3. **S7-c**：写入摘要的最小形态（P1–P4、N1–N5 全绿；P5/P6 显式放行）；
 4. **S7-d**：`--check-level=off` 逃生与 `--check-level=strict` 灰度开关；
-5. **S7-e**：P-1.3 迁移 lint 三档 dry-run。
+5. **S7-e**：P-1.3 迁移 lint 三档 dry-run —— **已完成（2026-11-28）**：`tools/migrate_lint.py`，结果见 [p1_3_lint.md](j6-evidence/p1_3_lint.md)。
 
 ## 6.1 REQ-TYPE-1 落地（2026-11-27，v1-PH-2 S7）
 
