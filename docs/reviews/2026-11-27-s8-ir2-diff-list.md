@@ -113,10 +113,17 @@ $ bash selfhost/check-ast.sh
 | `emit_type_decl` / `emit_impls` / `em_decl_*` | emitter | `EmitDecl.h.ct`（D5 尾，已移） |
 | `emit_expr` / `emit_node` / `emit_field` / `emit_inline` / `emit_outconv` / `em_*` | emitter | `EmitExpr.h.ct`（D6 尾，已移） |
 
-`Emitter.h.ct` 现在 1623 行（原 9872 行），只剩 `emit_program` / `emit_unit` /
+`Emitter.h.ct` 现在 1590 行（原 9872 行），只剩 `emit_program` / `emit_unit` /
 fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used` 的
-定义都在子单元，宿主只按名读写。**仍未做到**四个入口“只消费 LModule”：编译
-模式的 `emit_program` 体、类型/全局节点的遍历仍在宿主读 AST 与符号表。
+定义都在子单元，宿主只按名读写。**S8 外壳收尾后**，三个产品入口
+（`emit_program` / `emit_unit_body` / `write_unit_header_body`）已不再扫描 AST
+或符号表来决定顶层顺序、include 块、函数原型与实例/胶水集合，见 §3f。
+
+**仍未做到**四个入口“只消费 LModule”：`write_map` 的 map JSON 仍读符号表与
+AST；此外 `emit_struct_fwd` / `emit_trait_decls` / `emit_vtable_fwd` /
+`emit_link_externs` / `emit_impls` / `emit_maps` / `emit_generic_defs` /
+`emit_unit_init` / `emit_string_literals` 的**选择**仍读符号表（它们打印的是
+节点内容，不在本轮“实例闭包 / ADT-Box 胶水 / header / 原型”五项内）。
 
 ### 3c 施工记录（S8/S8r2 + S8 尾）
 
@@ -138,14 +145,16 @@ fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used`
 
 ### 3d 仍未做（剩余清单）
 
-1. **外壳部分 LModule 化**（S8 原目标，本轮推进、未完成）：`LModulePlan`
-   已增 `ct_lshellrow` 行与 ABI 导出表；`emit_program` / `emit_unit_body` /
-   `write_unit_header_body` 的 **PP / 类型 / 全局 / `_Static_assert` / 函数 /
-   Drop 面**改为读行，`write_abi_header` 读 plan 的导出表，写者身份与内建头
-   清单早已在 plan。**仍未迁**：实例闭包（`emit_struct_insts` /
-   `emit_struct_impls` / `inst_*` 判定）、ADT 胶水（`emit_adt_life_defs` /
-   `adt_*`）、Box 胶水、header 的 include/dep/shim 组装、map JSON、函数原型
-   的选择；这些仍读符号表/AST。
+1. **外壳 LModule 化（S8 外壳收尾已把五项迁完，map JSON 未迁）**：
+   `LModulePlan` 的 `ct_lshellrow` 增加 `hdr` 位与 `LPS_INC` / `LPS_PROTO` /
+   `LPS_INPROTO` / `LPS_INST` / `LPS_INSTPROTO` / `LPS_INSTHELP` / `LPS_IMPL` /
+   `LPS_BOXPROTO` / `LPS_BOXHELP` / `LPS_ADTLIFE` / `LPS_STRPROTO` 行；实例闭包
+   （`emit_struct_insts` / `emit_struct_impls` / `inst_*` 判定）、ADT 胶水
+   （`emit_adt_life_defs`）、Box 胶水、header 的 include/dep/shim 组装（含
+   `CT_UNIT_PRIVATE` 与 `<stddef.h>`）、函数原型选择（含 inherent）均改为读行，
+   §3f 给机制表。**仍未迁**：`write_map` 的 map JSON（traits / structs /
+   functions / impls / calls / maps 六段仍读符号表与 AST）；以及 §3b 末段列出的
+   其余写者选择。
 2. **回退改真修复**（让覆盖率回到 100%）：D-013 owning 字段写
    （`Lownfield`，14 个自举函数）与 owning 句柄局部 / 参数 / 结果
    （`Lglue` 等，6 个）**已在 S8 收尾转为真 lowering**（§3e）；仍保留的函数级
@@ -206,6 +215,64 @@ DEV 的 `test/ast` 逐字节探针（非门禁，882 个夹具）：**4 个仍�
 箭头字段写的 `{ … }` brace。其余形状已全部回退到 AST（0 差异、0 退出码差异）。
 这些夹具的**行为**由 `check-ast` 兜底；本清单不把它们计作“已降级”。
 
+## 3f S8 外壳收尾：LModule 行化 + `test/ast` 逐字节清零（2026-11-27）
+
+### 3f.1 LModule 字段与迁移
+
+`ct_lshellrow` 增加 `int hdr;`（0 = `.c` 写者消费，1 = `.h` 写者消费），新增
+行种类与位置常量：
+
+| 行 / API | 含义 |
+| --- | --- |
+| `LPS_INC` + `LINC_C_IO` / `LINC_C_PRE` / `LINC_C_POST` / `LINC_H_PRE` / `LINC_H_POST` | include 块逐行数据；`text` 为空串即空行，空行分组由模块层决定 |
+| `LPS_PROTO` | 符号表函数行；`hdr` 选 `.c` 全量 / `.h` 导出 |
+| `LPS_INPROTO` | `N_IMPL` 节点；pub 非模板 inherent 块的原型 |
+| `LPS_INST` / `LPS_INSTPROTO` / `LPS_INSTHELP` | 实例闭包：结构外壳 / 元素原型 / 元素 helpers |
+| `LPS_IMPL` | `node` = impl 行、`aux` = 实例行；模板方法（原型或定义） |
+| `LPS_BOXPROTO` / `LPS_BOXHELP` | 内建 `Box<T>` 胶水 |
+| `LPS_ADTLIFE` | owning ADT 的 `retain` / `release` |
+| `LPS_STRPROTO` | 编译模式 `String` / `U16String` 入口声明（`aux` 1 = 胶水处重复的一份） |
+| `lmod_plan_shell_add_stage(kind, unit, node, aux, hdr, text)` / `lmod_plan_row_hdr(i)` | 写带 `hdr` 的行 / 读 `hdr` |
+
+迁移后的读者（原位置 → 现数据）：
+
+| 判定 | 原读者 | 现数据 |
+| --- | --- | --- |
+| 编译/.c/.h 的 include 块（I/O、`<stddef.h>`、`CT_UNIT_PRIVATE`、自身头、deps、层头、空行） | `emit_unit_body` / `write_unit_header_body` 扫 AST + unit 表 | `LPS_INC` 行（§3f.1 位置） |
+| 函数原型 | `for (fn_start..fn_end)` / `sym->nfunc` + `emit_proto` | `LPS_PROTO` 行 |
+| inherent 原型 | `emit_inherent_protos(prog)` 扫 `N_IMPL` | `LPS_INPROTO` 行 |
+| 实例闭包 | `emit_struct_insts` / `emit_struct_impls` 扫 `ct_insts` / `ct_impls` / `ct_tmpls` | `LPS_INST` / `LPS_IMPL` / `LPS_INSTPROTO` / `LPS_INSTHELP` 行 |
+| Box 胶水 | 两个写者各扫一遍 `ct_insts` | `LPS_BOXPROTO` / `LPS_BOXHELP` 行 |
+| ADT 胶水 | `emit_adt_life_defs` 扫 `ct_adts` + `adt_owns` | `LPS_ADTLIFE` 行 |
+
+选择逻辑（`via_hdr`、foreign-element、instance helper 归属、Box 归属、ADT owns）
+搬进 `frontend/module/Module.h.ct` 的 `ct_shell_plan_add_*` 系列；`EmitShell` /
+`Emitter` 里对应的 AST/符号表兜底分支已删除。`write_map`（map JSON）未迁，
+见 §3d。
+
+### 3f.2 四个 `test/ast` 差异（清零）
+
+| 夹具 | 差异 | 根因 | 修复 |
+| --- | --- | --- | --- |
+| `p106_str_escape/ret_u16str`、`p80_literal/literal`、`p80_methods/prog` | 多出 `struct U16Str __ct_tmpN = U16String_as_str(...)` | LIR 的 receiver-chain 把 **receiverless inherent static call**（`Node.aux == 11`，`a == -1`）的 `kids[0]`（第一个实参）当成 receiver 提升 | 链扫描排除 `aux == 11`；实参按 AST 的 type-host 规则内联 |
+| `p80_methods/prog`、`p80_retain/field_ptr` | owning 句柄赋值少一层 `{ … }` | `sb_assign` 对 String / owning ADT 目标总是加 brace；LIR 只在 `__ct_sold` / retain 路径加 | `ct_lstmt.brace`：本地 tracked 目标或 plain struct 的 `->` 字段加 brace；deref 目标与泛型实例字段（`Box<String>.value`）保持无 brace |
+
+逐字节探针（882 个 `test/ast/**/*.ct`，可编译 403 个）：
+
+```console
+$ CT_LIR=0 ct <f> -o a.c; ct <f> -o b.c   # 每个夹具
+test/ast total 882 same 403 diffs 0 noncompile 479
+```
+
+### 3f.3 复查命令
+
+```console
+$ bash test/ir/run.sh ./ct-ast
+ir: OK (82 corpus byte-identical, 4 TIR negatives, 6 LIR negatives, 9 LIR fixtures, 2 module builds, selfhost=1, 15 checks)
+$ ct build --emit-c -I selfhost/ct-ast selfhost/ct-ast/main.ct -o <dir>
+$ diff -r -x .ctcache bootstrap/ct-ast <dir>   # 无差异 = 自举不动点
+```
+
 ## 4 回滚
 
 | 回滚对象 | 动作 | 结果 |
@@ -220,4 +287,5 @@ DEV 的 `test/ast` 逐字节探针（非门禁，882 个夹具）：**4 个仍�
 | 角色 | 结论 | 日期 | 依据 |
 | --- | --- | --- | --- |
 | DEV | S8 收尾：D-013 真 lowering（owning 局部/形参/结果/rebind/字段初始化/sret/跳转清理）+ S5 守卫与 or-pattern；自举 **1638/1638、78/78 ready**，语料 **498/498、80/80 ready**，0 字节差异；剩余 4 个 `test/ast` 探针差异见 §3e.3 | 2026-11-27 | 本文件 §1–§3e；`test/ir/run.sh` 15 checks OK；`check-seed OK`；`check-all` 8 门；`check-ast`、`check-sanitizers`、`check-docs`、`g1/g8` 见交付报告；源码 + seed 提交 `85f0f80f` |
-| REV | 待签字 | — | 逐条复核 §3 的回退类型、§3d 的剩余边界与“回退 ≠ 已降级” |
+| DEV | S8 外壳收尾：实例闭包 / ADT/Box 胶水 / header include-dep-shim / 函数原型（含 inherent）改为 `LModulePlan` 行；三个产品入口删除 AST/符号表兜底；4 个 `test/ast` 探针差异清零（882 夹具 0 差异）；语料 498/498、自举 1638/1638 与 C 树逐字节不变；剩余 map JSON 与 §3b 末段列出的写者选择 | 2026-11-27 | 本文件 §3f；`test/ir/run.sh` 15 checks；`check-all` 8 门；`check-seed` 两轮；`check-sanitizers`；`check-docs`；`g0/g1/g8` |
+| REV | 待签字 | — | 逐条复核 §3 的回退类型、§3d 的剩余边界与“回退 ≠ 已降级”；外壳收尾的“行化 ≠ 只换读取位置”（§3f.1 表） |

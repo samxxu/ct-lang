@@ -171,8 +171,10 @@ defer 的逆序。`c7_autodrop_model` 覆盖 AutoDrop：S2c 起它 `ready=1`，D
 - 默认路径上 LIR 验证器报错时静默回退到 AST（`--ir=on` / `CT_LIR_STRICT=1`
   仍是致命，供负例使用）；
 - 外壳：PP / INCLUDE / 类型 / 全局 / 断言 / 函数 / Drop 面 / ABI 导出表已是
-  `LModulePlan` 行数据；**实例闭包、ADT 胶水、map JSON 与 header 的
-  include/dep 组装仍读符号表/AST**，见 S8 差异清单 §3d。
+  `LModulePlan` 行数据；S8 外壳收尾后 **实例闭包、ADT/Box 胶水、header 的
+  include/dep/shim 组装、函数原型（含 inherent）也已是行数据**；三个产品入口
+  不再回退扫描 AST/符号表。**map JSON（`write_map`）仍未迁**，另见 S8 差异
+  清单 §3d、§3f。
 
 ## S8：语义判活（TGraph）与自举切换
 
