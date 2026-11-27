@@ -215,7 +215,7 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *se
         if (((strcmp(tname, "Drop") == 0) || (strcmp(tname, "Handback") == 0))) {
             continue;
         }
-        if (_self->__backend_emit_emitops_vptr->vtable_exported(_self, si, tname)) {
+        if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
             fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[si].name, tname);
         }
         else {
@@ -237,7 +237,7 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *se
             if ((!backend_emit_adoption_default_only(_self, si, tname))) {
                 continue;
             }
-            if (_self->__backend_emit_emitops_vptr->vtable_exported(_self, si, tname)) {
+            if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
                 fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[si].name, tname);
             }
             else {
@@ -265,7 +265,7 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *se
             }
             else {
                 if (owner == _self->cur_unit) {
-                    if ((_self->sym->structs[si].has_drop_impl && (!_self->__backend_emit_emitops_vptr->unit_has_drop_impl(_self, _self->cur_unit, si)))) {
+                    if ((_self->sym->structs[si].has_drop_impl && (!_self->__backend_emit_emitdecl_vptr->unit_has_drop_impl(_self, _self->cur_unit, si)))) {
                         continue;
                     }
                     fprintf(_self->out, "void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);

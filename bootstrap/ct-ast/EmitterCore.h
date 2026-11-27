@@ -160,20 +160,7 @@ struct backend_emit_EmitOps_vtbl {
     int (*emit_cond)(void *, int);
     int (*emit_indent)(void *, int);
     int (*emit_type_decl)(void *, int, int, int);
-    int (*emit_global_decl)(void *, int);
-    int (*emit_global_extern)(void *, int);
-    int (*decl_is_pub)(void *, int, const char *);
-    int (*vtable_exported)(void *, int, const char *);
-    int (*map_vtable_exported)(void *, int);
-    int (*emit_link_externs)(void *, int, int);
-    int (*emit_inherent_protos)(void *, int);
-    int (*unit_has_drop_impl)(void *, int, int);
-    int (*drop_visible)(void *, int);
-    int (*node_mentions)(void *, int, const char *);
-    int (*emit_trait_decls)(void *);
     int (*emit_impls)(void *, int);
-    int (*emit_maps)(void *, int);
-    int (*emit_unit_init)(void *, int);
     int (*fail)(void *, const char *);
     int (*fail_from)(void *, int, const char *);
 };
@@ -197,6 +184,26 @@ struct backend_emit_EmitHeader_vtbl {
 struct backend_emit_EmitHeader_iface {
     void *self;
     const struct backend_emit_EmitHeader_vtbl *vt;
+};
+
+struct backend_emit_EmitDecl_vtbl {
+    int (*emit_global_decl)(void *, int);
+    int (*emit_global_extern)(void *, int);
+    int (*decl_is_pub)(void *, int, const char *);
+    int (*vtable_exported)(void *, int, const char *);
+    int (*map_vtable_exported)(void *, int);
+    int (*emit_link_externs)(void *, int, int);
+    int (*emit_inherent_protos)(void *, int);
+    int (*unit_has_drop_impl)(void *, int, int);
+    int (*drop_visible)(void *, int);
+    int (*node_mentions)(void *, int, const char *);
+    int (*emit_trait_decls)(void *);
+    int (*emit_maps)(void *, int);
+    int (*emit_unit_init)(void *, int);
+};
+struct backend_emit_EmitDecl_iface {
+    void *self;
+    const struct backend_emit_EmitDecl_vtbl *vt;
 };
 
 struct backend_emit_EmitInit_vtbl {
@@ -317,6 +324,7 @@ struct backend_emit_Emitter {
     const char * ginst;
     const struct backend_emit_EmitOps_vtbl *__backend_emit_emitops_vptr;
     const struct backend_emit_EmitHeader_vtbl *__backend_emit_emitheader_vptr;
+    const struct backend_emit_EmitDecl_vtbl *__backend_emit_emitdecl_vptr;
     const struct backend_emit_EmitterTryOps_vtbl *__backend_emit_emittertryops_vptr;
     const struct backend_emit_EmitInvariant_vtbl *__backend_emit_emitinvariant_vptr;
     const struct backend_emit_EmitHoist_vtbl *__backend_emit_emithoist_vptr;
