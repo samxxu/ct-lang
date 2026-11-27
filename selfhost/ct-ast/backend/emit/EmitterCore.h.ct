@@ -72,36 +72,10 @@ pub trait EmitOps {
 
     int  emit_type_decl(int n, int ind, int with_semi);
 
-    int  emit_global_decl(int n);
-
-    int  emit_global_extern(int n);
-
-    int  decl_is_pub(int kind, const char *name);
-
-    int  vtable_exported(int si, const char *tname);
-
-    int  map_vtable_exported(int i);
-
-    int  emit_link_externs(int prog, int u);
-
-    int  emit_inherent_protos(int prog);
-
     /* PH-48 D48-2: the concrete `impl Drop` unit and the callable check; both
        live on the trait so the compiler's MAX_FUNCS budget stays untouched
        (the self-hosted build is at its top-level signature ceiling). */
-    int  unit_has_drop_impl(int u, int si);
-
-    int  drop_visible(int si);
-
-    int  node_mentions(int n, const char *name);
-
-    int  emit_trait_decls(void);
-
     int  emit_impls(int prog);
-
-    int  emit_maps(int u);
-
-    int  emit_unit_init(int prog);
 
     int  fail(const char *msg);
 
@@ -132,6 +106,37 @@ pub trait EmitHeader {
     int  write_header(const char *outc);
 
     int  write_abi_header(const char *path);
+}
+
+/* S8 D5: the declaration / trait / impl-surface writers. Bodies live in
+   `EmitDecl.h.ct`; `emit_type_decl` and `emit_impls` stay on `EmitOps` until
+   their kind-slice / lifecycle tails move. */
+pub trait EmitDecl {
+    int  emit_global_decl(int n);
+
+    int  emit_global_extern(int n);
+
+    int  decl_is_pub(int kind, const char *name);
+
+    int  vtable_exported(int si, const char *tname);
+
+    int  map_vtable_exported(int i);
+
+    int  emit_link_externs(int prog, int u);
+
+    int  emit_inherent_protos(int prog);
+
+    int  unit_has_drop_impl(int u, int si);
+
+    int  drop_visible(int si);
+
+    int  node_mentions(int n, const char *name);
+
+    int  emit_trait_decls(void);
+
+    int  emit_maps(int u);
+
+    int  emit_unit_init(int prog);
 }
 
 pub trait EmitInit {
@@ -335,4 +340,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps, EmitHeader, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;
+} use EmitOps, EmitHeader, EmitDecl, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;
