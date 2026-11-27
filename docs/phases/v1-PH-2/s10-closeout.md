@@ -10,11 +10,11 @@
 
 | 项 | 状态 |
 | --- | --- |
-| S0–S8 尾、S8c、S9 | 已入库；S8r2 单文件默认 LIR、known-gap 清零；S8 尾 D5/D6/外壳落盘（`Emitter.h.ct` 9872→1545） |
-| S8 §5 签字 | **缺 DEV 的 S8 尾证据行**，REV 待签（已按流程退回 DEV） |
-| S8a（LANG-31，可砍） | **deferred**：未开工，issue `open`；卡已授权，触发条件见卡 §6 E-V3-9d |
-| S8b 剩余 | D2 符号表大表、D3 命名构建、D4 判别式、D6 函子；D1/D2（Sh、Pkg）/D5 已入 |
-| 未关闭 issue | DESIGN-1、TEST-27、LANG-31（`issues/` 内状态 `open`；本轮不改 issue 状态） |
+| S0–S8 尾、S8c、S9 | 已入库；S8r2 单文件默认 LIR、known-gap 清零；S8 尾 D5/D6/外壳落盘（`Emitter.h.ct` 9872→1545）；S8 收尾 D-013 真 lowering（自举 1638/1638、语料 498/498）与外壳行化（882 夹具 0 差异） |
+| S8 §5 签字 | DEV 已补 S8 收尾与外壳收尾两行证据；REV 仍「待签字」（[差异清单 §5](../../reviews/2026-11-27-s8-ir2-diff-list.md#5-签字) 与 [最终收尾文档](../../reviews/2026-11-27-s8-closeout-lmodule.md) 两份） |
+| S8a（LANG-31，可砍） | **deferred**：未开工，issue 已转 `deferred`；触发条件见卡 §6 E-V3-9d |
+| S8b 剩余 | §3.6 已补 D6 函子、D4（`backend/mem`）、D2 符号表行块、D3a–c；仍余 D3 其余 `snprintf`（`Pkg` 53 / `Symbols` 41）、D2 `funcs`/`vars`/`structs` 大表、D4 其余域 |
+| 未关闭 issue | DESIGN-1、TEST-27（`open`）；LANG-31 已转 `deferred` |
 | ADR | `D-030`（print API）仍 `proposed`，待 REVIEW 签收；本轮不代签 |
 
 ## 2 开工闸（不清零不进 S10）
@@ -111,7 +111,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | # | 问题 | 影响 |
 | --- | --- | --- |
 | O-1 | S8a（LANG-31）做还是 deferred | **本轮结论：deferred**（卡已授权可砍）；未做 `D-031`，触发条件见卡 §6 |
-| O-2 | S8b 剩余 D2 符号表 / D3 / D4 / D6 做多少 | **本轮结论：未做，如实登记**（卡 §6 E-V3-9b）；不影响 S10 机械门禁 |
+| O-2 | S8b 剩余 D2 符号表 / D3 / D4 / D6 做多少 | **2026-11-28 补**：D6 函子、D4（`backend/mem`）、D2 符号表行块、D3a–c 已落（[dogfooding §3.6](../../planning/dogfooding.md)）；仍余 D3 其余 `snprintf`（`Pkg` 53 / `Symbols` 41）、D2 `funcs`/`vars`/`structs` 大表、D4 其余域，如实登记在卡 §6 E-V3-9b |
 | O-3 | `v1.2.0` 的 tag 与 release 何时手工执行 | **待所有者**；精确命令与校验项见卡 §7.5 |
 
 ## 11 执行结果（2026-11-27）
