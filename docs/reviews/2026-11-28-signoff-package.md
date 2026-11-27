@@ -17,9 +17,8 @@
 
 **签什么**：[D-032](../decisions/D-032.md) 设计——内部层（`selfhost/ct-ast` + `lib/core`）
 用两处显式 manifest `c-boundary = allow`；消费者默认 strict 不变；
-`c_boundary_for` 增加"单元自身目录 manifest"回退（与 `leaks_for` 对齐）；
-`lib/core/utf16` 保留 2 个 include-only shim（不为 2 个文件再加第三处 `ct.pkg`，
-也不把回退改成"最近祖先"）。
+manifest 解析改为**包根覆盖子树**（向上找最近 `ct.pkg`，止于所属根；嵌套子包以最近者为准），
+`leaks_for` 同批对齐同一解析。`lib/core/utf16` 由 `lib/core/ct.pkg` 覆盖，**不再需要子目录 manifest**。
 
 **签完改哪两行**（只改这两行 + 可加一行签收日期）：
 
@@ -59,7 +58,7 @@ grep -n "CR-V3-1" docs/phases/v1-PH-2/card.md
 | --- | --- | --- |
 | 1 | DEV | M1：`c_boundary_for` 回退 + 两处 `ct.pkg`（[施工卡](../design/d032-internal-c-boundary-construction.md)） |
 | 2 | DEV | M2/M3：69 个 include-only shim 退场 + seed 重生成 |
-| 3 | REV | 实施后**只读**复核：四个 `--show-c-boundary`（selfhost/lib/core 两正、utf16 一负、删文件一负）、门禁末行、shim 74 → 5（selfhost 3 + utf16 2） |
+| 3 | REV | 实施后**只读**复核：`--show-c-boundary` 正例（selfhost / lib/core / utf16）与负例（删 manifest、utf16 放 strict、包外 allow 不影响）各一组；`leaks` 对齐负例；门禁末行；shim 74 → 3 |
 
 ## 5 交付
 

@@ -137,7 +137,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-1 | D-032 设计签收（内部层 C 边界豁免） | **待签** | REV | 无（ADR 已 `proposed`） | [D-032](../../decisions/D-032.md)、[签收包](../../reviews/2026-11-28-signoff-package.md) |
 | Q-2 | D032-C1 实施 M1（`c_boundary_for` 回退 + 两处 `ct.pkg`） | 待开 | DEV | Q-1 | [施工卡](../../design/d032-internal-c-boundary-construction.md) |
 | Q-3 | D032-C1 实施 M2（selfhost 63 个 shim 退场） | 待开 | DEV | Q-2 | 同上 |
-| Q-4 | D032-C1 实施 M3（lib/core 6 个顶层 shim 退场，保留 utf16 2 个） | 待开 | DEV | Q-3 | 同上 |
+| Q-4 | D032-C1 实施 M3（lib/core 8 个 shim 退场，含 utf16 子树） | 待开 | DEV | Q-3 | 同上 |
 | Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | 待开 | DEV | 无（与 Q-2 互斥文件集，可先做） | [S8B 施工卡](../../design/s8b-remaining-construction.md) |
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 登记 | DEV | Q-5 与审计表复核 | 同上 §3 |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **登记（未立项）** | ARCH / REQ 出 ADR | 无 | 差异清单 §3d；需新 ADR，不属本卡 |
