@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=95098 io_cap=2048
+     emitted_before=48223 emitted_after=95088 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)

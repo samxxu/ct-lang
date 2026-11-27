@@ -1570,11 +1570,9 @@ impl SymbolOps for Symbols {
             if (strncmp(name, self->ns, nl) == 0)
                 i = self->find_type_alias(name + nl);
         }
-        if (i >= 0 && !self->taliases[i].forward) {
-            char msg[512];
-            snprintf(msg, sizeof msg, "type '%s' conflicts with an existing type alias", name);
-            return self->fail(msg);
-        }
+        if (i >= 0 && !self->taliases[i].forward)
+            return self->fail(runtime::text::ct_internf(
+                "type '%s' conflicts with an existing type alias", name));
         if (self->ensure_type_capacity(self->ntype + 1) != 0) return -1;
         self->types[self->ntype].name = runtime::text::ct_intern(name);
         if (!self->types[self->ntype].name) return self->fail("out of memory");
@@ -1887,24 +1885,17 @@ impl SymbolOps for Symbols {
                    int owner)
     {
         const char *enc;
-        char msg[MAX_TEXT * 2];
         int ti, ni, mi, pi, pk;
 
         ti = self->find_trait(tname);
-        if (ti < 0) {
-            snprintf(msg, sizeof msg, "unknown trait '%s'", tname);
-            return self->fail(msg);
-        }
-        if (self->traits[ti].ntparams == 0) {
-            snprintf(msg, sizeof msg, "trait '%s' is not generic", tname);
-            return self->fail(msg);
-        }
-        if (self->traits[ti].ntparams != nargs) {
-            snprintf(msg, sizeof msg,
-                     "generic trait '%s' takes %d type arguments, %d given",
-                     tname, self->traits[ti].ntparams, nargs);
-            return self->fail(msg);
-        }
+        if (ti < 0)
+            return self->fail(runtime::text::ct_internf("unknown trait '%s'", tname));
+        if (self->traits[ti].ntparams == 0)
+            return self->fail(runtime::text::ct_internf("trait '%s' is not generic", tname));
+        if (self->traits[ti].ntparams != nargs)
+            return self->fail(runtime::text::ct_internf(
+                "generic trait '%s' takes %d type arguments, %d given",
+                tname, self->traits[ti].ntparams, nargs));
         /* Phase 35 S6 (L35-4): the template's owner is the only unit that may
            create an instance row. A consumer naming one would split the vtable
            and the interface layout across two units. */
@@ -1918,11 +1909,9 @@ impl SymbolOps for Symbols {
         if (ni >= 0) {
             /* S7 (L35-6): a user-declared trait that happens to carry the
                encoded name is a collision, not a reusable instance row. */
-            if (self->traits[ni].tmpl < 0) {
-                snprintf(msg, sizeof msg,
-                         "trait instance name '%s' collides with a declared type", enc);
-                return self->fail(msg);
-            }
+            if (self->traits[ni].tmpl < 0)
+                return self->fail(runtime::text::ct_internf(
+                    "trait instance name '%s' collides with a declared type", enc));
             return ni;
         }
         {
@@ -2346,34 +2335,29 @@ impl TypeAliasOps for Symbols {
     int begin_type_alias(const char *name, const char *path, int line, int is_pub, int owner)
     {
         int i;
-        char msg[512];
         /* The pre-scan runs before any declaration is parsed, so a type that
            appears above the alias was not known then. Check it here, where the
            declaration order is finally known. */
-        if (self->find_type(name) >= 0) {
-            snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
-            return self->fail(msg);
-        }
+        if (self->find_type(name) >= 0)
+            return self->fail(runtime::text::ct_internf(
+                "type alias '%s' conflicts with an existing type", name));
         /* Declarations inside a namespace are stored under the mangled spelling
            (`lib_Thing`), so a trait or typedef declared above is a conflict even
            though the alias keeps its bare name. */
         if (self->ns && self->ns[0]) {
             const char *qn = runtime::text::ct_intern_join(self->ns, name);
             if (!qn) return self->fail("out of memory");
-            if (self->find_type(qn) >= 0) {
-                snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
-                return self->fail(msg);
-            }
+            if (self->find_type(qn) >= 0)
+                return self->fail(runtime::text::ct_internf(
+                    "type alias '%s' conflicts with an existing type", name));
         }
         i = self->find_type_alias(name);
         if (i >= 0) {
             if (self->taliases[i].owner == owner) {
-                if (!self->taliases[i].forward) {
-                    snprintf(msg, sizeof msg,
-                             "duplicate type alias '%s' (first at %s:%d)",
-                             name, self->taliases[i].path, self->taliases[i].line);
-                    return self->fail(msg);
-                }
+                if (!self->taliases[i].forward)
+                    return self->fail(runtime::text::ct_internf(
+                        "duplicate type alias '%s' (first at %s:%d)",
+                        name, self->taliases[i].path, self->taliases[i].line));
                 self->taliases[i].line = line;
                 self->taliases[i].is_pub = is_pub;
                 self->taliases[i].path = runtime::text::ct_intern(path);
@@ -2406,15 +2390,13 @@ impl TypeAliasOps for Symbols {
             self->ntachain++;
             return 0;
         }
-        if (self->find_type(name) >= 0) {
-            snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
-            return self->fail(msg);
-        }
+        if (self->find_type(name) >= 0)
+            return self->fail(runtime::text::ct_internf(
+                "type alias '%s' conflicts with an existing type", name));
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->aliases[i].name, name) == 0) {
-                snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
-                return self->fail(msg);
-            }
+            if (strcmp(self->aliases[i].name, name) == 0)
+                return self->fail(runtime::text::ct_internf(
+                    "type alias '%s' conflicts with an existing type", name));
         if (self->ensure_type_alias_capacity(self->ntalias + 1) != 0) return -1;
         i = self->ntalias;
         self->ntalias++;
@@ -2492,25 +2474,21 @@ impl TypeAliasOps for Symbols {
                                int line, int owner)
     {
         int i;
-        char msg[512];
         for (i = 0; i < self->ntalias; i++) {
             if (strcmp(self->taliases[i].name, name) != 0) continue;
             if (self->taliases[i].target
                 && strcmp(self->taliases[i].target, target) == 0) return 0;
-            snprintf(msg, sizeof msg,
-                     "type alias '%s' is exported by both %s and %s",
-                     name, self->taliases[i].path, path);
-            return self->fail(msg);
+            return self->fail(runtime::text::ct_internf(
+                "type alias '%s' is exported by both %s and %s",
+                name, self->taliases[i].path, path));
         }
-        if (self->find_type(name) >= 0) {
-            snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
-            return self->fail(msg);
-        }
+        if (self->find_type(name) >= 0)
+            return self->fail(runtime::text::ct_internf(
+                "type alias '%s' conflicts with an existing type", name));
         for (i = 0; i < self->nalias; i++)
-            if (strcmp(self->aliases[i].name, name) == 0) {
-                snprintf(msg, sizeof msg, "type alias '%s' conflicts with an existing type", name);
-                return self->fail(msg);
-            }
+            if (strcmp(self->aliases[i].name, name) == 0)
+                return self->fail(runtime::text::ct_internf(
+                    "type alias '%s' conflicts with an existing type", name));
         if (self->ensure_type_alias_capacity(self->ntalias + 1) != 0) return -1;
         i = self->ntalias;
         self->ntalias++;
@@ -2549,7 +2527,6 @@ impl TypeAliasOps for Symbols {
     int expand_type_alias_text(const char *name, const char **out)
     {
         int i, k;
-        char msg[512];
         const char *pooled;
         i = self->find_type_alias(name);
         if (i < 0) {
@@ -2559,24 +2536,26 @@ impl TypeAliasOps for Symbols {
             return 0;
         }
         if (self->taliases[i].forward) {
-            if (!self->alias_decl) {
-                snprintf(msg, sizeof msg,
-                         "type alias '%s' must be declared before it is used", name);
-                return self->fail(msg);
-            }
+            if (!self->alias_decl)
+                return self->fail(runtime::text::ct_internf(
+                    "type alias '%s' must be declared before it is used", name));
             pooled = runtime::text::ct_intern(name);
             if (!pooled) return self->fail("out of memory");
             *out = pooled;
             return 0;
         }
         for (k = 0; k < self->ntachain; k++) {
-            int m;
+            const char *cyc;
             if (strcmp(self->tachain[k], name) != 0) continue;
-            m = snprintf(msg, sizeof msg, "type alias cycle: ");
-            for (; k < self->ntachain; k++)
-                m += snprintf(msg + m, sizeof msg - (size_t)m, "'%s' -> ", self->tachain[k]);
-            snprintf(msg + m, sizeof msg - (size_t)m, "'%s'", name);
-            return self->fail(msg);
+            cyc = tool::sh::ct_scratch_fmt("type alias cycle: ");
+            if (!cyc) return -1;
+            for (; k < self->ntachain; k++) {
+                cyc = tool::sh::ct_scratch_fmt("%s'%s' -> ", cyc, self->tachain[k]);
+                if (!cyc) return -1;
+            }
+            cyc = tool::sh::ct_scratch_fmt("%s'%s'", cyc, name);
+            if (!cyc) return -1;
+            return self->fail(cyc);
         }
         if (self->ntachain >= MAX_ALIAS_CHAIN)
             return self->fail("type alias expansion is too deep");

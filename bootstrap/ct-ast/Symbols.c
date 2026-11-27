@@ -1022,9 +1022,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_type(void *self, cons
         }
     }
     if (((i >= 0) && (!_self->taliases[i].forward))) {
-        char msg[512];
-        snprintf(msg, sizeof(msg), "type '%s' conflicts with an existing type alias", name);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type '%s' conflicts with an existing type alias", name));
     }
     if (_self->__frontend_sym_symbolops_vptr->ensure_type_capacity(_self, (_self->ntype + 1)) != 0) {
         return (-1);
@@ -1437,7 +1435,6 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_trait(void *self, con
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, const char * tname, int nargs, char * * args, char * * cargs, int owner) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     const char * enc;
-    char msg[MAX_TEXT * 2];
     int ti;
     int ni;
     int mi;
@@ -1445,16 +1442,13 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     int pk;
     ti = _self->__frontend_sym_symbolops_vptr->find_trait(_self, tname);
     if (ti < 0) {
-        snprintf(msg, sizeof(msg), "unknown trait '%s'", tname);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("unknown trait '%s'", tname));
     }
     if (_self->traits[ti].ntparams == 0) {
-        snprintf(msg, sizeof(msg), "trait '%s' is not generic", tname);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("trait '%s' is not generic", tname));
     }
     if (_self->traits[ti].ntparams != nargs) {
-        snprintf(msg, sizeof(msg), "generic trait '%s' takes %d type arguments, %d given", tname, _self->traits[ti].ntparams, nargs);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("generic trait '%s' takes %d type arguments, %d given", tname, _self->traits[ti].ntparams, nargs));
     }
     if ((((owner >= 0) && (_self->traits[ti].owner >= 0)) && (_self->traits[ti].owner != owner))) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "a generic trait instance must be created in its owner unit");
@@ -1466,8 +1460,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     ni = _self->__frontend_sym_symbolops_vptr->find_trait(_self, enc);
     if (ni >= 0) {
         if (_self->traits[ni].tmpl < 0) {
-            snprintf(msg, sizeof(msg), "trait instance name '%s' collides with a declared type", enc);
-            return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("trait instance name '%s' collides with a declared type", enc));
         }
         return ni;
     }
@@ -2037,10 +2030,8 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_find_type_alias(void *
 static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void *self, const char * name, const char * path, int line, int is_pub, int owner) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
-    char msg[512];
     if (_self->__frontend_sym_symbolops_vptr->find_type(_self, name) >= 0) {
-        snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' conflicts with an existing type", name));
     }
     if ((_self->ns && _self->ns[0])) {
         const char * qn = runtime_text_ct_intern_join(_self->ns, name);
@@ -2048,16 +2039,14 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
             return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
         }
         if (_self->__frontend_sym_symbolops_vptr->find_type(_self, qn) >= 0) {
-            snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
-            return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' conflicts with an existing type", name));
         }
     }
     i = _self->__frontend_sym_typealiasops_vptr->find_type_alias(_self, name);
     if (i >= 0) {
         if (_self->taliases[i].owner == owner) {
             if ((!_self->taliases[i].forward)) {
-                snprintf(msg, sizeof(msg), "duplicate type alias '%s' (first at %s:%d)", name, _self->taliases[i].path, _self->taliases[i].line);
-                return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+                return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("duplicate type alias '%s' (first at %s:%d)", name, _self->taliases[i].path, _self->taliases[i].line));
             }
             _self->taliases[i].line = line;
             _self->taliases[i].is_pub = is_pub;
@@ -2101,13 +2090,11 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_begin_type_alias(void 
         return 0;
     }
     if (_self->__frontend_sym_symbolops_vptr->find_type(_self, name) >= 0) {
-        snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' conflicts with an existing type", name));
     }
     for (i = 0; i < _self->nalias; i++) {
         if (strcmp(_self->aliases[i].name, name) == 0) {
-            snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
-            return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' conflicts with an existing type", name));
         }
     }
     if (_self->__frontend_sym_symbolops_vptr->ensure_type_alias_capacity(_self, (_self->ntalias + 1)) != 0) {
@@ -2209,7 +2196,6 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_forward_type_alias
 static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_visible_type_alias(void *self, const char * name, const char * target, const char * path, int line, int owner) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
-    char msg[512];
     for (i = 0; i < _self->ntalias; i++) {
         if (strcmp(_self->taliases[i].name, name) != 0) {
             continue;
@@ -2217,17 +2203,14 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_add_visible_type_alias
         if ((_self->taliases[i].target && (strcmp(_self->taliases[i].target, target) == 0))) {
             return 0;
         }
-        snprintf(msg, sizeof(msg), "type alias '%s' is exported by both %s and %s", name, _self->taliases[i].path, path);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' is exported by both %s and %s", name, _self->taliases[i].path, path));
     }
     if (_self->__frontend_sym_symbolops_vptr->find_type(_self, name) >= 0) {
-        snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' conflicts with an existing type", name));
     }
     for (i = 0; i < _self->nalias; i++) {
         if (strcmp(_self->aliases[i].name, name) == 0) {
-            snprintf(msg, sizeof(msg), "type alias '%s' conflicts with an existing type", name);
-            return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' conflicts with an existing type", name));
         }
     }
     if (_self->__frontend_sym_symbolops_vptr->ensure_type_alias_capacity(_self, (_self->ntalias + 1)) != 0) {
@@ -2274,7 +2257,6 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_expand_type_alias_text
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
     int k;
-    char msg[512];
     const char * pooled;
     i = _self->__frontend_sym_typealiasops_vptr->find_type_alias(_self, name);
     if (i < 0) {
@@ -2287,8 +2269,7 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_expand_type_alias_text
     }
     if (_self->taliases[i].forward) {
         if ((!_self->alias_decl)) {
-            snprintf(msg, sizeof(msg), "type alias '%s' must be declared before it is used", name);
-            return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("type alias '%s' must be declared before it is used", name));
         }
         pooled = runtime_text_ct_intern(name);
         if ((!pooled)) {
@@ -2298,16 +2279,25 @@ static int frontend_sym_Symbols_frontend_sym_TypeAliasOps_expand_type_alias_text
         return 0;
     }
     for (k = 0; k < _self->ntachain; k++) {
-        int m;
+        const char * cyc;
         if (strcmp(_self->tachain[k], name) != 0) {
             continue;
         }
-        m = snprintf(msg, sizeof(msg), "type alias cycle: ");
-        for (; k < _self->ntachain; k++) {
-            m += snprintf((msg + m), (sizeof(msg) - (size_t)(m)), "'%s' -> ", _self->tachain[k]);
+        cyc = tool_sh_ct_scratch_fmt("type alias cycle: ");
+        if ((!cyc)) {
+            return (-1);
         }
-        snprintf((msg + m), (sizeof(msg) - (size_t)(m)), "'%s'", name);
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, msg);
+        for (; k < _self->ntachain; k++) {
+            cyc = tool_sh_ct_scratch_fmt("%s'%s' -> ", cyc, _self->tachain[k]);
+            if ((!cyc)) {
+                return (-1);
+            }
+        }
+        cyc = tool_sh_ct_scratch_fmt("%s'%s'", cyc, name);
+        if ((!cyc)) {
+            return (-1);
+        }
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, cyc);
     }
     if (_self->ntachain >= MAX_ALIAS_CHAIN) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "type alias expansion is too deep");
