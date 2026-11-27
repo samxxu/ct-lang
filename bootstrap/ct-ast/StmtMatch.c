@@ -15,6 +15,7 @@
 #include "StmtCore.h"
 #include "StmtDefer.h"
 #include "TypeCheck.h"
+#include "Sh.h"
 #include "Vec.h"
 #include "Result.h"
 
@@ -629,16 +630,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
             return (-1);
         }
         if (path[0] != 0) {
-            size_t need;
-            char * row;
-            need = ((strlen(path) + strlen(msgbuf)) + 4);
-            row = (char *)(malloc(need));
-            if ((!row)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            snprintf(row, need, "%s=%ld;", path, val);
-            rc = pat_cond_add(row);
-            free(row);
+            rc = pat_cond_add(tool_sh_ct_scratch_fmt("%s=%ld;", path, val));
             if (rc) {
                 return (-1);
             }
@@ -805,23 +797,13 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
             return (-1);
         }
         if (path[0] != 0) {
-            size_t need;
-            char * row;
-            need = (strlen(path) + 32);
-            row = (char *)(malloc(need));
-            if ((!row)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            snprintf(row, need, "%s.tag=%d;", path, v);
-            rc = pat_cond_add(row);
-            free(row);
+            rc = pat_cond_add(tool_sh_ct_scratch_fmt("%s.tag=%d;", path, v));
             if (rc) {
                 return (-1);
             }
         }
         for (i = 0; i < adts[adt].variants[v].nfields; i++) {
-            char * cp;
-            size_t need;
+            const char * cp;
             const char * sep;
             int child;
             if (i > 0) {
@@ -831,14 +813,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
                 }
             }
             sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
-            need = ((((strlen(path) + strlen(sep)) + strlen(adts[adt].variants[v].cname)) + strlen(adts[adt].variants[v].fields[i].name)) + 8);
-            cp = (char *)(malloc(need));
-            if ((!cp)) {
-                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-            }
-            snprintf(cp, need, "%s%su.%s.%s", path, sep, adts[adt].variants[v].cname, adts[adt].variants[v].fields[i].name);
+            cp = tool_sh_ct_scratch_fmt("%s%su.%s.%s", path, sep, adts[adt].variants[v].cname, adts[adt].variants[v].fields[i].name);
             child = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, adts[adt].variants[v].fields[i].type, cp);
-            free(cp);
             if (child < 0) {
                 return (-1);
             }
@@ -911,7 +887,6 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
         sd = (&_self->sym->structs[si]);
         if (((strcmp(bname, sd->name) != 0) && (strcmp(bname, frontend_parse_g_pat.cbase) != 0))) {
             const char * rr;
-            char rbase[512];
             rr = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, bname);
             if ((!rr)) {
                 rr = bname;
@@ -919,8 +894,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
             if (strncmp(rr, "struct ", 7) == 0) {
                 rr += 7;
             }
-            snprintf(rbase, sizeof(rbase), "%s", rr);
-            if (strcmp(rbase, sd->name) != 0) {
+            if (strcmp(rr, sd->name) != 0) {
                 snprintf(msgbuf, sizeof(msgbuf), "struct pattern names '%s', but the subject is '%s'", bname, type);
                 return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
             }
@@ -989,41 +963,24 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
             seen_n++;
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ":"))) {
-                char * fp;
-                size_t need;
+                const char * fp;
                 const char * sep;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
-                need = (((strlen(path) + strlen(sep)) + strlen(sd->fields[fi].name)) + 8);
-                fp = (char *)(malloc(need));
-                if ((!fp)) {
-                    free(seen);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                fp = tool_sh_ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
                 child = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, sd->fields[fi].type, fp);
-                free(fp);
             }
             else {
-                char * fp;
-                size_t need;
+                const char * fp;
                 const char * sep;
                 sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
-                need = (((strlen(path) + strlen(sep)) + strlen(sd->fields[fi].name)) + 8);
-                fp = (char *)(malloc(need));
-                if ((!fp)) {
-                    free(seen);
-                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                }
-                snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                fp = tool_sh_ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
                 child = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_BINDER, fname, sd->fields[fi].type, 0);
                 if (((child >= 0) && (pat_group_bind_add(fname, sd->fields[fi].type, runtime_text_ct_intern(fp)) == (-2)))) {
-                    free(fp);
                     free(seen);
                     snprintf(msgbuf, sizeof(msgbuf), "duplicate binding '%s' in a match arm", fname);
                     return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
                 }
-                free(fp);
                 if (child >= 0) {
                     _self->arena->nodes[child].b = 1;
                 }

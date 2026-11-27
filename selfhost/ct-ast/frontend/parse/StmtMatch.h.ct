@@ -28,6 +28,7 @@ import frontend::parse::StmtScope;
 import frontend::parse::StmtCore;
 import frontend::parse::StmtDefer;
 import frontend::type::TypeCheck;
+import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */
 #define MAX_TEXT 160
@@ -989,14 +990,9 @@ impl StmtMatch for Stmt {
             snprintf(msgbuf, sizeof msgbuf, "#%ld", val);
             if (pat_sig_add(msgbuf)) return -1;
             if (path[0] != 0) {
-                size_t need;
-                char *row;
-                need = strlen(path) + strlen(msgbuf) + 4;
-                row = (char *)malloc(need);
-                if (!row) return self->sup->fail("out of memory");
-                snprintf(row, need, "%s=%ld;", path, val);
-                rc = pat_cond_add(row);
-                free(row);
+                /* S8b D3: the path row is a run-scoped text, not a hand-sized
+                   malloc + snprintf + free triple. */
+                rc = pat_cond_add(tool::sh::ct_scratch_fmt("%s=%ld;", path, val));
                 if (rc) return -1;
             } else {
                 snprintf(msgbuf, sizeof msgbuf, "=%ld;", val);
@@ -1157,19 +1153,11 @@ impl StmtMatch for Stmt {
             if (path[0] != 0) {
                 /* the inner tag test goes before the payload tests so the C
                    union read always follows its discriminator */
-                size_t need;
-                char *row;
-                need = strlen(path) + 32;
-                row = (char *)malloc(need);
-                if (!row) return self->sup->fail("out of memory");
-                snprintf(row, need, "%s.tag=%d;", path, v);
-                rc = pat_cond_add(row);
-                free(row);
+                rc = pat_cond_add(tool::sh::ct_scratch_fmt("%s.tag=%d;", path, v));
                 if (rc) return -1;
             }
             for (i = 0; i < adts[adt].variants[v].nfields; i++) {
-                char *cp;
-                size_t need;
+                const char *cp;
                 const char *sep;
                 int child;
 
@@ -1185,15 +1173,10 @@ impl StmtMatch for Stmt {
                     }
                 }
                 sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
-                need = strlen(path) + strlen(sep) + strlen(adts[adt].variants[v].cname)
-                       + strlen(adts[adt].variants[v].fields[i].name) + 8;
-                cp = (char *)malloc(need);
-                if (!cp) return self->sup->fail("out of memory");
-                snprintf(cp, need, "%s%su.%s.%s", path, sep,
+                cp = tool::sh::ct_scratch_fmt("%s%su.%s.%s", path, sep,
                          adts[adt].variants[v].cname,
                          adts[adt].variants[v].fields[i].name);
                 child = self->pat_parse_one(adts[adt].variants[v].fields[i].type, cp);
-                free(cp);
                 if (child < 0) return -1;
                 if (first < 0) first = child;
                 else self->arena->nodes[last].next = child;
@@ -1259,12 +1242,12 @@ impl StmtMatch for Stmt {
             if (strcmp(bname, sd->name) != 0 && strcmp(bname, g_pat.cbase) != 0) {
                 /* an alias spelling (`typedef struct Point P`) is legal too */
                 const char *rr;
-                char rbase[512];
                 rr = self->sym->resolve_type_text(bname);
                 if (!rr) rr = bname;
                 if (strncmp(rr, "struct ", 7) == 0) rr += 7;
-                snprintf(rbase, sizeof rbase, "%s", rr);
-                if (strcmp(rbase, sd->name) != 0) {
+                /* S8b D3: `rr` is already NUL-terminated (a pool text or the
+                   token), so the 512-byte copy bought nothing. */
+                if (strcmp(rr, sd->name) != 0) {
                     snprintf(msgbuf, sizeof msgbuf,
                              "struct pattern names '%s', but the subject is '%s'",
                              bname, type);
@@ -1331,37 +1314,26 @@ impl StmtMatch for Stmt {
                 seen_n++;
                 self->sup->lex_next();
                 if (self->lex->tok == T_PUNCT && self->lex->tok_is(":")) {
-                    char *fp;
-                    size_t need;
+                    const char *fp;
                     const char *sep;
                     self->sup->lex_next();
                     sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
-                    need = strlen(path) + strlen(sep) + strlen(sd->fields[fi].name) + 8;
-                    fp = (char *)malloc(need);
-                    if (!fp) { free(seen); return self->sup->fail("out of memory"); }
-                    snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                    fp = tool::sh::ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
                     child = self->pat_parse_one(sd->fields[fi].type, fp);
-                    free(fp);
                 } else {
-                    char *fp;
-                    size_t need;
+                    const char *fp;
                     const char *sep;
                     sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
-                    need = strlen(path) + strlen(sep) + strlen(sd->fields[fi].name) + 8;
-                    fp = (char *)malloc(need);
-                    if (!fp) { free(seen); return self->sup->fail("out of memory"); }
-                    snprintf(fp, need, "%s%s%s", path, sep, sd->fields[fi].name);
+                    fp = tool::sh::ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
                     child = self->pat_desc(PAT_BINDER, fname, sd->fields[fi].type, 0);
                     if (child >= 0 && pat_group_bind_add(fname, sd->fields[fi].type,
                                                    runtime::text::ct_intern(fp)) == -2) {
-                        free(fp);
                         free(seen);
                         snprintf(msgbuf, sizeof msgbuf,
                                  "duplicate binding '%s' in a match arm", fname);
                         return tool::diag::ct_sem_error(line, col, msgbuf,
                                                         self->mem->path);
                     }
-                    free(fp);
                     if (child >= 0) self->arena->nodes[child].b = 1;
                     if (pat_sig_add("*")) {
                         free(seen);

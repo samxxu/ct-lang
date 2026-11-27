@@ -21,6 +21,7 @@
 #include "StmtCore.h"
 #include "StmtDefer.h"
 #include "TypeCheck.h"
+#include "Sh.h"
 
 #include "Vec.h"
 #include "Result.h"
