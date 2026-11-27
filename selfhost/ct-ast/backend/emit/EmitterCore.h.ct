@@ -29,10 +29,12 @@ import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 
 namespace backend::emit;
-/* The whole emitter API. The vptr / initialiser writer lives on a sub-object
-   (`Init.h.ct`), which keeps this trait clear of the method ceiling; `last_error`
-   is not a method -- the driver reads the message through
-   `ct_emit_last_error`. */
+/* The emitter entry surface: the program / unit writers, the error helpers
+   and the `fail` pair. The body writer, the declaration writer and the shell
+   writers moved to `EmitExpr` / `EmitDecl` / `EmitShell` in the v1-PH-2 S8
+   tail; the vptr / initialiser writer lives on a sub-object (`Init.h.ct`),
+   which keeps this trait clear of the method ceiling; `last_error` is not a
+   method -- the driver reads the message through `ct_emit_last_error`. */
 pub trait EmitOps {
     int  emit_program(int prog);
 
@@ -52,8 +54,8 @@ pub trait EmitShell {
 
 /* S8 D4: the header / map / ABI writers. The trait lives here with the rest of
    the Emitter surface; the bodies are in `EmitHeader.h.ct` (pure move). The
-   `.c`-side unit-header writer, `write_unit_header`, stays on `EmitOps` until
-   its instance-closure helper moves out of the host. */
+   `.c`-side unit-header writer moved to `EmitShell` with its instance
+   closure / ADT-glue helpers. */
 pub trait EmitHeader {
     int  emit_struct_fwd(void);
 

@@ -165,7 +165,7 @@ A1 是 spike：先验证“子单元只 import Core、宿主 import 子单元、
 `em_*` / `sb_*` / `match_*` / `eb_*` 切片）到 `EmitExpr.h.ct`。
 `write_unit_header(_body)`、`emit_unit_body` 与外壳胶水（Box / ADT
 生命周期 / 字面量 / 实例方法）落到新单元 `EmitShell.h.ct`；
-`Emitter.h.ct` 从 9872 行降到 1541 行，只剩 `emit_program` / `emit_unit` /
+`Emitter.h.ct` 从 9872 行降到 1545 行，只剩 `emit_program` / `emit_unit` /
 fail 与 `ct_emit_*` 绑定。写者身份由 `LModulePlan.shell_u` / `shell_header`
 提供；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used` 的定义已移入子单元，
 宿主只按名读写，不再自己判定。四个入口仍读 AST / 符号表（编译模式的

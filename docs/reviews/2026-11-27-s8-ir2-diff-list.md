@@ -112,7 +112,7 @@ $ bash selfhost/check-ast.sh
 | `emit_type_decl` / `emit_impls` / `em_decl_*` | emitter | `EmitDecl.h.ct`（D5 尾，已移） |
 | `emit_expr` / `emit_node` / `emit_field` / `emit_inline` / `emit_outconv` / `em_*` | emitter | `EmitExpr.h.ct`（D6 尾，已移） |
 
-`Emitter.h.ct` 现在 1541 行（原 9872 行），只剩 `emit_program` / `emit_unit` /
+`Emitter.h.ct` 现在 1545 行（原 9872 行），只剩 `emit_program` / `emit_unit` /
 fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used` 的
 定义都在子单元，宿主只按名读写。**仍未做到**四个入口“只消费 LModule”：编译
 模式的 `emit_program` 体、类型/全局节点的遍历仍在宿主读 AST 与符号表。
@@ -129,7 +129,7 @@ fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used`
 | **S8r2 单文件默认 LIR** | Driver 编译入口默认 LIR；默认路径验证器静默回退；D-013/vptr/into/static/attr/长名/闭包容量保守回退；`match` 占位名与逗号上下文修复 | 82 语料 + 839 个 `test/ast` 夹具逐字节；`check-ast` 0 失败；`check-all` 8 门；seed 两轮 |
 | **S8 尾 D6** | `emit_expr`/`emit_node`/`emit_field`/`emit_inline`/`emit_outconv` + 147 个 `em_*`/`sb_*`/`match_*`/`eb_*` 自由函数 → `EmitExpr.h.ct`；`StrRetain`/`FldSnap`/`EmitBuf`/`g_sb`/`g_body_hook`/`g_oc_bypass_node` 随走；`emit_gsub_type_text`/`emit_overload_suffix` 从 Decl 下调 | body 多重集不变（tool 仅 skeleton 差异）；82 语料逐字节；自举 2 轮 |
 | **S8 尾 D5** | `emit_type_decl` + 六个 `em_decl_*` + `emit_impls` + 27 个实例/闭包/ADT 胶水函数 → `EmitDecl.h.ct`；`g_adt_layout_state`/`g_inst_layout_state` 随走 | body 多重集不变（仅 3 条宏 skeleton）；82 语料逐字节；自举 2 轮 |
-| **S8 尾外壳** | `write_unit_header(_body)`、`emit_unit_body` 与 28 个外壳胶水函数 → 新单元 `EmitShell.h.ct`；`write_unit_header` 移入新 `EmitShell` trait；`g_plan`/`g_slice_used` 随走并导出 | 82 语料逐字节；自举 2 轮；`Emitter.h.ct` 9872 → 1541 行 |
+| **S8 尾外壳** | `write_unit_header(_body)`、`emit_unit_body` 与 28 个外壳胶水函数 → 新单元 `EmitShell.h.ct`；`write_unit_header` 移入新 `EmitShell` trait；`g_plan`/`g_slice_used` 随走并导出 | 82 语料逐字节；自举 2 轮；`Emitter.h.ct` 9872 → 1545 行 |
 
 每片后 `gen-seed.sh` 重生成；本分支**未 push、未打 tag、未改版本号**。
 
