@@ -66,10 +66,10 @@ LANG-30（`Str.print()` / `println()`，[spec §4.78](../language-spec.md)、[D-
 
 | 文件 | 为什么保留 | 触发条件 / 关联 |
 | --- | --- | --- |
-| `18_generic_string_table` | 课题就是「泛型模板以 `char *` 显式实例化」；`Str` 是 struct，`T=Str` 的 `T *items` 实例化当前编译不过（`cannot convert 'Str' to 'struct Str *'`），改成具体类型会删掉泛型教学点 | 结构体类型参数可用后重判（`nth<Str>` / `count_if<Str>`） |
-| `19_container_each_generic` | 同上：`walk<char *>` 的实例化与 `(fn, env)` 回调是课题；`T=Str` 实例化同样不可用 | 同上 |
+| `18_generic_string_table` | 课题就是「泛型模板以 `char *` 显式实例化」；泛型**自由函数**以 struct 类型实参实例化当前不可用（`nth<Str>` 报 `cannot convert 'Str' to 'struct Str *'`；泛型 trait 实例化没有这个问题，见 39/65），改成具体类型会删掉泛型教学点 | 结构体类型实参的泛型函数可用后重判（`nth<Str>` / `count_if<Str>`） |
+| `19_container_each_generic` | 同上：`walk<char *>` 的实例化与 `(fn, env)` 回调是课题；`T=Str` 的自由函数实例化同样不可用 | 同上 |
 | `21_generic_bound` | `Word` 的 `char *s` 用 `strcmp` 比较，`strcmp` 是「约束泛型调用 C 函数」的行为本体；`Str` 不能作 struct 字段（§4.70 硬错） | `test/c-boundary-allow.tsv` 已登记；保留 |
-| `23_generic_stack` | 课题是 `Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段；`Stack<Str>` 的数组字段与 `T *` 字段同样卡在结构体泛型实例化 | 同上 |
+| `23_generic_stack` | 课题是 `Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段；`Stack<String>` 的 struct 实例化能生成布局，但 `impl<T> Stack<T>` 的方法没有 String 实例（`no method 'push'`），同样卡在结构体类型实参 | 泛型 struct/impl 的结构体实参可用后重判 |
 | `tour/11_variadic/forward` | `va_list` 转 `vprintf` / `vsnprintf`：`char *fmt` 就是 C 变参 ABI 的一部分，换成 `Str` 会丢掉 NUL 结尾的格式串契约 | E1 C 互操作；保留 |
 
 > `21` / `23` 同时登记在 [test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv)：

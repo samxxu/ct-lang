@@ -9,6 +9,8 @@ Str_codepoint_at
 Str_cstr
 Str_get
 Str_len
+Str_print
+Str_println
 Str_slice
 Str_to_string
 String_as_str
@@ -25,6 +27,8 @@ String_drop
 String_from_utf16
 String_get
 String_len
+String_print
+String_println
 String_refs
 String_release
 String_retain

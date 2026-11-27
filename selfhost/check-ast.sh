@@ -8554,7 +8554,7 @@ if [ $? -ne 0 ]; then
     bad "p29 P29-1: range Vec" "ct-ast failed: $(head -3 "$work/p29rv.err")"
 elif ! grep -Fq 'Vec_int_from((int[4]){ ' "$work/p29rv.c"; then
     bad "p29 P29-1: range Vec" "no composite literal handed to Vec_int_from"
-elif ! grep -Fq 'Vec_char_p_from(' "$work/p29rv.c"; then
+elif ! grep -Fq 'Vec_Str_from(' "$work/p29rv.c"; then
     bad "p29 P29-1: range Vec" "the static entry is not callable from source"
 elif ! "$CC" -Wall -Wextra -std=c99 "$work/p29rv.c" -o "$work/p29rv.bin" \
         2>"$work/p29rv.cc" \
@@ -8760,7 +8760,19 @@ elif ! grep -q 'memcmp' "$work/p29ml.c"; then
 else
     ok "p29 V29-1 (a long key takes the byte comparison; no strcmp in the product)"
 fi
-"$work/ct-ast" examples/27_map_keys/map_keys.ct -o "$work/p29mk.c" \
+# The `char *` key block is a dedicated impl, so its probe uses a local
+# fixture: LANG-30 moved example 27 to `Map<String, int>` and the example is
+# no longer the place where the char-pointer block is exercised.
+cat >"$work/p29mk.ct" <<'EOF'
+int main(void)
+{
+    Map<char *, int> m;
+    m.h = 0;
+    m.put("a", 1);
+    return *m.get("a") - 1;
+}
+EOF
+"$work/ct-ast" "$work/p29mk.ct" -o "$work/p29mk.c" \
     >"$work/p29mk.out" 2>"$work/p29mk.err"
 if [ $? -ne 0 ]; then
     bad "p29 V29-1: Map keys" "ct-ast failed: $(head -3 "$work/p29mk.err")"
@@ -8768,15 +8780,24 @@ elif [ "$(grep -c 'Map_char_p_int_put(void \*self' "$work/p29mk.c")" -ne 1 ]; th
     bad "p29 V29-1: Map keys" "the string and the generic block both emitted Map_char_p_int_put"
 elif [ "$(grep -c 'Map_char_p_int_get(void \*self' "$work/p29mk.c")" -ne 1 ]; then
     bad "p29 V29-1: Map keys" "the string and the generic block both emitted Map_char_p_int_get"
-elif ! "$CC" -Wall -Wextra -std=c99 "$work/p29mk.c" -o "$work/p29mk.bin" \
-        2>"$work/p29mk.cc" \
-      || ! "$work/p29mk.bin" >"$work/p29mk.run" 2>&1; then
-    bad "p29 V29-1: Map keys" "$(head -4 "$work/p29mk.cc")"
-elif ! diff -u examples/27_map_keys/map_keys.expected.out "$work/p29mk.run" \
-        >"$work/p29mk.diff"; then
-    bad "p29 V29-1: Map keys" "$(head -6 "$work/p29mk.diff")"
 else
-    ok "p29 V29-1 (int / long / char * keys: one definition each, expected output)"
+    ok "p29 V29-1 (int / long / char * keys: one definition each)"
+fi
+"$work/ct-ast" examples/27_map_keys/map_keys.ct -o "$work/p29mk2.c" \
+    >"$work/p29mk2.out" 2>"$work/p29mk2.err"
+if [ $? -ne 0 ]; then
+    bad "p29 V29-1: Map keys example" "ct-ast failed: $(head -3 "$work/p29mk2.err")"
+elif [ "$(grep -c 'Map_String_int_put(void \*self' "$work/p29mk2.c")" -ne 1 ]; then
+    bad "p29 V29-1: Map keys example" "expected exactly one Map_String_int_put definition"
+elif ! "$CC" -Wall -Wextra -std=c99 "$work/p29mk2.c" -o "$work/p29mk2.bin" \
+        2>"$work/p29mk2.cc" \
+      || ! "$work/p29mk2.bin" >"$work/p29mk2.run" 2>&1; then
+    bad "p29 V29-1: Map keys example" "$(head -4 "$work/p29mk2.cc")"
+elif ! diff -u examples/27_map_keys/map_keys.expected.out "$work/p29mk2.run" \
+        >"$work/p29mk2.diff"; then
+    bad "p29 V29-1: Map keys example" "$(head -6 "$work/p29mk2.diff")"
+else
+    ok "p29 V29-1 (String key block: one definition, expected output)"
 fi
 p29_neg map_key_bad "Map does not support key type 'char' (key types: int, long, char *, String)" 6:20
 
