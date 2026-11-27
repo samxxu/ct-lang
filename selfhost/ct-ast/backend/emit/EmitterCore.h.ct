@@ -46,10 +46,6 @@ pub trait EmitOps {
 
     int  emit_inline(int n);
 
-    int  emit_type_name(const char *type, const char *name);
-
-    int  emit_type_name_dims(const char *type, const char *name, const char *dims);
-
     int  emit_expr(int n);
 
     /* LANG-26 / D-020 §6.1: a call whose `out` actual needed a temporary. The
@@ -60,16 +56,8 @@ pub trait EmitOps {
     /* Phase 78 S2: one `ref` / `out` actual. A plain place takes its address;
        a Vec/Map subscript sugar already answers a pointer (`at`) and must not
        be addressed again. */
-    int  emit_ref_arg(int n);
-
     /* PH-79 fix SH-100: one value against an expected C type. An array where a
        slice (`struct __ct_slice`) is expected becomes a `{ptr,len}` view. */
-    int  emit_value_for(const char *want, int n);
-
-    int  emit_cond(int n);
-
-    int  emit_indent(int n);
-
     int  emit_type_decl(int n, int ind, int with_semi);
 
     /* PH-48 D48-2: the concrete `impl Drop` unit and the callable check; both
@@ -137,6 +125,24 @@ pub trait EmitDecl {
     int  emit_maps(int u);
 
     int  emit_unit_init(int prog);
+}
+
+/* S8 D6: expression spelling / condition / indentation. Bodies live in
+   `EmitExpr.h.ct`; the kind dispatchers (`emit_expr` / `emit_node` /
+   `emit_field` / `emit_inline`) and `emit_outconv` stay on `EmitOps` until
+   their kind-slice / intercept tails move. */
+pub trait EmitExpr {
+    int  emit_type_name(const char *type, const char *name);
+
+    int  emit_type_name_dims(const char *type, const char *name, const char *dims);
+
+    int  emit_ref_arg(int n);
+
+    int  emit_value_for(const char *want, int n);
+
+    int  emit_cond(int n);
+
+    int  emit_indent(int n);
 }
 
 pub trait EmitInit {
@@ -340,4 +346,4 @@ pub struct Emitter {
        be retained nor released. `sb_blk` holds the binding depth at each
        statement block so a `break` / `continue` can release what the skipped
        closing brace would have. The literals are the documented caps. */
-} use EmitOps, EmitHeader, EmitDecl, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;
+} use EmitOps, EmitHeader, EmitDecl, EmitExpr, EmitterTryOps, EmitInvariant, EmitHoist, EmitInit;

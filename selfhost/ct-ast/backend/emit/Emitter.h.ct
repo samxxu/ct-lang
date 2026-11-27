@@ -44,6 +44,7 @@ import backend::emit::EmitHoist;
 import backend::emit::EmitInit;
 import backend::emit::EmitHeader;
 import backend::emit::EmitDecl;
+import backend::emit::EmitExpr;
 import backend::lir::LModule;
 import backend::lir::LModule::LModulePlan as LModulePlan;
 
@@ -8018,13 +8019,6 @@ impl EmitOps for Emitter {
        can observe a different value. Calls are stable once the hoist pass has
        materialised them (text3); post/pre/assignment and calls buried inside a
        subscript/member base are not. */
-    int emit_indent(int n)
-    {
-        int i;
-        (void)self;
-        for (i = 0; i < n * 4; i++) fputc(' ', self->out);
-        return 0;
-    }
 
     /* Fresh state for one statement's hoist scan. The statement's `next` is the
        following statement (not part of this expression), so it is cut off
@@ -9142,38 +9136,7 @@ impl EmitOps for Emitter {
        inside the same declarator (`int (*tbl[2])(int)`), so they are part of
        the name here rather than a suffix; without a `(*)` they trail the name
        exactly as `fputs(text3)` did before (D-5). */
-    int emit_type_name_dims(const char *type, const char *name, const char *dims)
-    {
-        const char *star;
-        const char *sub;
-        (void)self;
 
-        sub = emit_gsub_type_text(self, type);
-        if (sub) {
-            type = sub;
-        } else if (strchr(type, '<')) {
-            /* An instance spelling that reached the emitter without a template
-               substitution (a field of a monomorphised struct, say). */
-            char *ibuf = (char *)malloc(TEXT_LIMIT);
-            if (ibuf && frontend::sym::ct_inst_resolve(type, ibuf, TEXT_LIMIT) == 0) {
-                const char *pooled = runtime::text::ct_intern(ibuf);
-                if (pooled) type = pooled;
-            }
-            free(ibuf);
-        }
-        star = strstr(type, "(*)");
-        if (!star) {
-            fprintf(self->out, "%s %s%s", type, name, dims);
-            return 0;
-        }
-        fprintf(self->out, "%.*s(*%s%s)%s", (int)(star - type), type, name, dims, star + 3);
-        return 0;
-    }
-
-    int emit_type_name(const char *type, const char *name)
-    {
-        return self->emit_type_name_dims(type, name, "");
-    }
 
     int emit_inline(int n)
     {
@@ -9288,56 +9251,12 @@ impl EmitOps for Emitter {
         }
     }
 
-    int emit_cond(int n)
-    {
-        const char *op;
-        (void)self;
-
-        if (self->arena->nodes[n].kind == N_BIN && self->arena->nodes[n].aux >= B_LT && self->arena->nodes[n].aux <= B_NE) {
-            op = "<";
-            if (self->arena->nodes[n].aux == B_GT) op = ">";
-            else if (self->arena->nodes[n].aux == B_LE) op = "<=";
-            else if (self->arena->nodes[n].aux == B_GE) op = ">=";
-            else if (self->arena->nodes[n].aux == B_EQ) op = "==";
-            else if (self->arena->nodes[n].aux == B_NE) op = "!=";
-            if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-            fprintf(self->out, " %s ", op);
-            return self->emit_expr(self->arena->nodes[n].b);
-        }
-        return self->emit_expr(n);
-    }
 
     /* Phase 78 S2: emit one actual whose formal is `ref` / `out`. Taking the
        address of a Vec subscript sugar would be the address of an rvalue; the
        sugar's own `at()` call already answers the element pointer, so it is
        emitted without a second `&`. (A Map element is already a `V *`; the
        source spelling for a place is `*m[k]`, which goes through N_DEREF.) */
-    int emit_ref_arg(int n)
-    {
-        int k;
-
-        if (n < 0) return self->fail("a ref/out argument is missing");
-        k = self->arena->nodes[n].kind;
-        if (k == N_MCALL
-            && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
-            && self->arena->nodes[n].line > 0 && self->arena->nodes[n].num > 0
-            && (strcmp(self->arena->nodes[n].text2, "get") == 0
-                || strcmp(self->arena->nodes[n].text2, "at") == 0)
-            && (strncmp(self->arena->nodes[n].text, "struct Vec_", 11) == 0
-                || strncmp(self->arena->nodes[n].text, "Vec_", 4) == 0)) {
-            self->arena->nodes[n].text2 = runtime::text::ct_intern("at");
-            if (!self->arena->nodes[n].text2) return self->fail("out of memory");
-            return self->emit_expr(n);
-        }
-        /* Phase 78 fix SH-96: `self` is already the receiver pointer in the
-           emitted C (`_self`), so `self.bump(self)` must pass `_self`, not
-           `&_self` (which would be `S **`). */
-        if (k == N_VAR && self->sym->self_mode
-            && strcmp(self->arena->nodes[n].text2, "self") == 0)
-            return self->emit_expr(n);
-        fputs("&", self->out);
-        return self->emit_expr(n);
-    }
 
     /* PH-79 fix SH-100: an array expression where a `T[]` is expected is a
        view. The C storage is the erased `struct __ct_slice`, so the element
@@ -9346,31 +9265,6 @@ impl EmitOps for Emitter {
        local-declaration conversion does. A parameter written `T a[]` has
        already decayed to a pointer and carries no length, so it is left to C;
        a slice value (depth 0) passes through untouched. */
-    int emit_value_for(const char *want, int n)
-    {
-        char *t = tool::sh::ct_scratch_alloc(TEXT_LIMIT);
-        int d = 0;
-        int vi;
-
-        if (want && strcmp(want, "struct __ct_slice") == 0 && n >= 0) {
-            if (self->arena->nodes[n].kind == N_VAR) {
-                vi = self->sym->find_var(self->arena->nodes[n].text2);
-                if (vi >= 0 && self->sym->vars[vi].is_fnparam)
-                    return self->emit_expr(n);
-            }
-            if (hoist_ctype(n, t, TEXT_LIMIT, &d) && d == 1) {
-                fputs("(struct __ct_slice){ (void *)(", self->out);
-                if (self->emit_expr(n) != 0) return -1;
-                fputs("), (int)(sizeof(", self->out);
-                if (self->emit_expr(n) != 0) return -1;
-                fputs(") / sizeof((", self->out);
-                if (self->emit_expr(n) != 0) return -1;
-                fputs(")[0])) }", self->out);
-                return 0;
-            }
-        }
-        return self->emit_expr(n);
-    }
 
     int emit_outconv(int n)
     {
