@@ -119,11 +119,9 @@ fail 与 `ct_emit_*` 绑定；`g_sb` / `g_body_hook` / `g_plan` / `g_slice_used`
 （`emit_program` / `emit_unit_body` / `write_unit_header_body`）已不再扫描 AST
 或符号表来决定顶层顺序、include 块、函数原型与实例/胶水集合，见 §3f。
 
-**仍未做到**四个入口“只消费 LModule”：`write_map` 的 map JSON 仍读符号表与
-AST；此外 `emit_struct_fwd` / `emit_trait_decls` / `emit_vtable_fwd` /
-`emit_link_externs` / `emit_impls` / `emit_maps` / `emit_generic_defs` /
-`emit_unit_init` / `emit_string_literals` 的**选择**仍读符号表（它们打印的是
-节点内容，不在本轮“实例闭包 / ADT-Box 胶水 / header / 原型”五项内）。
+**2026-11-27 最终收尾已把上段剩余项清零**：map/model JSON 六段 / 三段与
+九个写者的选择都已迁入 `LModulePlan` 行，见
+[S8 最终收尾](2026-11-27-s8-closeout-lmodule.md)；§3d 第 1 条保留为历史记录。
 
 ### 3c 施工记录（S8/S8r2 + S8 尾）
 
@@ -145,16 +143,9 @@ AST；此外 `emit_struct_fwd` / `emit_trait_decls` / `emit_vtable_fwd` /
 
 ### 3d 仍未做（剩余清单）
 
-1. **外壳 LModule 化（S8 外壳收尾已把五项迁完，map JSON 未迁）**：
-   `LModulePlan` 的 `ct_lshellrow` 增加 `hdr` 位与 `LPS_INC` / `LPS_PROTO` /
-   `LPS_INPROTO` / `LPS_INST` / `LPS_INSTPROTO` / `LPS_INSTHELP` / `LPS_IMPL` /
-   `LPS_BOXPROTO` / `LPS_BOXHELP` / `LPS_ADTLIFE` / `LPS_STRPROTO` 行；实例闭包
-   （`emit_struct_insts` / `emit_struct_impls` / `inst_*` 判定）、ADT 胶水
-   （`emit_adt_life_defs`）、Box 胶水、header 的 include/dep/shim 组装（含
-   `CT_UNIT_PRIVATE` 与 `<stddef.h>`）、函数原型选择（含 inherent）均改为读行，
-   §3f 给机制表。**仍未迁**：`write_map` 的 map JSON（traits / structs /
-   functions / impls / calls / maps 六段仍读符号表与 AST）；以及 §3b 末段列出的
-   其余写者选择。
+1. **外壳 LModule 化**：S8 外壳收尾迁完五项（§3f），最终收尾把 map/model
+   JSON 与九个写者的选择迁完，见
+   [S8 最终收尾](2026-11-27-s8-closeout-lmodule.md)。
 2. **回退改真修复**（让覆盖率回到 100%）：D-013 owning 字段写
    （`Lownfield`，14 个自举函数）与 owning 句柄局部 / 参数 / 结果
    （`Lglue` 等，6 个）**已在 S8 收尾转为真 lowering**（§3e）；仍保留的函数级
