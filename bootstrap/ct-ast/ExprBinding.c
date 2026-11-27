@@ -170,6 +170,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;

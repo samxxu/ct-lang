@@ -10,10 +10,14 @@
 #include "Memory.h"
 #include "Lexer.h"
 #include "Unit.h"
+#include "MapTable.h"
 #include "Parser.h"
 #include "Expr.h"
 #include "Mem2Writes.h"
 #include "EmitterQuery.h"
+#include "EmitterMapText.h"
+#include "EmitterText.h"
+#include "Init.h"
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
@@ -46,6 +50,37 @@
 #define LPS_BOXHELP     17
 #define LPS_ADTLIFE     18
 #define LPS_STRPROTO    19
+#define LPS_STRUCTFWD   20
+#define LPS_TRAITDECL   21
+#define LPS_VTBLFWD     22
+#define LPS_DROPPROTO   23
+#define LPS_HANDBAK     24
+#define LPS_LINKEXTERN  25
+#define LPS_IMPLDEF     26
+#define LPS_MAPDEF      27
+#define LPS_GINIT       28
+#define LPS_UNITINIT    29
+#define LPS_STRLIT      30
+#define LMP_TRAIT          1
+#define LMP_TRAIT_M        2
+#define LMP_STRUCT         3
+#define LMP_STRUCT_USE     4
+#define LMP_FUNC           5
+#define LMP_IMPL           6
+#define LMP_CALL           7
+#define LMP_MAP            8
+#define LMP_MAP_BIND       9
+#define LMP_MSTRUCT       10
+#define LMP_MSTRUCT_FIELD 11
+#define LMP_MENUM         12
+#define LMP_MENUM_M       13
+#define LMP_MFUNC         14
+#define LMP_MFUNC_PARAM   15
+#define LMP_MAP_STATIC     1
+#define LMP_MAP_TYPE_HOST  2
+#define LMP_MAP_NS_HOST    4
+#define LMP_MAP_SHIM       8
+#define LMP_MAP_SHIM_SRC  16
 #define LINC_C_IO       0
 #define LINC_C_PRE      1
 #define LINC_C_POST     2
@@ -63,6 +98,9 @@
 #define T_PP     5
 #define N_STRUCT  20
 #define N_TYPEDEF 21
+#define N_NUM      8
+#define N_STR      9
+#define N_RAW     31
 #define N_GLOBAL  22
 #define N_IMPL    33
 #define N_ENUM    45
@@ -142,6 +180,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -225,7 +264,16 @@ static int ct_shell_plan_add_glue(struct frontend_module_Module *, int, int);
 static int ct_decl_is_pub(struct frontend_module_Module *, int, const char *);
 static int ct_shell_plan_add_inprots(struct frontend_module_Module *, int, int);
 static int ct_shell_plan_add_protos(struct frontend_module_Module *, int);
+static int ct_vtable_exported(struct frontend_module_Module *, int, const char *);
+static int ct_map_vtable_exported(struct frontend_module_Module *, int);
+static int ct_adoption_default_only(struct frontend_module_Module *, int, const char *);
+static int ct_unit_has_drop_impl(struct frontend_module_Module *, int, int);
+static int ct_unit_init_needed(struct frontend_module_Module *, int);
+static int ct_shell_plan_add_surface(struct frontend_module_Module *, int, int, int);
 static int ct_shell_plan_add_program(struct frontend_module_Module *, int, int, int);
+static int ct_map_plan_add(int, int, int, int, int, int, const char *, const char *, const char *, const char *, const char *);
+static int ct_map_plan_build(struct frontend_module_Module *, int, int);
+static int ct_model_plan_build(struct frontend_module_Module *, int);
 static const char * cycle_file(struct frontend_module_Module *, int);
 static int cycle_is_builtin_Box(struct frontend_module_Module *, const char *);
 static int cycle_Box_target(struct frontend_module_Module *, int, int);
@@ -3187,6 +3235,9 @@ static int frontend_module_Module_frontend_module_ModuleOps_write_header(void *s
 static int frontend_module_Module_frontend_module_ModuleOps_write_map(void *self, const char * dest, int prog, int u) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
     const char * why;
+    if (ct_map_plan_build(_self, prog, u) != 0) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
     if (backend_emit_ct_emit_map(dest, prog, u) != 0) {
         why = backend_emit_ct_emit_last_error();
         if (why[0]) {
@@ -3200,6 +3251,9 @@ static int frontend_module_Module_frontend_module_ModuleOps_write_map(void *self
 static int frontend_module_Module_frontend_module_ModuleOps_write_model(void *self, const char * dest, int prog) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
     const char * why;
+    if (ct_model_plan_build(_self, prog) != 0) {
+        return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
+    }
     if (backend_emit_ct_emit_model(dest, prog) != 0) {
         why = backend_emit_ct_emit_last_error();
         if (why[0]) {
@@ -3863,6 +3917,336 @@ static int ct_shell_plan_add_protos(struct frontend_module_Module * self, int un
     }
     return 0;
 }
+static int ct_vtable_exported(struct frontend_module_Module * self, int si, const char * tname) {
+    int t;
+    if (((strcmp(tname, "Drop") == 0) || (strcmp(tname, "Handback") == 0))) {
+        return 0;
+    }
+    t = self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, tname);
+    if (((t < 0) || (!self->sym->traits[t].is_pub))) {
+        return 0;
+    }
+    return ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name);
+}
+static int ct_map_vtable_exported(struct frontend_module_Module * self, int i) {
+    int t;
+    t = self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, self->p->maps[i].trait);
+    if (((t < 0) || (!self->sym->traits[t].is_pub))) {
+        return 0;
+    }
+    if (self->p->maps[i].ns_host) {
+        return 1;
+    }
+    return ct_decl_is_pub(self, N_GLOBAL, self->p->maps[i].inst);
+}
+static int ct_adoption_default_only(struct frontend_module_Module * self, int si, const char * tname) {
+    int ti;
+    int mi;
+    ti = self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, tname);
+    if (ti < 0) {
+        return 0;
+    }
+    if (backend_emit_impl_exists_anywhere(self->arena, si, tname)) {
+        return 0;
+    }
+    if (self->sym->traits[ti].nm == 0) {
+        return 0;
+    }
+    for (mi = 0; mi < self->sym->traits[ti].nm; mi++) {
+        if (self->sym->traits[ti].m[mi].body < 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+static int ct_unit_has_drop_impl(struct frontend_module_Module * self, int u, int si) {
+    int n;
+    if ((((u < 0) || (u >= self->nunits)) || (si < 0))) {
+        return 0;
+    }
+    for (n = self->arena->nodes[self->units[u].prog].a; n >= 0; n = self->arena->nodes[n].next) {
+        if ((((self->arena->nodes[n].kind == N_IMPL) && (self->arena->nodes[n].aux == si)) && (strcmp(self->arena->nodes[n].text2, "Drop") == 0))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+static int ct_unit_init_needed(struct frontend_module_Module * self, int n) {
+    struct runtime_arena_Arena * a = self->arena;
+    struct backend_emit_Init * init = backend_emit_init_get();
+    const char * lit;
+    int k;
+    if (a->nodes[n].kind != N_GLOBAL) {
+        return 0;
+    }
+    if ((!init->__backend_emit_initops_vptr->type_needs_init(init, a->nodes[n].text))) {
+        return 0;
+    }
+    if (((!a->nodes[n].text3[0]) && (!self->ty->__frontend_type_typeops_vptr->type_has_array_init(self->ty, a->nodes[n].text)))) {
+        return 0;
+    }
+    k = a->nodes[n].a;
+    if ((((((k >= 0) && (a->nodes[k].kind == N_RAW)) && a->nodes[n].text3[0]) && init->__backend_emit_initops_vptr->type_has_vptr(init, a->nodes[n].text)) && (!init->__backend_emit_initops_vptr->type_needs_nested_init(init, a->nodes[n].text)))) {
+        lit = (a->nodes[k].aux ? a->__runtime_arena_arenaops_vptr->str_at(a, (int)(a->nodes[k].num)) : a->nodes[k].text);
+        if (backend_emit_init_has_elem_groups(lit)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int prog, int unit, int is_header) {
+    int n;
+    int i;
+    int si;
+    int trs;
+    int tre;
+    const char * tname;
+    for (i = 0; i < self->sym->nstructs; i++) {
+        int ti;
+        if (self->sym->structs[i].is_template) {
+            continue;
+        }
+        ti = self->sym->__frontend_sym_symbolops_vptr->find_type(self->sym, self->sym->structs[i].name);
+        if (ti < 0) {
+            continue;
+        }
+        if (((self->sym->type_kind[ti] != 1) && (self->sym->type_kind[ti] != 6))) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_STRUCTFWD, unit, i, ((self->sym->type_kind[ti] == 6) ? 1 : 0), 0, 0) != 0) {
+            return 1;
+        }
+    }
+    if (unit < 0) {
+        for (i = 0; i < self->sym->ntraits; i++) {
+            if ((self->sym->traits[i].is_static || (self->sym->traits[i].ntparams > 0))) {
+                continue;
+            }
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_TRAITDECL, unit, i, 0, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    else {
+        trs = self->units[unit].tr_start;
+        tre = self->units[unit].tr_end;
+        for (i = trs; i < tre; i++) {
+            if ((self->sym->traits[i].is_static || (self->sym->traits[i].ntparams > 0))) {
+                continue;
+            }
+            if ((!self->sym->traits[i].is_pub)) {
+                if (backend_lir_lmod_plan_shell_add_stage(LPS_TRAITDECL, unit, i, 2, 0, 0) != 0) {
+                    return 1;
+                }
+            }
+            if ((is_header && self->sym->traits[i].is_pub)) {
+                if (backend_lir_lmod_plan_shell_add_stage(LPS_TRAITDECL, unit, i, 1, 1, 0) != 0) {
+                    return 1;
+                }
+            }
+        }
+    }
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        if (self->arena->nodes[n].kind != N_IMPL) {
+            continue;
+        }
+        si = self->arena->nodes[n].aux;
+        if (si < 0) {
+            continue;
+        }
+        if ((!self->arena->nodes[n].text2[0])) {
+            continue;
+        }
+        tname = self->arena->nodes[n].text2;
+        if (((strcmp(tname, "Drop") == 0) || (strcmp(tname, "Handback") == 0))) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_VTBLFWD, unit, si, ct_vtable_exported(self, si, tname), 0, tname) != 0) {
+            return 1;
+        }
+    }
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        if (((self->arena->nodes[n].kind != N_STRUCT) || (!self->arena->nodes[n].text2[0]))) {
+            continue;
+        }
+        si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
+        if (si < 0) {
+            continue;
+        }
+        for (i = 0; i < self->sym->structs[si].nuse; i++) {
+            tname = self->sym->structs[si].use[i];
+            if ((!ct_adoption_default_only(self, si, tname))) {
+                continue;
+            }
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_VTBLFWD, unit, si, ct_vtable_exported(self, si, tname), 0, tname) != 0) {
+                return 1;
+            }
+        }
+    }
+    for (si = 0; si < self->sym->nstructs; si++) {
+        int owner;
+        int legacy;
+        int kind;
+        if (((!self->sym->structs[si].uses_drop) || self->sym->structs[si].is_template)) {
+            continue;
+        }
+        owner = self->sym->structs[si].owner;
+        legacy = ((unit < 0) || (owner < 0));
+        if (unit < 0) {
+            kind = 0;
+        }
+        else {
+            if (legacy) {
+                if (self->sym->structs[si].is_inst) {
+                    continue;
+                }
+                kind = 1;
+            }
+            else {
+                if (owner == unit) {
+                    if ((self->sym->structs[si].has_drop_impl && (!ct_unit_has_drop_impl(self, unit, si)))) {
+                        continue;
+                    }
+                    kind = 2;
+                }
+                else {
+                    kind = 3;
+                }
+            }
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_DROPPROTO, unit, si, kind, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    for (si = 0; si < self->sym->nstructs; si++) {
+        if (self->sym->structs[si].has_handback_impl) {
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_HANDBAK, unit, si, 0, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    if ((is_header && (unit >= 0))) {
+        for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+            if (self->arena->nodes[n].kind != N_IMPL) {
+                continue;
+            }
+            si = self->arena->nodes[n].aux;
+            if (si < 0) {
+                continue;
+            }
+            if ((!self->arena->nodes[n].text2[0])) {
+                continue;
+            }
+            tname = self->arena->nodes[n].text2;
+            if ((!ct_vtable_exported(self, si, tname))) {
+                continue;
+            }
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_LINKEXTERN, unit, si, 0, 1, tname) != 0) {
+                return 1;
+            }
+        }
+        for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+            if (((self->arena->nodes[n].kind != N_STRUCT) || (!self->arena->nodes[n].text2[0]))) {
+                continue;
+            }
+            si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
+            if (si < 0) {
+                continue;
+            }
+            for (i = 0; i < self->sym->structs[si].nuse; i++) {
+                tname = self->sym->structs[si].use[i];
+                if ((!ct_adoption_default_only(self, si, tname))) {
+                    continue;
+                }
+                if ((!ct_vtable_exported(self, si, tname))) {
+                    continue;
+                }
+                if (backend_lir_lmod_plan_shell_add_stage(LPS_LINKEXTERN, unit, si, 0, 1, tname) != 0) {
+                    return 1;
+                }
+            }
+        }
+        for (i = 0; i < self->p->nmaps; i++) {
+            if (self->p->maps[i].unit != unit) {
+                continue;
+            }
+            if (self->p->maps[i].is_static) {
+                continue;
+            }
+            if ((!ct_map_vtable_exported(self, i))) {
+                continue;
+            }
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_LINKEXTERN, unit, i, 1, 1, self->p->maps[i].trait) != 0) {
+                return 1;
+            }
+        }
+    }
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        int k = self->arena->nodes[n].kind;
+        if (k == N_IMPL) {
+            if (((self->arena->nodes[n].aux >= 0) && self->arena->nodes[n].text2[0])) {
+                if (backend_lir_lmod_plan_shell_add_stage(LPS_IMPLDEF, unit, n, 1, 0, 0) != 0) {
+                    return 1;
+                }
+            }
+            else {
+                if (((!self->arena->nodes[n].text2[0]) && (self->arena->nodes[n].aux != (-1)))) {
+                    if (backend_lir_lmod_plan_shell_add_stage(LPS_IMPLDEF, unit, n, 2, 0, 0) != 0) {
+                        return 1;
+                    }
+                }
+            }
+        }
+        else {
+            if (((k == N_STRUCT) && self->arena->nodes[n].text2[0])) {
+                if (backend_lir_lmod_plan_shell_add_stage(LPS_IMPLDEF, unit, n, 3, 0, 0) != 0) {
+                    return 1;
+                }
+            }
+        }
+    }
+    for (i = 0; i < self->p->nmaps; i++) {
+        if (((unit >= 0) && (self->p->maps[i].unit != unit))) {
+            continue;
+        }
+        if (self->p->maps[i].is_static) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_MAPDEF, unit, i, ct_map_vtable_exported(self, i), 0, 0) != 0) {
+            return 1;
+        }
+    }
+    for (i = 0; i < self->sym->nginsts; i++) {
+        if (((unit >= 0) && (self->sym->ginsts[i].owner != unit))) {
+            continue;
+        }
+        if (self->sym->funcs[self->sym->ginsts[i].func].body < 0) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_GINIT, unit, i, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        if (ct_unit_init_needed(self, n)) {
+            if (backend_lir_lmod_plan_shell_add_stage(LPS_UNITINIT, unit, n, 0, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    for (n = 0; n < self->arena->nnode; n++) {
+        if (self->arena->nodes[n].kind != N_STR) {
+            continue;
+        }
+        if (self->arena->nodes[n].aux != 1) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_shell_add_stage(LPS_STRLIT, unit, n, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
 static int ct_shell_plan_add_program(struct frontend_module_Module * self, int prog, int unit, int is_header) {
     struct runtime_arena_Arena * ar = self->arena;
     int n;
@@ -3946,6 +4330,9 @@ static int ct_shell_plan_add_program(struct frontend_module_Module * self, int p
             return 1;
         }
     }
+    if (ct_shell_plan_add_surface(self, prog, unit, is_header) != 0) {
+        return 1;
+    }
     if (((!is_header) || (!uu))) {
         return 0;
     }
@@ -3980,6 +4367,254 @@ static int ct_shell_plan_add_program(struct frontend_module_Module * self, int p
                 }
             }
             if (backend_lir_lmod_plan_shell_add(LPS_DROP, unit, si, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int ct_map_plan_add(int kind, int unit, int parent, int line, int a, int b, const char * t1, const char * t2, const char * t3, const char * t4, const char * t5) {
+    if (backend_lir_lmod_map_plan_add(kind, unit, parent, line, a, b, t1, t2, t3, t4, t5) != 0) {
+        return 1;
+    }
+    return 0;
+}
+static int ct_map_plan_build(struct frontend_module_Module * self, int prog, int u) {
+    struct frontend_module_MapTable * maps = self->p->maps;
+    struct frontend_module_Call * calls = self->p->calls;
+    int nmaps = self->p->nmaps;
+    int trs;
+    int tre;
+    int fns;
+    int fne;
+    int cls;
+    int cle;
+    int i;
+    int j;
+    int m;
+    int n;
+    int si;
+    int parent;
+    backend_lir_lmod_map_plan_reset();
+    if (u >= 0) {
+        trs = self->units[u].tr_start;
+        tre = self->units[u].tr_end;
+        fns = self->units[u].fn_start;
+        fne = self->units[u].fn_end;
+        cls = self->units[u].call_start;
+        cle = self->units[u].call_end;
+    }
+    else {
+        trs = 0;
+        tre = self->sym->ntraits;
+        fns = 0;
+        fne = self->sym->nfunc;
+        cls = 0;
+        cle = self->p->ncalls;
+    }
+    for (i = trs; i < tre; i++) {
+        parent = backend_lir_lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_TRAIT, u, (-1), self->sym->traits[i].line, 0, 0, self->sym->traits[i].name, self->sym->traits[i].name, 0, 0, 0) != 0) {
+            return 1;
+        }
+        for (m = 0; m < self->sym->traits[i].nm; m++) {
+            if (ct_map_plan_add(LMP_TRAIT_M, u, parent, 0, self->sym->traits[i].m[m].nparams, 0, self->sym->traits[i].m[m].name, self->sym->traits[i].m[m].ret, 0, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        if (self->arena->nodes[n].kind != N_STRUCT) {
+            continue;
+        }
+        parent = backend_lir_lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_STRUCT, u, (-1), self->arena->nodes[n].line, 0, 0, self->arena->nodes[n].text2, self->arena->nodes[n].text2, 0, 0, 0) != 0) {
+            return 1;
+        }
+        si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
+        if (si >= 0) {
+            for (i = 0; i < self->sym->structs[si].nuse; i++) {
+                if (ct_map_plan_add(LMP_STRUCT_USE, u, parent, 0, 0, 0, self->sym->structs[si].use[i], 0, 0, 0, 0) != 0) {
+                    return 1;
+                }
+            }
+        }
+    }
+    for (i = fns; i < fne; i++) {
+        if (ct_map_plan_add(LMP_FUNC, u, (-1), self->sym->funcs[i].line, 0, self->sym->funcs[i].nparams, self->sym->funcs[i].name, self->sym->funcs[i].ret, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        const char * tname;
+        if (self->arena->nodes[n].kind != N_IMPL) {
+            continue;
+        }
+        si = self->arena->nodes[n].aux;
+        if (si < 0) {
+            continue;
+        }
+        if ((!self->arena->nodes[n].text2[0])) {
+            continue;
+        }
+        tname = self->arena->nodes[n].text2;
+        for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+            int count = 0;
+            for (i = self->arena->nodes[m].a; i > 0; i = self->arena->nodes[i].next) {
+                count++;
+            }
+            if (ct_map_plan_add(LMP_IMPL, u, (-1), self->arena->nodes[n].line, count, 0, self->sym->structs[si].name, tname, self->arena->nodes[m].text2, self->arena->nodes[m].text, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    for (i = cls; i < cle; i++) {
+        if (ct_map_plan_add(LMP_CALL, u, (-1), calls[i].line, 0, 0, calls[i].caller, calls[i].callee, 0, 0, 0) != 0) {
+            return 1;
+        }
+    }
+    for (i = 0; i < nmaps; i++) {
+        int flags = 0;
+        if (((!maps) || maps[i].is_binding)) {
+            continue;
+        }
+        if (maps[i].is_static) {
+            flags |= LMP_MAP_STATIC;
+        }
+        if (maps[i].type_host) {
+            flags |= LMP_MAP_TYPE_HOST;
+        }
+        else {
+            if (maps[i].ns_host) {
+                flags |= LMP_MAP_NS_HOST;
+            }
+        }
+        if (maps[i].is_static) {
+            int su = maps[i].unit;
+            if ((((su >= 0) && (su < self->nunits)) && self->units[su].has_shim)) {
+                flags |= LMP_MAP_SHIM;
+                if (self->units[su].shim_c) {
+                    flags |= LMP_MAP_SHIM_SRC;
+                }
+            }
+        }
+        parent = backend_lir_lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MAP, u, (-1), maps[i].line, 0, flags, maps[i].trait, maps[i].inst, (maps[i].type_host ? maps[i].host_type : 0), ((flags & LMP_MAP_SHIM) ? self->units[maps[i].unit].shim_h : 0), ((flags & LMP_MAP_SHIM_SRC) ? self->units[maps[i].unit].shim_c : 0)) != 0) {
+            return 1;
+        }
+        for (j = 0; j < maps[i].nb; j++) {
+            const char * sym;
+            if (maps[i].is_static) {
+                sym = backend_emit_map_recipe_callee_text(maps[i].b[j].call);
+                if ((!sym)) {
+                    return 1;
+                }
+            }
+            else {
+                sym = (maps[i].b[j].direct ? maps[i].b[j].call : maps[i].b[j].wrapper);
+            }
+            if (ct_map_plan_add(LMP_MAP_BIND, u, parent, 0, 0, maps[i].b[j].direct, maps[i].b[j].method, sym, 0, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int ct_model_plan_build(struct frontend_module_Module * self, int prog) {
+    int n;
+    int i;
+    int j;
+    int si;
+    int bi;
+    int bn;
+    int skip;
+    int parent;
+    backend_lir_lmod_map_plan_reset();
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        int k = self->arena->nodes[n].kind;
+        if (((k != N_STRUCT) && (k != N_UNION))) {
+            continue;
+        }
+        skip = 0;
+        for (bi = 0; ((bi < self->nbuiltin) && (!skip)); bi++) {
+            int bu = self->builtin_units[bi];
+            if (((bu < 0) || (bu >= self->nunits))) {
+                continue;
+            }
+            for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0; bn = self->arena->nodes[bn].next) {
+                if (bn == n) {
+                    skip = 1;
+                    break;
+                }
+            }
+        }
+        if (skip) {
+            continue;
+        }
+        if ((((((((strcmp(self->arena->nodes[n].text2, "ct_buf") == 0) || (strcmp(self->arena->nodes[n].text2, "Vec") == 0)) || (strcmp(self->arena->nodes[n].text2, "Map") == 0)) || (strcmp(self->arena->nodes[n].text2, "MapEntry") == 0)) || (strcmp(self->arena->nodes[n].text2, "Option") == 0)) || (strcmp(self->arena->nodes[n].text2, "Result") == 0)) || (strcmp(self->arena->nodes[n].text2, "Str") == 0))) {
+            continue;
+        }
+        parent = backend_lir_lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MSTRUCT, (-1), (-1), self->arena->nodes[n].line, 0, (k == N_UNION), self->arena->nodes[n].text2, 0, 0, 0, 0) != 0) {
+            return 1;
+        }
+        si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
+        if (si >= 0) {
+            for (i = 0; i < self->sym->structs[si].nfields; i++) {
+                if (ct_map_plan_add(LMP_MSTRUCT_FIELD, (-1), parent, 0, self->sym->structs[si].fields[i].line, self->sym->structs[si].fields[i].col, self->sym->structs[si].fields[i].name, self->sym->structs[si].fields[i].type, 0, 0, 0) != 0) {
+                    return 1;
+                }
+            }
+        }
+    }
+    for (n = ((prog >= 0) ? self->arena->nodes[prog].a : (-1)); n >= 0; n = self->arena->nodes[n].next) {
+        int m;
+        if (self->arena->nodes[n].kind != N_ENUM) {
+            continue;
+        }
+        if ((self->arena->nodes[n].aux & 2)) {
+            continue;
+        }
+        skip = 0;
+        for (bi = 0; ((bi < self->nbuiltin) && (!skip)); bi++) {
+            int bu = self->builtin_units[bi];
+            if (((bu < 0) || (bu >= self->nunits))) {
+                continue;
+            }
+            for (bn = self->arena->nodes[self->units[bu].prog].a; bn >= 0; bn = self->arena->nodes[bn].next) {
+                if (bn == n) {
+                    skip = 1;
+                    break;
+                }
+            }
+        }
+        if (skip) {
+            continue;
+        }
+        parent = backend_lir_lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MENUM, (-1), (-1), self->arena->nodes[n].line, 0, 0, self->arena->nodes[n].text, 0, 0, 0, 0) != 0) {
+            return 1;
+        }
+        for ((m = self->arena->nodes[n].a, i = 0); m >= 0; (m = self->arena->nodes[m].next, i++)) {
+            int val = 0;
+            if (((self->arena->nodes[m].a >= 0) && (self->arena->nodes[self->arena->nodes[m].a].kind == N_NUM))) {
+                val = (int)(self->arena->nodes[self->arena->nodes[m].a].num);
+            }
+            if (ct_map_plan_add(LMP_MENUM_M, (-1), parent, 0, val, 0, self->arena->nodes[m].text2, 0, 0, 0, 0) != 0) {
+                return 1;
+            }
+        }
+    }
+    for (i = 0; i < self->sym->nfunc; i++) {
+        if ((((((strncmp(self->sym->funcs[i].name, "str_", 4) == 0) || (strncmp(self->sym->funcs[i].name, "vec_", 4) == 0)) || (strncmp(self->sym->funcs[i].name, "map_", 4) == 0)) || (strncmp(self->sym->funcs[i].name, "option_", 7) == 0)) || (strncmp(self->sym->funcs[i].name, "result_", 7) == 0))) {
+            continue;
+        }
+        parent = backend_lir_lmod_map_plan_count();
+        if (ct_map_plan_add(LMP_MFUNC, (-1), (-1), self->sym->funcs[i].line, 0, 0, self->sym->funcs[i].name, self->sym->funcs[i].cname, self->sym->funcs[i].ret, 0, 0) != 0) {
+            return 1;
+        }
+        for (j = 0; j < self->sym->funcs[i].nparams; j++) {
+            if (ct_map_plan_add(LMP_MFUNC_PARAM, (-1), parent, 0, 0, 0, self->sym->funcs[i].ptype[j], 0, 0, 0, 0) != 0) {
                 return 1;
             }
         }

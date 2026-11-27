@@ -48,6 +48,8 @@
 #define LPS_BOXHELP     17
 #define LPS_ADTLIFE     18
 #define LPS_STRPROTO    19
+#define LPS_GINIT       28
+#define LPS_STRLIT      30
 #define LINC_C_IO       0
 #define LINC_C_PRE      1
 #define LINC_C_POST     2
@@ -134,6 +136,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -809,10 +812,16 @@ int backend_emit_emit_adt_life_defs(struct backend_emit_Emitter * self, int u) {
 int backend_emit_emit_generic_defs(struct backend_emit_Emitter * self, int u) {
     int i;
     int t;
-    for (i = 0; i < self->sym->nginsts; i++) {
-        if (((u >= 0) && (self->sym->ginsts[i].owner != u))) {
+    int nr = backend_lir_lmod_plan_row_count();
+    int r;
+    for (r = 0; r < nr; r++) {
+        if (backend_lir_lmod_plan_row_kind(r) != LPS_GINIT) {
             continue;
         }
+        if (backend_lir_lmod_plan_row_unit(r) != u) {
+            continue;
+        }
+        i = backend_lir_lmod_plan_row_node(r);
         t = self->sym->funcs[self->sym->ginsts[i].func].body;
         if (t < 0) {
             continue;
@@ -951,17 +960,21 @@ void backend_emit_emit_slice_helpers(struct backend_emit_Emitter * self) {
     fputs("static void __attribute__((unused)) __ct_slice_check(struct __ct_slice *s, int i)\n""{\n""    if (i < 0 || i >= s->len) {\n""        fprintf(stderr, \"ct: slice index %d out of bounds (length %d)\\n\", i, s->len);\n""        exit(1);\n""    }\n""}\n""__attribute__((unused)) static void *__ct_slice_at(struct __ct_slice *s, int i, unsigned long esz)\n""{\n""    __ct_slice_check(s, i);\n""    return (char *)s->ptr + (unsigned long)i * esz;\n""}\n""__attribute__((unused)) static void *__ct_slice_get(struct __ct_slice s, int i, unsigned long esz)\n""{\n""    if (i < 0 || i >= s.len) return 0;\n""    return (char *)s.ptr + (unsigned long)i * esz;\n""}\n""__attribute__((unused)) static struct __ct_slice __ct_slice_range(void *p, int len, int lo, int hi, unsigned long esz, const char *where)\n""{\n""    struct __ct_slice s;\n""    if (lo < 0 || hi < lo || hi > len) {\n""        fprintf(stderr, \"%s: slice construction out of bounds: [%d,%d) for length %d\\n\", where, lo, hi, len);\n""        exit(1);\n""    }\n""    s.ptr = (char *)p + (unsigned long)lo * esz;\n""    s.len = hi - lo;\n""    return s;\n""}\n\n", self->out);
 }
 int backend_emit_emit_string_literals(struct backend_emit_Emitter * self, int prog) {
-    int n;
+    int nr = backend_lir_lmod_plan_row_count();
+    int r;
     int any = 0;
+    int u = backend_lir_lmod_plan_shell_u();
     (void)(prog);
-    for (n = 0; n < self->arena->nnode; n++) {
+    for (r = 0; r < nr; r++) {
+        int n;
         const char * lit;
-        if (self->arena->nodes[n].kind != N_STR) {
+        if (backend_lir_lmod_plan_row_kind(r) != LPS_STRLIT) {
             continue;
         }
-        if (self->arena->nodes[n].aux != 1) {
+        if (backend_lir_lmod_plan_row_unit(r) != u) {
             continue;
         }
+        n = backend_lir_lmod_plan_row_node(r);
         lit = self->arena->__runtime_arena_arenaops_vptr->str_at(self->arena, (int)(self->arena->nodes[n].num));
         if ((!any)) {
             fputs("\n/* PH-80: immortal String literal headers */\n", self->out);
@@ -1128,7 +1141,7 @@ int backend_emit_emit_unit_body(struct backend_emit_Emitter * self, int u) {
     if (self->__backend_emit_emitheader_vptr->emit_struct_fwd(self) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitheader_vptr->emit_trait_range(self, self->units[u].tr_start, self->units[u].tr_end, 2) != 0) {
+    if (self->__backend_emit_emitdecl_vptr->emit_trait_decls(self) != 0) {
         return (-1);
     }
     if (self->__backend_emit_emitheader_vptr->emit_vtable_fwd(self, self->units[u].prog) != 0) {
@@ -1719,7 +1732,7 @@ int backend_emit_write_unit_header_body(struct backend_emit_Emitter * self, int 
     if (self->__backend_emit_emitheader_vptr->emit_struct_fwd(self) != 0) {
         return (-1);
     }
-    if (self->__backend_emit_emitheader_vptr->emit_trait_range(self, self->units[u].tr_start, self->units[u].tr_end, 1) != 0) {
+    if (self->__backend_emit_emitdecl_vptr->emit_trait_decls(self) != 0) {
         return (-1);
     }
     if (self->__backend_emit_emitdecl_vptr->emit_link_externs(self, self->units[u].prog, u) != 0) {

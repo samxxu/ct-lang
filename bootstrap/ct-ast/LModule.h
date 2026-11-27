@@ -80,6 +80,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -338,6 +339,19 @@ struct backend_lir_LModule {
     int stat_fallback;
     int stat_printed;
 };
+struct backend_lir_LMapRow {
+    int kind;
+    int unit;
+    int parent;
+    int line;
+    int a;
+    int b;
+    const char * t1;
+    const char * t2;
+    const char * t3;
+    const char * t4;
+    const char * t5;
+};
 struct backend_lir_LModulePlan {
     int nbuiltin;
     int live[8];
@@ -351,6 +365,9 @@ struct backend_lir_LModulePlan {
     void * srows;
     int nsrows;
     int srowcap;
+    void * mrows;
+    int nmrows;
+    int mrowcap;
     int abi_root;
     int abi_n;
     int abi_exports[256];
@@ -371,6 +388,10 @@ int backend_lir_lmod_plan_row_node(int);
 int backend_lir_lmod_plan_row_aux(int);
 int backend_lir_lmod_plan_row_hdr(int);
 const char * backend_lir_lmod_plan_row_text(int);
+void backend_lir_lmod_map_plan_reset(void);
+int backend_lir_lmod_map_plan_add(int, int, int, int, int, int, const char *, const char *, const char *, const char *, const char *);
+int backend_lir_lmod_map_plan_count(void);
+struct backend_lir_LMapRow * backend_lir_lmod_map_plan_row(int);
 void backend_lir_lmod_plan_set_prog(int);
 int backend_lir_lmod_plan_prog(void);
 void backend_lir_lmod_plan_set_abi(int, int *, int);

@@ -15,10 +15,14 @@
 #include "Memory.h"
 #include "Lexer.h"
 #include "Unit.h"
+#include "MapTable.h"
 #include "Parser.h"
 #include "Expr.h"
 #include "Mem2Writes.h"
 #include "EmitterQuery.h"
+#include "EmitterMapText.h"
+#include "EmitterText.h"
+#include "Init.h"
 #include "Symbols.h"
 #include "TypeCheck.h"
 #include "Arena.h"
@@ -99,6 +103,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;

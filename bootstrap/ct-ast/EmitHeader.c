@@ -26,6 +26,32 @@
 #define N_IMPL    33
 #define N_ENUM    45
 #define N_UNION   48
+#define LMP_TRAIT          1
+#define LMP_TRAIT_M        2
+#define LMP_STRUCT         3
+#define LMP_STRUCT_USE     4
+#define LMP_FUNC           5
+#define LMP_IMPL           6
+#define LMP_CALL           7
+#define LMP_MAP            8
+#define LMP_MAP_BIND       9
+#define LMP_MSTRUCT       10
+#define LMP_MSTRUCT_FIELD 11
+#define LMP_MENUM         12
+#define LMP_MENUM_M       13
+#define LMP_MFUNC         14
+#define LMP_MFUNC_PARAM   15
+#define LMP_MAP_STATIC     1
+#define LMP_MAP_TYPE_HOST  2
+#define LMP_MAP_NS_HOST    4
+#define LMP_MAP_SHIM       8
+#define LMP_MAP_SHIM_SRC  16
+#define LPS_STRUCTFWD  20
+#define LPS_TRAITDECL  21
+#define LPS_VTBLFWD    22
+#define LPS_DROPPROTO  23
+#define LPS_HANDBAK    24
+#define LPS_LINKEXTERN 25
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -94,6 +120,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -197,89 +224,57 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_proto(void *self, i
 
 static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *self, int prog) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int n;
-    int si;
-    const char * tname;
+    int nr = backend_lir_lmod_plan_row_count();
+    int r;
+    int u = backend_lir_lmod_plan_shell_u();
+    (void)(prog);
     (void)(_self);
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        if (_self->arena->nodes[n].kind != N_IMPL) {
-            continue;
-        }
-        si = _self->arena->nodes[n].aux;
-        if (si < 0) {
-            continue;
-        }
-        if ((!_self->arena->nodes[n].text2[0])) {
-            continue;
-        }
-        tname = _self->arena->nodes[n].text2;
-        if (((strcmp(tname, "Drop") == 0) || (strcmp(tname, "Handback") == 0))) {
-            continue;
-        }
-        if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
-            fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[si].name, tname);
-        }
-        else {
-            fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n", tname, _self->sym->structs[si].name, tname);
-        }
-    }
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        int ui;
+    for (r = 0; r < nr; r++) {
+        int kind;
+        int si;
         const char * tname;
-        if (((_self->arena->nodes[n].kind != N_STRUCT) || (!_self->arena->nodes[n].text2[0]))) {
+        if (backend_lir_lmod_plan_row_unit(r) != u) {
             continue;
         }
-        si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[n].text2);
-        if (si < 0) {
-            continue;
-        }
-        for (ui = 0; ui < _self->sym->structs[si].nuse; ui++) {
-            tname = _self->sym->structs[si].use[ui];
-            if ((!backend_emit_adoption_default_only(_self, si, tname))) {
+        kind = backend_lir_lmod_plan_row_kind(r);
+        si = backend_lir_lmod_plan_row_node(r);
+        if (kind == LPS_VTBLFWD) {
+            if (((si < 0) || (si >= _self->sym->nstructs))) {
                 continue;
             }
-            if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
+            tname = backend_lir_lmod_plan_row_text(r);
+            if (backend_lir_lmod_plan_row_aux(r)) {
                 fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[si].name, tname);
             }
             else {
                 fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n", tname, _self->sym->structs[si].name, tname);
             }
         }
-    }
-    for (si = 0; si < _self->sym->nstructs; si++) {
-        int owner;
-        int legacy;
-        if (((!_self->sym->structs[si].uses_drop) || _self->sym->structs[si].is_template)) {
-            continue;
-        }
-        owner = _self->sym->structs[si].owner;
-        legacy = ((_self->cur_unit < 0) || (owner < 0));
-        if (_self->cur_unit < 0) {
-            fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
-        }
         else {
-            if (legacy) {
-                if (_self->sym->structs[si].is_inst) {
+            if (kind == LPS_DROPPROTO) {
+                if (((si < 0) || (si >= _self->sym->nstructs))) {
                     continue;
                 }
-                fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
-            }
-            else {
-                if (owner == _self->cur_unit) {
-                    if ((_self->sym->structs[si].has_drop_impl && (!_self->__backend_emit_emitdecl_vptr->unit_has_drop_impl(_self, _self->cur_unit, si)))) {
-                        continue;
-                    }
+                if (backend_lir_lmod_plan_row_aux(r) == 2) {
                     fprintf(_self->out, "void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
                 }
                 else {
-                    fprintf(_self->out, "extern void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
+                    if (backend_lir_lmod_plan_row_aux(r) == 3) {
+                        fprintf(_self->out, "extern void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
+                    }
+                    else {
+                        fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
+                    }
                 }
             }
-        }
-    }
-    for (si = 0; si < _self->sym->nstructs; si++) {
-        if (_self->sym->structs[si].has_handback_impl) {
-            fprintf(_self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n", _self->sym->structs[si].name);
+            else {
+                if (kind == LPS_HANDBAK) {
+                    if (((si < 0) || (si >= _self->sym->nstructs))) {
+                        continue;
+                    }
+                    fprintf(_self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n", _self->sym->structs[si].name);
+                }
+            }
         }
     }
     if (_self->sym->nstructs) {
@@ -288,59 +283,29 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *se
     return 0;
 }
 
-static int backend_emit_Emitter_backend_emit_EmitHeader_emit_trait_range(void *self, int start, int end, int mode) {
-    struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int t;
-    int m;
-    int k;
-    (void)(_self);
-    for (t = start; t < end; t++) {
-        if ((_self->sym->traits[t].is_static || (_self->sym->traits[t].ntparams > 0))) {
-            continue;
-        }
-        if (((mode == 1) && (!_self->sym->traits[t].is_pub))) {
-            continue;
-        }
-        if (((mode == 2) && _self->sym->traits[t].is_pub)) {
-            continue;
-        }
-        fprintf(_self->out, "struct %s_vtbl {\n", _self->sym->traits[t].name);
-        for (m = 0; m < _self->sym->traits[t].nm; m++) {
-            fprintf(_self->out, "    %s (*%s)(void *", _self->sym->traits[t].m[m].ret, _self->sym->traits[t].m[m].name);
-            for (k = 0; k < _self->sym->traits[t].m[m].nparams; k++) {
-                fprintf(_self->out, ", %s", _self->sym->traits[t].m[m].ptype[k]);
-                if (((_self->sym->traits[t].m[m].pann[k] == 2) || (_self->sym->traits[t].m[m].pann[k] == 3))) {
-                    fputs(" *", _self->out);
-                }
-            }
-            fputs(");\n", _self->out);
-        }
-        fputs("};\n", _self->out);
-        fprintf(_self->out, "struct %s_iface {\n    void *self;\n    const struct %s_vtbl *vt;\n};\n\n", _self->sym->traits[t].name, _self->sym->traits[t].name);
-    }
-    return 0;
-}
-
 static int backend_emit_Emitter_backend_emit_EmitHeader_emit_struct_fwd(void *self) {
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
-    int i;
-    int ti;
+    int nr = backend_lir_lmod_plan_row_count();
+    int r;
+    int u = backend_lir_lmod_plan_shell_u();
     (void)(_self);
-    for (i = 0; i < _self->sym->nstructs; i++) {
-        if (_self->sym->structs[i].is_template) {
+    for (r = 0; r < nr; r++) {
+        int si;
+        if (backend_lir_lmod_plan_row_kind(r) != LPS_STRUCTFWD) {
             continue;
         }
-        ti = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->structs[i].name);
-        if (ti < 0) {
+        if (backend_lir_lmod_plan_row_unit(r) != u) {
             continue;
         }
-        if (_self->sym->type_kind[ti] == 1) {
-            fprintf(_self->out, "struct %s;\n", _self->sym->structs[i].name);
+        si = backend_lir_lmod_plan_row_node(r);
+        if (((si < 0) || (si >= _self->sym->nstructs))) {
+            continue;
+        }
+        if (backend_lir_lmod_plan_row_aux(r)) {
+            fprintf(_self->out, "union %s;\n", _self->sym->structs[si].name);
         }
         else {
-            if (_self->sym->type_kind[ti] == 6) {
-                fprintf(_self->out, "union %s;\n", _self->sym->structs[i].name);
-            }
+            fprintf(_self->out, "struct %s;\n", _self->sym->structs[si].name);
         }
     }
     return 0;
@@ -417,11 +382,12 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_model(void *self, 
     }
     FILE * f;
     const char * path;
-    int n;
     int i;
     int j;
+    int nrows;
     int first;
     (void)(_self);
+    (void)(prog);
     if (strcmp(dest, "-") == 0) {
         f = stdout;
     }
@@ -432,6 +398,7 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_model(void *self, 
         }
     }
     path = _self->path;
+    nrows = backend_lir_lmod_map_plan_count();
     fputs("{\n  \"schema\": \"ct.model\",\n  \"schema_version\": 1,\n", f);
     fputs("  \"compiler\": \"ct v", f);
     _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->version);
@@ -439,133 +406,103 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_model(void *self, 
     _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
     fputs("\",\n  \"structs\": [", f);
     first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        int si;
-        int bi;
-        int bn;
-        int skip = 0;
-        if (((_self->arena->nodes[n].kind != N_STRUCT) && (_self->arena->nodes[n].kind != N_UNION))) {
-            continue;
-        }
-        for (bi = 0; ((bi < _self->nbuiltin) && (!skip)); bi++) {
-            int bu = _self->builtins[bi];
-            if (((bu < 0) || (bu >= (*_self->nunits)))) {
-                continue;
-            }
-            for (bn = _self->arena->nodes[_self->units[bu].prog].a; bn >= 0; bn = _self->arena->nodes[bn].next) {
-                if (bn == n) {
-                    skip = 1;
-                    break;
-                }
-            }
-        }
-        if (skip) {
-            continue;
-        }
-        if ((((((((strcmp(_self->arena->nodes[n].text2, "ct_buf") == 0) || (strcmp(_self->arena->nodes[n].text2, "Vec") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Map") == 0)) || (strcmp(_self->arena->nodes[n].text2, "MapEntry") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Option") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Result") == 0)) || (strcmp(_self->arena->nodes[n].text2, "Str") == 0))) {
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        int ffirst = 1;
+        if (((!r) || (r->kind != LMP_MSTRUCT))) {
             continue;
         }
         if ((!first)) {
             fputc(',', f);
         }
         fputs("{\"kind\":\"", f);
-        fputs(((_self->arena->nodes[n].kind == N_UNION) ? "union" : "struct"), f);
+        fputs((r->b ? "union" : "struct"), f);
         fputs("\",\"name\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text2);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
         fputs("\",\"file\":\"", f);
         _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"fields\":[", _self->arena->nodes[n].line);
-        si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[n].text2);
-        if (si >= 0) {
-            for (i = 0; i < _self->sym->structs[si].nfields; i++) {
-                if (i > 0) {
-                    fputc(',', f);
-                }
-                fputs("{\"name\":\"", f);
-                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->structs[si].fields[i].name);
-                fputs("\",\"type\":\"", f);
-                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->structs[si].fields[i].type);
-                fputs("\",\"visibility\":\"unknown\",\"loc\":{\"file\":\"", f);
-                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-                fprintf(f, "\",\"line\":%d,\"col\":%d}}", _self->sym->structs[si].fields[i].line, _self->sym->structs[si].fields[i].col);
+        fprintf(f, "\",\"line\":%d,\"fields\":[", r->line);
+        for (j = 0; j < nrows; j++) {
+            struct backend_lir_LMapRow * c = backend_lir_lmod_map_plan_row(j);
+            if ((((!c) || (c->kind != LMP_MSTRUCT_FIELD)) || (c->parent != i))) {
+                continue;
             }
+            if ((!ffirst)) {
+                fputc(',', f);
+            }
+            ffirst = 0;
+            fputs("{\"name\":\"", f);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t1);
+            fputs("\",\"type\":\"", f);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t2);
+            fputs("\",\"visibility\":\"unknown\",\"loc\":{\"file\":\"", f);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
+            fprintf(f, "\",\"line\":%d,\"col\":%d}}", c->a, c->b);
         }
         fputs("]}", f);
         first = 0;
     }
     fputs("],\n  \"enums\": [", f);
     first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        int m;
-        int bi;
-        int bn;
-        int skip = 0;
-        if (_self->arena->nodes[n].kind != N_ENUM) {
-            continue;
-        }
-        if ((_self->arena->nodes[n].aux & 2)) {
-            continue;
-        }
-        for (bi = 0; ((bi < _self->nbuiltin) && (!skip)); bi++) {
-            int bu = _self->builtins[bi];
-            if (((bu < 0) || (bu >= (*_self->nunits)))) {
-                continue;
-            }
-            for (bn = _self->arena->nodes[_self->units[bu].prog].a; bn >= 0; bn = _self->arena->nodes[bn].next) {
-                if (bn == n) {
-                    skip = 1;
-                    break;
-                }
-            }
-        }
-        if (skip) {
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        int ffirst = 1;
+        if (((!r) || (r->kind != LMP_MENUM))) {
             continue;
         }
         if ((!first)) {
             fputc(',', f);
         }
         fputs("{\"kind\":\"enum\",\"name\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
         fputs("\",\"file\":\"", f);
         _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"members\":[", _self->arena->nodes[n].line);
-        for ((m = _self->arena->nodes[n].a, i = 0); m >= 0; (m = _self->arena->nodes[m].next, i++)) {
-            int val = 0;
-            if (i > 0) {
+        fprintf(f, "\",\"line\":%d,\"members\":[", r->line);
+        for (j = 0; j < nrows; j++) {
+            struct backend_lir_LMapRow * c = backend_lir_lmod_map_plan_row(j);
+            if ((((!c) || (c->kind != LMP_MENUM_M)) || (c->parent != i))) {
+                continue;
+            }
+            if ((!ffirst)) {
                 fputc(',', f);
             }
-            if (((_self->arena->nodes[m].a >= 0) && (_self->arena->nodes[_self->arena->nodes[m].a].kind == N_NUM))) {
-                val = (int)(_self->arena->nodes[_self->arena->nodes[m].a].num);
-            }
+            ffirst = 0;
             fputs("{\"name\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->arena->nodes[m].text2);
-            fprintf(f, "\",\"value\":%d}", val);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t1);
+            fprintf(f, "\",\"value\":%d}", c->a);
         }
         fputs("]}", f);
         first = 0;
     }
     fputs("],\n  \"functions\": [", f);
     first = 1;
-    for (i = 0; i < _self->sym->nfunc; i++) {
-        if ((((((strncmp(_self->sym->funcs[i].name, "str_", 4) == 0) || (strncmp(_self->sym->funcs[i].name, "vec_", 4) == 0)) || (strncmp(_self->sym->funcs[i].name, "map_", 4) == 0)) || (strncmp(_self->sym->funcs[i].name, "option_", 7) == 0)) || (strncmp(_self->sym->funcs[i].name, "result_", 7) == 0))) {
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        int ffirst = 1;
+        if (((!r) || (r->kind != LMP_MFUNC))) {
             continue;
         }
         if ((!first)) {
             fputc(',', f);
         }
         fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->funcs[i].name);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
         fputs("\",\"cname\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->funcs[i].cname);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t2);
         fputs("\",\"visibility\":\"unknown\",\"returns\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ret);
-        fprintf(f, "\",\"line\":%d,\"params\":[", _self->sym->funcs[i].line);
-        for (j = 0; j < _self->sym->funcs[i].nparams; j++) {
-            if (j > 0) {
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t3);
+        fprintf(f, "\",\"line\":%d,\"params\":[", r->line);
+        for (j = 0; j < nrows; j++) {
+            struct backend_lir_LMapRow * c = backend_lir_lmod_map_plan_row(j);
+            if ((((!c) || (c->kind != LMP_MFUNC_PARAM)) || (c->parent != i))) {
+                continue;
+            }
+            if ((!ffirst)) {
                 fputc(',', f);
             }
+            ffirst = 0;
             fputs("{\"type\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ptype[j]);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t1);
             fputs("\"}", f);
         }
         fputs("]}", f);
@@ -585,20 +522,12 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_map(void *self, co
     }
     FILE * f;
     const char * path;
-    int trs;
-    int tre;
-    int fns;
-    int fne;
-    int cls;
-    int cle;
     int i;
     int j;
-    int m;
-    int n;
+    int nrows;
     int first;
-    int si;
-    int count;
     (void)(_self);
+    (void)(prog);
     if (strcmp(dest, "-") == 0) {
         f = stdout;
     }
@@ -608,24 +537,8 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_map(void *self, co
             return _self->__backend_emit_emitops_vptr->fail(_self, "cannot write the map");
         }
     }
-    if (u >= 0) {
-        path = _self->units[u].path;
-        trs = _self->units[u].tr_start;
-        tre = _self->units[u].tr_end;
-        fns = _self->units[u].fn_start;
-        fne = _self->units[u].fn_end;
-        cls = _self->units[u].call_start;
-        cle = _self->units[u].call_end;
-    }
-    else {
-        path = _self->path;
-        trs = 0;
-        tre = _self->sym->ntraits;
-        fns = 0;
-        fne = _self->sym->nfunc;
-        cls = 0;
-        cle = (*_self->ncalls);
-    }
+    path = _self->path;
+    nrows = backend_lir_lmod_map_plan_count();
     fputs("{\n", f);
     fprintf(f, "  \"compiler\": \"ct v%s\",\n", _self->version);
     fputs("  \"file\": \"", f);
@@ -633,26 +546,36 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_map(void *self, co
     fputs("\",\n", f);
     fputs("  \"traits\": [", f);
     first = 1;
-    for (i = trs; i < tre; i++) {
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        int mfirst = 1;
+        if ((((!r) || (r->kind != LMP_TRAIT)) || (r->unit != u))) {
+            continue;
+        }
         if ((!first)) {
             fputc(',', f);
         }
         fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->traits[i].name);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
         fputs("\",\"cname\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->traits[i].name);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t2);
         fputs("\",\"file\":\"", f);
         _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"methods\":[", _self->sym->traits[i].line);
-        for (m = 0; m < _self->sym->traits[i].nm; m++) {
-            if (m > 0) {
+        fprintf(f, "\",\"line\":%d,\"methods\":[", r->line);
+        for (j = 0; j < nrows; j++) {
+            struct backend_lir_LMapRow * c = backend_lir_lmod_map_plan_row(j);
+            if ((((!c) || (c->kind != LMP_TRAIT_M)) || (c->parent != i))) {
+                continue;
+            }
+            if ((!mfirst)) {
                 fputc(',', f);
             }
+            mfirst = 0;
             fputs("{\"name\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->traits[i].m[m].name);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t1);
             fputs("\",\"ret\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->traits[i].m[m].ret);
-            fprintf(f, "\",\"params\":%d}", _self->sym->traits[i].m[m].nparams);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t2);
+            fprintf(f, "\",\"params\":%d}", c->a);
         }
         fputs("]}", f);
         first = 0;
@@ -660,30 +583,34 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_map(void *self, co
     fputs("],\n", f);
     fputs("  \"structs\": [", f);
     first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        if (_self->arena->nodes[n].kind != N_STRUCT) {
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        int ufirst = 1;
+        if ((((!r) || (r->kind != LMP_STRUCT)) || (r->unit != u))) {
             continue;
         }
         if ((!first)) {
             fputc(',', f);
         }
         fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text2);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
         fputs("\",\"cname\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->arena->nodes[n].text2);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t2);
         fputs("\",\"file\":\"", f);
         _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"uses\":[", _self->arena->nodes[n].line);
-        si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[n].text2);
-        if (si >= 0) {
-            for (i = 0; i < _self->sym->structs[si].nuse; i++) {
-                if (i > 0) {
-                    fputc(',', f);
-                }
-                fputc('"', f);
-                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->structs[si].use[i]);
-                fputc('"', f);
+        fprintf(f, "\",\"line\":%d,\"uses\":[", r->line);
+        for (j = 0; j < nrows; j++) {
+            struct backend_lir_LMapRow * c = backend_lir_lmod_map_plan_row(j);
+            if ((((!c) || (c->kind != LMP_STRUCT_USE)) || (c->parent != i))) {
+                continue;
             }
+            if ((!ufirst)) {
+                fputc(',', f);
+            }
+            ufirst = 0;
+            fputc('"', f);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t1);
+            fputc('"', f);
         }
         fputs("]}", f);
         first = 0;
@@ -691,95 +618,91 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_map(void *self, co
     fputs("],\n", f);
     fputs("  \"functions\": [", f);
     first = 1;
-    for (i = fns; i < fne; i++) {
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        if ((((!r) || (r->kind != LMP_FUNC)) || (r->unit != u))) {
+            continue;
+        }
         if ((!first)) {
             fputc(',', f);
         }
         fputs("{\"name\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->funcs[i].name);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
         fputs("\",\"file\":\"", f);
         _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"ret\":\"", _self->sym->funcs[i].line);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->funcs[i].ret);
-        fprintf(f, "\",\"params\":%d}", _self->sym->funcs[i].nparams);
+        fprintf(f, "\",\"line\":%d,\"ret\":\"", r->line);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t2);
+        fprintf(f, "\",\"params\":%d}", r->b);
         first = 0;
     }
     fputs("],\n", f);
     fputs("  \"impls\": [", f);
     first = 1;
-    for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
-        const char * tname;
-        if (_self->arena->nodes[n].kind != N_IMPL) {
-            continue;
-        }
-        si = _self->arena->nodes[n].aux;
-        if (si < 0) {
-            continue;
-        }
-        if ((!_self->arena->nodes[n].text2[0])) {
-            continue;
-        }
-        tname = _self->arena->nodes[n].text2;
-        for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
-            if ((!first)) {
-                fputc(',', f);
-            }
-            fputs("{\"struct\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->sym->structs[si].name);
-            fputs("\",\"trait\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, tname);
-            fputs("\",\"method\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->arena->nodes[m].text2);
-            fputs("\",\"symbol\":\"", f);
-            fprintf(f, "%s_%s_%s", _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
-            fputs("\",\"ret\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->arena->nodes[m].text);
-            count = 0;
-            for (i = _self->arena->nodes[m].a; i > 0; i = _self->arena->nodes[i].next) {
-                count++;
-            }
-            fprintf(f, "\",\"params\":%d,\"file\":\"", count);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-            fprintf(f, "\",\"line\":%d}", _self->arena->nodes[n].line);
-            first = 0;
-        }
-    }
-    fputs("],\n", f);
-    fputs("  \"calls\": [", f);
-    for (i = cls; i < cle; i++) {
-        if (i > cls) {
-            fputc(',', f);
-        }
-        fputs("{\"caller\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, (*_self->calls)[i].caller);
-        fputs("\",\"callee\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, (*_self->calls)[i].callee);
-        fputs("\",\"file\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d}", (*_self->calls)[i].line);
-    }
-    fputs("],\n", f);
-    fputs("  \"maps\": [", f);
-    first = 1;
-    for (i = 0; i < (*_self->nmaps); i++) {
-        if ((*_self->maps)[i].is_binding) {
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        if ((((!r) || (r->kind != LMP_IMPL)) || (r->unit != u))) {
             continue;
         }
         if ((!first)) {
             fputc(',', f);
         }
+        fputs("{\"struct\":\"", f);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
+        fputs("\",\"trait\":\"", f);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t2);
+        fputs("\",\"method\":\"", f);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t3);
+        fputs("\",\"symbol\":\"", f);
+        fprintf(f, "%s_%s_%s", r->t1, r->t2, r->t3);
+        fputs("\",\"ret\":\"", f);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t4);
+        fprintf(f, "\",\"params\":%d,\"file\":\"", r->a);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
+        fprintf(f, "\",\"line\":%d}", r->line);
         first = 0;
+    }
+    fputs("],\n", f);
+    fputs("  \"calls\": [", f);
+    first = 1;
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        if ((((!r) || (r->kind != LMP_CALL)) || (r->unit != u))) {
+            continue;
+        }
+        if ((!first)) {
+            fputc(',', f);
+        }
+        fputs("{\"caller\":\"", f);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
+        fputs("\",\"callee\":\"", f);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t2);
+        fputs("\",\"file\":\"", f);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
+        fprintf(f, "\",\"line\":%d}", r->line);
+        first = 0;
+    }
+    fputs("],\n", f);
+    fputs("  \"maps\": [", f);
+    first = 1;
+    for (i = 0; i < nrows; i++) {
+        struct backend_lir_LMapRow * r = backend_lir_lmod_map_plan_row(i);
+        int bfirst = 1;
+        if (((!r) || (r->kind != LMP_MAP))) {
+            continue;
+        }
+        if ((!first)) {
+            fputc(',', f);
+        }
         fputs("{\"trait\":\"", f);
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, (*_self->maps)[i].trait);
-        if ((*_self->maps)[i].is_static) {
-            int su = (*_self->maps)[i].unit;
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t1);
+        if ((r->b & LMP_MAP_STATIC)) {
             fputs("\",\"static\":true", f);
-            if ((((_self->units && (su >= 0)) && (su < (*_self->nunits))) && _self->units[su].has_shim)) {
+            if ((r->b & LMP_MAP_SHIM)) {
                 fputs(",\"shim\":{\"header\":\"", f);
-                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->units[su].shim_h);
-                if (_self->units[su].shim_c) {
+                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t4);
+                if ((r->b & LMP_MAP_SHIM_SRC)) {
                     fputs("\",\"source\":\"", f);
-                    _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, _self->units[su].shim_c);
+                    _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t5);
                 }
                 fputs("\"}", f);
             }
@@ -788,47 +711,48 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_map(void *self, co
         else {
             fputs("\",\"instance\":\"", f);
         }
-        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, (*_self->maps)[i].inst);
+        _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t2);
         fputs("\",\"host\":\"", f);
-        if ((*_self->maps)[i].type_host) {
+        if ((r->b & LMP_MAP_TYPE_HOST)) {
             fputs("type", f);
         }
         else {
-            fputs(((*_self->maps)[i].ns_host ? "namespace" : "instance"), f);
+            if ((r->b & LMP_MAP_NS_HOST)) {
+                fputs("namespace", f);
+            }
+            else {
+                fputs("instance", f);
+            }
         }
-        if ((*_self->maps)[i].type_host) {
+        if ((r->b & LMP_MAP_TYPE_HOST)) {
             fputs("\",\"type\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, (*_self->maps)[i].host_type);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, r->t3);
         }
         fputs("\",\"file\":\"", f);
         _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, path);
-        fprintf(f, "\",\"line\":%d,\"bindings\":[", (*_self->maps)[i].line);
-        for (j = 0; j < (*_self->maps)[i].nb; j++) {
-            if (j > 0) {
+        fprintf(f, "\",\"line\":%d,\"bindings\":[", r->line);
+        for (j = 0; j < nrows; j++) {
+            struct backend_lir_LMapRow * c = backend_lir_lmod_map_plan_row(j);
+            if ((((!c) || (c->kind != LMP_MAP_BIND)) || (c->parent != i))) {
+                continue;
+            }
+            if ((!bfirst)) {
                 fputc(',', f);
             }
+            bfirst = 0;
             fputs("{\"method\":\"", f);
-            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, (*_self->maps)[i].b[j].method);
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t1);
             fputs("\",\"symbol\":\"", f);
-            if ((*_self->maps)[i].is_static) {
-                const char * callee;
-                callee = backend_emit_map_recipe_callee_text((*_self->maps)[i].b[j].call);
-                if ((!callee)) {
-                    return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
-                }
-                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, callee);
-            }
-            else {
-                _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, ((*_self->maps)[i].b[j].direct ? (*_self->maps)[i].b[j].call : (*_self->maps)[i].b[j].wrapper));
-            }
-            if ((*_self->maps)[i].is_static) {
+            _self->__backend_emit_emitheader_vptr->emit_json_str(_self, f, c->t2);
+            if ((r->b & LMP_MAP_STATIC)) {
                 fputs("\",\"wrapper\":false,\"inline\":true}", f);
             }
             else {
-                fprintf(f, "\",\"wrapper\":%s}", ((*_self->maps)[i].b[j].direct ? "false" : "true"));
+                fprintf(f, "\",\"wrapper\":%s}", (c->b ? "false" : "true"));
             }
         }
         fputs("]}", f);
+        first = 0;
     }
     fputs("]\n", f);
     fputs("}\n", f);
@@ -1068,7 +992,6 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_header(void *self,
 const struct backend_emit_EmitHeader_vtbl backend_emit_Emitter_backend_emit_EmitHeader_vtable = {
     .emit_proto = backend_emit_Emitter_backend_emit_EmitHeader_emit_proto,
     .emit_vtable_fwd = backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd,
-    .emit_trait_range = backend_emit_Emitter_backend_emit_EmitHeader_emit_trait_range,
     .emit_struct_fwd = backend_emit_Emitter_backend_emit_EmitHeader_emit_struct_fwd,
     .header_guard = backend_emit_Emitter_backend_emit_EmitHeader_header_guard,
     .emit_json_str = backend_emit_Emitter_backend_emit_EmitHeader_emit_json_str,

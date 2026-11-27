@@ -86,6 +86,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -166,7 +167,6 @@ struct backend_emit_EmitShell_iface {
 
 struct backend_emit_EmitHeader_vtbl {
     int (*emit_struct_fwd)(void *);
-    int (*emit_trait_range)(void *, int, int, int);
     int (*emit_proto)(void *, int);
     int (*emit_vtable_fwd)(void *, int);
     int (*header_guard)(void *, const char *, char * *);

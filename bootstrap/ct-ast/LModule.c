@@ -169,11 +169,42 @@
 #define LPS_BOXHELP    17   /* node: instance row, Box helpers               */
 #define LPS_ADTLIFE    18   /* node: ADT row, retain/release glue            */
 #define LPS_STRPROTO   19   /* text: the compile-mode String entry prototypes */
+#define LPS_STRUCTFWD  20   /* node: struct row; aux: 1 = union             */
+#define LPS_TRAITDECL  21   /* node: trait row; aux: 0 all / 1 pub / 2 priv */
+#define LPS_VTBLFWD    22   /* text: trait; node: struct row; aux: exported */
+#define LPS_DROPPROTO  23   /* node: struct; aux: 0 static, 1 legacy static, 2 owner def, 3 extern */
+#define LPS_HANDBAK    24   /* node: struct row                            */
+#define LPS_LINKEXTERN 25   /* text: trait; node: struct, or a map when aux = 1 */
+#define LPS_IMPLDEF    26   /* node: N_IMPL row                            */
+#define LPS_MAPDEF     27   /* node: map row; aux: 1 = vtable exported     */
+#define LPS_GINIT      28   /* node: generic-instance row                  */
+#define LPS_UNITINIT   29   /* node: N_GLOBAL row needing a constructor    */
+#define LPS_STRLIT     30   /* node: N_STR row in the literal table        */
 #define LINC_C_IO      0    /* `.c`: after the banner, before stddef       */
 #define LINC_C_PRE     1    /* `.c`: before the allocator / map prologues  */
 #define LINC_C_POST    2    /* `.c`: own header, deps, layer headers       */
 #define LINC_H_PRE     3    /* `.h`: before the banner (stddef)            */
 #define LINC_H_POST    4    /* `.h`: includes, shim, deps, layer headers   */
+#define LMP_TRAIT          1   /* t1 name, t2 cname, a line; kids: _M     */
+#define LMP_TRAIT_M        2   /* parent, t1 name, t2 ret, a params      */
+#define LMP_STRUCT         3   /* t1 name, t2 cname, a line; kids: _USE  */
+#define LMP_STRUCT_USE     4   /* parent, t1 use                         */
+#define LMP_FUNC           5   /* t1 name, a line, t2 ret, b params      */
+#define LMP_IMPL           6   /* t1 struct, t2 trait, t3 method, t4 ret, a line, b params */
+#define LMP_CALL           7   /* t1 caller, t2 callee, a line           */
+#define LMP_MAP            8   /* t1 trait, t2 inst, t3 type host, t4/t5 shim, a line, b flags; kids: _BIND */
+#define LMP_MAP_BIND       9   /* parent, t1 method, t2 symbol, b direct */
+#define LMP_MSTRUCT       10   /* t1 name, a line, b 1 = union; kids: _FIELD */
+#define LMP_MSTRUCT_FIELD 11   /* parent, t1 name, t2 type, a line, b col */
+#define LMP_MENUM         12   /* t1 name, a line; kids: _MENUM_M        */
+#define LMP_MENUM_M       13   /* parent, t1 name, a value               */
+#define LMP_MFUNC         14   /* t1 name, t2 cname, t3 ret, a line; kids: _PARAM */
+#define LMP_MFUNC_PARAM   15   /* parent, t1 type                        */
+#define LMP_MAP_STATIC     1
+#define LMP_MAP_TYPE_HOST  2
+#define LMP_MAP_NS_HOST    4
+#define LMP_MAP_SHIM       8
+#define LMP_MAP_SHIM_SRC  16
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;
@@ -242,6 +273,7 @@ struct backend_lir_ct_lcleanup;
 struct backend_lir_ct_lscope;
 struct backend_lir_LModule;
 struct backend_lir_ct_lshellrow;
+struct backend_lir_LMapRow;
 struct backend_lir_LModulePlan;
 struct backend_emit_FldSnap;
 struct backend_emit_StrRetain;
@@ -328,6 +360,10 @@ int backend_lir_lmod_plan_row_node(int);
 int backend_lir_lmod_plan_row_aux(int);
 int backend_lir_lmod_plan_row_hdr(int);
 const char * backend_lir_lmod_plan_row_text(int);
+void backend_lir_lmod_map_plan_reset(void);
+int backend_lir_lmod_map_plan_add(int, int, int, int, int, int, const char *, const char *, const char *, const char *, const char *);
+int backend_lir_lmod_map_plan_count(void);
+struct backend_lir_LMapRow * backend_lir_lmod_map_plan_row(int);
 void backend_lir_lmod_plan_set_prog(int);
 int backend_lir_lmod_plan_prog(void);
 void backend_lir_lmod_plan_set_abi(int, int *, int);
@@ -515,6 +551,38 @@ int backend_lir_lmod_plan_row_hdr(int i) {
 const char * backend_lir_lmod_plan_row_text(int i) {
     struct backend_lir_ct_lshellrow * r = lmod_row(i);
     return (r ? r->text : "");
+}
+void backend_lir_lmod_map_plan_reset(void) {
+    backend_lir_g_plan.nmrows = 0;
+}
+int backend_lir_lmod_map_plan_add(int kind, int unit, int parent, int line, int a, int b, const char * t1, const char * t2, const char * t3, const char * t4, const char * t5) {
+    struct backend_lir_LMapRow * r;
+    if (lir_reserve((&backend_lir_g_plan.mrows), (&backend_lir_g_plan.mrowcap), (backend_lir_g_plan.nmrows + 1), (int)(sizeof(struct backend_lir_LMapRow))) != 0) {
+        return (-1);
+    }
+    r = ((struct backend_lir_LMapRow *)(backend_lir_g_plan.mrows) + backend_lir_g_plan.nmrows);
+    r->kind = kind;
+    r->unit = unit;
+    r->parent = parent;
+    r->line = line;
+    r->a = a;
+    r->b = b;
+    r->t1 = ((t1 && t1[0]) ? runtime_text_ct_intern(t1) : "");
+    r->t2 = ((t2 && t2[0]) ? runtime_text_ct_intern(t2) : "");
+    r->t3 = ((t3 && t3[0]) ? runtime_text_ct_intern(t3) : "");
+    r->t4 = ((t4 && t4[0]) ? runtime_text_ct_intern(t4) : "");
+    r->t5 = ((t5 && t5[0]) ? runtime_text_ct_intern(t5) : "");
+    backend_lir_g_plan.nmrows++;
+    return 0;
+}
+int backend_lir_lmod_map_plan_count(void) {
+    return backend_lir_g_plan.nmrows;
+}
+struct backend_lir_LMapRow * backend_lir_lmod_map_plan_row(int i) {
+    if (((i < 0) || (i >= backend_lir_g_plan.nmrows))) {
+        return (struct backend_lir_LMapRow *)(0);
+    }
+    return ((struct backend_lir_LMapRow *)(backend_lir_g_plan.mrows) + i);
 }
 void backend_lir_lmod_plan_set_prog(int prog) {
     backend_lir_g_plan.prog = prog;
