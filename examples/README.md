@@ -3,7 +3,7 @@
 每个目录是一份可运行的小程序，覆盖 `ct` 的一类能力；唯一例外是 `49_socket`（文档型样例，
 std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**impl / vtable**、
 **类型宿主（type host）**、**闭包**、**loop 语义**、**数组初值与泛型**、
-**新句柄层（ref/out、切片、Box/new、ADT/match、可选链 `?.`）**。
+**新句柄层与新特性（ref/out、切片、Box/new、ADT/match、模式扩展、泛型 ADT、可选链 `?.`）**。
 
 ## impl / vtable
 
@@ -109,11 +109,12 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `33_vec_brace_init` | `Vec` 花括号初值（Phase 31）：拥有型元素、空 `{}` 的非空 header、与 `from` 等价 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `34_map_literal` | `Map` 字面量（Phase 31）：插入序、重复键原位覆盖、编译期重复键报 `duplicate key` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
-## 新句柄层（ref/out、切片、Box/new、ADT/match）
+## 新句柄层与新特性（ref/out、切片、Box/new、ADT/match、模式扩展、泛型 ADT）
 
-四个最小样例，覆盖 PH-78 / PH-79 / PH-81 / PH-84 的新句柄；每个只有一份 `prog.ct`，
-不依赖 shim。文件首行的 `//@ct-requires: ct-ast` 让 `test/run.sh` 走 ct-ast 路径，
-`check-ast.sh` 的语料层也会编译、运行并与 `prog.expected.out` 逐字节比对。
+四个最小句柄样例覆盖 PH-78 / PH-79 / PH-81 / PH-84；`67`–`69` 覆盖 v1-PH-2 的
+S4 模式扩展、S5 or/守卫与 S6 泛型 ADT；每个只有一份 `prog.ct`，不依赖 shim。
+文件首行的 `//@ct-requires: ct-ast` 让 `test/run.sh` 走 ct-ast 路径，`check-ast.sh`
+的语料层也会编译、运行并与 `prog.expected.out` 逐字节比对。
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
@@ -122,9 +123,12 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `52_box_new` | `Box<T>` / `new T { … }`、`at()` 借出 `T *`、`release()` 释放；SH-116 已修复 build 模式的 Box 内置单元，`ct build` 可用 | ct-ast | 同上（compile + build） |
 | `53_match_adt` | 最小 ADT + 穷尽 `match`；`String` 负载由 `str_concat` 构造，绑定里显式 `release()` | ct-ast | 同上 |
 | `58_optional_chain` | `?.` 穿过可空指针：接收者只求值一次（`__ct_optN` 临时）、空接收者读作 `0`；无 `T?` / `Maybe<T>` 结果类型 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
-| `59_custom_subscript` | `x["k"]` → `get(k)`、`x["k"] = v` → `set(k, v)`；方案 A 只按名字 + 参数个数匹配，按键分派属 REQ-JSACCESS-1 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `59_custom_subscript` | `x[k]` → `get(k)`、`x[k] = v` → `set(k, v)`；S2 起按**名字 + 参数类型**匹配（`int` 键样例；同类型并存 `int` / `char *` 键的形态见 `test/ast/index_overload_both`） | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
 | `63_ref_out_places` | `ref` / `out` 写回调用方：`ref` 需已初始化、trivial `out` 可未初始化；实参必须是可赋值 place | ct-ast | 同上 |
 | `64_match_expr` | 表达式 `match` + `yield`：块臂无隐式取值、主语只求值一次、`_` 末位且唯一 | ct-ast | 同上 |
+| `67_adt_patterns` | S4 模式：整数/字符字面量、枚举负载里的嵌套模式（`Shape.At(Point { x: 0, y })`）、结构体模式的显式子模式 / 简写绑定 / `..` | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `68_adt_guards` | S5 模式：or 模式（`Circle(r) \| Square(r)`、`0 \| 1`）与守卫（`pattern if expr`）；守卫不计穷尽 | ct-ast | 同上 |
+| `69_generic_adt` | S6 泛型 ADT：`enum Opt<T>` / `enum Res<T,E>` 的实例化、显式与推断构造、`match` 模式、嵌套实例 `Opt<Opt<int>>` | ct-ast | 同上 |
 
 ## 近相能力（TEST-23）
 

@@ -1,0 +1,78 @@
+// 68_adt_guards - S5 pattern grammar: or-patterns and guards.
+//
+// Normal path: `Shape.Circle(r) | Shape.Square(r)` names alternatives that
+// bind the same name once; a cross-variant `A | B` can complete the variant
+// list without a `_`. `pattern if expr` runs the guard after the pattern
+// matched and falls through to the next arm when it is false.
+// Counterintuitive points: a guarded arm never counts toward exhaustiveness
+// (an unguarded arm still has to cover the variant), and the bindings are in
+// scope inside the guard.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+
+
+enum Shape {
+    Circle(int r),
+    Square(int s),
+    Rect(int w, int h),
+}
+
+enum Flag {
+    On(),
+    Off(),
+}
+
+static int area(Shape s)
+{
+    match (s) {
+        Shape.Circle(r) | Shape.Square(r) => { return r * r; }
+        Shape.Rect(w, h) => { return w * h; }
+    }
+}
+
+static int small(int n)
+{
+    match (n) {
+        0 | 1 => { return 1; }
+        _ => { return 0; }
+    }
+}
+
+static int gated(Shape s, int limit)
+{
+    match (s) {
+        Shape.Circle(r) if r > limit => { return 100 + r; }
+        Shape.Circle(r) => { return r; }
+        Shape.Square(x) => { return x; }
+        Shape.Rect(w, h) if w > h => { return w; }
+        Shape.Rect(w, h) => { return h; }
+    }
+    return -1;
+}
+
+static int nested_guard(Shape s, Flag fl)
+{
+    return match (s) {
+        Shape.Circle(r) if (match (fl) {
+            Flag.On() => 1,
+            Flag.Off() => 0,
+        }) > 0 && r > 0 => r,
+        Shape.Circle(r) => 0 - r,
+        Shape.Square(x) => x,
+        Shape.Rect(w, h) => w * h,
+    };
+}
+
+int main(void)
+{
+    printf("%d %d %d\n", area(Shape.Circle(3)), area(Shape.Square(4)),
+           area(Shape.Rect(2, 5)));
+    printf("%d %d %d\n", small(0), small(1), small(2));
+    printf("%d %d %d\n", gated(Shape.Circle(5), 3), gated(Shape.Circle(1), 3),
+           gated(Shape.Rect(5, 2), 3));
+    printf("%d %d %d %d\n", nested_guard(Shape.Circle(7), Flag.On()),
+           nested_guard(Shape.Circle(7), Flag.Off()), nested_guard(Shape.Square(4), Flag.On()),
+           nested_guard(Shape.Rect(2, 3), Flag.Off()));
+    return 0;
+}

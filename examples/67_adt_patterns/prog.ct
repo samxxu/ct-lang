@@ -1,0 +1,81 @@
+// 67_adt_patterns - S4 pattern grammar: literal, nested and struct patterns.
+//
+// Normal path: an integer-family subject takes literal arms; an enum payload
+// that is itself a struct is destructured as `Shape.At(Point { x: 0, y })`,
+// where `x: 0` is an explicit subpattern, `y` is a shorthand binding and
+// `..` swallows the remaining fields.
+// Counterintuitive point: the same arm text works for a struct value subject
+// (`Point { ... }`) and for a struct payload; `_` covers what the listed
+// variants/literals do not.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+
+
+struct Point { int x; int y; }
+
+enum Shape {
+    At(Point p),
+    Away(),
+}
+
+enum Mode {
+    Off(),
+    Level(int n),
+}
+
+static int bucket(int n)
+{
+    match (n) {
+        0 => { return 10; }
+        1 => { return 11; }
+        -1 => { return 12; }
+        _ => { return 99; }
+    }
+}
+
+static int level(Mode m)
+{
+    match (m) {
+        Mode.Off() => { return 0; }
+        Mode.Level(0) => { return 100; }
+        Mode.Level(_) => { return 200; }
+    }
+}
+
+static int at(Shape s)
+{
+    match (s) {
+        Shape.At(Point { x: 0, y: 0 }) => { return 1; }
+        Shape.At(Point { x: 0, y }) => { return y; }
+        Shape.At(Point { x, y: 2 }) => { return x + 40; }
+        Shape.At(p) => { return p.x + p.y + 70; }
+        Shape.Away() => { return -2; }
+    }
+}
+
+static int point(Point p)
+{
+    match (p) {
+        Point { x: 0, y } => { return y; }
+        Point { x, y: 2 } => { return x + 30; }
+        Point { .. } => { return 60; }
+    }
+}
+
+int main(void)
+{
+    Point origin = { 0, 0 };
+    Point on_y = { 0, 9 };
+    Point on_x2 = { 7, 2 };
+    Point free = { 1, 1 };
+
+    printf("%d %d %d %d\n", bucket(0), bucket(1), bucket(-1), bucket(7));
+    printf("%d %d %d\n", level(Mode.Off()), level(Mode.Level(0)),
+           level(Mode.Level(9)));
+    printf("%d %d %d %d\n", at(Shape.At(origin)), at(Shape.At(on_y)),
+           at(Shape.At(on_x2)), at(Shape.At(free)));
+    printf("%d\n", at(Shape.Away()));
+    printf("%d %d %d\n", point(origin), point(on_x2), point(free));
+    return 0;
+}

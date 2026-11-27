@@ -1,0 +1,57 @@
+// 69_generic_adt - S6 generic ADTs: `enum Opt<T>` / `enum Res<T, E>`.
+//
+// Normal path: a variant payload names the ADT's type parameters, an instance
+// substitutes them, and constructors / match patterns name the instance
+// (`Opt<int>.Some(7)`); the short `Opt.Some(v)` form infers the instance from
+// the subject type.
+// Counterintuitive point: two instances are two distinct layouts; a generic
+// instance nests as another instance's type argument (`Opt<Opt<int>>`).
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+
+
+enum Opt<T> {
+    Some(T v),
+    None(),
+}
+
+enum Res<T, E> {
+    Ok(T v),
+    Err(E e),
+}
+
+static int unwrap_or(Opt<int> o, int fallback)
+{
+    return match (o) {
+        Opt.Some(v) => v,
+        Opt.None() => fallback
+    };
+}
+
+static int result_code(Res<int, int> r)
+{
+    match (r) {
+        Res<int, int>.Ok(v) => { return v; }
+        Res<int, int>.Err(e) => { return 0 - e; }
+    }
+}
+
+int main(void)
+{
+    Opt<int> a = Opt<int>.Some(7);
+    Opt<int> b = Opt<int>.None();
+    Res<int, int> ok = Res<int, int>.Ok(5);
+    Res<int, int> bad = Res<int, int>.Err(2);
+    Opt<Opt<int>> nested = Opt<Opt<int>>.Some(Opt<int>.Some(8));
+
+    int inner;
+    match (nested) {
+        Opt.Some(sub) => { inner = unwrap_or(sub, -1); }
+        Opt.None() => { inner = -1; }
+    }
+
+    printf("%d %d %d %d %d\n", unwrap_or(a, -1), unwrap_or(b, -1),
+           result_code(ok), result_code(bad), inner);
+    return 0;
+}
