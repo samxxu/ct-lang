@@ -29,13 +29,30 @@
 
 审计不通过不进切片：dogfooding §1 允许"没有收益的域记录不改的理由"。
 
+### 2.1 REQ 预审（2026-11-28，供 DEV 核对，不代替 DEV 的审计表）
+
+| 域 | 总数 | 归桶结果 |
+| --- | --- | --- |
+| `Pkg.h.ct` | 53 | **a 2**（`git_run` 的 `pre[32]`、`pkg_official_resolve` 的 `"ct/%s"`）；**c 1**（`sha256:%s` 写调用方 `out`）；**d 7**（`ct.lock` 文本与记录字段）；**纯带界拷贝 38**（其中 6 处写 lock 记录字段，其余写本地/调用方 buffer）；**`vsnprintf` 5 处**（动态增长，保持） |
+| `Symbols.h.ct` | 41 | **b 17**（`snprintf(msg, sizeof msg, …)` → `fail`）；**c 15**（`snprintf(out, cap, "%s", row.field)`）；**d/e 9**（写 `tparam` / `bound` / `path` / `pat` 等行字段） |
+
+要点：
+
+- `Pkg` 的 53 处里，**真正值得改的只有 2 处**。38 处是 `snprintf(dst, cap, "%s", src)` 的带界拷贝，不是名字构建；改成 pool 只增加分配、无收益，按 dogfooding §1 登记"不改 + 理由"。
+- `Symbols` 的 `fail()` 已经 `ct_internf("%s", msg)`；所以 17 处 `msg` 缓冲是**双拷贝且带 512/`MAX_TEXT*2` 截断**，改 `ct_internf` 是纯收益。逐字链（`type alias cycle`）用 `tool::sh::ct_scratch_fmt` 迭代拼接，交给 `fail` 时再 intern。
+- 命名空间：`ct_scratch_fmt` 必须写 `tool::sh::ct_scratch_fmt(...)`；直接写裸名会报
+  `that function lives in another namespace and needs a qualified call`。
+- `gen-seed.sh` 在 emit 失败时会**先清空** `bootstrap/ct-ast/`；失败后先 `git checkout -- bootstrap/` 再改代码重跑（REQ 实测）。
+- `check-goldens-ast.sh` 需要 `CT_C_BOUNDARY=allow` 才是 25/25（否则 5 个 `#include` 负例会红）。
+- `check-ast.sh` 本地约 30–45 分钟、1741 项；建议后台跑并落日志，不要在前台等。
+
 ## 3 切片
 
 | 片 | 内容 | 判据 | 风险 |
 | --- | --- | --- | --- |
-| R1 | D3-Pkg：a 类临时缓冲 + `sha256:%s` hex 拼接 | `ct get` / `ct index verify` 输出逐字节；`test/pkg` 全绿 | 低 |
-| R2 | D3-Symbols：b 类错误消息 17 处（`snprintf(msg, sizeof msg, …)`）→ `ct_internf` | 345 条诊断逐字不变；`check-ast` 0 失败 | 低 |
-| R3 | D3-Symbols：c 类取值 API 14 处（`snprintf(out, cap, "%s", row.field)`） | 每处先给出「改签名 + 调用点数」评估；改了则调用点同批迁，输出逐字节 | 中 |
+| R1 | D3-Pkg：a 类 2 处（`git_run` 前缀、`pkg_official_resolve` 的 `ct/%s`）→ `ct_scratch_fmt`；其余归桶登记不改 | `test/pkg` 165/0；`ct get` / `ct index verify` / `ct.lock` 输出逐字节；`Pkg.h.ct` `snprintf(` 53 → 51 | 低 |
+| R2 | D3-Symbols：b 类错误消息 17 处（`snprintf(msg, sizeof msg, …)`）→ `ct_internf` / scratch，删 `msg` 定长缓冲 | 345 条诊断逐字不变；`check-ast` 0 失败；`Symbols.h.ct` `snprintf(` 41 → 24 | 低 |
+| R3 | D3-Symbols：c 类取值 API 15 处（`snprintf(out, cap, "%s", row.field)`） | 每处先给出「改签名 + 调用点数」评估；改了则调用点同批迁，输出逐字节 | 中 |
 | R4 | D3-Pkg：d 类 lock 记录字段（`kind` / `commit` / `digest` / `action`） | `ct.lock` 与 `test/modules/**` 的锁行逐字节不变；做不到就登记不改 | 中 |
 | R5 | D2-`funcs`：`struct Fn *funcs` + `ptype` / `pdim` / `pann` 三个并行数组 → 行内 `Vec` / 行块 | 语料 25/25 逐字节；`realloc` 该表 0 处；`symbols_get` 仍堆分配，不回到 `__DATA` | 高 |
 | R6 | D2-`vars` + `scope` → 行内 `Vec` | 同上；`scope` 语义（作用域栈）不变 | 中 |
