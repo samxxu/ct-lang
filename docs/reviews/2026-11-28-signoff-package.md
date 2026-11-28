@@ -12,22 +12,19 @@
 | S8 最终收尾（§7） | [2026-11-27-s8-closeout-lmodule.md](2026-11-27-s8-closeout-lmodule.md#7-签字) | `0e2edb15` |
 | S8b 生成 C 可读性（§3.7） | [dogfooding.md](../planning/dogfooding.md) | `0e2edb15` |
 | D-030（`Str.print` / `println`） | [D-030.md](../decisions/D-030.md)（`accepted`） | `0e2edb15` |
+| D-032（内部层 C 边界豁免） | [D-032.md](../decisions/D-032.md)（`accepted`） | `bdc505fe` |
 
-## 2 待签：只有 D-032
+## 2 已签：D-032（设计 + 实施复核索引）
 
-**签什么**：[D-032](../decisions/D-032.md) 设计——内部层（`selfhost/ct-ast` + `lib/core`）
-用两处显式 manifest `c-boundary = allow`；消费者默认 strict 不变；
-manifest 解析改为**包根覆盖子树**（向上找最近 `ct.pkg`，止于所属根；嵌套子包以最近者为准），
-`leaks_for` 同批对齐同一解析。`lib/core/utf16` 由 `lib/core/ct.pkg` 覆盖，**不再需要子目录 manifest**。
+**设计**：已签 `accepted`（REVIEW 2026-11-28，T-8 非作者席位），状态行见
+[D-032.md](../decisions/D-032.md)。
 
-**签完改哪两行**（只改这两行 + 可加一行签收日期）：
+**实施复核索引**（原始输出不复制，按需回查）：
 
-```text
-- 状态：**accepted（REVIEW 签收 2026-11-28）**
-- 签收：REVIEW（2026-11-28，T-8 非作者席位）
-```
-
-其余正文不重写、不调数字。若不同意：转 `battle/` 或 `CR-*`，不要改文档迁就。
+- 判据与正负例：[D-032 §6](../decisions/D-032.md)（`--show-c-boundary` 四个正例、三个负例、
+  `leaks` 对齐、shim 74 → 3）；
+- 只读实测与门禁末行：[评估 §1](2026-11-28-review-priority-assessment.md)；
+- 评审判断：E-V3-10 实现证据成立，可出正式结论。
 
 ## 3 只读核对（不跑长门禁，5 分钟内可完成）
 
