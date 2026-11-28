@@ -264,6 +264,10 @@ static int ci_probe(struct frontend_parse_Expr *, const char *, const char *, in
 static const char * ci_signature_text(struct frontend_parse_Expr *, const char *, int, int);
 static const char * ci_candidates_text(struct frontend_parse_Expr *, const char *, const char *, int, int, int);
 static int ci_emit_failure(struct frontend_parse_Expr *, int, const char *, const char *, int, int, int, int, int);
+static int ckf_builtin_base(const char *);
+static int ckf_is_adt(struct frontend_parse_Expr *, const char *);
+static int ckf_receiver_ok(struct frontend_parse_Expr *, int);
+static const char * ckf_candidates_text(struct frontend_parse_Expr *, int);
 static const char * frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label_text(void *self, const char * bty) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     const char * base;
@@ -409,12 +413,135 @@ static const char * frontend_parse_Expr_frontend_parse_ExprSubscript_custom_inde
         return (const char *)(0);
 }
 
+static int frontend_parse_Expr_frontend_parse_ExprSubscript_const_key_fold(void *self, const char * bty, int recv, int idx, int line, int col, int writable) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    const char * lit;
+    const char * fname;
+    const char * base;
+    const char * actual;
+    const char * label;
+    const char * msg;
+    size_t n;
+    int si;
+    int fi;
+    int i;
+    int m;
+    int row;
+    int node;
+    int code;
+    int zero = 0;
+    if (writable) {
+        return 0;
+    }
+    if (((idx < 0) || (idx >= _self->arena->nnode))) {
+        return 0;
+    }
+    if (_self->arena->nodes[idx].kind != N_STR) {
+        return 0;
+    }
+    lit = _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, (int)(_self->arena->nodes[idx].num));
+    if (((!lit) || (lit[0] != '"'))) {
+        return 0;
+    }
+    n = strlen(lit);
+    if (((n < 3) || (lit[(n - 1)] != '"'))) {
+        return 0;
+    }
+    for (i = 1; i < ((int)(n) - 1); i++) {
+        if (((lit[i] == '"') || (lit[i] == '\\'))) {
+            return 0;
+        }
+    }
+    fname = runtime_text_ct_intern_len((lit + 1), ((int)(n) - 2));
+    if ((!fname)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    if ((!fname[0])) {
+        return 0;
+    }
+    if ((!ckf_receiver_ok(_self, recv))) {
+        return 0;
+    }
+    base = bty;
+    if (strncmp(base, "struct ", 7) == 0) {
+        base += 7;
+    }
+    else {
+        if (strncmp(base, "union ", 6) == 0) {
+            base += 6;
+        }
+    }
+    if (ckf_builtin_base(base)) {
+        return 0;
+    }
+    si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
+    if (si < 0) {
+        return 0;
+    }
+    if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->defined)) {
+        return 0;
+    }
+    if (ckf_is_adt(_self, base)) {
+        return 0;
+    }
+    fi = (-1);
+    for (i = 0; i < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; i++) {
+        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, i)->name, fname) == 0) {
+            fi = i;
+            break;
+        }
+    }
+    code = ci_probe(_self, bty, "get", 1, idx, 0, (&m), (&row), (&node));
+    if (fi >= 0) {
+        if (((code == CI_OK) || (code == CI_AMBIG))) {
+            label = _self->__frontend_parse_exprsubscript_vptr->custom_index_label_text(_self, bty);
+            if ((!label)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            actual = _self->__frontend_parse_exprtypes_vptr->chk_type_text(_self, idx, (&zero));
+            if (((!actual) || (!actual[0]))) {
+                actual = "char *";
+            }
+            msg = tool_sh_ct_scratch_fmt("type '%s' has an ambiguous constant-key subscript: both field '%s' and 'get(%s)' match; write the field access or 'get(\"%s\")'", label, fname, actual, fname);
+            return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+        }
+        m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MEMBER);
+        if (m < 0) {
+            return (-1);
+        }
+        _self->arena->nodes[m].a = recv;
+        _self->arena->nodes[m].text2 = fname;
+        _self->arena->nodes[m].line = line;
+        _self->arena->nodes[m].num = col;
+        return m;
+    }
+    if (code != CI_NONAME) {
+        return 0;
+    }
+    label = _self->__frontend_parse_exprsubscript_vptr->custom_index_label_text(_self, bty);
+    if ((!label)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields > 0) {
+        const char * cands = ckf_candidates_text(_self, si);
+        if ((!cands)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        msg = tool_sh_ct_scratch_fmt("type '%s' has no field '%s': candidates are %s", label, fname, cands);
+    }
+    else {
+        msg = tool_sh_ct_scratch_fmt("type '%s' has no field '%s'", label, fname);
+    }
+    return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+}
+
 const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_parse_ExprSubscript_vtable = {
     .custom_index_label_text = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label_text,
     .custom_index_label = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label,
     .custom_index_method = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method,
     .custom_index_write_form = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_write_form,
-    .custom_index_suffix = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_suffix
+    .custom_index_suffix = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_suffix,
+    .const_key_fold = frontend_parse_Expr_frontend_parse_ExprSubscript_const_key_fold
 };
 
 static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
@@ -874,4 +1001,86 @@ static int ci_emit_failure(struct frontend_parse_Expr * self, int code, const ch
         }
     }
     return tool_diag_ct_sem_error(line, col, msg, path);
+}
+static int ckf_builtin_base(const char * base) {
+    if (((((((strcmp(base, "Str") == 0) || (strcmp(base, "String") == 0)) || (strcmp(base, "U16Str") == 0)) || (strcmp(base, "U16String") == 0)) || (strcmp(base, "ct_buf") == 0)) || (strcmp(base, "ct_Box_hdr") == 0))) {
+        return 1;
+    }
+    if ((((((strncmp(base, "Vec_", 4) == 0) || (strncmp(base, "Map_", 4) == 0)) || (strncmp(base, "Box_", 4) == 0)) || (strncmp(base, "Option_", 7) == 0)) || (strncmp(base, "Result_", 7) == 0))) {
+        return 1;
+    }
+    return 0;
+}
+static int ckf_is_adt(struct frontend_parse_Expr * self, const char * base) {
+    int ti;
+    int ii;
+    int ni;
+    int nti;
+    int tr;
+    struct frontend_sym_StructInst * ins;
+    struct frontend_sym_StructTmpl * tps;
+    ti = self->sym->__frontend_sym_symbolops_vptr->find_type(self->sym, base);
+    if (((ti >= 0) && (self->sym->types[ti].kind == 7))) {
+        return 1;
+    }
+    ii = frontend_sym_ct_inst_find(base);
+    if (ii < 0) {
+        return 0;
+    }
+    ins = frontend_sym_ct_insts((&ni));
+    if (((!ins) || (ii >= ni))) {
+        return 0;
+    }
+    tr = ins[ii].tmpl_row;
+    if (tr < 0) {
+        tr = frontend_sym_ct_tmpl_find(ins[ii].tmpl, self->cur_unit);
+    }
+    tps = frontend_sym_ct_tmpls((&nti));
+    return (((tps && (tr >= 0)) && (tr < nti)) && tps[tr].is_adt);
+}
+static int ckf_receiver_ok(struct frontend_parse_Expr * self, int n) {
+    int k;
+    int guard = 0;
+    while ((((n >= 0) && (n < self->arena->nnode)) && (guard++ < 64))) {
+        k = self->arena->nodes[n].kind;
+        if ((((((k == N_MEMBER) || (k == N_ARROW)) || (k == N_DEREF)) || (k == N_INDEX)) || (k == N_SLICE_INDEX))) {
+            n = self->arena->nodes[n].a;
+            continue;
+        }
+        return (k == N_VAR);
+    }
+    return 0;
+}
+static const char * ckf_candidates_text(struct frontend_parse_Expr * self, int si) {
+    char * buf = 0;
+    int cap = 0;
+    int i;
+    int nf;
+    const char * out;
+    nf = self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields;
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
+    }
+    for (i = 0; i < nf; i++) {
+        const char * nm = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, i)->name;
+        if (((i > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ", ") != 0))) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), "'") != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), nm) != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), "'") != 0) {
+            goto fail;
+        }
+    }
+    out = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return (out ? out : (const char *)(0));
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
 }

@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1594 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=97845 io_cap=2048
+     emitted_before=48223 emitted_after=98065 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -553,3 +553,9 @@ spike 只切一个方法，v0-PH-88 切 5 个判别函数并新增了"漏一个 
 2. `String`/可增长 buffer 见 §4 第 6 条：判定不适用，未改。
 3. `MAX_FUNCS` 已按 SH-109 动态化（初值 512 / 安全阀 65536），历史余量 11（501/512）
    不再是硬顶；C2n-2 的 `ct_internf` 是唯一新增的顶层 helper，容量按需增长。
+- **LANG-31 / Q-12（常量键折叠，v1-PH-2 S8a）后的 live 校准**：
+  `frontend/parse/ExprSubscript.h.ct` 新增常量键识别 / 字段优先 / 歧义与未知字段诊断，
+  `ExprCore.h.ct` 增一条 trait 方法，`Expr.h.ct` 在下标分支接入；`Emitter.h.ct` 行数不变
+  （1594），发射 C 97845 → 98065（+220：识别 helper、候选表与两条诊断文案）。
+  82 语料与自举 C 树的语义不变（语料 pin 只新增 `examples/70_const_key_fold` 一行），
+  seed 两轮逐字节。

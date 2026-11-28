@@ -1521,6 +1521,17 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "]") != 0) {
                     return (-1);
                 }
+{
+                    int wop = ((_self->lex->tok == T_PUNCT) && ((((((((((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "+=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "-=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "/=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "%=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "&=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "|=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "^=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<<=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">>=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "++")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "--")));
+                    m = _self->__frontend_parse_exprsubscript_vptr->const_key_fold(_self, bty, n, idx, bl, bc, wop);
+                    if (m < 0) {
+                        return (-1);
+                    }
+                    if (m > 0) {
+                        n = m;
+                        continue;
+                    }
+                }
                 m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
                 if (m < 0) {
                     return (-1);

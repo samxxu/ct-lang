@@ -288,6 +288,7 @@ struct frontend_parse_ExprSubscript_vtbl {
     int (*custom_index_method)(void *, const char *, const char *, int, int, int, int, int, int, int);
     int (*custom_index_write_form)(void *, int, int, int);
     const char * (*custom_index_suffix)(void *, const char *, int, int, int);
+    int (*const_key_fold)(void *, const char *, int, int, int, int, int);
 };
 struct frontend_parse_ExprSubscript_iface {
     void *self;
