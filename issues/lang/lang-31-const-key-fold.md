@@ -7,8 +7,8 @@
 | 严重度 | **Medium**（不影响既有程序；收益是静态 struct 的零开销下标） |
 | 锚点 | `4b57567d`（2026-11-27） |
 | 依据 | [RFC-0000 评估](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md) §3、[lang31-const-key-fold-construction](../../docs/design/lang31-const-key-fold-construction.md)、[D-028](../../docs/decisions/D-028.md) |
-| 状态 | open |
-| 验收 | REQ 2026-11-28 通过（证据见 §7）；待 EDITOR 签 `verified` |
+| 状态 | verified |
+| 验收 | REQ 2026-11-28 通过（§7）；EDITOR 2026-11-28 签 verified（依据 §7 + D-031 §8） |
 | 负责人 | ARCH（ADR 技术审定）；EDITOR（ADR 签收与状态）；DEV（实施）；REVIEW（复核）；REQ（排期与验收） |
 | 交付窗口 | **v1.2 必做（所有者 2026-11-28 撤回 deferred）**：与 I2 一起随 1.2 交付；1.2.0 已提交但未打 tag，tag 推迟到本项与 I2 落地后 |
 | 处置证据 | 施工卡已交 DEV（2026-11-27）：[lang31-const-key-fold-construction](../../docs/design/lang31-const-key-fold-construction.md)；前置 ADR 与 spec 新节。**2026-11-28 转回 `open`**：所有者裁定不再后推，随 [卡 §8 CR-V3-2](../../docs/phases/v1-PH-2/card.md#8-判据变更记录) 纳入 1.2；与 I2 共用 D-028 的下标解析表，但独立交付。 |
