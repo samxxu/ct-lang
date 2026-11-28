@@ -168,7 +168,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | **已完成**（R3 `e23338db`、R4 `75fcb698`、R5 `9a0312a0`、R6 `3026f9bb`、R7 `233727d5`、R8 `bd252782`；realloc 96→87） | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ EDITOR 签收 → REQ 排期 → DEV（签收口径已对齐，见 Q-12 注） | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
-| Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`；排期见下注** | ARCH 起草 `D-034` → EDITOR 签收（口径已对齐）→ REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9 已排期 | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
+| Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`；排期见下注** | ARCH 起草 `D-034`（输入包已备）→ EDITOR 签收（口径已对齐）→ REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9 已排期；起草输入见 [D-034 输入包](../../design/i2-d034-drafting-input.md) | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
 | Q-9 | dist 产物冒烟 | **已完成**（`0911029a`；本地方案 B 复跑通过，见下注） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
@@ -275,7 +275,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | A1 | I1 `LANG-31` 实现 T1–T5 | ✅ | DEV | `93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`；REQ 验收见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) |
 | A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔ | ARCH / EDITOR | 审定包已备：[d031-arch-review-packet](../../reviews/2026-11-28-d031-arch-review-packet.md)；B1/B2 已完成，只余 ARCH 结论 → EDITOR 落签 |
 | A3 | `LANG-31` issue 转 `verified` | 🟡 | EDITOR | 验收证据已齐（issue §7）；状态词由 EDITOR 落 |
-| A4 | `D-034` 起草 + 签收 | ⛔ | ARCH / EDITOR | I2 硬前置；见 [I2-C1 §2](../../design/i2-interface-subscript-construction.md#2-前置开工前必须) |
+| A4 | `D-034` 起草 + 签收 | ⛔ | ARCH / EDITOR | 起草输入包已备：[i2-d034-drafting-input](../../design/i2-d034-drafting-input.md)（D1–D10 待 ARCH 定）；签收口径已对齐 |
 | A5 | I2 阶段一（只读，`E-V3-9e`） | ⛔ | DEV | I2-1 → I2-3；验收清单见 [I2-C1 §10](../../design/i2-interface-subscript-construction.md#10-验收清单e-v3-9e--e-v3-9f) |
 | A6 | I2 阶段二（写入，`E-V3-9f`） | ⛔ | DEV | I2-4；同属 1.2 |
 | A7 | I2 文档（spec 新节 / 矩阵 / stable-subset） | ⛔ | REQ | I2-5；随 A5/A6 同步 |
