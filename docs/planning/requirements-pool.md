@@ -415,7 +415,8 @@ v0-PH-52 的 D52-6 指向本条。
 > **四问裁定**：Q1 立项（随 1.2）；Q2 合并为方法级 `index`，取消 `Indexable`；
 > Q3 阶段一只读、阶段二写入（同属 1.2）；Q4 暂不承诺 vtable 槽 ABI，语言稳定后统一发布。
 > 样例与 D-028 边界（具体类型只认固有 impl，接口值走 trait 的 `index get`）见
-> [RFC 评估 §3.1](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md)。
+> [RFC 评估 §3.1](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md)；
+> 施工卡见 [I2-C1](../../docs/design/i2-interface-subscript-construction.md)。
 
 ## REQ-POINTERFREE-1 — 日常代码的指针退场
 
