@@ -331,6 +331,96 @@ static int check_borrow_param(struct Parser *self, int pnode, int line, int col)
     return 0;
 }
 
+/* D-034 (I2) / v1-PH-2: the C-declarator spelling of one trait method
+   (`int set(char *, int)`), which the frozen `index` diagnostics quote. The
+   declared types are shown as written; a 2000-byte row is kept whole. */
+static const char *trait_sig_text(struct Parser *self, int ti, int mi)
+{
+    struct MethodSig *m;
+    char *buf = 0;
+    int cap = 0, k;
+    const char *ret;
+    const char *out;
+
+    m = &self->sym->traits[ti].m[mi];
+    ret = (m->ret && m->ret[0]) ? m->ret : "void";
+    if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
+    if (tool::sh::ct_text_printf(&buf, &cap, strchr(ret, '*') ? "%s%s(" : "%s %s(",
+                                 ret, m->name) != 0) goto fail;
+    for (k = 0; k < m->nparams; k++) {
+        if (k > 0 && tool::sh::ct_text_cat(&buf, &cap, ", ") != 0) goto fail;
+        if (tool::sh::ct_text_cat(&buf, &cap, m->ptype[k]) != 0) goto fail;
+    }
+    if (tool::sh::ct_text_cat(&buf, &cap, ")") != 0) goto fail;
+    out = runtime::text::ct_intern(buf);
+    tool::sh::ct_text_free(&buf, &cap);
+    return out ? out : (const char *)0;
+fail:
+    tool::sh::ct_text_free(&buf, &cap);
+    return (const char *)0;
+}
+
+/* D-034 D5 / D6 / D7: validate the postfix `index` marker of the trait method
+   row just recorded. The cursor sits after `)` (and after any `mut`, which a
+   dynamic trait rejects later anyway). `index` is not a reserved word: it is
+   read as the marker only here, in the one position after the parameter list.
+   A `.m.ct` static map trait never produces interface values, so it does not
+   recognise the marker at all (D-034 D2). One diagnostic only. */
+static int trait_index_marker(struct Parser *self, int ti, int mi,
+                              int nline, int ncol)
+{
+    struct MethodSig *m, *prev;
+    int want, j, mkline, mkcol;
+    const char *key, *msg;
+
+    if (self->unit_is_map) return 0;
+    if (!(self->lex->tok == T_ID && self->lex->tok_is("index"))) return 0;
+    m = &self->sym->traits[ti].m[mi];
+    mkline = self->lex->tokline;
+    mkcol = self->lex->tokstart - self->lex->lstart + 1;
+    m->is_index = 1;
+    self->sup->lex_next();
+    /* `index index`: a second marker in the same position (D034-7). */
+    if (self->lex->tok == T_ID && self->lex->tok_is("index"))
+        return tool::diag::ct_sem_error(self->lex->tokline,
+            self->lex->tokstart - self->lex->lstart + 1,
+            "the 'index' marker goes after the parameter list and before ';'",
+            self->mem->path);
+    /* D034-6: the write slot must return void (`o[k] = v` is a statement). */
+    if (strcmp(m->name, "set") == 0
+        && !(m->ret && strcmp(m->ret, "void") == 0)) {
+        const char *sig = trait_sig_text(self, ti, mi);
+        if (!sig) return self->sup->fail("out of memory");
+        msg = tool::sh::ct_scratch_fmt(
+            "an indexed 'set' must return void: '%s'", sig);
+        return tool::diag::ct_sem_error(nline, ncol, msg, self->mem->path);
+    }
+    /* D034-5: one indexed get / set per key type in a trait. A key type is the
+       first parameter's `type_key`; the return type is not part of it. */
+    want = strcmp(m->name, "get") == 0 ? 1
+           : (strcmp(m->name, "set") == 0 ? 2 : -1);
+    if (want > 0 && m->nparams == want && m->ptype[0]) {
+        key = frontend::type::type_key_text(m->ptype[0]);
+        if (!key) return self->sup->fail("out of memory");
+        for (j = 0; j < mi; j++) {
+            const char *pk;
+            prev = &self->sym->traits[ti].m[j];
+            if (!prev->is_index || prev->nparams != want || !prev->ptype[0]) continue;
+            if (strcmp(prev->name, m->name) != 0) continue;
+            pk = frontend::type::type_key_text(prev->ptype[0]);
+            if (!pk) return self->sup->fail("out of memory");
+            if (strcmp(pk, key) != 0) continue;
+            /* The duplicate test is by `type_key`; the message quotes the
+               declared spelling, the same way D034-2 lists its key types. */
+            msg = tool::sh::ct_scratch_fmt(
+                "trait '%s' marks more than one indexed '%s' for key type '%s'",
+                self->sym->traits[ti].name, m->name, m->ptype[0]);
+            return tool::diag::ct_sem_error(mkline, mkcol, msg, self->mem->path);
+        }
+    }
+    return 0;
+}
+
 /* Parse the `{ … }` of a trait method's default body. The adopting struct is
    unknown here, so `self` is bound to `void *`; the emitter expands the block
    once per struct, where `self` becomes `struct <S> *`. The parameter names
@@ -3910,6 +4000,7 @@ impl ParseOps for Parser {
     {
         int ti, mi, np, trait_line, mline, pfirst, ptail, dm, di, dj, dk, dcycle;
         int seen_borrow, seen_ref, seen_out, bline;
+        int mname_line, mname_col;
         int rty;
         int ntp, pi, discard, save_ntraits, save_ntype, save_nnode, stride;
         char **tparam = 0;
@@ -4066,6 +4157,18 @@ impl ParseOps for Parser {
                     self->lex->tokstart - self->lex->lstart + 1,
                     "receiver mutability is written after the parameter list: 'int f() mut;'",
                     self->mem->path);
+            /* D-034 D2 / D7: `index` is the postfix marker, never a prefix.
+               Read the same position rule as `mut`: refuse the prefix spelling
+               (and a marker left after a `;`) at the token, before the return
+               type is parsed, so `index int get(…)` is one placed diagnostic
+               instead of "expected a method name". A dynamic trait only; a
+               `.m.ct` static trait does not recognise the marker. */
+            if (!self->unit_is_map && self->lex->tok == T_ID
+                && self->lex->tok_is("index"))
+                return tool::diag::ct_sem_error(mline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "the 'index' marker goes after the parameter list and before ';'",
+                    self->mem->path);
             /* SH-60 / D-60-2: a `.m.ct` signature is the one place where an
                unknown bare type name is an error instead of an opaque C
                spelling -- the recipe cannot verify it and there is no C
@@ -4077,6 +4180,8 @@ impl ParseOps for Parser {
             if (self->ex->fnptr_state)
                 return self->sup->fail("a trait method cannot return a function pointer");
             if (self->lex->tok != T_ID) return self->sup->fail("expected a method name");
+            mname_line = self->lex->tokline;
+            mname_col = self->lex->tokstart - self->lex->lstart + 1;
             /* S1a-0 C1: the method block grows on demand; only the OOM valve
                (CAP_LIMIT) can stop it now. */
             if (self->sym->ensure_trait_capacity(ti, self->sym->traits[ti].nm + 1) != 0)
@@ -4092,6 +4197,7 @@ impl ParseOps for Parser {
             self->sym->traits[ti].m[mi].pnode = -1;
             self->sym->traits[ti].m[mi].line = mline;
             self->sym->traits[ti].m[mi].is_mut = 0;
+            self->sym->traits[ti].m[mi].is_index = 0;
             pfirst = -1;
             ptail = -1;
             self->sup->lex_next();
@@ -4124,6 +4230,9 @@ impl ParseOps for Parser {
                         self->sym->traits[ti].m[mi].is_mut = 1;
                         self->sup->lex_next();
                     }
+                    if (trait_index_marker(self, ti, mi, mname_line,
+                                           mname_col) != 0)
+                        return -1;
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                         if (self->unit_is_map)
                             return tool::diag::ct_sem_error(mline, 1,
@@ -4251,6 +4360,8 @@ impl ParseOps for Parser {
             }
             self->sym->traits[ti].m[mi].nparams = np;
             self->sym->traits[ti].m[mi].pnode = pfirst;
+            if (trait_index_marker(self, ti, mi, mname_line, mname_col) != 0)
+                return -1;
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                 if (self->unit_is_map)
                     return tool::diag::ct_sem_error(mline, 1,
@@ -4480,6 +4591,15 @@ impl ParseOps for Parser {
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
                     "a static method cannot implement a trait", self->mem->path);
+            /* D-034 D2 / D3: the `index` marker belongs to the trait
+               declaration. An impl writes the same signature without it; both
+               the prefix attempt and the postfix one are this one hard error,
+               so the two declarations can never disagree. */
+            if (self->lex->tok == T_ID && self->lex->tok_is("index"))
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "the 'index' marker belongs to the trait declaration, not the impl",
+                    self->mem->path);
             if (self->ex->parse_type_text(&ret) != 0) return -1;
             if (self->ex->fnptr_state)
                 return self->sup->fail("an impl method cannot return a function pointer");
@@ -4501,6 +4621,13 @@ impl ParseOps for Parser {
             if (params < 0) {
                 self->sup->pop_scope();
                 return -1;
+            }
+            if (self->lex->tok == T_ID && self->lex->tok_is("index")) {
+                self->sup->pop_scope();
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "the 'index' marker belongs to the trait declaration, not the impl",
+                    self->mem->path);
             }
             /* the vtable slot is a fixed function-pointer type, so a method
                cannot carry a variadic tail */
@@ -5196,6 +5323,14 @@ impl ParseOps for Parser {
             } else if (self->lex->tok == T_ID && self->lex->tok_is("pub")) {
                 return self->sup->fail("duplicate pub on one method");
             }
+            /* D-034 D3: the marker belongs to the trait declaration; a trait
+               impl (including a template one) writing it is the same hard
+               error as the non-generic impl path. */
+            if (use[0] && self->lex->tok == T_ID && self->lex->tok_is("index"))
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "the 'index' marker belongs to the trait declaration, not the impl",
+                    self->mem->path);
             if (is_pub) {
                 int tsi = self->sym->find_struct(tmpl);
                 int tpub = 0;
@@ -5245,6 +5380,13 @@ impl ParseOps for Parser {
             if (params < 0) {
                 self->sup->pop_scope();
                 return -1;
+            }
+            if (use[0] && self->lex->tok == T_ID && self->lex->tok_is("index")) {
+                self->sup->pop_scope();
+                return tool::diag::ct_sem_error(self->lex->tokline,
+                    self->lex->tokstart - self->lex->lstart + 1,
+                    "the 'index' marker belongs to the trait declaration, not the impl",
+                    self->mem->path);
             }
             if (self->variadic) {
                 self->sup->pop_scope();

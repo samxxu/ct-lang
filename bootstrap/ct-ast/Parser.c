@@ -236,6 +236,8 @@ extern void U16String_Drop_drop(void *self);
 static int borrow_struct_of(struct frontend_parse_Parser *, const char *, int);
 static const char * struct_name_text(const char *);
 static int check_borrow_param(struct frontend_parse_Parser *, int, int, int);
+static const char * trait_sig_text(struct frontend_parse_Parser *, int, int);
+static int trait_index_marker(struct frontend_parse_Parser *, int, int, int, int);
 static int parse_trait_body(struct frontend_parse_Parser *, int, int, const char *);
 static void trait_default_edges(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, int, char *, int);
 static int pp_is(const char *, const char *);
@@ -3718,6 +3720,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
     int seen_ref;
     int seen_out;
     int bline;
+    int mname_line;
+    int mname_col;
     int rty;
     int ntp;
     int pi;
@@ -3863,6 +3867,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         if (((_self->unit_is_map && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "mut"))) {
             return tool_diag_ct_sem_error(mline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "receiver mutability is written after the parameter list: 'int f() mut;'", _self->mem->path);
         }
+        if ((((!_self->unit_is_map) && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "index"))) {
+            return tool_diag_ct_sem_error(mline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "the 'index' marker goes after the parameter list and before ';'", _self->mem->path);
+        }
         _self->sup->map_sig = _self->unit_is_map;
         rty = _self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret));
         _self->sup->map_sig = 0;
@@ -3875,6 +3882,8 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         if (_self->lex->tok != T_ID) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "expected a method name");
         }
+        mname_line = _self->lex->tokline;
+        mname_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
         if (_self->sym->__frontend_sym_symbolops_vptr->ensure_trait_capacity(_self->sym, ti, (_self->sym->traits[ti].nm + 1)) != 0) {
             return (-1);
         }
@@ -3889,6 +3898,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         _self->sym->traits[ti].m[mi].pnode = (-1);
         _self->sym->traits[ti].m[mi].line = mline;
         _self->sym->traits[ti].m[mi].is_mut = 0;
+        _self->sym->traits[ti].m[mi].is_index = 0;
         pfirst = (-1);
         ptail = (-1);
         _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
@@ -3921,6 +3931,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                     }
                     _self->sym->traits[ti].m[mi].is_mut = 1;
                     _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                }
+                if (trait_index_marker(_self, ti, mi, mname_line, mname_col) != 0) {
+                    return (-1);
                 }
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
                     if (_self->unit_is_map) {
@@ -4059,6 +4072,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         }
         _self->sym->traits[ti].m[mi].nparams = np;
         _self->sym->traits[ti].m[mi].pnode = pfirst;
+        if (trait_index_marker(_self, ti, mi, mname_line, mname_col) != 0) {
+            return (-1);
+        }
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
             if (_self->unit_is_map) {
                 return tool_diag_ct_sem_error(mline, 1, "a .m.ct trait cannot carry a default body", _self->mem->path);
@@ -4318,6 +4334,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "static"))) {
             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "a static method cannot implement a trait", _self->mem->path);
         }
+        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "index"))) {
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "the 'index' marker belongs to the trait declaration, not the impl", _self->mem->path);
+        }
         if (_self->ex->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self->ex, (&ret)) != 0) {
             return (-1);
         }
@@ -4344,6 +4363,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         if (params < 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
+        }
+        if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "index"))) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "the 'index' marker belongs to the trait declaration, not the impl", _self->mem->path);
         }
         if (_self->variadic) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
@@ -5077,6 +5100,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "duplicate pub on one method");
             }
         }
+        if (((use[0] && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "index"))) {
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "the 'index' marker belongs to the trait declaration, not the impl", _self->mem->path);
+        }
         if (is_pub) {
             int tsi = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, tmpl);
             int tpub = 0;
@@ -5127,6 +5153,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
         if (params < 0) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
             return (-1);
+        }
+        if (((use[0] && (_self->lex->tok == T_ID)) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "index"))) {
+            _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
+            return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), "the 'index' marker belongs to the trait declaration, not the impl", _self->mem->path);
         }
         if (_self->variadic) {
             _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
@@ -5378,6 +5408,99 @@ static int check_borrow_param(struct frontend_parse_Parser * self, int pnode, in
         self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->borrowed = 1;
         self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_param = 1;
         self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->own_line = line;
+    }
+    return 0;
+}
+static const char * trait_sig_text(struct frontend_parse_Parser * self, int ti, int mi) {
+    struct frontend_sym_MethodSig * m;
+    char * buf = 0;
+    int cap = 0;
+    int k;
+    const char * ret;
+    const char * out;
+    m = (&self->sym->traits[ti].m[mi]);
+    ret = ((m->ret && m->ret[0]) ? m->ret : "void");
+    if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+        return (const char *)(0);
+    }
+    if (tool_sh_ct_text_printf((&buf), (&cap), (strchr(ret, '*') ? "%s%s(" : "%s %s("), ret, m->name) != 0) {
+        goto fail;
+    }
+    for (k = 0; k < m->nparams; k++) {
+        if (((k > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ", ") != 0))) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), m->ptype[k]) != 0) {
+            goto fail;
+        }
+    }
+    if (tool_sh_ct_text_cat((&buf), (&cap), ")") != 0) {
+        goto fail;
+    }
+    out = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return (out ? out : (const char *)(0));
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+static int trait_index_marker(struct frontend_parse_Parser * self, int ti, int mi, int nline, int ncol) {
+    struct frontend_sym_MethodSig * m;
+    struct frontend_sym_MethodSig * prev;
+    int want;
+    int j;
+    int mkline;
+    int mkcol;
+    const char * key;
+    const char * msg;
+    if (self->unit_is_map) {
+        return 0;
+    }
+    if ((!((self->lex->tok == T_ID) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, "index")))) {
+        return 0;
+    }
+    m = (&self->sym->traits[ti].m[mi]);
+    mkline = self->lex->tokline;
+    mkcol = ((self->lex->tokstart - self->lex->lstart) + 1);
+    m->is_index = 1;
+    self->sup->__frontend_parse_supportops_vptr->lex_next(self->sup);
+    if (((self->lex->tok == T_ID) && self->lex->__frontend_lex_lexops_vptr->tok_is(self->lex, "index"))) {
+        return tool_diag_ct_sem_error(self->lex->tokline, ((self->lex->tokstart - self->lex->lstart) + 1), "the 'index' marker goes after the parameter list and before ';'", self->mem->path);
+    }
+    if (((strcmp(m->name, "set") == 0) && (!(m->ret && (strcmp(m->ret, "void") == 0))))) {
+        const char * sig = trait_sig_text(self, ti, mi);
+        if ((!sig)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+        }
+        msg = tool_sh_ct_scratch_fmt("an indexed 'set' must return void: '%s'", sig);
+        return tool_diag_ct_sem_error(nline, ncol, msg, self->mem->path);
+    }
+    want = ((strcmp(m->name, "get") == 0) ? 1 : ((strcmp(m->name, "set") == 0) ? 2 : (-1)));
+    if ((((want > 0) && (m->nparams == want)) && m->ptype[0])) {
+        key = frontend_type_type_key_text(m->ptype[0]);
+        if ((!key)) {
+            return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+        }
+        for (j = 0; j < mi; j++) {
+            const char * pk;
+            prev = (&self->sym->traits[ti].m[j]);
+            if ((((!prev->is_index) || (prev->nparams != want)) || (!prev->ptype[0]))) {
+                continue;
+            }
+            if (strcmp(prev->name, m->name) != 0) {
+                continue;
+            }
+            pk = frontend_type_type_key_text(prev->ptype[0]);
+            if ((!pk)) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
+            if (strcmp(pk, key) != 0) {
+                continue;
+            }
+            msg = tool_sh_ct_scratch_fmt("trait '%s' marks more than one indexed '%s' for key type '%s'", self->sym->traits[ti].name, m->name, m->ptype[0]);
+            return tool_diag_ct_sem_error(mkline, mkcol, msg, self->mem->path);
+        }
     }
     return 0;
 }

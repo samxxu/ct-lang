@@ -352,6 +352,7 @@ struct frontend_sym_MethodSig {
     int pcap;
     int variadic;
     int is_mut;
+    int is_index;
     int body;
     int pnode;
     int line;

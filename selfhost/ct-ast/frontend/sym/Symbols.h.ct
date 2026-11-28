@@ -323,6 +323,12 @@ pub struct MethodSig {
        value. It is a compile-time table flag only -- no vtable slot, mangled
        name, recipe or emitted C changes. */
     int  is_mut;
+    /* D-034 (I2) / v1-PH-2: the postfix `index` marker of a dynamic trait
+       method (`Str get(char *k) index;`). It says this slot is the `[]`
+       protocol: interface values dispatch `o[k]` here by key type. A
+       compile-time attribute only -- the slot count, order and offset are the
+       same as without it, and a `.m.ct` static trait never sets it. */
+    int  is_index;
     /* A default body (`{ … }` after the signature): the N_BLOCK's index and
        the N_PARAM chain that names its parameters. Both are -1 for an abstract
        method, whose body the adopting impl must write. `line` is where the
