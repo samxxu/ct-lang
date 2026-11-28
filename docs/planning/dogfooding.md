@@ -170,6 +170,19 @@ seed 两轮逐字节）、`check-seed`、`check-docs`、`tools/check.sh g1/g8`�
 | REV | 通过：抽查 §3.5/§3.6 各片生成 C 的命名、缩进、无单行压缩、无遗留手写胶水；「机械对等（用户语料逐字节）不等于已降级」 | 2026-11-28 | `bootstrap/ct-ast/{Intern,Symbols,EmitExpr}.c` 逐段抽查；`check-goldens-ast` 25/25、`check-seed` 两轮、`check-docs` OK、`g0/g1/g6/g8` OK |
 | REV-NOTE | 边界：§3.6 的 D2/D3 剩余（realloc/snprintf）仍存在，按“机械对等 ≠ 已降级”记录；本签字只覆盖可读性，不覆盖这些剩余项 | 2026-11-28 | §3.6 剩余清单；本行不改变 §3.5/§3.6 的计数 |
 
+### 3.8 结果（2026-11-28，S8B-REM-1 R1/R2）
+
+| 片 | 域 | 改前 | 改后 | 依据 |
+| --- | --- | ---: | ---: | --- |
+| R1 | `Pkg.h.ct` `snprintf(` / LOC | 53 / 5657 | **51 / 5660** | a 类 2 处改 `tool::sh::ct_scratch_fmt`；`ct.lock`/`test/pkg` 逐字节 |
+| R2 | `Symbols.h.ct` `snprintf(` / LOC | 41 / 3599 | **24 / 3578** | b 类 17 处直接 `ct_internf`/scratch+intern；诊断逐字 |
+| 合计 | 全仓 `snprintf(`（卡口径） | 308 | **289** | Pkg −2、Symbols −17 |
+
+审计表：[s8b-rem-audit.tsv](../design/s8b-rem-audit.tsv)（Pkg 53 行 + Symbols 17 行；
+a 2 / b 17 / c 1 / d 7 / bounded 38 / vsnprintf 5；c/d 只登记不改）。
+门禁：`check-all OK (8 gates)`、`check-ast 1741/0`、`goldens 25/25`、`test/pkg 165/0`、
+`check-seed` 两轮、`sanitizers 662`、`docs`/`g1`/`g6`/`g8` 绿。
+
 ## 4 非目标
 
 - 不把 Arena 节点池改成 ADT（D32 布局与性能契约不动）；
