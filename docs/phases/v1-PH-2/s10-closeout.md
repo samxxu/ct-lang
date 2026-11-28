@@ -176,6 +176,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | **已完成**（`9eb519c4`） | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 | Q-14 | T-8 门禁允许 EDITOR 签收 ADR（B1） | **已完成**（`f0ce1746`；待 EDITOR 审核） | REQ（所有者 2026-11-28 授权直接修复）→ EDITOR | 无 | 本节 Q-12 注；`test/docs/check-docs.py` |
 | Q-15 | ADR 规范对齐（B2：`AGENTS §0.7` + 规范矩阵 + sha pin） | **已完成**（`b4f3a568`；待 EDITOR 审核） | REQ（所有者授权直接修复）→ EDITOR | 外部主规范副本需 EDITOR 后续同步（见注） | `AGENTS.md`、`docs/spec/ai-coding-workflow.md` |
+| Q-16 | E-V3-9b 条件通过裁定（方案 A） | **已完成**（REQ 2026-11-28 裁定；待 REV 补签） | REQ 裁定 → REV 补 `dogfooding §3.8` 计数与抽查 → REV 签 | 无 | [REV 现状评估](../../reviews/2026-11-28-review-priority-assessment.md) §2；卡 §6 E-V3-9b |
 
 > **Q-7 排期口径（2026-11-28）**：本条是架构债、无用户可见收益，**不进 1.2 窗口**
 > （窗口已由 I1/I2 占满）；建议放在 `v1.2.0` tag 之后的技术债批，不单独立版本。三步：
@@ -282,7 +283,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | B1 | T-8 门禁允许 EDITOR 签 ADR | ✅（待 EDITOR 审核） | REQ（所有者授权） | `f0ce1746`；临时 ADR 探针验证通过后删除 |
 | B2 | `AGENTS.md` §0.7 + 规范矩阵 + `docs/spec` sha pin | ✅（待 EDITOR 审核） | REQ（所有者授权） | `b4f3a568`；`g0` 绿（`sync-agents.sh` 不在本机，块体等价比对被跳过） |
 | B3 | D-032 REV 只读复核 + EDITOR 落状态 | 🟡 | REV / EDITOR | M1–M3 已落地、REQ 验收全绿（shim 74 → 3） |
-| B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | ✅ | DEV | R3 `e23338db`、R4 `75fcb698`、R5 `9a0312a0`、R6 `3026f9bb`、R7 `233727d5`、R8 `bd252782`、§3.8 `9eb519c4`；现测 `realloc` 87、`snprintf` 292（Pkg 43 / Symbols 24）；**余 REVIEW 对 E-V3-9b 的签字** |
+| B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | ✅ | DEV / REV | R3 `e23338db` … R8 `bd252782`、§3.8 `9eb519c4`；现测 `realloc` 87、`snprintf` 292（Pkg 43 / Symbols 24）；**E-V3-9b 按方案 A 条件通过（SH-123 保留），待 REV 补 §3.8 计数与抽查后签** |
 | B5 | 门禁全绿：8 门 / seed 两轮 / goldens 25/25 / warnings 0 / `test/ir` 15 / `check-docs` | ✅（I1 后） | DEV / REQ | I2 落地后必须重跑一遍再 tag |
 | B6 | CI 首绿（含 Q-9 dist 冒烟） | 🟡 | DEV | `0911029a` 已入库；以首次 CI 结果为准 |
 | C1 | `CTC_VERSION 1.2.0` | ✅ | — | `selfhost/ct-ast/main.ct` |
