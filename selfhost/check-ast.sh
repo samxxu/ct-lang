@@ -5413,6 +5413,16 @@ if bash test/ast/i2_index_syntax.sh "$work/ct-ast" "$CC"; then
 else
     bad "i2/syntax" "index marker syntax (D-034) failed"
 fi
+# D-034 / v1-PH-2 (I2-2): an interface value's `o[k]` resolves against the
+# trait declaration's indexed `get` by the key's static type and lands on the
+# existing vtable slot, so the product is the explicit `o.get(k)` one. The
+# probe pins the byte identity, the D-028 non-leak and the frozen D034
+# diagnostics (no index / key mismatch / stage-one write / concrete-type use).
+if bash test/ast/i2_index.sh "$work/ct-ast" "$CC"; then
+    ok "i2/index (D-034 interface subscript: shape, keys, diagnostics)"
+else
+    bad "i2/index" "interface subscript (D-034 stage one) failed"
+fi
 # v1-PH-2 S3 / D-029: `(A, B) => R` is the function-pointer type in another
 # spelling. The forms fixture (`test/ast/p3_functor_forms`) and the pub-header
 # fixture (`test/ast/p3_functor_header`) run in the generic loops above; this

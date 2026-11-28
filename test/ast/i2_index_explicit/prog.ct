@@ -1,0 +1,34 @@
+/* D-034 (I2) stage one / A1, the explicit twin: the same program with
+   `s.get("name")`. The probe compares both products byte for byte, so the
+   subscript can never drift into a second call shape. */
+
+trait Store {
+    int get(char *k) index;
+    int size();
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(char *k)
+    {
+        return self->n + (k[0] == 'n' ? 1 : 0);
+    }
+    int size()
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    Store s;
+
+    m.n = 7;
+    s = m;
+    printf("%d %d\n", s.get("name"), s.size());
+    return 0;
+}

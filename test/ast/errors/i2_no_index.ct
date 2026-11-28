@@ -1,0 +1,27 @@
+/* D-034 D3 / A5: an unmarked `get` is an ordinary method; it does not enable
+   `[]` on an interface value. */
+trait Env {
+    int get(char *k);
+}
+
+struct Sys {
+    int n;
+} use Env;
+
+impl Env for Sys {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Sys sys;
+    Env e;
+
+    sys.n = 1;
+    e = sys;
+    return e["PATH"];
+}

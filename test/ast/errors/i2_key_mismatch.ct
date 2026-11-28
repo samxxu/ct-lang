@@ -1,0 +1,27 @@
+/* D-034 D3 / A6: the key matches by its static type; `int` is not `char *`,
+   so the trait's `get(char *) index` is listed as the only candidate. */
+trait Slot {
+    int get(char *k) index;
+}
+
+struct Bag {
+    int n;
+} use Slot;
+
+impl Slot for Bag {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Bag b;
+    Slot s;
+
+    b.n = 1;
+    s = b;
+    return s[0];
+}

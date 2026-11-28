@@ -1,0 +1,28 @@
+/* D-034 D1 / A9: the interface rule never leaks to a concrete type. `Store`
+   is implemented for `Json` with an indexed get, but `j[key]` on the value
+   still follows D-028 (inherent impl only) and says so. The key is a variable
+   so the constant-key fold (D-031, struct + literal) does not answer first. */
+trait Store {
+    int get(char *k) index;
+}
+
+struct Json {
+    int n;
+} use Store;
+
+impl Store for Json {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Json j;
+    char *key = "x";
+
+    j.n = 1;
+    return j[key];
+}

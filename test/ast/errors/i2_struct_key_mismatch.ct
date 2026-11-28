@@ -1,0 +1,22 @@
+/* D-034 D1 / A9, the inherent half: a concrete type's `[]` keeps D-028's
+   key-type dispatch and lists the candidates instead of claiming the trait
+   rule. */
+struct Vault {
+    int n;
+}
+
+impl Vault {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Vault v;
+
+    v.n = 1;
+    return v[0];
+}

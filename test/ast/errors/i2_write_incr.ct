@@ -1,0 +1,27 @@
+/* D-034 D4: `++` is the same read-modify-write family; stage one refuses it
+   with the same diagnostic, not with a missing-`set` message. */
+trait Slot {
+    int get(int k) index;
+}
+
+struct Bag {
+    int n;
+} use Slot;
+
+impl Slot for Bag {
+    int get(int k)
+    {
+        return self->n + k;
+    }
+}
+
+int main(void)
+{
+    Bag b;
+    Slot s;
+
+    b.n = 1;
+    s = b;
+    s[0]++;
+    return 0;
+}

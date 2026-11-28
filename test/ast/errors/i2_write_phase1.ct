@@ -1,0 +1,27 @@
+/* D-034 D4 / A8: stage one has no indexed set slot, so the whole write family
+   is refused at the subscript (`=` first). */
+trait Slot {
+    int get(int k) index;
+}
+
+struct Bag {
+    int n;
+} use Slot;
+
+impl Slot for Bag {
+    int get(int k)
+    {
+        return self->n + k;
+    }
+}
+
+int main(void)
+{
+    Bag b;
+    Slot s;
+
+    b.n = 1;
+    s = b;
+    s[0] = 3;
+    return 0;
+}

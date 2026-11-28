@@ -1,0 +1,35 @@
+/* D-034 (I2) stage one / A1: a dynamic trait's `get` marked `index` is the
+   interface value's `[]`. `s["name"]` resolves against the trait declaration,
+   matches the key's static type (`char *`) and lands on the existing vtable
+   slot call, so the generated C is the explicit `s.get("name")` one. */
+
+trait Store {
+    int get(char *k) index;
+    int size();
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(char *k)
+    {
+        return self->n + (k[0] == 'n' ? 1 : 0);
+    }
+    int size()
+    {
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    Store s;
+
+    m.n = 7;
+    s = m;
+    printf("%d %d\n", s["name"], s.size());
+    return 0;
+}
