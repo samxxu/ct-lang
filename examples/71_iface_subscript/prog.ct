@@ -1,0 +1,48 @@
+// 71_iface_subscript - interface-value subscript (I2, D-034).
+//
+// A dynamic trait method may carry the context modifier `index` after its
+// parameter list: `int get(int k) index;`. Marking it makes the EXISTING get
+// slot usable as `o[k]` when `o`'s static type is the interface value; the
+// marked `void set(int k, int v) index` likewise makes `o[k] = v` work. The
+// marker adds no vtable slot and no new C shape: the generated C is the same
+// as the explicit `o.get(k)` / `o.set(k, v)` call.
+//
+// Keys follow §4.64 exactly: the key's static type must equal the parameter's
+// type_key verbatim (a string literal's static type is a C string pointer,
+// never `Str`). This sample uses int keys only, so no pointer appears anywhere.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+
+trait Store {
+    int get(int k) index;
+    void set(int k, int v) index;
+}
+
+struct Counter {
+    int total;
+} use Store;
+
+impl Store for Counter {
+    int get(int k)
+    {
+        return self->total + k;
+    }
+    void set(int k, int v)
+    {
+        self->total = self->total + k * v;
+    }
+}
+
+int main(void)
+{
+    Counter c;
+    Store s;
+
+    c.total = 1;
+    s = c;
+    printf("read before: %d\n", s[0]);
+    s[2] = 3;
+    printf("read after: %d\n", s[0]);
+    return 0;
+}

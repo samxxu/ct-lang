@@ -57,8 +57,9 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 24 | 自定义下标（S2，§4.64） | [59_custom_subscript](../../examples/59_custom_subscript) | [index_overload_both](../../test/ast/index_overload_both)、[jsaccess_overload_both](../../test/ast/jsaccess_overload_both) | spec §4.64；README §0.8 | 薄 |
 | 25 | 函子 `(A,B) => R`（S3） | [66_functor](../../examples/66_functor) | [p3_functor_forms](../../test/ast/p3_functor_forms) | spec §4.77；README §0.10 | 薄 |
 | 26 | 常量键折叠（S8a） | [70_const_key_fold](../../examples/70_const_key_fold) | [320_const_key_fold](../../test/ast/320_const_key_fold)、[321_const_key_fold_chain](../../test/ast/321_const_key_fold_chain) | spec §4.79；README — | 薄 |
+| 27 | 接口值下标（I2） | [71_iface_subscript](../../examples/71_iface_subscript) | [i2_index.sh](../../test/ast/i2_index.sh)、[i2_index_write.sh](../../test/ast/i2_index_write.sh) | spec §4.80；tutorial §6.1 | 薄 |
 
-## 2 缺口清单（S8c 收口）
+## 2 缺口清单（S8c 收口 + I2 补行）
 
 | 片 | 缺口 | 动作 | 状态 |
 | --- | --- | --- | --- |
@@ -70,6 +71,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | B-5 | 文档可执行片段偏少 | README 现有 12 个 `// source:` 来源（10 个 `docs/snippets/README/` standalone + 2 个 examples 摘录）；新增 `0.12_adt_tour`（S4/S5/S6）与 `0.13_c_boundary`（C 边界对照），矩阵 26 行的 doc 单元全部落到 README 小节；`check-docs` 12 sources、`check-warnings` 逐片段编译运行（H1–H4 逐片表仍在 TEST-27 §8，issue 状态由 REV 复核；本轮按指示不改 issue） | 已补 |
 | B-6 | S2 下标协议、S3 函子、S4–S6 模式 | `59`（S2）、`66`（S3）、`67`（S4）、`68`（S5）、`69`（S6）各 ≥1 个 example | 已补 |
 | B-7 | 文档去指针 | README / tutorial / guide / idioms 的非互操作段改 `String` / `Str` / `Vec` / `Map` / `Box` / 切片 / `ref`·`out`；C 互操作段（README §0.1/§0.2/§0.11/§0.13、tutorial §0/§9、guide §1.1/§10、idioms §11.1）保留并逐段标注理由；`Map<char *, V>` 词表改 `Map<String, V>` | 已补 |
+| B-8 | 接口值下标（I2 / D-034）无样例 | `examples/71_iface_subscript`（只读 + 写入各一，int 键、零指针）；正负例由 `test/ast/i2_index*.sh` 与 `test/ast/errors/i2_*` 钉住；spec §4.80 + glossary + tutorial §6.1 | 已补 |
 
 ## 3 保留的 C 互操作例外（不要求去指针）
 

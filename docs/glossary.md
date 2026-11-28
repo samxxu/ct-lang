@@ -54,6 +54,7 @@
 | 方言（dialect） | `//@ct-dialect: <名字>` + `//@` DSL 行 | 写在注释里的领域专用语法；`ctc` **零感知**，由**仓库外**的展开器脚本转成纯 Ct 后再编译（Phase 6.6；见 [design/dialect.md](history/design/dialect.md)） |
 | 方言插件（dialect plugin） | `ct-dialects/<名字>.sh`（`/` 换 `-`；亦接受同名其他后缀，如 `.py`） | 展开器的实现脚本，作者语言自选（bash / Python / awk / PHP…）；门禁按插件自身的 shebang 执行（有执行位直接执行，否则用 shebang 解释器，无 shebang 才退回 POSIX `sh`）；仓库内只允许作**演示 / 测试**（`examples/**`、`test/**`），**不得**进入编译器构建（AGENTS §2） |
 | 接口值（interface value / iface） | `struct <T>_iface`、`T x = p;` | 胖指针：`void *self` + `struct <T>_vtbl *vt` |
+| 接口值下标（interface subscript） | `trait Store { int get(int k) index; void set(int k, int v) index; }` + `s[k]` / `s[k] = v` | 方法级 `index` 是**上下文修饰词**，写在 trait 方法参数列表之后、`;` 之前；它让**接口值**的下标糖落到已有 `get` / `set` vtable 槽。读 `s[k]` 只看 trait 声明、按键的静态类型匹配（字面量键是 `char *`，不是 `Str`）；写 `s[k] = v` 需要 `void set(K, V) index`，否则编译期硬错。具体类型仍只认固有 `impl`（§4.64 / D-028）；标记不新增槽、不改槽序，单键 trait 下生成 C 与显式调用一致（[D-034](decisions/D-034.md)、[language-spec](language-spec.md) §4.80） |
 | 虚表（vtable） | `struct <Trait>_vtbl` | 函数指针表 |
 | 虚表指针（vptr） | `__<trait>_vptr` | struct 内字段，指向其 vtable |
 | 装箱（boxing） | `Greeter g = p;` | 把 struct 变量/指针转成接口值 |

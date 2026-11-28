@@ -494,6 +494,20 @@ int main(void) {
 ct-ast 还放宽了 L0 的三条限制：接口**数组**、接口**数组字段**、以及**构造点装箱**都能用
 （`test/cases/**` 与 `docs/language-spec.md §4.8` 有逐条对照）。
 
+### 6.1 接口值下标：`s[k]` / `s[k] = v`（I2 / D-034，v1.2 起可用）
+
+接口值也能用下标，但这是 **trait 声明给的方法**，不是新容器协议：在 trait 方法签名的参数
+列表之后、`;` 之前写上下文修饰词 `index`（如 `int get(int k) index;`；`index` 不是保留字，
+其它位置仍是普通标识符），该方法就成为“接口值可下标”的读版本；再声明
+`void set(int k, int v) index;` 后 `s[k] = v` 也能写。读只看 trait 声明、按键的静态类型
+逐字匹配（字符串字面量的静态类型是 C 字符串指针，`Str` 形参不命中，需先把键绑成 `Str`
+变量），写要求 `set` 返回 `void` 且键类型匹配；trait 没声明 `index set` 时写入是编译期
+硬错，不存在“只读实现被静默写入”的运行期分支。它不新增 vtable 槽，生成 C 与显式
+`s.get(k)` / `s.set(k, v)` 同形；具体 struct 的 `x[k]` 仍走 §4.64 的固有 `impl`，两者不
+互相兜底——想用接口值下标就先把值装进接口变量。完整样例见
+[examples/71_iface_subscript](../examples/71_iface_subscript/prog.ct)，细节见
+[language-spec §4.80](language-spec.md)。
+
 ## 7. 模块化：namespace、import、pub、多文件
 
 一个文件一个单元，`ct build` 把多个单元编到同一目录。三个关键字分工明确：

@@ -63,6 +63,7 @@
 - [4.77 函子签名糖 `(A, B) => R`（v1-PH-2 S3，仅 ct-ast）](#477-函子签名糖-a-b--rv1-ph-2-s3仅-ct-ast)
 - [4.78 `Str` / `String` 的 stdout 出口：`print` / `println`（v1-PH-2 S8c，仅 ct-ast）](#478-str--string-的-stdout-出口print--printlnv1-ph-2-s8c仅-ct-ast)
 - [4.79 常量键折叠（v1-PH-2 S8a，仅 ct-ast）](#479-常量键折叠v1-ph-2-s8a仅-ct-ast)
+- [4.80 接口值下标（v1.2 / D-034，仅 ct-ast）](#480-接口值下标v12--d-034仅-ct-ast)
 
 ---
 
@@ -3921,3 +3922,104 @@ owned.release();
 **不做。** 写形态、嵌套常量键（`p["a"]["b"]`）、数组 / 切片 / 容器的常量键折叠、
 接口值下标（I2 / Q-8，`D-034` 另卡）、变量键与运行期键、字符串到字段的映射表、
 其它运算符重载。
+
+### 4.80 接口值下标（v1.2 / D-034，仅 ct-ast）
+
+> **状态：已冻结（v1.2）：ARCH 起草 2026-11-28、EDITOR 签收 2026-11-28。**
+> 语义权威是 [D-034](decisions/D-034.md)；实现形状、诊断落点与夹具命名见
+> [i2-implementation-notes](design/i2-implementation-notes.md)。阶段一（只读）对应
+> `E-V3-9e`，阶段二（写入）对应 `E-V3-9f`，两阶段都在 v1.2 落地。
+
+**`index` 是上下文修饰词，不是保留字。** 它只在一个位置被识别：动态 `trait` / `pub trait`
+的方法声明里，参数列表 `)` 之后、`;` 或默认体 `{` 之前，且只出现一次，如
+`int get(char *k) index;`——语法位与 §4.10 的后置 `mut` 同型。前缀写
+（`index int get(…)`）、写在 `;` 之后、重复写（`index index`）都是硬错（D034-7）。
+`impl` 侧不写标记，写了是硬错（D034-3，“标记属于 trait 声明”），不做两处取并集。
+`.m.ct` 的静态 `map trait` 不产生接口值，不识别本标记。其它位置全部保持普通标识符：
+`int index`、`c.index`、字段 `index` 与方法名 `index`（`int index(Str k);`）都不变。
+
+**接口值只读 `o[k]`。** 接收者的静态类型必须是接口值（`struct <Trait>_iface`）。解析只看
+**trait 声明**，不看 `impl`：在标了 `index` 的 `get` 里，按“名字 + 参数个数 1 + 非
+`static` + 键的静态类型与形参 `type_key` 逐字相等”选版本（与 §4.64 同一条规则，不做
+隐式转换、不做数值提升）。同 trait 可并存多个键类型（`get(char *)` / `get(int)` 都标
+`index`），按键分派。未标 `index` 的 `get` 不参与 `[]`，仍是普通方法（`o.get(k)` 可调用）。
+匹配成功后 `o[k]` 在解析期改写成与显式 `o.get(k)` 同形的既有方法调用节点，TIR / LIR /
+发射器没有新增分支。
+
+**字面量键是 `char *`，不是 `Str`。** `"name"` 的静态类型是 `char *`（§4.64、§4.70），
+所以 `o["name"]` 只命中 `get(char *k) index`；`Str get(Str k) index` 对字面量键**不命中**，
+按 D034-2 报键类型不匹配。需要 `Str` 键时先把键绑定为变量（`Str k = "name"; o[k]`）。
+不存在 `char * → Str` 的隐式匹配，也不为字面量键放宽 `type_key` 逐字相等的规则。
+
+**阶段二写入 `o[k] = v`。** 仅当接收者的静态 trait 声明了与键匹配的
+`void set(K, V) index` 时合法；trait 没声明则**编译期**硬错 D034-8，不落运行期检查。
+`set` 必须返回 `void`（否则 D034-6），参数恰好 2 个（否则 L52-4），不能是 `static`
+（L52-5）。分派只按键类型（`set` 首参）选版，值类型按既有实参兼容性检查，不是选版维度。
+写入值所有权按签名（D-013）：`V` 值形参按值传入（标量即复制；`String` / 按值 struct 按
+§4.70 / D-013 的规则 retain，**不是**深拷贝），`V *` 形参是视图（不 retain、不复制，调用方
+保留所有权）。`o[k] = v` 是语句，没有结果值；失败语义（`Result` / 缺省返回）不在本协议。
+复合写 `o[k] += v`、`o[k]++` / `--` 与 `&o[k]` 仍按 §4.64 的 L52-6 / L52-7 硬错；右值是
+`own` / `borrow` 变量仍是 L52-9；写形态必须是语句且接收者可回溯到左值（L52-8）；`get` /
+`set` 在定义单元私有、消费单元不可见时按 L52-10 拒绝。
+
+**“只读实现被写入”在类型层不可能存在。** trait 完整性（§6.1）要求 impl 实现每个抽象方法：
+trait 声明了 `index set` 而某个 impl 没写，是既有硬错（`trait method 'set' is not implemented
+for struct 'S'`），不是运行期缺实现。编译器不合成空实现（静默丢写入），也不在调用点插运行期
+报错——这两种做法都会让写入丢失或让同一语法多出失败通道。
+
+**与 §4.64 的分裂（D-034 选 (i)）。** 具体类型（非接口值）的 `[]` 仍只认固有 `impl` 的
+`get` / `set`；trait 里标 `index` 的方法**只服务接口值**。两套派发模型不共用解析：具体类型
+是静态直调 `<T>_get`（零 vtable、零间接），接口值是 vtable 槽调用；统一会在同一语法上并存
+两套求值与所有权路径，并让 §4.64“唯一名 `get` / `set` 的生成 C 逐字节不变”无法保持。
+可观察结果：`struct JsonStore` 即使实现了带 `index` 的 `Store`，`j["x"]` 仍按 §4.64 报
+“没有固有下标”（无固有 `get` 时是 L52-1），**不提示** trait 的 `index get`；要用接口值
+下标就写 `Store s = j; s["x"]`。若未来要统一（(ii)），必须单独立 ADR 扩 D-028，不在本节内改。
+
+**零 vtable 槽。** `index` 只是给**已有** `get` / `set` 槽加“可作为 `[]`”的编译期属性：
+槽数、槽序、槽偏移与不加标记时完全相同，不新增槽，也不改变同名方法之间的声明顺序。唯一
+`get` 的 trait 下 `o[k]` 与 `o.get(k)` 的生成 C 逐字节一致；同 trait 有多个同名 `get`
+（不同键类型）时，同名槽**全部**按参数类型键追加 `$<enc>` 后缀（与 §4.64 同一编码），由
+键类型选中对应槽，符号互不相同。下标在解析期静态落到已有槽，不建“字符串键 → 方法”的
+运行期表、不做反射。**不承诺 vtable 槽位 ABI**：只保证同一次构建内一致，不承诺跨版本
+布局；接口库仍以源码分发。标记随 `pub trait` 进入 `.h.ct` 公开头，跨单元时调用方能看到它；
+`ct build` 全量重编保证声明、实现与调用三者一致。
+
+**与 I1 的边界。** §4.79 的常量键折叠只作用于**非指针用户 struct 值**的读形态；接口值上的
+字面量键明确不折叠（接口值没有静态字段表），仍走本节的下标协议。两卡共用 §4.64 的解析表，
+但互不改写：`p["x"]`（struct 值）折叠为 `p.x`，`s["x"]`（接口值）落到 `index get` 槽。
+
+**诊断**（位置规则：下标形态一律指向 `[`；标记形态指向 `index` 记号；D034-5 指向第二个
+标记；D034-6 指向 `set`；一次只报一条）：
+
+```text
+D034-1  trait 'T' declares no indexed get; 'o[k]' is not available
+D034-2  trait 'T' has no indexed 'get' matching key type 'int': candidates are 'char *'
+D034-3  the 'index' marker belongs to the trait declaration, not the impl
+D034-4  interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)
+D034-5  trait 'T' marks more than one indexed 'get' for key type 'char *'
+D034-6  an indexed 'set' must return void: 'int set(char *, int)'
+D034-7  the 'index' marker goes after the parameter list and before ';'
+D034-8  trait 'T' declares no indexed set; 'o[k] = v' is not available
+```
+
+- `D034-1…8` 是 D-034 的**本地标签**，不是 §9 / `docs/diagnostics/codes.md` 的 registry 码；
+  实现直接使用上述文案，不新增 `E-` 码（registry 要求源码字面量与表行同集合，理由见
+  D-034 §2）。
+- 写入形态把文案里的 `'get'` 换成 `'set'`（`trait 'T' has no indexed 'set' matching key type
+  'int': candidates are 'char *'`）。候选只列该 trait 中**参数个数相符且标了 `index`** 的
+  方法的键类型，按声明顺序、单引号、逗号加空格；trait 没有任何 `index get` 时先命中
+  D034-1，不列空候选。
+- 既有 L52-4 / L52-5 / L52-7 / L52-9 文案逐字保留，只是把作用对象从“固有下标”扩到接口值
+  的同名检查点；不新增“接口值专用”的重复文案。
+- `D034-3` / `D034-7` 共用“标记位置”语义：impl 重复写、前缀写、重复两次、写在 `;` 之后
+  都归这一类，不产生多条诊断。
+- D034-4 是**阶段一的过渡诊断**（当时写入整体拒绝）；阶段二落地后不再产生，写入由 D034-8
+  接管。它保留在这里只为对齐冻结的 ADR 文案，不是现行行为。
+
+**不做。** `o[k].field` / `o[k].m()` / 多级链、`$[k]`（`into` 块内）、其它运算符重载、
+缺失 / 越界语义（编译器不加检查，由 `get` / `set` 自己决定）、`Result` 等失败语义、
+trait 继承 / 关联类型 / `Indexable` 这类专用 trait 名、编译器合成的默认 `set`、预编译
+接口库与跨版本槽位 ABI。`struct T *p` 的 `p[k]` 仍是 C 指针算术；容器 `v[i]` / `m[k]`
+仍按 §4.51 / §4.53 只读。样例：[examples/71_iface_subscript](../examples/71_iface_subscript/prog.ct)；
+正负例：[test/ast/i2_index.sh](../test/ast/i2_index.sh)、
+[test/ast/i2_index_write.sh](../test/ast/i2_index_write.sh) 与 `test/ast/errors/i2_*`。
