@@ -99,6 +99,12 @@ neg i2_dup_method 5:9 \
 neg i2_dup_generic 8:15 \
     "trait 'Vat_int' declares duplicate method 'get' with the same parameter types" \
     "I2-1_dupgeneric  generic instantiation collapsing two keys is rejected (F1-g)"
+neg i2_dup_generic_qual 5:36 \
+    "trait 'Vat_char_p' declares duplicate method 'get' with the same parameter types" \
+    "I2-1_dupqual  const-qualified collapse uses type_key (F1-g2)"
+neg i2_dup_generic_int 5:33 \
+    "trait 'Vat_int' declares duplicate method 'get' with the same parameter types" \
+    "I2-1_dupint  signed-int collapse uses type_key (F1-g2)"
 
 echo "i2/syntax: $fail failure(s)"
 exit $([ "$fail" -eq 0 ] && echo 0 || echo 1)

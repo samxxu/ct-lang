@@ -2262,8 +2262,10 @@ impl SymbolOps for Symbols {
                     const char *a, *b;
                     if (!self->traits[ni].m[mi].ptype
                         || !self->traits[ni].m[mj].ptype) { same = 0; break; }
-                    a = self->traits[ni].m[mi].ptype[mk];
-                    b = self->traits[ni].m[mj].ptype[mk];
+                    a = type_key_text_low(
+                        self->traits[ni].m[mi].ptype[mk]);
+                    b = type_key_text_low(
+                        self->traits[ni].m[mj].ptype[mk]);
                     if (!a || !b) { same = 0; break; }
                     if (strcmp(a, b) != 0) { same = 0; break; }
                 }

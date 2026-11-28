@@ -2811,8 +2811,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
                     same = 0;
                     break;
                 }
-                a = _self->traits[ni].m[mi].ptype[mk];
-                b = _self->traits[ni].m[mj].ptype[mk];
+                a = frontend_sym_type_key_text_low(_self->traits[ni].m[mi].ptype[mk]);
+                b = frontend_sym_type_key_text_low(_self->traits[ni].m[mj].ptype[mk]);
                 if (((!a) || (!b))) {
                     same = 0;
                     break;

@@ -1,0 +1,5 @@
+trait Vat<T> {
+    T get(T k) index;
+    T get(const char *k) index;
+}
+struct V { int n; } use Vat<char *>;

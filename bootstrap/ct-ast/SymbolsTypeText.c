@@ -183,6 +183,7 @@ int frontend_sym_impl_pat_split(const char *, const char * *, char * *, int, int
 int frontend_sym_inst_enc_one(const char *, char *, int);
 void frontend_sym_meth_host_key(const char *, char *, int);
 static const char * inst_enc_one_text(const char *);
+const char * frontend_sym_type_key_text_low(const char *);
 static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
     struct Result_int_int *_self = (struct Result_int_int *)self;
     (void)_self;
@@ -1095,4 +1096,99 @@ void frontend_sym_meth_host_key(const char * host, char * out, int cap) {
         p++;
     }
     out[i] = 0;
+}
+const char * frontend_sym_type_key_text_low(const char * in) {
+    char * raw = 0;
+    char * w = 0;
+    char one[2];
+    int rawcap = 0;
+    int wcap = 0;
+    const char * p = (in ? in : "");
+    const char * pooled;
+    one[1] = 0;
+    if (tool_sh_ct_text_init((&raw), (&rawcap), 32) != 0) {
+        return (const char *)(0);
+    }
+    while ((*p)) {
+        if ((((((*p) == ' ') || ((*p) == '\t')) || ((*p) == '\n')) || ((*p) == '\r'))) {
+            p++;
+            continue;
+        }
+        if ((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || ((*p) == '_'))) {
+            if (tool_sh_ct_text_reset((&w), (&wcap), 32) != 0) {
+                goto fail;
+            }
+            while (((((((*p) >= 'a') && ((*p) <= 'z')) || (((*p) >= 'A') && ((*p) <= 'Z'))) || (((*p) >= '0') && ((*p) <= '9'))) || ((*p) == '_'))) {
+                one[0] = (*p);
+                if (tool_sh_ct_text_cat((&w), (&wcap), one) != 0) {
+                    goto fail;
+                }
+                p++;
+            }
+            if (((strcmp(w, "const") == 0) || (strcmp(w, "volatile") == 0))) {
+                continue;
+            }
+            if (tool_sh_ct_text_cat((&raw), (&rawcap), w) != 0) {
+                goto fail;
+            }
+            continue;
+        }
+        one[0] = (*p);
+        if (tool_sh_ct_text_cat((&raw), (&rawcap), one) != 0) {
+            goto fail;
+        }
+        p++;
+    }
+    pooled = 0;
+    if ((((strchr(raw, '*') == 0) && (strchr(raw, '[') == 0)) && (strchr(raw, '(') == 0))) {
+        if (((!strcmp(raw, "signed")) || (!strcmp(raw, "signedint")))) {
+            pooled = runtime_text_ct_intern("int");
+        }
+        else {
+            if ((!strcmp(raw, "unsignedint"))) {
+                pooled = runtime_text_ct_intern("unsigned");
+            }
+            else {
+                if ((((!strcmp(raw, "longint")) || (!strcmp(raw, "signedlong"))) || (!strcmp(raw, "signedlongint")))) {
+                    pooled = runtime_text_ct_intern("long");
+                }
+                else {
+                    if ((!strcmp(raw, "unsignedlongint"))) {
+                        pooled = runtime_text_ct_intern("unsignedlong");
+                    }
+                    else {
+                        if ((((!strcmp(raw, "longlongint")) || (!strcmp(raw, "signedlonglong"))) || (!strcmp(raw, "signedlonglongint")))) {
+                            pooled = runtime_text_ct_intern("longlong");
+                        }
+                        else {
+                            if ((!strcmp(raw, "unsignedlonglongint"))) {
+                                pooled = runtime_text_ct_intern("unsignedlonglong");
+                            }
+                            else {
+                                if ((((!strcmp(raw, "shortint")) || (!strcmp(raw, "signedshort"))) || (!strcmp(raw, "signedshortint")))) {
+                                    pooled = runtime_text_ct_intern("short");
+                                }
+                                else {
+                                    if ((!strcmp(raw, "unsignedshortint"))) {
+                                        pooled = runtime_text_ct_intern("unsignedshort");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ((!pooled)) {
+        pooled = runtime_text_ct_intern(raw);
+    }
+    tool_sh_ct_text_free((&w), (&wcap));
+    tool_sh_ct_text_free((&raw), (&rawcap));
+    return pooled;
+    fail:
+        ;
+        tool_sh_ct_text_free((&w), (&wcap));
+        tool_sh_ct_text_free((&raw), (&rawcap));
+        return (const char *)(0);
 }

@@ -1,0 +1,5 @@
+trait Vat<T> {
+    T get(T k) index;
+    T get(signed int k) index;
+}
+struct V { int n; } use Vat<int>;

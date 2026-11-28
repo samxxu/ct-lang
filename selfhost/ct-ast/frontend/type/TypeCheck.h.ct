@@ -126,59 +126,9 @@ pub struct TypeCheck {
 pub const char *type_key_text(const char *in);
 const char *type_key_text(const char *in)
 {
-    char *raw = 0;
-    char *w = 0;
-    char one[2];
-    int rawcap = 0, wcap = 0;
-    const char *p = in ? in : "";
-    const char *pooled;
-
-    one[1] = 0;
-    if (tool::sh::ct_text_init(&raw, &rawcap, 32) != 0) return (const char *)0;
-    while (*p) {
-        if (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
-            p++;
-            continue;
-        }
-        if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_') {
-            if (tool::sh::ct_text_reset(&w, &wcap, 32) != 0) goto fail;
-            while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
-                   || (*p >= '0' && *p <= '9') || *p == '_') {
-                one[0] = *p;
-                if (tool::sh::ct_text_cat(&w, &wcap, one) != 0) goto fail;
-                p++;
-            }
-            if (strcmp(w, "const") == 0 || strcmp(w, "volatile") == 0) continue;
-            if (tool::sh::ct_text_cat(&raw, &rawcap, w) != 0) goto fail;
-            continue;
-        }
-        one[0] = *p;
-        if (tool::sh::ct_text_cat(&raw, &rawcap, one) != 0) goto fail;
-        p++;
-    }
-    pooled = 0;
-    if (strchr(raw, '*') == 0 && strchr(raw, '[') == 0 && strchr(raw, '(') == 0) {
-        if (!strcmp(raw, "signed") || !strcmp(raw, "signedint")) pooled = runtime::text::ct_intern("int");
-        else if (!strcmp(raw, "unsignedint")) pooled = runtime::text::ct_intern("unsigned");
-        else if (!strcmp(raw, "longint") || !strcmp(raw, "signedlong")
-                 || !strcmp(raw, "signedlongint")) pooled = runtime::text::ct_intern("long");
-        else if (!strcmp(raw, "unsignedlongint")) pooled = runtime::text::ct_intern("unsignedlong");
-        else if (!strcmp(raw, "longlongint") || !strcmp(raw, "signedlonglong")
-                 || !strcmp(raw, "signedlonglongint")) pooled = runtime::text::ct_intern("longlong");
-        else if (!strcmp(raw, "unsignedlonglongint")) pooled = runtime::text::ct_intern("unsignedlonglong");
-        else if (!strcmp(raw, "shortint") || !strcmp(raw, "signedshort")
-                 || !strcmp(raw, "signedshortint")) pooled = runtime::text::ct_intern("short");
-        else if (!strcmp(raw, "unsignedshortint")) pooled = runtime::text::ct_intern("unsignedshort");
-    }
-    if (!pooled) pooled = runtime::text::ct_intern(raw);
-    tool::sh::ct_text_free(&w, &wcap);
-    tool::sh::ct_text_free(&raw, &rawcap);
-    return pooled;
-fail:
-    tool::sh::ct_text_free(&w, &wcap);
-    tool::sh::ct_text_free(&raw, &rawcap);
-    return (const char *)0;
+    return frontend::sym::type_key_text_low(in);
 }
+
 pub struct TypeCheck *type_get(void);
 
 /* Phase 84: an ADT constructor answers the ADT's C struct spelling. */

@@ -184,5 +184,6 @@ const char * frontend_sym_impl_arg_canon_text(const char *);
 int frontend_sym_impl_pat_split(const char *, const char * *, char * *, int, int *);
 int frontend_sym_inst_enc_one(const char *, char *, int);
 void frontend_sym_meth_host_key(const char *, char *, int);
+const char * frontend_sym_type_key_text_low(const char *);
 
 #endif
