@@ -22,7 +22,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitDecl.h.ct"
-#include "EmitDecl.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #define TEXT_LIMIT 65536
 #define MAX_TEXT   160
 #define LPS_INPROTO 11

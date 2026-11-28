@@ -6,7 +6,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/diag/Diag.h.ct"
-#include "Diag.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define MAX_TEXT     160
 #define TEXT_LIMIT   65536              /* S1a-0 C2l: formal text / path bound */
 #define MAX_ERRORS   20                 /* recovery cap: past this the compiler stops */

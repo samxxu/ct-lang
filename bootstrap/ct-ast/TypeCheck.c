@@ -12,7 +12,8 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/type/TypeCheck.h.ct"
-#include "TypeCheck.shim.h"
+#include <stdio.h>
+#include <string.h>
 #define MAX_TEXT 160
 #define TEXT_LIMIT 65536
 #define MAX_INIT_ITEM 4096

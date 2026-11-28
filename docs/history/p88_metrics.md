@@ -6,9 +6,9 @@
 > 探针：`p88_emit`（切片清单 + 变异自测 + 66 语料逐字节）、`p88_fixpoint`（2/3 轮）、
 > `p88_metrics`（本文数字复算）。原始输出见 [test/probes/p88_evidence.txt](../../test/probes/p88_evidence.txt)。
 
-<!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
+<!-- p88-metrics: emitter_before=8876 emitter_after=1594 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=97707 io_cap=2048
+     emitted_before=48223 emitted_after=97858 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -319,6 +319,13 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   行（-3：四条系统 include 收进 `Emitter.shim.h`，`.h.ct` 只写自己的 shim），
   发射 C 88858 → 88919（+61：每个单元一条 shim include 取代原来的 3–5 条系统
   include，`ct build` 把 shim 复制进产物目录）。
+  `p88_metrics` 的 baseline 树按它自己的年代用显式 allow 发射。
+- **D-032 M2（selfhost include-only shim 退场）后的 live 校准**：66 个 shim 中 63 个
+  只有 `#include`，删除后系统头回到各自 `.h.ct` 顶部（包根 `selfhost/ct-ast/ct.pkg`
+  为 allow）；保留 `Module` / `ModuleBoundary` / `Pkg` 三个只放 C 原型/宏的 shim。
+  `Emitter.h.ct` 1590 → 1594（+4：一条 shim include 换回四条系统 include），
+  发射 C 97707 → 97858（+151：`.c` 前导重新展开各单元的系统 include；82 语料
+  与自举 C 树的语义不变）。
   `p88_metrics` 的 baseline 树按它自己的年代用显式 allow 发射。
 - **v1-PH-2 S8b（源码狗粮化）后的 live 校准**：每个片按实际发射 C 行数推进头部的
   `emitted_after` live pin；PH-88 的历史数字不动。

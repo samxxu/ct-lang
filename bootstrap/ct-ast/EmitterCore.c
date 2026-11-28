@@ -12,7 +12,7 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterCore.h.ct"
-#include "EmitterCore.shim.h"
+#include <stdio.h>
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

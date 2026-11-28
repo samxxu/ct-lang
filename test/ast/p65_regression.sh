@@ -3,9 +3,10 @@
 # global default is strict.
 #   1. the two internal layers (selfhost/ct-ast, lib/core incl. utf16/) resolve
 #      allow through their own manifest, every other in-repo tree (test /
-#      examples) resolves to strict, and selfhost + lib/core carry no direct
-#      `#include`; the registered C-interop fixtures stay the only per-file
-#      allow rows;
+#      examples) resolves to strict, and selfhost/ct-ast keeps only the three
+#      shims that carry a C declaration (Module / ModuleBoundary / Pkg) with
+#      system includes in the units' `.h.ct`; the registered C-interop fixtures
+#      stay the only per-file allow rows;
 #   2. an external project sees strict by default and `--c-boundary=allow` on
 #      request, end to end through `ct build`;
 #   3. a plain `.ct` with no include is unaffected (it builds under the default).
@@ -42,12 +43,57 @@ for f in test/cases/02_multi_trait.ct examples/37_nested_pattern/nested_pattern.
     fi
 done
 
-# 1b) The compiler and the built-in layer are migrated to `.m.ct` boundary
-#     units: no strict `.ct` / `.h.ct` may carry a direct include there.
-ninc=$( cd "$root" && grep -rlE '^[[:space:]]*#include[[:space:]]*<' selfhost lib/core --include='*.ct' | grep -v '/cbound/' | wc -l | tr -d ' ' )
-if [ "$ninc" != "0" ]; then
-    echo "FAIL p65/regression: $ninc selfhost/lib/core unit(s) still carry a direct system #include" >&2
-    ( cd "$root" && grep -rlE '^[[:space:]]*#include[[:space:]]*<' selfhost lib/core --include='*.ct' | grep -v '/cbound/' | head -5 ) >&2
+# 1b) D-032 M2: the internal layer keeps only the three shims that carry a C
+#     declaration (Module / ModuleBoundary `realpath`, Pkg `CT_ROR`); every
+#     other unit's system includes live in its own `.h.ct`. The predicate is a
+#     function so the real tree (green) and a synthetic include-only tree (red)
+#     run the same check.
+internal_shims_ok() {
+    tree=$1
+    names=$( cd "$tree" && find . -name '*.shim.h' -type f | sed 's#.*/##; s/\.shim\.h$//' \
+             | LC_ALL=C sort | tr '\n' ' ' )
+    [ "$names" = "Module ModuleBoundary Pkg " ] || return 1
+    # A retired include-only shim would put a system include back on the
+    # boundary; the three retained shims carry declarations only.
+    if ( cd "$tree" && find . -name '*.shim.h' -type f -exec \
+             grep -lE '^[[:space:]]*#include[[:space:]]*<' {} + ) 2>/dev/null \
+            | grep -q .; then
+        return 1
+    fi
+    return 0
+}
+if ! internal_shims_ok "$root/selfhost/ct-ast"; then
+    echo "FAIL p65/regression: selfhost/ct-ast must keep exactly the Module / ModuleBoundary / Pkg shims, none with an include" >&2
+    fail=1
+fi
+# The retired shims' system headers are now in the units themselves (sample the
+# distinctive ones: lexer assert, TIR time, Pkg dirent).
+for pair in \
+    "selfhost/ct-ast/frontend/lex/Lexer.h.ct:#include <assert.h>" \
+    "selfhost/ct-ast/backend/tir/TGraph.h.ct:#include <time.h>" \
+    "selfhost/ct-ast/tool/pkg/Pkg.h.ct:#include <dirent.h>"; do
+    f=${pair%%:*}; h=${pair#*:}
+    if ! grep -qF -- "$h" "$root/$f"; then
+        echo "FAIL p65/regression: $f lost '$h' (M2 moves it back into the unit)" >&2
+        fail=1
+    fi
+done
+# Negative fixtures for the predicate above: both a retired include-only shim
+# under the three allowed names and an extra shim base must go red.
+mkdir -p "$tmp/neg-inc" "$tmp/neg-extra"
+: >"$tmp/neg-inc/Module.shim.h"
+: >"$tmp/neg-inc/ModuleBoundary.shim.h"
+printf '#include <stdio.h>\n' >"$tmp/neg-inc/Pkg.shim.h"
+if internal_shims_ok "$tmp/neg-inc"; then
+    echo "FAIL p65/regression: an include in a retained shim did not go red" >&2
+    fail=1
+fi
+: >"$tmp/neg-extra/Module.shim.h"
+: >"$tmp/neg-extra/ModuleBoundary.shim.h"
+: >"$tmp/neg-extra/Pkg.shim.h"
+: >"$tmp/neg-extra/Lexer.shim.h"
+if internal_shims_ok "$tmp/neg-extra"; then
+    echo "FAIL p65/regression: an extra retired shim did not go red" >&2
     fail=1
 fi
 
@@ -91,5 +137,5 @@ if ! ( cd "$tmp/proj" && env -u CT_C_BOUNDARY "$CT" build plain.ct -o plain ) \
     fail=1
 fi
 
-[ "$fail" -eq 0 ] && echo "OK p65/regression (global default strict; selfhost + lib/core carry no direct include)"
+[ "$fail" -eq 0 ] && echo "OK p65/regression (global default strict; selfhost/ct-ast keeps only the three C-declaration shims)"
 exit "$fail"

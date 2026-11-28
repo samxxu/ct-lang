@@ -12,8 +12,11 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 
-#include "EmitDecl.shim.h"
 import frontend::lex::Lexer;
 import frontend::module::MapTable::Call as Call;
 import frontend::module::MapTable;

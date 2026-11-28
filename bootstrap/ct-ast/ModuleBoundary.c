@@ -16,6 +16,11 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/module/ModuleBoundary.h.ct"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "ModuleBoundary.shim.h"
 #define MAX_TEXT   160
 struct ct_buf;

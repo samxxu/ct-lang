@@ -15,7 +15,8 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypeText.h.ct"
-#include "ExprTypeText.shim.h"
+#include <stdio.h>
+#include <string.h>
 #define MAX_TEXT 160
 #define N_METHOD 29
 struct ct_buf;

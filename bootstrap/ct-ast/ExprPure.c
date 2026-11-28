@@ -10,7 +10,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprPure.h.ct"
-#include "ExprPure.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define MAX_TEXT 160
 #define N_VAR 10
 struct ct_buf;

@@ -14,7 +14,11 @@
  * `TEXT_LIMIT`. The array lengths are spelled out as literals because a
  * `pub struct` lands in the generated header, which carries no macros.
  */
-#include "Symbols.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
 import frontend::sym::SymbolsTypeText;
 import runtime::text::Intern;
 import tool::sh::Sh;

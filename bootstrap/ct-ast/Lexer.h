@@ -5,7 +5,11 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include "Lexer.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <assert.h>
+#include <string.h>
 
 #include "Vec.h"
 #include "Result.h"

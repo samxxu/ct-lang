@@ -17,7 +17,7 @@
 
 | 文件 | 基线 | 当前 | Δ |
 | --- | --- | --- | --- |
-| `frontend/lex/Lexer.h.ct` | 391 | 470 | +79 |
+| `frontend/lex/Lexer.h.ct` | 391 | 474 | +83 |
 | `frontend/parse/Expr.h.ct` | 8703 | 8710 | +7 |
 | `frontend/parse/Parser.h.ct` | 4785 | 4795 | +10 |
 | `frontend/parse/Stmt.h.ct` | 5055 | 5056 | +1 |
@@ -31,6 +31,9 @@
 `lex_suffix` + 五个 C 边界 helper（`tok_is`/`tok_prefix`/`tok_copy`/`tok_cstr`/
 `tok_first`）+ 边界断言；token 扫描分支删掉了所有 `toktext[...]` 写点，净增不大。
 消费方只增加局部 `_ptr/_len` 保存与 `tok_copy` 调用，没有新增结构。
+
+> D-032 M2 后按 live 树复算：`Lexer.h.ct` 470 → 474（+4：五个系统 include
+> 回到 `.h.ct` 顶部、删掉一条 shim include）；本行是 `p86_docs` 冻结的当前值。
 
 ## 3 编译耗时
 

@@ -8,7 +8,8 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterMapText.h.ct"
-#include "EmitterMapText.shim.h"
+#include <stdio.h>
+#include <string.h>
 #define N_VAR 10
 #define N_NUM 8
 #define N_STR 9

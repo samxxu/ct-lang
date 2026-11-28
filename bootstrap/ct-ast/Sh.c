@@ -5,8 +5,11 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/sh/Sh.h.ct"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
 #define TEXT_LIMIT 65536
-#include "Sh.shim.h"
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

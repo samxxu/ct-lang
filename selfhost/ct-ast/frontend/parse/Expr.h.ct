@@ -15,7 +15,10 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include "Expr.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 import frontend::sym::SymbolsTypeText;
 
 import frontend::lex::Lexer;

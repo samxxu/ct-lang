@@ -5,7 +5,7 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include "EmitterCore.shim.h"
+#include <stdio.h>
 
 #include "Init.h"
 #include "Lexer.h"

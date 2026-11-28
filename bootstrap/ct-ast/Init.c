@@ -9,7 +9,7 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/Init.h.ct"
-#include "Init.shim.h"
+#include <string.h>
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

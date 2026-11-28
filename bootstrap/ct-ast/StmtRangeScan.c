@@ -8,7 +8,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtRangeScan.h.ct"
-#include "StmtRangeScan.shim.h"
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
 #define MAX_TEXT 160
 #define T_NUM 2
 struct ct_buf;

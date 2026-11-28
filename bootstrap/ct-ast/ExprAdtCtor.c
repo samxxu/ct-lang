@@ -14,7 +14,8 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprAdtCtor.h.ct"
-#include "ExprAdtCtor.shim.h"
+#include <stdio.h>
+#include <string.h>
 #define MAX_TEXT 160
 #define MAX_ARG_POS 32
 #define CAP_LIMIT 65536

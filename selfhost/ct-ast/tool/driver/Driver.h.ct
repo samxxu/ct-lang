@@ -17,7 +17,10 @@
  * S1a-0 C2l: the compile-mode default output path and the `-I` root handed to
  * `ct check` are run-scoped blocks (tool/sh), not `char[MAX_PATH]` arrays.
  */
-#include "Driver.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 import frontend::module::ModuleBoundary;
 
 import backend::emit::Emitter;

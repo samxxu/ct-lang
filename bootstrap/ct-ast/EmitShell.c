@@ -29,7 +29,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitShell.h.ct"
-#include "EmitShell.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #define LPS_PP          1
 #define LPS_TYPE        3
 #define LPS_GLOBAL      4

@@ -25,7 +25,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprTypes.h.ct"
-#include "ExprTypes.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define B_ADD 1
 #define B_AND 12
 #define B_BAND 15

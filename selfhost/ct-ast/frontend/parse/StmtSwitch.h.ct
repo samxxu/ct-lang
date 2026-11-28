@@ -8,9 +8,12 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 
-#include "StmtSwitch.shim.h"
 import frontend::sym::SymbolsTypeText;
 import runtime::arena::Arena;
 import runtime::text::Intern;

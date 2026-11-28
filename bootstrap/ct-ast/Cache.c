@@ -6,7 +6,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/cache/Cache.h.ct"
-#include "Cache.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #define MAX_KEY  768
 #define CAP_LIMIT 65536
 struct ct_buf;

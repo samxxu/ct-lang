@@ -30,6 +30,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/module/Module.h.ct"
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "Module.shim.h"
 #define MAX_TEXT   160
 #define LPS_PP          1

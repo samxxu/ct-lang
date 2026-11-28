@@ -5,7 +5,9 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include "StmtRangeScan.shim.h"
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
 
 #include "Lexer.h"
 #include "StmtRangeText.h"

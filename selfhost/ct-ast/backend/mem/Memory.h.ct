@@ -10,8 +10,9 @@
  * out as literals because a `pub struct` lands in the generated header, which
  * carries no macros.
  */
+#include <stdio.h>
+#include <string.h>
 
-#include "Memory.shim.h"
 import frontend::sym::Symbols;
 import runtime::text::Intern;
 import runtime::arena::Arena;

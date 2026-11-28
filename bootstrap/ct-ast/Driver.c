@@ -19,7 +19,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/driver/Driver.h.ct"
-#include "Driver.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define MAX_FLAGS 1024                  /* mirrors Module.h.ct's --cflags cap */
 struct ct_buf;
 struct Str;

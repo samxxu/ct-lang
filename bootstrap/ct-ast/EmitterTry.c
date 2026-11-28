@@ -11,7 +11,8 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterTry.h.ct"
-#include "EmitterTry.shim.h"
+#include <stdio.h>
+#include <string.h>
 #define MAX_TEXT 160
 #define N_IMPL 33
 struct ct_buf;

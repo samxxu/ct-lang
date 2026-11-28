@@ -8,9 +8,11 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 
-#include "ExprTraitInst.shim.h"
 import frontend::sym::SymbolsTypeText;
 import frontend::lex::Lexer;
 import frontend::module::MapTable::Call as Call;

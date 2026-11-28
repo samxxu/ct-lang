@@ -15,7 +15,11 @@
  * FILE * nor the trait may appear in its surface. The driver reaches it
  * through the `pub` primitives at the end of the file.
  */
-#include "Emitter.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
 import frontend::sym::SymbolsTypeText;
 
 import backend::emit::Init;

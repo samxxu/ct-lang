@@ -9,7 +9,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/Mem2Writes.h.ct"
-#include "Mem2Writes.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define N_VAR     10
 #define N_MEMBER  24
 #define N_ARROW   25

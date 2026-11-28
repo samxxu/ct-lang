@@ -5,8 +5,11 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/runtime/text/Intern.h.ct"
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
 #define TEXT_LIMIT 65536
-#include "Intern.shim.h"
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

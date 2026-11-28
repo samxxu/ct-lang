@@ -13,7 +13,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/lir/Lower.h.ct"
-#include "Lower.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define CAP_LIMIT 65536
 #define TK_LITERAL           1
 #define TK_NAME_LOCAL        2

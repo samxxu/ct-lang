@@ -24,7 +24,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtUninit.h.ct"
-#include "StmtUninit.shim.h"
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define MAX_TEXT 160
 #define CAP_LIMIT 65536
 #define MAX_LABELS 64

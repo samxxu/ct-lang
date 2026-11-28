@@ -11,7 +11,9 @@
  * reads are declared here; MAX_TEXT 160 is the value
  * `frontend/sym/Symbols.h.ct` lists.
  */
-#include "TypeCheck.shim.h"
+#include <stdio.h>
+#include <string.h>
+
 import frontend::sym::SymbolsTypeText;
 import runtime::text::Intern;
 import tool::sh::Sh;

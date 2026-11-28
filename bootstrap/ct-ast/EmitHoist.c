@@ -22,7 +22,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitHoist.h.ct"
-#include "EmitHoist.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #define TEXT_LIMIT 65536
 #define MAX_HOISTS 4
 #define CAP_LIMIT 65536

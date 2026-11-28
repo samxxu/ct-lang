@@ -10,7 +10,9 @@
  * whole unit closure at once, so its size follows the compiler's own source
  * (~70 K nodes by v0.15.0); the pool is a capacity, not a language limit.
  */
-#include "Arena.shim.h"
+#include <stdlib.h>
+#include <string.h>
+
 import runtime::text::Intern;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */

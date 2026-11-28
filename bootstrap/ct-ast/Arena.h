@@ -6,7 +6,8 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include "Arena.shim.h"
+#include <stdlib.h>
+#include <string.h>
 
 #include "Intern.h"
 

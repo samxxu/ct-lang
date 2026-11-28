@@ -13,7 +13,8 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ParseSupport.h.ct"
-#include "ParseSupport.shim.h"
+#include <stdio.h>
+#include <string.h>
 #define MAX_RAW_INIT 4096
 #define CAP_LIMIT 65536
 #define MAX_FUNCS 512

@@ -5,7 +5,8 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include "EmitterTry.shim.h"
+#include <stdio.h>
+#include <string.h>
 
 #include "EmitterCore.h"
 #include "Expr.h"

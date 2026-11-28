@@ -7,7 +7,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/pkg/PkgIndex.h.ct"
-#include "PkgIndex.shim.h"
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
 #define INDEX_ERR_STRIDE   560
 #define INDEX_ERR_KIND_OFF 4
 #define INDEX_ERR_MSG_OFF  36

@@ -13,8 +13,11 @@
  * deliberately knows nothing about `Unit`: the module layer hands in the key
  * material as strings and numbers, so this unit never imports upward.
  */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 
-#include "Cache.shim.h"
 import tool::sh::Sh;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */

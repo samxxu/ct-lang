@@ -6,7 +6,8 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtScope.h.ct"
-#include "StmtScope.shim.h"
+#include <stdio.h>
+#include <string.h>
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

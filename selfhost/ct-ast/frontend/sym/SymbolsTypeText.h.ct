@@ -6,7 +6,11 @@
  * prototype, the interface change the M0 card allows. See
  * docs/design/p85_m0.md for the baseline and the old->new map.
  */
-#include "SymbolsTypeText.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
 import runtime::text::Intern;
 import tool::sh::Sh;
 

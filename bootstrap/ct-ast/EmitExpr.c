@@ -27,7 +27,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitExpr.h.ct"
-#include "EmitExpr.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #define TEXT_LIMIT 65536
 #define N_VAR     10
 #define N_BIN     11

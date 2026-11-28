@@ -13,7 +13,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/StmtRangeText.h.ct"
-#include "StmtRangeText.shim.h"
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
 #define MAX_TEXT 160
 struct ct_buf;
 struct Str;

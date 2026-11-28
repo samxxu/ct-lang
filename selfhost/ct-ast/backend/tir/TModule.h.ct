@@ -28,7 +28,11 @@
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include "TModule.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
 import runtime::text::Intern;
 import frontend::type::TypeCheck;
 import backend::tir::TGraph;

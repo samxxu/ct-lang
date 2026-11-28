@@ -5,7 +5,8 @@
    includes this header).
    Generated output is not covered by the GPL and may be used without restriction (LICENSE.EXCEPTION). */
 
-#include "EmitterQuery.shim.h"
+#include <stdio.h>
+#include <string.h>
 
 #include "MapTable.h"
 #include "Symbols.h"

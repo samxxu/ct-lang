@@ -18,7 +18,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitHeader.h.ct"
-#include "EmitHeader.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #define TEXT_LIMIT 65536
 #define MAX_TEXT   160
 #define N_NUM     8

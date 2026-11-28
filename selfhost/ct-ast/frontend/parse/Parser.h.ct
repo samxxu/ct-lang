@@ -15,7 +15,10 @@
  * `frontend/sym/Symbols.h.ct` lists and MAX_IMPORTS the one
  * `frontend/module/Module.h.ct` spells.
  */
-#include "Parser.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 import frontend::sym::SymbolsTypeText;
 
 import backend::mem::Memory;

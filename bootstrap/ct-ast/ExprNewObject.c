@@ -13,7 +13,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/frontend/parse/ExprNewObject.h.ct"
-#include "ExprNewObject.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define MAX_TEXT 160
 #define N_ARROW 25
 #define N_MEMBER 24

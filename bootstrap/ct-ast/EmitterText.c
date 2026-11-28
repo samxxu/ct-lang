@@ -15,7 +15,10 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/emit/EmitterText.h.ct"
-#include "EmitterText.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #define TEXT_LIMIT 65536
 struct ct_buf;
 struct Str;

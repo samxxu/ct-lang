@@ -13,7 +13,10 @@
  * Macros do not cross units, so the caps this unit needs are declared here;
  * MAX_TEXT 160 is the value `frontend/sym/Symbols.h.ct` lists.
  */
-#include "Diag.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 import runtime::text::Intern;
 
 /* cap mirrors: frontend/sym/Limits.h.ct is authoritative; tools/limits_sync.py checks them. */

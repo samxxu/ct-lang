@@ -9,7 +9,9 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/backend/verify/Verifier.h.ct"
-#include "Verifier.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #define TK_ADDR              7
 #define TK_CALL             11
 #define TK_INTRINSIC        12

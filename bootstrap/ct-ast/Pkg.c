@@ -8,6 +8,12 @@
 #include "Result.h"
 
 #line 1 "selfhost/ct-ast/tool/pkg/Pkg.h.ct"
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <stdarg.h>
 #include "Pkg.shim.h"
 #define MAX_TEXT       160
 #define MAX_LOCK       4096             /* old flat lock text (8 * 512) */
