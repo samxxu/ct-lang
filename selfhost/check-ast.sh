@@ -5423,6 +5423,15 @@ if bash test/ast/i2_index.sh "$work/ct-ast" "$CC"; then
 else
     bad "i2/index" "interface subscript (D-034 stage one) failed"
 fi
+# D-034 / v1-PH-2 (I2-4): the stage-two write. `s[k] = v` resolves the trait's
+# indexed `set` by the write key and lands on the vtable slot, so the product is
+# the explicit `s.set(k, v)` one; a missing / mismatched set is a compile-time
+# error, and the ownership / compound-write refusals keep the L52 text.
+if bash test/ast/i2_index_write.sh "$work/ct-ast" "$CC"; then
+    ok "i2/write (D-034 indexed set: shape, keys, ownership)"
+else
+    bad "i2/write" "interface subscript write (D-034 stage two) failed"
+fi
 # v1-PH-2 S3 / D-029: `(A, B) => R` is the function-pointer type in another
 # spelling. The forms fixture (`test/ast/p3_functor_forms`) and the pub-header
 # fixture (`test/ast/p3_functor_header`) run in the generic loops above; this

@@ -1,0 +1,34 @@
+/* D-034 (I2) stage two / B1, the explicit twin: the same program with
+   `s.set(2, 3)`. The probe compares both products byte for byte. */
+
+trait Store {
+    int get(int k) index;
+    void set(int k, int v) index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(int k)
+    {
+        return self->n + k;
+    }
+    void set(int k, int v)
+    {
+        self->n = self->n + k * v;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    Store s;
+
+    m.n = 1;
+    s = m;
+    s.set(2, 3);
+    printf("%d\n", s.get(0));
+    return 0;
+}

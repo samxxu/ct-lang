@@ -1,0 +1,32 @@
+/* D-034 D7 / B: stage two allows the plain `=` statement only; a compound
+   write keeps the D-028 L52-6 wording (read-modify-write) and points at `[`. */
+trait Store {
+    int get(int k) index;
+    void set(int k, int v) index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(int k)
+    {
+        return self->n + k;
+    }
+    void set(int k, int v)
+    {
+        self->n = v;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    Store s;
+
+    m.n = 1;
+    s = m;
+    s[0] += 2;
+    return 0;
+}

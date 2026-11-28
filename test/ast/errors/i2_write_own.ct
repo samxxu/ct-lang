@@ -1,0 +1,41 @@
+/* D-034 D6 / B4: the write value's ownership follows the signature (D-013);
+   an `own` handle may not be handed to a `set`, exactly like D-028's L52-9
+   (AutoDrop would release it again). */
+struct P {
+    int n;
+} use Drop;
+
+impl Drop for P {
+    void drop()
+    {
+    }
+}
+
+trait Store {
+    void set(char *k, struct P *v) index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    void set(char *k, struct P *v)
+    {
+        (void)k;
+        (void)v;
+        self->n = 1;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    Store s;
+    own struct P *p = malloc(sizeof(struct P));
+
+    m.n = 1;
+    s = m;
+    s["k"] = p;
+    return 0;
+}

@@ -1,5 +1,6 @@
-/* D-034 D4 / A8: stage one has no indexed set slot, so the whole write family
-   is refused at the subscript (`=` first). */
+/* D-034 D5 / B2: the trait declares an indexed `get` but no indexed `set`, so
+   `s[0] = 3` has no write slot. This is a compile-time error (D034-8), not a
+   run-time branch: there is no read-only-implementation case. */
 trait Slot {
     int get(int k) index;
 }

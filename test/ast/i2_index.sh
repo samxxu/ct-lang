@@ -9,8 +9,8 @@
 #                 `ct build` recompiles the closure, so an edited impl changes
 #                 the run (no stale vtable).
 #   A4 D-028    : a concrete type's inherent subscript keeps its direct call.
-#   A5..A9 +    : the frozen D034 diagnostics, positioned at `[`, one each, no
-#   misuse        product.
+#   A5..A9 +    : the frozen D034 read/use diagnostics, positioned at `[`, one
+#   misuse        each, no product. The write family lives in i2_index_write.sh.
 #
 # Usage: sh test/ast/i2_index.sh <ct-ast> [cc]
 set -u
@@ -164,12 +164,6 @@ neg i2_no_index 26:13 \
 neg i2_key_mismatch 26:13 \
     "trait 'Slot' has no indexed 'get' matching key type 'int': candidates are 'char *'" \
     "A6  a mismatched key lists the declared key types"
-neg i2_write_phase1 25:6 \
-    "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)" \
-    "A8  stage one refuses the write form before resolving get"
-neg i2_write_incr 25:6 \
-    "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)" \
-    "A8  stage one refuses ++ with the same diagnostic"
 neg i2_non_iface 27:13 \
     "type 'Json' has no subscript: declare 'V get(K)' in impl Json" \
     "A9  the interface rule does not reach a concrete type"

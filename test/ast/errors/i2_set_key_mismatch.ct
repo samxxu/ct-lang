@@ -1,0 +1,33 @@
+/* D-034 D5 / B3: the write key matches the indexed `set`'s FIRST parameter,
+   by static type. `set(char *, int)` does not answer an `int` key. */
+trait Store {
+    int get(int k) index;
+    void set(char *k, int v) index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(int k)
+    {
+        return self->n + k;
+    }
+    void set(char *k, int v)
+    {
+        (void)k;
+        self->n = v;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    Store s;
+
+    m.n = 1;
+    s = m;
+    s[0] = 3;
+    return 0;
+}
