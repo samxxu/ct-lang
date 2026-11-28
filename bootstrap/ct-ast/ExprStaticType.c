@@ -1021,7 +1021,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_container_write_che
         return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a custom subscript supports only '='; use set(k, v)", _self->sup->mem->path);
     }
     if (k == 4) {
-        return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)", _self->sup->mem->path);
+        return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a custom subscript supports only '='; use set(k, v)", _self->sup->mem->path);
     }
     return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a Map subscript is read-only; use put(k, v)", _self->sup->mem->path);
 }

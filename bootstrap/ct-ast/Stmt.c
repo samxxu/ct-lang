@@ -2371,7 +2371,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
 {
                 int csk = _self->ex->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self->ex, e);
                 int cform = 0;
-                if (((_self->arena->nodes[e].kind == N_MCALL) && (csk == 3))) {
+                if (((_self->arena->nodes[e].kind == N_MCALL) && ((csk == 3) || (csk == 4)))) {
                     int cl = _self->arena->nodes[e].line;
                     int cc = _self->arena->nodes[e].num;
                     int recv = _self->arena->nodes[e].a;
@@ -2381,9 +2381,17 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                     if (((recv < 0) || (_self->arena->nodes[recv].kind != N_VAR))) {
                         return tool_diag_ct_sem_error(cl, cc, "a custom subscript write needs a statement and an lvalue receiver", _self->sup->mem->path);
                     }
-                    cform = _self->ex->__frontend_parse_exprsubscript_vptr->custom_index_write_form(_self->ex, e, cl, cc);
-                    if (cform < 0) {
-                        return (-1);
+                    if (csk == 4) {
+                        if (_self->ex->__frontend_parse_exprsubscript_vptr->iface_index_method(_self->ex, _self->arena->nodes[e].text, "set", 2, _self->arena->nodes[e].b, cl, cc, 1, e) != 0) {
+                            return (-1);
+                        }
+                        cform = 1;
+                    }
+                    else {
+                        cform = _self->ex->__frontend_parse_exprsubscript_vptr->custom_index_write_form(_self->ex, e, cl, cc);
+                        if (cform < 0) {
+                            return (-1);
+                        }
                     }
                     if (cform == 2) {
                         int dr = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_DEREF);
@@ -2423,7 +2431,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                     _self->arena->nodes[n].a = e;
                 }
                 else {
-                    if (csk == 3) {
+                    if (((csk == 3) || (csk == 4))) {
                         int cl = _self->arena->nodes[e].line;
                         int cc = _self->arena->nodes[e].num;
                         int vi;

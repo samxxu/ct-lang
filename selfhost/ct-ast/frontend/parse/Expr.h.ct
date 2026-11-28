@@ -1199,8 +1199,10 @@ impl ExprOps for Expr {
             /* PH-52 L52-6/L52-8: a custom subscript only writes as a plain
                `=` statement; a value-position assignment has no statement for
                the void `set`, and a compound operator has no read-modify-write
-               spelling in the protocol. */
-            if (self->container_subscript_kind(left) == 3) {
+               spelling in the protocol. D-034 adds the interface value (kind
+               4) to the same rule. */
+            if (self->container_subscript_kind(left) == 3
+                || self->container_subscript_kind(left) == 4) {
                 int cl = self->arena->nodes[left].line;
                 int cc = self->arena->nodes[left].num;
                 if (!self->lex->tok_is("="))
@@ -2219,32 +2221,34 @@ impl ExprOps for Expr {
                     int bl = self->lex->tokline;
                     int bc = self->lex->tokstart - self->lex->lstart + 1;
                     int rd3 = 0;
+                    int wop = 0;
                     self->sup->lex_next();
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
                     if (self->sup->expect("]") != 0) return -1;
-                    /* D-034 D4 (stage one): the whole write family is a hard
-                       error at the subscript, before the read protocol is
-                       resolved and before any product is written. The
-                       `&o[k]` form keeps the L52-7 wording through
+                    /* D-034 D4 / D5 (stage two): the write family is the
+                       statement `=`. A plain `=` is deferred: the statement
+                       layer probes the trait's indexed `set` and owns the
+                       wording (D034-8 / the set variant of D034-2), so a read
+                       protocol miss never wins over the write protocol. A
+                       compound / `++` / `--` write is still the L52-6 refusal
+                       (only `=` has a `set` spelling), raised at the ordinary
+                       write check point. `&o[k]` keeps L52-7 through
                        `container_addr_check`. */
-                    if (self->lex->tok == T_PUNCT
-                        && (self->lex->tok_is("=")
-                            || self->lex->tok_is("+=")
-                            || self->lex->tok_is("-=")
-                            || self->lex->tok_is("*=")
-                            || self->lex->tok_is("/=")
-                            || self->lex->tok_is("%=")
-                            || self->lex->tok_is("&=")
-                            || self->lex->tok_is("|=")
-                            || self->lex->tok_is("^=")
-                            || self->lex->tok_is("<<=")
-                            || self->lex->tok_is(">>=")
-                            || self->lex->tok_is("++")
-                            || self->lex->tok_is("--")))
-                        return tool::diag::ct_sem_error(bl, bc,
-                            "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)",
-                            self->sup->mem->path);
+                    wop = self->lex->tok == T_PUNCT
+                          && (self->lex->tok_is("=")
+                              || self->lex->tok_is("+=")
+                              || self->lex->tok_is("-=")
+                              || self->lex->tok_is("*=")
+                              || self->lex->tok_is("/=")
+                              || self->lex->tok_is("%=")
+                              || self->lex->tok_is("&=")
+                              || self->lex->tok_is("|=")
+                              || self->lex->tok_is("^=")
+                              || self->lex->tok_is("<<=")
+                              || self->lex->tok_is(">>=")
+                              || self->lex->tok_is("++")
+                              || self->lex->tok_is("--"));
                     m = self->sup->new_node(N_MCALL);
                     if (m < 0) return -1;
                     self->arena->nodes[m].aux = 3;
@@ -2256,8 +2260,9 @@ impl ExprOps for Expr {
                     if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                     self->arena->nodes[m].a = n;
                     self->arena->nodes[m].b = idx;
-                    if (self->iface_index_method(trname, "get", 1, idx, bl, bc, 0,
-                                                 m) != 0)
+                    if (!wop
+                        && self->iface_index_method(trname, "get", 1, idx, bl,
+                                                    bc, 0, m) != 0)
                         return -1;
                     /* A call receiver is an rvalue: the emitter names it in a
                        temporary before taking its address, which is why the

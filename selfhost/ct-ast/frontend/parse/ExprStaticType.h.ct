@@ -1077,12 +1077,13 @@ impl ExprStaticType for Expr {
                                             self->arena->nodes[at].num,
                                             "a custom subscript supports only '='; use set(k, v)",
                                             self->sup->mem->path);
-        /* D-034 D4 (stage one): the write family of an interface subscript is
-           refused at the check point, before `get` is resolved. */
+        /* D-034 D7 (stage two): only the plain `=` statement writes through
+           the indexed `set`; `+=` / `++` / `--` keep the L52-6 wording that the
+           inherent protocol already uses. */
         if (k == 4)
             return tool::diag::ct_sem_error(self->arena->nodes[at].line,
                                             self->arena->nodes[at].num,
-                                            "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)",
+                                            "a custom subscript supports only '='; use set(k, v)",
                                             self->sup->mem->path);
         return tool::diag::ct_sem_error(self->arena->nodes[at].line,
                                         self->arena->nodes[at].num,

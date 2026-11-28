@@ -3099,7 +3099,8 @@ impl StmtOps for Stmt {
                lvalue so the ordinary deref assignment below writes through
                the returned storage; the receiver/index are still evaluated
                once. */
-            if (self->arena->nodes[e].kind == N_MCALL && csk == 3) {
+            if (self->arena->nodes[e].kind == N_MCALL
+                && (csk == 3 || csk == 4)) {
                 int cl = self->arena->nodes[e].line;
                 int cc = self->arena->nodes[e].num;
                 int recv = self->arena->nodes[e].a;
@@ -3120,8 +3121,20 @@ impl StmtOps for Stmt {
                     return tool::diag::ct_sem_error(cl, cc,
                         "a custom subscript write needs a statement and an lvalue receiver",
                         self->sup->mem->path);
-                cform = self->ex->custom_index_write_form(e, cl, cc);
-                if (cform < 0) return -1;
+                if (csk == 4) {
+                    /* D-034 D5: an interface value's write is the trait's
+                       indexed `set` only. The trait declares it or the write
+                       is a compile-time error (D034-8); there is no borrow-
+                       write form, so no `get` fallback and no form 2. */
+                    if (self->ex->iface_index_method(
+                            self->arena->nodes[e].text, "set", 2,
+                            self->arena->nodes[e].b, cl, cc, 1, e) != 0)
+                        return -1;
+                    cform = 1;
+                } else {
+                    cform = self->ex->custom_index_write_form(e, cl, cc);
+                    if (cform < 0) return -1;
+                }
                 if (cform == 2) {
                     int dr = self->sup->new_node(N_DEREF);
                     if (dr < 0) return -1;
@@ -3149,7 +3162,7 @@ impl StmtOps for Stmt {
                 n = self->sup->new_node(N_EXPR);
                 if (n < 0) return -1;
                 self->arena->nodes[n].a = e;
-            } else if (csk == 3) {
+            } else if (csk == 3 || csk == 4) {
                 int cl = self->arena->nodes[e].line;
                 int cc = self->arena->nodes[e].num;
                 int vi, widx;

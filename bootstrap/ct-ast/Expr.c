@@ -391,7 +391,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_expr(void *self) {
         if (_self->__frontend_parse_exproptional_vptr->opt_lvalue_check(_self, left, _self->arena->nodes[left].line, _self->arena->nodes[left].num) != 0) {
             return (-1);
         }
-        if (_self->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self, left) == 3) {
+        if (((_self->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self, left) == 3) || (_self->__frontend_parse_exprstatictype_vptr->container_subscript_kind(_self, left) == 4))) {
             int cl = _self->arena->nodes[left].line;
             int cc = _self->arena->nodes[left].num;
             if ((!_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "="))) {
@@ -1511,6 +1511,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 int bl = _self->lex->tokline;
                 int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
                 int rd3 = 0;
+                int wop = 0;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 idx = _self->__frontend_parse_exprops_vptr->parse_expr(_self);
                 if (idx < 0) {
@@ -1519,9 +1520,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "]") != 0) {
                     return (-1);
                 }
-                if (((_self->lex->tok == T_PUNCT) && ((((((((((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "+=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "-=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "/=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "%=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "&=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "|=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "^=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<<=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">>=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "++")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "--")))) {
-                    return tool_diag_ct_sem_error(bl, bc, "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)", _self->sup->mem->path);
-                }
+                wop = ((_self->lex->tok == T_PUNCT) && ((((((((((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "+=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "-=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "/=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "%=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "&=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "|=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "^=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<<=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">>=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "++")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "--")));
                 m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
                 if (m < 0) {
                     return (-1);
@@ -1539,7 +1538,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 }
                 _self->arena->nodes[m].a = n;
                 _self->arena->nodes[m].b = idx;
-                if (_self->__frontend_parse_exprsubscript_vptr->iface_index_method(_self, trname, "get", 1, idx, bl, bc, 0, m) != 0) {
+                if (((!wop) && (_self->__frontend_parse_exprsubscript_vptr->iface_index_method(_self, trname, "get", 1, idx, bl, bc, 0, m) != 0))) {
                     return (-1);
                 }
 {
