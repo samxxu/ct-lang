@@ -325,7 +325,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | C2 | `roadmap` 的 `v1-PH-2` 行转 ✅ | ⛔ | REQ | tag 前；现为 🟨 |
 | C3 | I1 文档：spec §4.79 / 矩阵第 26 行 / stable-subset 冻结行 | ✅ | REQ | `367ba1a8` |
 | C4 | I2 文档：spec 新节 / 矩阵行 / stable-subset 行 | ✅ | REQ/DEV | spec §4.80、glossary、矩阵第 27 行、stable-subset（`c78b5e86` 等） |
-| C5 | 流水账 `v1.2.0` 行与收口记录补 I1/I2 | ⛔ | EDITOR / REQ | `docs/history/phase-log.md` |
+| C5 | 流水账 `v1.2.0` 行与收口记录补 I1/I2 | ✅ | EDITOR / REQ | [phase-log](../../history/phase-log.md) v1.2.0 行已追加；本文 §14 追加收口记录（2026-11-28） |
 | C6 | `examples/README` 补 `70_const_key_fold` 索引行 | 🟡 | REV | `examples/` 不在 REQ 写权限内 |
 | D1 | 从**最终源码**重出 dist 并更新 sha | ⛔ | DEV | 旧值 `98130730…`（卡 §7.3）已被 I1 改动；本机方案 B 实测为 `c59acea5…`，tag 前须以最终提交重出 |
 | D2 | 分支推送（收口提交须在远端） | ⛔ | 所有者 / DEV | 卡 §7.5 第 ④ 项；当前 `main` 与 `origin/main` 同步，本轮收口提交需再推送 |
@@ -336,3 +336,19 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 D2（推送）、D3（所有者手工 tag）**；B6（CI 首绿）为 🟡。
 I1/I2 的实现与文档均已完成并经 REQ 验收；A5–A7 已闭。E-V3-9b 只等 REV 结论（不阻塞 DEV）。
 Q-7（`D-033`）按裁定在 1.2 之后，不进本清单。
+
+## 14 追加收口记录（2026-11-28，I1 / I2）
+
+> 用途：补 S10 收口时未含的两项语言面交付；判据以卡 §3/§8 与 D-031/D-034 为准。
+> 本节只记事实与证据，不改判据。
+
+| 项 | 交付 | 验收 / 证据 |
+| --- | --- | --- |
+| I1 常量键折叠 | T1 `93b1bc2c`、T2 `0c10bd2d`、T4 `27becd9a`、T5 `1ede1dce`；spec §4.79 | `D-031` accepted（ARCH 审定 + EDITOR 签收）；`LANG-31` verified；附条件 C1–C4 探针 `edfbf90e`/`4df6568a`；REQ 验收见 issue §7 |
+| I2 阶段一（只读） | I2-1 `335967e0`/`38827fd1`、I2-2 `3c97e841`/`53a36b38`、I2-3 `0edda589`/`83f94ab7`；契约 `f8d180d0` | `E-V3-9e` 经 REV `verified`（[报告](../../reviews/2026-11-28-i2-rev.md)）；`i2/syntax 7/7`、`i2/index 9/9` |
+| I2 阶段二（写入） | I2-4 `80ebe52f`/`e0ca032f`；`D-034` §8 errata `1a9ecf5c` + F1 修复 `a93e6701`/`2de60117`/`cbdf359c` | `E-V3-9f` 经 REV `verified`；`i2/write 7/7` |
+| I2 文档 | I2-5 `c78b5e86`：spec §4.80、glossary、矩阵第 27 行、stable-subset、tutorial、`examples/71` | REQ 文档核对；`check-docs` OK |
+| 门禁复跑（I2 后） | — | `check-goldens-ast` 25/25、`check-seed` 两轮、`check-warnings` 635/0、`test/ir` 84 语料/15 checks、`check-docs` OK；`check-ast` 1780/0（REV） |
+
+**未闭（截至本节）**：`E-V3-9b` 待 REV 结论（→ 卡状态与 roadmap 才能转 ✅）；dist 重出（D1）、
+推送（D2）、所有者手工 tag（D3）；CI 首绿（B6）。Q-7 / `D-033` 按裁定在 1.2 之后。

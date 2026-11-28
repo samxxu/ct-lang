@@ -394,7 +394,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `what` | 字符串**字面量**键在编译期解析到结构体字段并折叠为字段访问；未知字段/非字面量键/非结构体接收者硬错；字段优先、并存 `get(char *)` 时给歧义诊断；只做读形态。 |
 | `why` | 来稿 RFC-0000 的核心卖点（静态零开销下标），Ct 目前只有运行期 `get`；动态键已经可用，缺的只是“编译期已知的键”。 |
 | `priority` | `P2` |
-| `status` | `planned`（**v1.2 必做，2026-11-28 撤回 deferred**；与 I2 共用 D-028 的下标解析表） |
+| `status` | `accepted`（2026-11-28 已交付 v1.2：T1 `93b1bc2c`、T2 `0c10bd2d`、T4 `27becd9a`、T5 `1ede1dce`；`D-031` accepted；`LANG-31` verified；REQ 验收见 issue §7） |
 | `owner` | ARCH（ADR `D-031` 起草，不得缺位）；EDITOR（ADR 签收）；DEV（实施）；REVIEW（复核）；REQ（排期 + 验收） |
 | `last-touched` | 2026-11-28 |
 | `block` | 前置 ADR `D-031` + spec 新节（施工卡已交）；按所有者 2026-11-28 裁定随 1.2 交付，1.2.0 的 tag 推迟到本项与 I2 落地后 |
@@ -407,7 +407,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `what` | 接口值（trait 对象）支持 `o[k]`：在 trait 的 `get(K)` 签名后标 `index` 即表示该 `get` 是 `[]` 的解析目标，经 vtable 槽调用；单 trait、无独立标记 trait；读形态先行，写形态第二。 |
 | `why` | 让同一段下标代码既能用于静态 struct（I1 / D-028），也能用于多实现的接口值；来稿 RFC-0000 的统一访问动机之一。Ct 目前只认固有 impl，接口值只能显式 `o.get(k)`。 |
 | `priority` | `P2` |
-| `status` | `planned`（四问已裁定 2026-11-28：Q1 立项、Q2 方法级 `index`、Q3 两阶段、Q4 暂不承诺 ABI；等 `D-034`） |
+| `status` | `accepted`（2026-11-28 已交付 v1.2：I2-1…I2-5 落地，`D-034` accepted，`E-V3-9e`/`E-V3-9f` 经 REV `verified`；REQ 验收见 [I2-C1 §10](../design/i2-interface-subscript-construction.md) 与 [REV 报告](../reviews/2026-11-28-i2-rev.md)） |
 | `owner` | ARCH（ADR 起草，不得缺位）；EDITOR（ADR 签收）；DEV（实施）；REVIEW（复核）；REQ（排期 + 验收） |
 | `last-touched` | 2026-11-28 |
 | `block` | 前置 ADR `D-034`（ARCH 起草、EDITOR 签收）；不得破坏 D-028 的固有 impl 路径；`v1.2.0` 的 tag 推迟到 I1 与 I2 两阶段落地后。排期见 [I2-C1 §9](../design/i2-interface-subscript-construction.md)：`D-034` 签收 → REQ 排期 → I2-1 → I2-2（只读）→ I2-3 → I2-4（写入）→ I2-5；I1 的 `T1`/`T2` 先于 I2-2 改同一张解析表 |
