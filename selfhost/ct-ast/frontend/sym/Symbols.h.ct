@@ -2141,7 +2141,7 @@ impl SymbolOps for Symbols {
                    int owner)
     {
         const char *enc;
-        int ti, ni, mi, pi, pk;
+        int ti, ni, mi, mj, mk, pi, pk;
 
         ti = self->find_trait(tname);
         if (ti < 0)
@@ -2244,6 +2244,33 @@ impl SymbolOps for Symbols {
                     if (!ntype) return self->fail("out of memory");
                     self->traits[ni].m[mi].ptype[pk] = ntype;
                 }
+            }
+        }
+        /* D-034 E1 / I2 F1-g: the template's type keys are distinct (`T` vs
+           `int`), but one instantiation can collapse them to the same key and
+           emit the same vtable member twice. Reject the collapsed signature;
+           the diagnostic is the same duplicate-method rule the declaration
+           side uses (`A93E6701`). */
+        for (mi = 0; mi < self->traits[ni].nm; mi++) {
+            for (mj = 0; mj < mi; mj++) {
+                int same = 1;
+                if (strcmp(self->traits[ni].m[mi].name,
+                           self->traits[ni].m[mj].name) != 0) continue;
+                if (self->traits[ni].m[mi].nparams
+                    != self->traits[ni].m[mj].nparams) continue;
+                for (mk = 0; mk < self->traits[ni].m[mi].nparams; mk++) {
+                    const char *a, *b;
+                    if (!self->traits[ni].m[mi].ptype
+                        || !self->traits[ni].m[mj].ptype) { same = 0; break; }
+                    a = self->traits[ni].m[mi].ptype[mk];
+                    b = self->traits[ni].m[mj].ptype[mk];
+                    if (!a || !b) { same = 0; break; }
+                    if (strcmp(a, b) != 0) { same = 0; break; }
+                }
+                if (!same) continue;
+                return self->fail(runtime::text::ct_internf(
+                    "trait '%s' declares duplicate method '%s' with the same parameter types",
+                    self->traits[ni].name, self->traits[ni].m[mi].name));
             }
         }
         self->traits[ni].is_pub = self->traits[ti].is_pub;

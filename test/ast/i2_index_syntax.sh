@@ -96,6 +96,9 @@ neg i2_index_set_nonvoid 4:9 \
 neg i2_dup_method 5:9 \
     "trait 'Store' declares duplicate method 'get' with the same parameter types" \
     "I2-1_dupmix  indexed + unindexed same key is rejected (F1)"
+neg i2_dup_generic 8:15 \
+    "trait 'Vat_int' declares duplicate method 'get' with the same parameter types" \
+    "I2-1_dupgeneric  generic instantiation collapsing two keys is rejected (F1-g)"
 
 echo "i2/syntax: $fail failure(s)"
 exit $([ "$fail" -eq 0 ] && echo 0 || echo 1)

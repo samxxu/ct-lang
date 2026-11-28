@@ -2702,6 +2702,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
     int ti;
     int ni;
     int mi;
+    int mj;
+    int mk;
     int pi;
     int pk;
     ti = _self->__frontend_sym_symbolops_vptr->find_trait(_self, tname);
@@ -2791,6 +2793,39 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_trait_inst(void *self, co
                 }
                 _self->traits[ni].m[mi].ptype[pk] = ntype;
             }
+        }
+    }
+    for (mi = 0; mi < _self->traits[ni].nm; mi++) {
+        for (mj = 0; mj < mi; mj++) {
+            int same = 1;
+            if (strcmp(_self->traits[ni].m[mi].name, _self->traits[ni].m[mj].name) != 0) {
+                continue;
+            }
+            if (_self->traits[ni].m[mi].nparams != _self->traits[ni].m[mj].nparams) {
+                continue;
+            }
+            for (mk = 0; mk < _self->traits[ni].m[mi].nparams; mk++) {
+                const char * a;
+                const char * b;
+                if (((!_self->traits[ni].m[mi].ptype) || (!_self->traits[ni].m[mj].ptype))) {
+                    same = 0;
+                    break;
+                }
+                a = _self->traits[ni].m[mi].ptype[mk];
+                b = _self->traits[ni].m[mj].ptype[mk];
+                if (((!a) || (!b))) {
+                    same = 0;
+                    break;
+                }
+                if (strcmp(a, b) != 0) {
+                    same = 0;
+                    break;
+                }
+            }
+            if ((!same)) {
+                continue;
+            }
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, runtime_text_ct_internf("trait '%s' declares duplicate method '%s' with the same parameter types", _self->traits[ni].name, _self->traits[ni].m[mi].name));
         }
     }
     _self->traits[ni].is_pub = _self->traits[ti].is_pub;
