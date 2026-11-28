@@ -207,7 +207,10 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > `void set(K,V) index` 才可写**，否则编译期硬错（不存在运行期“只读实现”分支）；⑥ 所有权按签名；
 > ⑦ `set` 仅 `void`；⑧ 同键重复硬错；⑨ 标记随 `pub trait` 进公开头；⑩ 不新增槽、不承诺 ABI。
 > **技术更正**：字符串字面量静态类型是 `char *`，`s["name"]` 只命中 `get(char *) index`；
-> RFC §3.1.1 已加更正注，I2-C1 §10 的夹具样例与负例已改。**待 EDITOR 签收**；签收前 I2 不动代码。
+> RFC §3.1.1 已加更正注，I2-C1 §10 的夹具样例与负例已改。
+> **已签收（`accepted`，2026-11-28）**。**诊断码口径（2026-11-28 定）**：沿用 I1 先例，
+> 直接使用 `D-034 §2` 的冻结文案、**不新增 `E-` 码**；唯一例外是 DEV 若必须编码，需在
+> **同一提交**补 `docs/diagnostics/codes.md` 对应行并注明“LANG-25 例外”。DEV 可据此开工。
 >
 > **Q-9 立项口径（所有者 2026-11-28 选 C）**：在 CI 增加一步——用 `selfhost/make-dist.sh`
 > 产出 `ct-linux-x64.tar.gz`，**解包后用包内的 `ct`** 跑 `ct -v` 与 `examples/50_ref_out`
@@ -294,7 +297,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ✅ | EDITOR | `D-031` 已 `accepted`：ARCH 技术审定 2026-11-28（附条件 C1–C4，[§8](../../decisions/D-031.md)）；EDITOR 2026-11-28 签收（非作者席位） |
 | A3 | `LANG-31` issue 转 `verified` | ✅ | EDITOR | issue 状态 `verified`（2026-11-28，依据 [§7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) + D-031 §8）；附条件 C1–C4 由 DEV 后续补测，不阻塞 |
 | A4 | `D-034` 起草 + 签收 | ✅ | EDITOR | [D-034](../../decisions/D-034.md) 已 `accepted`：ARCH 起草 2026-11-28（D1=(i) 分裂、D1–D10 定案）；EDITOR 2026-11-28 签收 |
-| A5 | I2 阶段一（只读，`E-V3-9e`） | ⛔ | DEV | I2-1 → I2-3；验收清单见 [I2-C1 §10](../../design/i2-interface-subscript-construction.md#10-验收清单e-v3-9e--e-v3-9f) |
+| A5 | I2 阶段一（只读，`E-V3-9e`） | ⛔ | DEV | I2-1 → I2-3；`D-034` 已 `accepted`；诊断码口径已定（用 D-034 §2 文案、不新增 `E-` 码）；验收清单见 [I2-C1 §10](../../design/i2-interface-subscript-construction.md#10-验收清单e-v3-9e--e-v3-9f) |
 | A6 | I2 阶段二（写入，`E-V3-9f`） | ⛔ | DEV | I2-4；同属 1.2 |
 | A7 | I2 文档（spec 新节 / 矩阵 / stable-subset） | ⛔ | REQ | I2-5；随 A5/A6 同步 |
 | B1 | T-8 门禁允许 EDITOR 签 ADR | ✅（待 EDITOR 审核） | REQ（所有者授权） | `f0ce1746`；临时 ADR 探针验证通过后删除 |
