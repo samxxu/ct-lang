@@ -135,9 +135,10 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > **角色边界（所有者 2026-11-28）**：REV 只写评审报告与样例代码，不改其它文档或代码；
 > 产物头部的状态落笔由 EDITOR（或该产物的作者席位）执行，REV 只出评审结论。
 >
-> **设计与签收（所有者 2026-11-28 补充裁定）**：**ARCH 不得缺位**，其职责是完成技术设计规划
-> （ADR 起草）；ADR 由 **EDITOR 审核签收**（非作者席位）；签收后由 **REQ 安排具体任务与排期**；
-> REV 只出评审结论与样例代码。ADR 未签收前，DEV 不得按该设计动代码。
+> **设计与签收（所有者 2026-11-28 补充裁定）**：**ARCH 不得缺位**——按工程规范
+> [§3.4 架构（ARCH）](../../spec/ai-coding-workflow.md#34-架构arch)，技术选型、技术可行性与
+> 架构设计归 ARCH；ADR 由 ARCH 起草，**EDITOR 审核签收**（非作者席位），签收后由
+> **REQ 安排具体任务与排期**；REV 只出评审结论与样例代码。ADR 未签收前，DEV 不得按该设计动代码。
 >
 > **非阻塞原则**：REQ 的文档同步（spec §4.66 / c-shim-contract）与 REV 的评审都**不进入
 > DEV 的提交前置**；DEV 可连续 M1 → M2 → M3，也可让 S8B 的 R3–R8 与 D032-C1 并行
@@ -168,7 +169,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ EDITOR 签收 → REQ 排期 → DEV | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
 | Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`；排期见下注** | ARCH 起草 `D-034` → EDITOR 签收 → REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9 已排期 | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
-| Q-9 | dist 产物冒烟 | **已完成**（`0911029a`：CI 解包产物，用包内 `ct` 跑 `-v` + 50/52 样例） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
+| Q-9 | dist 产物冒烟 | **已完成**（`0911029a`；本地方案 B 复跑通过，见下注） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
 | Q-12 | LANG-31（常量键折叠，I1） | **待开（2026-11-28 撤回 deferred）** | ARCH 起草 `D-031` → EDITOR 签收 → REQ 排期 → DEV | spec §4.79（施工卡已有） | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
@@ -201,15 +202,19 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > （期望 `2 3 4`）、`examples/52_box_new`（期望 `4 4`）；测的是"上传的那份产物"，
 > 不是 CI 重新构建的二进制。
 >
-> 本地尝试记录：macOS + Podman（libkrun，linux/amd64）在 `machine start` 后端口短暂可连、
-> 随后 gvproxy 转发消失（`127.0.0.1:53316` connection refused，krunkit 进程仍在），
-> **本机冒烟受阻于环境，不作为结论**；以 CI 步骤为准。
+> 本地复跑记录（**方案 B，2026-11-28**）：`zig cc -target x86_64-linux-musl -static` 交叉构建
+> `ct-linux-x64.tar.gz`（sha256 `c59acea527260591e11a64f1263c5dca79d44069caff9adc806be0a6542c4509`），
+> 在 Podman `ct-ci:24.04` 容器内经 binfmt `qemu-x86_64` 运行包内 `ct`：`ct v1.2.0`、
+> `50_ref_out → 2 3 4`、`52_box_new → 4 4` 全部通过。两个环境坑：① Podman VM 必须与
+> `podman run` 在同一次终端会话内启动（会话结束 VM 即停，这是先前 `53316` 拒绝连接的原因）；
+> ② 容器内从仓库根运行或设 `CT_CORE_DIR=<repo>/lib/core`，否则 `Str` 等内置类型找不到。
+> CI 仍是最终判据；本地复跑只作提前验证。
 >
 > **实施记录（2026-11-28，`0911029a`）**：`ci.yml` 新增 "distribution artefact smoke (Q-9)"
 > 一步——`make-dist.sh --out /tmp/ct-dist` 出包、`tar -xzf` 解包、先跑包内 `ct -v`，
 > 再用**包内 `ct`** 构建并运行 `examples/50_ref_out`（期望 `2 3 4`）与
-> `examples/52_box_new`（期望 `4 4`）；期望不符即硬失败，不设跳过分支。本地 macOS
-> 无法运行 linux/amd64 二进制，未复跑；以 CI 首次运行结果为准，若红先回退该步、不改判据。
+> `examples/52_box_new`（期望 `4 4`）；期望不符即硬失败，不设跳过分支。本地已按方案 B
+> 复跑通过（见上）；CI 首次运行仍是最终确认，若红先回退该步、不改判据。
 
 **DEV 执行顺序（2026-11-28 排定，无外部阻塞）**
 
