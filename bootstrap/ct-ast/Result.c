@@ -4,7 +4,8 @@
 #include "Vec.h"
 
 #line 1 "lib/core/Result.h.ct"
-#include "Result.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
 struct ct_buf;
 struct Str;
 struct ct_str_hdr;

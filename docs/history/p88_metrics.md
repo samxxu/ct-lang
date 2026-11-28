@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1594 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=97858 io_cap=2048
+     emitted_before=48223 emitted_after=97860 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -327,6 +327,12 @@ trait 方法：trait 方法数计入 `MAX_METHODS`（64），且 `EmitOps` 已�
   发射 C 97707 → 97858（+151：`.c` 前导重新展开各单元的系统 include；82 语料
   与自举 C 树的语义不变）。
   `p88_metrics` 的 baseline 树按它自己的年代用显式 allow 发射。
+- **D-032 M3（lib/core include-only shim 退场）后的 live 校准**：`lib/core` 8 个 shim
+  （6 个顶层 + `utf16/U16Str`、`utf16/U16String`）只有 `#include`，删除后系统头回到
+  各自 `.h.ct` 顶部（包根 `lib/core/ct.pkg` 为 allow，覆盖 `utf16/` 子树，不再单加
+  manifest）；`bootstrap/ct-ast/*.shim.h` 5 → 3（`Result` / `Vec` 随 lib/core 退场）。
+  编译器闭包内的这两个单元在发射 C 里直接展开系统 include，发射 C 97858 → 97860
+  （+2；82 语料与自举 C 树的语义不变）。
 - **v1-PH-2 S8b（源码狗粮化）后的 live 校准**：每个片按实际发射 C 行数推进头部的
   `emitted_after` live pin；PH-88 的历史数字不动。
   - D1 `runtime/arena` 方法化：`Arena.c` 的两个池增长 helper 进 `ArenaOps`，发射 C

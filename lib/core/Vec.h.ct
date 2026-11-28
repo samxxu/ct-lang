@@ -17,7 +17,9 @@ namespace core;
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include "Vec.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /*
  * LANG-23: the visible declarations of the two reserved built-in traits.

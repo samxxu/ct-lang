@@ -137,6 +137,24 @@ if [ "$got" != "allow" ]; then
     fail=1
 fi
 
+# D-032 M3 negative: a manifest placed directly under `lib/core/utf16` is the
+# nearer package and makes that subtree strict again; the root sibling keeps the
+# package root's allow. Copy the layer so the repo tree stays untouched.
+cp -R "$root/lib/core" "$tmp/core-strict"
+printf 'name = core\nc-boundary = strict\n' >"$tmp/core-strict/utf16/ct.pkg"
+got=$( cd "$tmp/elsewhere" && env -u CT_C_BOUNDARY CT_CORE_DIR="$tmp/core-strict" \
+    "$CT" --show-c-boundary "$tmp/core-strict/utf16/U16Str.h.ct" 2>"$tmp/err" )
+if [ "$got" != "strict" ]; then
+    echo "FAIL p65/policy: utf16 child manifest: want 'strict', got '$got' ($(head -1 "$tmp/err"))" >&2
+    fail=1
+fi
+got=$( cd "$tmp/elsewhere" && env -u CT_C_BOUNDARY CT_CORE_DIR="$tmp/core-strict" \
+    "$CT" --show-c-boundary "$tmp/core-strict/Vec.h.ct" 2>"$tmp/err" )
+if [ "$got" != "allow" ]; then
+    echo "FAIL p65/policy: root sibling after utf16 child manifest: want 'allow', got '$got' ($(head -1 "$tmp/err"))" >&2
+    fail=1
+fi
+
 ( cd "$root" && "$CT" --c-boundary=nope --show-c-boundary "$tmp/ext/x.ct" >"$tmp/bad.out" 2>"$tmp/bad.err" )
 rc=$?
 if [ "$rc" -eq 0 ] || ! grep -q "takes strict or allow" "$tmp/bad.err"; then

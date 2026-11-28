@@ -19,7 +19,8 @@ namespace core;
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include "Result.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 pub struct Result<T, E> {
     int ok;

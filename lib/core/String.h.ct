@@ -32,7 +32,8 @@ namespace core;
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include "String.shim.h"
+#include <stdlib.h>
+#include <string.h>
 
 pub struct ct_str_hdr {
     int refs;

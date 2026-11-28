@@ -3,10 +3,10 @@
 # global default is strict.
 #   1. the two internal layers (selfhost/ct-ast, lib/core incl. utf16/) resolve
 #      allow through their own manifest, every other in-repo tree (test /
-#      examples) resolves to strict, and selfhost/ct-ast keeps only the three
-#      shims that carry a C declaration (Module / ModuleBoundary / Pkg) with
-#      system includes in the units' `.h.ct`; the registered C-interop fixtures
-#      stay the only per-file allow rows;
+#      examples) resolves to strict, selfhost/ct-ast keeps only the three shims
+#      that carry a C declaration (Module / ModuleBoundary / Pkg) with system
+#      includes in the units' `.h.ct`, and lib/core keeps no shim at all (D-032
+#      M3); the registered C-interop fixtures stay the only per-file allow rows;
 #   2. an external project sees strict by default and `--c-boundary=allow` on
 #      request, end to end through `ct build`;
 #   3. a plain `.ct` with no include is unaffected (it builds under the default).
@@ -94,6 +94,48 @@ fi
 : >"$tmp/neg-extra/Lexer.shim.h"
 if internal_shims_ok "$tmp/neg-extra"; then
     echo "FAIL p65/regression: an extra retired shim did not go red" >&2
+    fail=1
+fi
+
+# 1c) D-032 M3: the built-in layer keeps no shim (8 -> 0). Its system includes
+#     live at the top of each `.h.ct`, and the package root `lib/core/ct.pkg`
+#     (allow) covers `utf16/` -- no per-subdirectory manifest. The predicate is
+#     a function so the real tree (green) and a synthetic stray shim (red) run
+#     the same check.
+core_shims_ok() {
+    tree=$1
+    if ( cd "$tree" && find . -name '*.shim.h' -type f | grep -q . ); then
+        return 1
+    fi
+    return 0
+}
+if ! core_shims_ok "$root/lib/core"; then
+    echo "FAIL p65/regression: lib/core must keep no shim (D-032 M3: 8 -> 0)" >&2
+    fail=1
+fi
+# The retired shims' system headers are now in the units themselves (sample the
+# distinctive ones: Vec stdio, U16String stdint / stdio).
+for pair in \
+    "lib/core/Vec.h.ct:#include <stdio.h>" \
+    "lib/core/String.h.ct:#include <string.h>" \
+    "lib/core/utf16/U16String.h.ct:#include <stdint.h>"; do
+    f=${pair%%:*}; h=${pair#*:}
+    if ! grep -qF -- "$h" "$root/$f"; then
+        echo "FAIL p65/regression: $f lost '$h' (M3 moves it back into the unit)" >&2
+        fail=1
+    fi
+done
+# The root manifest is the only one: utf16/ must not grow a second ct.pkg.
+if [ -e "$root/lib/core/utf16/ct.pkg" ]; then
+    echo "FAIL p65/regression: lib/core/utf16/ct.pkg exists (the package root already covers the subtree)" >&2
+    fail=1
+fi
+# Negative fixture: a stray include-only shim under lib/core must go red.
+mkdir -p "$tmp/neg-core/utf16"
+: >"$tmp/neg-core/Vec.shim.h"
+: >"$tmp/neg-core/utf16/U16Str.shim.h"
+if core_shims_ok "$tmp/neg-core"; then
+    echo "FAIL p65/regression: a stray lib/core shim did not go red" >&2
     fail=1
 fi
 

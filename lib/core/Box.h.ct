@@ -16,7 +16,7 @@ namespace core;
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include "Box.shim.h"
+#include <stdlib.h>
 
 /* ---- PH-81 / S1: `Box<T>` (single-object owning handle) ------------------ */
 

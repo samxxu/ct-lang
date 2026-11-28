@@ -21,7 +21,8 @@ namespace core;
  *
  * License: same as the rest of the compiler (see LICENSE / LICENSE.EXCEPTION).
  */
-#include "Option.shim.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 pub struct Option<T> {
     int has;
