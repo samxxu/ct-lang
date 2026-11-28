@@ -9,6 +9,7 @@
 #   after-;  : `int get(...); index`           -> D034-7 at the stray marker
 #   impl     : `impl … { int get(...) index; }`-> D034-3 at the marker
 #   dup      : two indexed `get(char *)`       -> D034-5 at the second marker
+#   dupmix   : indexed + unindexed same key    -> duplicate-method hard error
 #   setret   : `int set(char *, int) index`    -> D034-6 at `set`
 #
 # Every negative must be exactly one diagnostic, positioned, and must write no
@@ -92,6 +93,9 @@ neg i2_index_dup 6:25 \
 neg i2_index_set_nonvoid 4:9 \
     "an indexed 'set' must return void: 'int set(char *, int)'" \
     "I2-1_setret  a non-void indexed set is D034-6"
+neg i2_dup_method 5:9 \
+    "trait 'Store' declares duplicate method 'get' with the same parameter types" \
+    "I2-1_dupmix  indexed + unindexed same key is rejected (F1)"
 
 echo "i2/syntax: $fail failure(s)"
 exit $([ "$fail" -eq 0 ] && echo 0 || echo 1)

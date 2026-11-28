@@ -402,6 +402,48 @@ static int trait_method_params_match(struct Parser *self, int ti, int mi,
    read as the marker only here, in the one position after the parameter list.
    A `.m.ct` static map trait never produces interface values, so it does not
    recognise the marker at all (D-034 D2). One diagnostic only. */
+/* D-034 / F1: two trait methods with the same name and the same parameter
+   `type_key`s cannot share one vtable slot: the emitted C would declare the
+   same member twice. The indexed duplicate is D034-5; this catches the mixed
+   indexed/unindexed and the unindexed/unindexed shapes. */
+static int trait_method_dup(struct Parser *self, int ti, int mi,
+                            int line, int col)
+{
+    int j, k, same;
+    const char *mname;
+
+    if (self->unit_is_map) return 0;
+    mname = self->sym->traits[ti].m[mi].name;
+    for (j = 0; j < mi; j++) {
+        if (strcmp(self->sym->traits[ti].m[j].name, mname) != 0) continue;
+        if (self->sym->traits[ti].m[j].nparams
+            != self->sym->traits[ti].m[mi].nparams) continue;
+        same = 1;
+        for (k = 0; k < self->sym->traits[ti].m[mi].nparams; k++) {
+            const char *a, *b;
+            const char *pa = self->sym->traits[ti].m[j].ptype
+                             ? self->sym->traits[ti].m[j].ptype[k] : 0;
+            const char *pb = self->sym->traits[ti].m[mi].ptype
+                             ? self->sym->traits[ti].m[mi].ptype[k] : 0;
+            if (!pa || !pb) { same = 0; break; }
+            a = frontend::type::type_key_text(pa);
+            b = frontend::type::type_key_text(pb);
+            if (!a || !b) return self->sup->fail("out of memory");
+            if (strcmp(a, b) != 0) { same = 0; break; }
+        }
+        if (!same) continue;
+        if (self->sym->traits[ti].m[j].is_index
+            && self->sym->traits[ti].m[mi].is_index) continue; /* D034-5 */
+        {
+            const char *msg = tool::sh::ct_scratch_fmt(
+                "trait '%s' declares duplicate method '%s' with the same parameter types",
+                self->sym->traits[ti].name, mname);
+            return tool::diag::ct_sem_error(line, col, msg, self->mem->path);
+        }
+    }
+    return 0;
+}
+
 static int trait_index_marker(struct Parser *self, int ti, int mi,
                               int nline, int ncol)
 {
@@ -4269,6 +4311,9 @@ impl ParseOps for Parser {
                     if (trait_index_marker(self, ti, mi, mname_line,
                                            mname_col) != 0)
                         return -1;
+                    if (trait_method_dup(self, ti, mi, mname_line,
+                                         mname_col) != 0)
+                        return -1;
                     if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                         if (self->unit_is_map)
                             return tool::diag::ct_sem_error(mline, 1,
@@ -4397,6 +4442,8 @@ impl ParseOps for Parser {
             self->sym->traits[ti].m[mi].nparams = np;
             self->sym->traits[ti].m[mi].pnode = pfirst;
             if (trait_index_marker(self, ti, mi, mname_line, mname_col) != 0)
+                return -1;
+            if (trait_method_dup(self, ti, mi, mname_line, mname_col) != 0)
                 return -1;
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                 if (self->unit_is_map)

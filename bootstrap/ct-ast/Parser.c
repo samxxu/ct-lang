@@ -238,6 +238,7 @@ static const char * struct_name_text(const char *);
 static int check_borrow_param(struct frontend_parse_Parser *, int, int, int);
 static const char * trait_sig_text(struct frontend_parse_Parser *, int, int);
 static int trait_method_params_match(struct frontend_parse_Parser *, int, int, int, int);
+static int trait_method_dup(struct frontend_parse_Parser *, int, int, int, int);
 static int trait_index_marker(struct frontend_parse_Parser *, int, int, int, int);
 static int parse_trait_body(struct frontend_parse_Parser *, int, int, const char *);
 static void trait_default_edges(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, int, char *, int);
@@ -3936,6 +3937,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
                 if (trait_index_marker(_self, ti, mi, mname_line, mname_col) != 0) {
                     return (-1);
                 }
+                if (trait_method_dup(_self, ti, mi, mname_line, mname_col) != 0) {
+                    return (-1);
+                }
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
                     if (_self->unit_is_map) {
                         return tool_diag_ct_sem_error(mline, 1, "a .m.ct trait cannot carry a default body", _self->mem->path);
@@ -4074,6 +4078,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_trait(void *self,
         _self->sym->traits[ti].m[mi].nparams = np;
         _self->sym->traits[ti].m[mi].pnode = pfirst;
         if (trait_index_marker(_self, ti, mi, mname_line, mname_col) != 0) {
+            return (-1);
+        }
+        if (trait_method_dup(_self, ti, mi, mname_line, mname_col) != 0) {
             return (-1);
         }
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
@@ -5503,6 +5510,55 @@ static int trait_method_params_match(struct frontend_parse_Parser * self, int ti
         }
     }
     return 1;
+}
+static int trait_method_dup(struct frontend_parse_Parser * self, int ti, int mi, int line, int col) {
+    int j;
+    int k;
+    int same;
+    const char * mname;
+    if (self->unit_is_map) {
+        return 0;
+    }
+    mname = self->sym->traits[ti].m[mi].name;
+    for (j = 0; j < mi; j++) {
+        if (strcmp(self->sym->traits[ti].m[j].name, mname) != 0) {
+            continue;
+        }
+        if (self->sym->traits[ti].m[j].nparams != self->sym->traits[ti].m[mi].nparams) {
+            continue;
+        }
+        same = 1;
+        for (k = 0; k < self->sym->traits[ti].m[mi].nparams; k++) {
+            const char * a;
+            const char * b;
+            const char * pa = (self->sym->traits[ti].m[j].ptype ? self->sym->traits[ti].m[j].ptype[k] : 0);
+            const char * pb = (self->sym->traits[ti].m[mi].ptype ? self->sym->traits[ti].m[mi].ptype[k] : 0);
+            if (((!pa) || (!pb))) {
+                same = 0;
+                break;
+            }
+            a = frontend_type_type_key_text(pa);
+            b = frontend_type_type_key_text(pb);
+            if (((!a) || (!b))) {
+                return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
+            }
+            if (strcmp(a, b) != 0) {
+                same = 0;
+                break;
+            }
+        }
+        if ((!same)) {
+            continue;
+        }
+        if ((self->sym->traits[ti].m[j].is_index && self->sym->traits[ti].m[mi].is_index)) {
+            continue;
+        }
+{
+            const char * msg = tool_sh_ct_scratch_fmt("trait '%s' declares duplicate method '%s' with the same parameter types", self->sym->traits[ti].name, mname);
+            return tool_diag_ct_sem_error(line, col, msg, self->mem->path);
+        }
+    }
+    return 0;
 }
 static int trait_index_marker(struct frontend_parse_Parser * self, int ti, int mi, int nline, int ncol) {
     struct frontend_sym_MethodSig * m;

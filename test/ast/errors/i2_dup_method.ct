@@ -1,0 +1,8 @@
+/* F1: an indexed get and an unindexed get with the same key type would emit
+   the same vtable member twice; the declaration is rejected. */
+trait Store {
+    int get(char *k) index;
+    int get(char *k);
+}
+
+int main(void) { return 0; }
