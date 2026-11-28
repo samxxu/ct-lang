@@ -212,7 +212,7 @@ version-minor: 2
 | E-V3-9d | **待开（2026-11-28 撤回 deferred）** | S8a 未实施；[LANG-31](../../../issues/lang/lang-31-const-key-fold.md) 已转回 `open`；施工卡 [lang31-const-key-fold-construction](../../design/lang31-const-key-fold-construction.md) 已有 | 所有者 2026-11-28 裁定：随 1.2 一起交付，不再后推 |
 | E-V3-9e | **待开（2026-11-28 新立）** | I2 阶段一未实施；四问已裁定（Q1 立项 / Q2 方法级 `index` / Q3 两阶段 / Q4 暂不承诺 ABI），见 [RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) | 前置 ADR `D-034`；阶段一只读 |
 | E-V3-9f | **待开（2026-11-28 新立）** | I2 阶段二未实施：`set` 的 `index` 与写语义 | 阶段一稳定后开工；同属 1.2 |
-| E-V3-10 | 通过（口径后由 CR-V3-1 更新） | S9 提交 `5c0e6781`；默认 strict 下 `check-all` 8 门绿（§7.4）；**当时** `selfhost/`、`lib/core/` 零 allow；普通无 include 的 `.ct` 逐字节不变；`test/c-boundary-allow.tsv` 登记 examples/test 的显式例外；`ct migrate` 旧包夹具在 `check-ast` | `examples`/`test` 的 C 互操作保留 allow 属设计，不是豁免回退；本行是 v1.2.0 历史证据，现行判据见 §8 CR-V3-1 |
+| E-V3-10 | 通过（口径后由 CR-V3-1 更新） | S9 提交 `5c0e6781`；默认 strict 下 `check-all` 8 门绿（§7.4）；**当时** `selfhost/`、`lib/core/` 零 allow；普通无 include 的 `.ct` 逐字节不变；`test/c-boundary-allow.tsv` 登记 examples/test 的显式例外；`ct migrate` 旧包夹具在 `check-ast`。**2026-11-28 按 CR-V3-1 补齐**：D-032 M1–M3 已落地（`feb6caa5`/`981f2ee9`/`653dec09`），`selfhost/ct-ast` 与 `lib/core` 各一处包根 manifest；shim 74 → 3（seed 5 → 3）；`--show-c-boundary` 正负例与 `p65_*`、goldens 25/25、`check-seed` 两轮均绿 | `examples`/`test` 的 C 互操作保留 allow 属设计，不是豁免回退；本行是 v1.2.0 历史证据，现行判据见 §8 CR-V3-1 |
 | E-V3-11 | 通过 | `CTC_VERSION 1.2.0`；dist `ct-linux-x64.tar.gz` sha256 `98130730155f88934a2c4b4d0ce82e222bc81fc25e34a6fc0fdcf7736a0e28d3`；`check-all` 8 门、seed 两轮、stable-subset v1.2 冻结（§7） | **tag / release 未创建**：按所有者版本纪律由手工执行，见 §7.5 |
 
 ## 7 S10 收口记录（2026-11-27）

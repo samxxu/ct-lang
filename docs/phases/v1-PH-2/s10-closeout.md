@@ -143,13 +143,22 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > 53 + 17 处逐条归桶齐全（38 带界拷贝 / 2 a / 1 c / 7 d / 5 vsnprintf / 17 b），
 > 与提交信息一致；小瑕：`Pkg.h.ct:3270` 的 function 列写成 `install_main`，实为
 > `pkg_official_resolve`，不阻塞。
+>
+> **REQ 验收记录（D-032 M1–M3，2026-11-28）**：M1 `feb6caa5`、M2 `981f2ee9`、
+> M3 `653dec09`。实测 shim：selfhost 66 → 3、lib/core 8 → 0、`bootstrap/ct-ast` 68 → 3
+> （合计 74 → 3，seed 侧 5 → 3）。`--show-c-boundary`：lib/core 8 个单元与 `utf16/` 子树
+> 均 `allow`，`test/cases`、`examples` 仍 `strict`；三个负例（删包根清单 → 全回 strict；
+> `lib/core/utf16/ct.pkg: c-boundary = strict` → 该子树 strict、根单元仍 allow；包外 allow
+> 不外溢）经 `test/ast/p65_policy.sh` 与临时副本独立复测通过。门禁：`p65_regression`、
+> `p65_policy`、`CT_C_BOUNDARY=allow check-goldens-ast` 25/25、`check-seed` 两轮逐字节
+> （73 .c + 75 .h）全绿。剩余：REV 只读复核（不改状态），状态由 EDITOR 落。
 
 | # | 事项 | 状态 | 写者 / 批者 | 前置 | 依据 |
 | --- | --- | --- | --- | --- | --- |
 | Q-1 | D-032 设计签收（内部层 C 边界豁免） | **已完成** | REV | 无（ADR 已 `proposed`） | [D-032](../../decisions/D-032.md)、[签收包](../../reviews/2026-11-28-signoff-package.md) |
 | Q-2 | D032-C1 实施 M1（`c_boundary_for`/`leaks_for` 同源解析 + 两处 `ct.pkg`） | **已完成**（`feb6caa5`） | DEV | — | [施工卡](../../design/d032-internal-c-boundary-construction.md) |
 | Q-3 | D032-C1 实施 M2（selfhost 63 个 shim 退场） | **已完成**（`981f2ee9`，66 → 3） | DEV | — | 同上 |
-| Q-4 | D032-C1 实施 M3（lib/core 8 个 shim 退场，含 utf16 子树） | 待开 | DEV | Q-3 | 同上 |
+| Q-4 | D032-C1 实施 M3（lib/core 8 个 shim 退场，含 utf16 子树） | **已完成**（`653dec09`，8 → 0；seed 5 → 3；REQ 验收见下） | DEV | Q-3 | 同上 |
 | Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | **已完成**（`6ba2a627`、`1d93fd77`） | DEV | 无 | [S8B 施工卡](../../design/s8b-remaining-construction.md)、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 排在 S8B-REM-1 R8（同属 `backend/emit`）之后，避免同文件集冲突 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
@@ -171,7 +180,8 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 
 **DEV 执行顺序（2026-11-28 排定，无外部阻塞）**
 
-1. D-032 线：M1 ✅（`feb6caa5`）→ M2 ✅（`981f2ee9`）→ **M3（当前）**：lib/core 8 → 0、seed 5 → 3；
+1. D-032 线：M1 ✅（`feb6caa5`）→ M2 ✅（`981f2ee9`）→ M3 ✅（`653dec09`，lib/core 8 → 0、
+   seed 5 → 3）；**D032-C1 三片已全部落地**，余 REV 只读复核与 EDITOR 落状态；
 2. 可并行：S8B R3–R8（Q-6）、dogfooding §3.8（Q-13），与 D-032 线文件集不重叠；
 3. I1（Q-12）：`D-031` 由 **DEV 起草**（先例 [D-030](../../decisions/D-030.md)，DEV 起草、REV 签收），
    **不等 ARCH**；签收后按 `T1–T5` 开工；
