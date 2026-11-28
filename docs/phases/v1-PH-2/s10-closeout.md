@@ -188,7 +188,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | **已完成**（`9eb519c4`） | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 | Q-14 | T-8 门禁允许 EDITOR 签收 ADR（B1） | **已完成**（`f0ce1746`；待 EDITOR 审核） | REQ（所有者 2026-11-28 授权直接修复）→ EDITOR | 无 | 本节 Q-12 注；`test/docs/check-docs.py` |
 | Q-15 | ADR 规范对齐（B2：`AGENTS §0.7` + 规范矩阵 + sha pin） | **已完成**（`b4f3a568`；待 EDITOR 审核） | REQ（所有者授权直接修复）→ EDITOR | 外部主规范副本需 EDITOR 后续同步（见注） | `AGENTS.md`、`docs/spec/ai-coding-workflow.md` |
-| Q-16 | E-V3-9b 条件通过裁定（方案 A） | **已完成**（REV 结论已出 `cde1c425`：条件通过；待 EDITOR 落 card） | REQ 裁定 → REV 出结论（已完成）→ EDITOR 落 card 状态 | 无 | [REV 报告](../../reviews/2026-11-28-ev39b-rev.md)；卡 §6 E-V3-9b |
+| Q-16 | E-V3-9b 条件通过裁定（方案 A） | **已完成**（EDITOR 2026-11-28 落卡：E-V3-9b 通过（条件）） | REQ 裁定 → REV 出结论（已完成）→ EDITOR 落 card 状态 | 无 | [REV 报告](../../reviews/2026-11-28-ev39b-rev.md)；卡 §6 E-V3-9b |
 
 > **Q-7 排期口径（2026-11-28）**：本条是架构债、无用户可见收益，**不进 1.2 窗口**
 > （窗口已由 I1/I2 占满）；建议放在 `v1.2.0` tag 之后的技术债批，不单独立版本。三步：
@@ -318,11 +318,11 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | B1 | T-8 门禁允许 EDITOR 签 ADR | ✅（待 EDITOR 审核） | REQ（所有者授权） | `f0ce1746`；临时 ADR 探针验证通过后删除 |
 | B2 | `AGENTS.md` §0.7 + 规范矩阵 + `docs/spec` sha pin | ✅（待 EDITOR 审核） | REQ（所有者授权） | `b4f3a568`；`g0` 绿（`sync-agents.sh` 不在本机，块体等价比对被跳过） |
 | B3 | D-032 REV 只读复核 + EDITOR 落状态 | ✅ | REV / EDITOR | M1–M3 已落地、REQ 验收全绿（shim 74 → 3）；REV 评估 §1 + 签收包已更新（`1f78480c`） |
-| B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | ✅ | DEV / REV | R3 `e23338db` … R8 `bd252782`、§3.8 `9eb519c4`；现测 `realloc` 87、`snprintf` 292（Pkg 43 / Symbols 24）；**E-V3-9b REV 结论已出：条件通过（`cde1c425`），SH-123 冻结基线为代码口径 76/171；待 EDITOR 落 card 状态** |
+| B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | ✅ | DEV / REV | R3 `e23338db` … R8 `bd252782`、§3.8 `9eb519c4`；现测 `realloc` 87、`snprintf` 292（Pkg 43 / Symbols 24）；**REV 结论已出并已由 EDITOR 落卡（`cde1c425`；card §6 E-V3-9b = 通过（条件））** |
 | B5 | 门禁全绿：8 门 / seed 两轮 / goldens 25/25 / warnings 0 / `test/ir` 15 / `check-docs` | ✅（I2 后已复跑） | DEV / REQ | 2026-11-28：goldens 25/25、seed 两轮、warnings 635/0、`test/ir` 84 语料/15 checks、`check-docs` OK；`check-ast` 1780/0（REV） |
 | B6 | CI 首绿（含 Q-9 dist 冒烟） | 🟡 | DEV | `0911029a` 已入库；以首次 CI 结果为准 |
 | C1 | `CTC_VERSION 1.2.0` | ✅ | — | `selfhost/ct-ast/main.ct` |
-| C2 | `roadmap` 的 `v1-PH-2` 行转 ✅ | ⛔ | REQ | tag 前；现为 🟨 |
+| C2 | `roadmap` 的 `v1-PH-2` 行转 ✅ | ✅ | REQ | roadmap v1-PH-2 行已转 ✅（2026-11-28） |
 | C3 | I1 文档：spec §4.79 / 矩阵第 26 行 / stable-subset 冻结行 | ✅ | REQ | `367ba1a8` |
 | C4 | I2 文档：spec 新节 / 矩阵行 / stable-subset 行 | ✅ | REQ/DEV | spec §4.80、glossary、矩阵第 27 行、stable-subset（`c78b5e86` 等） |
 | C5 | 流水账 `v1.2.0` 行与收口记录补 I1/I2 | ✅ | EDITOR / REQ | [phase-log](../../history/phase-log.md) v1.2.0 行已追加；本文 §14 追加收口记录（2026-11-28） |
@@ -332,9 +332,10 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | D3 | annotated tag `v1.2.0` + 五项校验 | ⛔ | 所有者 | 卡 §7.5 |
 | D4 | GitHub Release 与资产（可选） | 🟡 | 所有者 | 卡 §7.5；资产 sha 与 D1 一致 |
 
-**当前缺口结论（2026-11-28）**：硬阻塞只剩 **C2（roadmap 转 ✅，依赖 E-V3-9b）、D1（重出 dist）、
+**当前缺口结论（2026-11-28）**：硬阻塞只剩 **D1（重出 dist）、
 D2（推送）、D3（所有者手工 tag）**；B6（CI 首绿）为 🟡。
-I1/I2 的实现、文档、验收与流水账收口均已完成；C5 已闭。E-V3-9b 只等 REV 结论。
+I1/I2 的实现、文档、验收与流水账收口均已完成；C5 已闭；C2 已闭（roadmap 转 ✅）；
+E-V3-9b 已由 EDITOR 落卡（通过（条件））。
 Q-7（`D-033`）按裁定在 1.2 之后，不进本清单。
 
 ## 14 追加收口记录（2026-11-28，I1 / I2）
@@ -350,5 +351,5 @@ Q-7（`D-033`）按裁定在 1.2 之后，不进本清单。
 | I2 文档 | I2-5 `c78b5e86`：spec §4.80、glossary、矩阵第 27 行、stable-subset、tutorial、`examples/71` | REQ 文档核对；`check-docs` OK |
 | 门禁复跑（I2 后） | — | `check-goldens-ast` 25/25、`check-seed` 两轮、`check-warnings` 635/0、`test/ir` 84 语料/15 checks、`check-docs` OK；`check-ast` 1780/0（REV） |
 
-**未闭（截至本节）**：`E-V3-9b` 待 REV 结论（→ 卡状态与 roadmap 才能转 ✅）；dist 重出（D1）、
+**未闭（截至本节）**：`E-V3-9b` 已完成（条件通过，卡状态与 roadmap 已转 ✅）；dist 重出（D1）、
 推送（D2）、所有者手工 tag（D3）；CI 首绿（B6）。Q-7 / `D-033` 按裁定在 1.2 之后。
