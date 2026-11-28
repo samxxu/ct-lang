@@ -241,7 +241,8 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 
 1. D-032 线：M1 ✅（`feb6caa5`）→ M2 ✅（`981f2ee9`）→ M3 ✅（`653dec09`，lib/core 8 → 0、
    seed 5 → 3）；**D032-C1 三片已全部落地**，余 REV 只读复核与 EDITOR 落状态；
-2. 可并行：S8B R3–R8（Q-6）、dogfooding §3.8（Q-13），与 D-032 线文件集不重叠；
+2. S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13）：**均已完成**（R3 `e23338db` … R8 `bd252782`、
+   §3.8 `9eb519c4`），DEV 侧无剩余动作；余 REVIEW 对 E-V3-9b 签字；
 3. I1（Q-12）：**DEV 实施已完成**（T1–T5），REQ 验收通过（见 issue §7）；**DEV 侧无剩余动作**。
    余 **ARCH 技术审定 → EDITOR 签收 `D-031` 与 issue `verified`**（方案 a 前置见 Q-12 注）；
 4. I2（Q-8）：`D-034` 由 **ARCH 起草**、**EDITOR 签收**（前置同上），签收后由 REQ 排期；DEV 随后按
@@ -269,7 +270,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | B1 | T-8 门禁允许 EDITOR 签 ADR | ⛔ | DEV | `test/docs/check-docs.py` 的 `check_signoffs` ADR 分支 |
 | B2 | `AGENTS.md` §0.7 + 规范矩阵 + `docs/spec` sha pin | ⛔ | EDITOR | 三处同批；`bash tools/check.sh g0` |
 | B3 | D-032 REV 只读复核 + EDITOR 落状态 | 🟡 | REV / EDITOR | M1–M3 已落地、REQ 验收全绿（shim 74 → 3） |
-| B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | 🟡 | DEV | E-V3-9b 已按「部分」签收；若要求全绿则升 ⛔，需所有者裁定 |
+| B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | ✅ | DEV | R3 `e23338db`、R4 `75fcb698`、R5 `9a0312a0`、R6 `3026f9bb`、R7 `233727d5`、R8 `bd252782`、§3.8 `9eb519c4`；现测 `realloc` 87、`snprintf` 292（Pkg 43 / Symbols 24）；**余 REVIEW 对 E-V3-9b 的签字** |
 | B5 | 门禁全绿：8 门 / seed 两轮 / goldens 25/25 / warnings 0 / `test/ir` 15 / `check-docs` | ✅（I1 后） | DEV / REQ | I2 落地后必须重跑一遍再 tag |
 | B6 | CI 首绿（含 Q-9 dist 冒烟） | 🟡 | DEV | `0911029a` 已入库；以首次 CI 结果为准 |
 | C1 | `CTC_VERSION 1.2.0` | ✅ | — | `selfhost/ct-ast/main.ct` |
@@ -285,4 +286,5 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 
 **当前缺口结论（2026-11-28）**：硬阻塞集中在 **A2、A4–A7、B1、B2、C2、C4、C5、D1–D3**。
 其中 A2/B1/B2 是同一根因（ADR 签收口径切换未落地）；A4–A7 是 I2 本体；D1–D3 是发版动作。
-I1 侧 DEV 已无剩余动作；Q-7（`D-033`）按裁定在 1.2 之后，不进本清单。
+I1 侧 DEV 已无剩余动作；S8B R3–R8 与 §3.8 已完成（余 REVIEW 签字）；Q-7（`D-033`）按裁定在
+1.2 之后，不进本清单。
