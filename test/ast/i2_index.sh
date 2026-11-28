@@ -1,8 +1,13 @@
 #!/bin/sh
-# D-034 (I2-2) / v1-PH-2 probe: interface-value subscript, stage one.
+# D-034 (I2-2 / I2-3) / v1-PH-2 probe: interface-value subscript, stage one.
 #
 #   A1 shape    : `s["name"]` and the explicit `s.get("name")` products are
 #                 byte-identical (banner line aside).
+#   A2 keys     : two indexed `get`s with different key types dispatch by the
+#                 key's static type and name two distinct vtable slots.
+#   A3 cross    : trait in a `.h.ct` unit, impl in a second, call in a third;
+#                 `ct build` recompiles the closure, so an edited impl changes
+#                 the run (no stale vtable).
 #   A4 D-028    : a concrete type's inherent subscript keeps its direct call.
 #   A5..A9 +    : the frozen D034 diagnostics, positioned at `[`, one each, no
 #   misuse        product.
@@ -69,6 +74,50 @@ if compile a1_sub test/ast/i2_index_read/prog.ct \
     else
         fail_msg "A1: the product does not call the vtable slot"
     fi
+fi
+
+# --- A2: two key types, two slots ----------------------------------------
+if compile a2 test/ast/i2_index_read_keys/prog.ct; then
+    if grep -Fq 'vt->get$char_2a(' "$tmp/a2.c" \
+       && grep -Fq 'vt->get$int(' "$tmp/a2.c"; then
+        ok_msg "A2  s[k] / s[0] name two distinct slots by key type"
+    else
+        fail_msg "A2: the two key types did not select two slots"
+    fi
+    run_bin a2 i2_index_read_keys || true
+fi
+
+# --- A3: cross-unit build, and a rebuilt impl is not stale ---------------
+xu="$tmp/xu"
+rm -rf "$xu"
+mkdir -p "$xu"
+cp "$root"/test/ast/i2_cross_unit/*.ct "$xu/" || fail_msg "A3: cannot stage the fixture"
+if ( cd "$xu" && CT_CORE_DIR="$root/lib/core" "$ctast" build prog.ct -o "$xu/bin" ) \
+        >"$tmp/a3.out" 2>"$tmp/a3.err"; then
+    if ! "$xu/bin" >"$tmp/a3.txt" 2>&1; then
+        fail_msg "A3: the cross-unit program exited non-zero"
+    elif ! diff -u "$root/test/ast/i2_cross_unit/prog.expected.out" "$tmp/a3.txt" \
+            >"$tmp/a3.diff"; then
+        fail_msg "A3: cross-unit output drifted"
+    elif ! grep -Fq '.vt->get(' "$xu"/.ctbuild/*.c 2>/dev/null; then
+        fail_msg "A3: the call unit did not spell the vtable slot"
+    else
+        # change the impl and rebuild: a stale product would still print 42.
+        # The cache compares mtimes, so let the clock move past the edit.
+        sleep 1
+        sed 's/self->n + 1/self->n + 2/' "$xu/mem.h.ct" >"$xu/mem.h.ct.new"
+        mv "$xu/mem.h.ct.new" "$xu/mem.h.ct"
+        if ( cd "$xu" && CT_CORE_DIR="$root/lib/core" "$ctast" build prog.ct -o "$xu/bin2" ) \
+                >"$tmp/a3b.out" 2>"$tmp/a3b.err" \
+           && "$xu/bin2" >"$tmp/a3b.txt" 2>&1 \
+           && [ "$(cat "$tmp/a3b.txt")" = "43" ]; then
+            ok_msg "A3  trait/impl/call cross three units; a rebuild sees the new impl"
+        else
+            fail_msg "A3: a rebuilt impl did not reach the call (stale vtable): $(cat "$tmp/a3b.txt" 2>/dev/null)"
+        fi
+    fi
+else
+    fail_msg "A3: ct build failed: $(sed -n '1,3p' "$tmp/a3.err" | tr '\n' ' ')"
 fi
 
 # --- A4: D-028's inherent path is unchanged ------------------------------

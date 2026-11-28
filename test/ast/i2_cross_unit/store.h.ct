@@ -1,0 +1,10 @@
+/* D-034 (I2) stage one / A3: the trait (and its marker) lives in a header
+   unit, so the marker travels with the public declaration; the impl is in a
+   second unit and the call in a third. */
+pub trait Store {
+    int get(char *k) index;
+}
+
+pub struct Mem {
+    int n;
+} use Store;

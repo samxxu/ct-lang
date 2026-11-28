@@ -1,0 +1,10 @@
+/* A3: the impl unit. It never repeats the marker -- the declaration owns it. */
+import store;
+
+impl Store for Mem {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n + 1;
+    }
+}

@@ -1,0 +1,15 @@
+/* A3: the call unit sees `import store` (the marker) and `import mem` (the
+   impl) and nothing else; `ct build` recompiles the closure together. */
+import store;
+import mem;
+
+int main(void)
+{
+    Mem m;
+    Store s;
+
+    m.n = 41;
+    s = m;
+    printf("%d\n", s["x"]);
+    return 0;
+}

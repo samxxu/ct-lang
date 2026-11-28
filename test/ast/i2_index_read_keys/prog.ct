@@ -1,0 +1,36 @@
+/* D-034 (I2) stage one / A2: two key types, both marked `index`. The dispatch
+   is by the key's static type, exactly like D-028's inherent overloads; the
+   two vtable slots spell different C identifiers, so the two calls cannot
+   collapse into the same function. */
+
+trait Table {
+    int get(char *k) index;
+    int get(int row) index;
+}
+
+struct Grid {
+    int base;
+} use Table;
+
+impl Table for Grid {
+    int get(char *k)
+    {
+        (void)k;
+        return self->base + 1;
+    }
+    int get(int row)
+    {
+        return self->base + row;
+    }
+}
+
+int main(void)
+{
+    Grid g;
+    Table t;
+
+    g.base = 100;
+    t = g;
+    printf("%d %d\n", t["k"], t[5]);
+    return 0;
+}
