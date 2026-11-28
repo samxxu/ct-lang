@@ -25,7 +25,7 @@ PY
 | --- | --- | --- | --- |
 | E1 | C 互操作 / 边界：`.m.ct`、`*.shim.h`、板级头、`c-superset`、type host | 41 | **保留**，显式 allow + 理由（§3） |
 | E2 | 生命周期与句柄语义演示：`own` / `delete` / Drop / 构造位置 | 11 | **保留**，指针是课题本身（§3） |
-| E3 | 字符串打印受阻：`char *` 只用于 `%s` / `cstr()` | 26 | **已解锁**：LANG-30 落地后迁 21，保留 5（§2.1） |
+| E3 | 字符串打印受阻：`char *` 只用于 `%s` / `cstr()` | 26 | **已解锁**：LANG-30 落地后迁 22，保留 4（§2.1；`23` 于 2026-11-28 迁 `Stack<String>`） |
 | E4 | 结构体 / 接口值指针：只有 `p->f`，没有 `char *` | 15 | **保留**：语言暂无等价引用形态（§3） |
 | M | 可迁移 | 8 | 已迁 2 个，其余 6 个各有结构理由（§5） |
 
@@ -33,7 +33,8 @@ PY
 
 这些文件的 `char *` 原本都来自「字符串字段 / 字符串形参 → `printf("%s", …)`」。
 LANG-30（`Str.print()` / `println()`，[spec §4.78](../language-spec.md)、[D-030](../decisions/D-030.md)）
-落地后，E3 的 26 个文件里 **21 个已迁**，**5 个保留**（理由见 §2.1）。
+落地后，E3 的 26 个文件里 **22 个已迁**，**4 个保留**（理由见 §2.1；`23_generic_stack`
+于 2026-11-28 改 `Stack<String>`，`char *` 清零，输出逐字节不变）。
 下表是迁移前的判断依据，保留作历史记录：
 
 | 事实 | 位置 |
@@ -69,16 +70,16 @@ LANG-30（`Str.print()` / `println()`，[spec §4.78](../language-spec.md)、[D-
 | `18_generic_string_table` | 课题就是「泛型模板以 `char *` 显式实例化」；泛型**自由函数**以 struct 类型实参实例化当前不可用（`nth<Str>` 报 `cannot convert 'Str' to 'struct Str *'`；泛型 trait 实例化没有这个问题，见 39/65），改成具体类型会删掉泛型教学点 | 结构体类型实参的泛型函数可用后重判（`nth<Str>` / `count_if<Str>`） |
 | `19_container_each_generic` | 同上：`walk<char *>` 的实例化与 `(fn, env)` 回调是课题；`T=Str` 的自由函数实例化同样不可用 | 同上 |
 | `21_generic_bound` | `Word` 的 `char *s` 用 `strcmp` 比较，`strcmp` 是「约束泛型调用 C 函数」的行为本体；`Str` 不能作 struct 字段（§4.70 硬错） | `test/c-boundary-allow.tsv` 已登记；保留 |
-| `23_generic_stack` | 课题是 `Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段；`Stack<String>` 的 struct 实例化能生成布局，但 `impl<T> Stack<T>` 的方法没有 String 实例（`no method 'push'`），同样卡在结构体类型实参 | 泛型 struct/impl 的结构体实参可用后重判 |
+| `23_generic_stack` | **2026-11-28 已迁**：`Stack<String>` + `String *`，`char *` 清零，输出不变 | 已关闭（见 §2.2 E3-4） |
 | `tour/11_variadic/forward` | `va_list` 转 `vprintf` / `vsnprintf`：`char *fmt` 就是 C 变参 ABI 的一部分，换成 `Str` 会丢掉 NUL 结尾的格式串契约 | E1 C 互操作；保留 |
 
 > `21` / `23` 同时登记在 [test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv)：
 > 它们的 `#include <string.h>` 是 `strcmp` / `memset` 行为本体，不是打印阻碍。
 > `18` / `19` 的 `char *` 是样例主题；`tour/11_variadic/forward` 的 `char *` 是变参 ABI。
 
-### 2.2 E3 五个保留项逐条登记（S8c 收口，2026-11-28）
+### 2.2 E3 四个保留项逐条登记（2026-11-28；E3-4 已迁出）
 
-E3 的 26 个文件里 21 个已迁；下面 5 个是**有编号的保留例外**，不是“待办”。每条都写明
+E3 的 26 个文件里 22 个已迁；下面 4 个是**有编号的保留例外**，不是“待办”。每条都写明
 所属类别、为什么当前必须保留、重判触发条件与登记位置，评审按编号核对。
 
 | 编号 | 文件 | 类别 | 为什么必须保留（当前） | 重判触发条件 | 登记位置 |
@@ -86,11 +87,11 @@ E3 的 26 个文件里 21 个已迁；下面 5 个是**有编号的保留例外*
 | E3-1 | `examples/18_generic_string_table` | 泛型自由函数、结构体类型实参不可用 | 课题是 `nth<char *>` / `count_if<char *>` 的显式实例化；`nth<Str>` 报 `cannot convert 'Str' to 'struct Str *'`，改成具体类型会删掉教学点 | 泛型自由函数支持结构体类型实参（`nth<Str>` / `count_if<Str>` 可编译） | 本表；矩阵 §3；`char *` 是主题 |
 | E3-2 | `examples/19_container_each_generic` | 同上 + `(fn, env)` 回调 | `walk<char *>` 的实例化与回调环境是课题；`T=Str` 的自由函数实例化同样不可用 | 同 E3-1 | 本表；矩阵 §3 |
 | E3-3 | `examples/21_generic_bound` | `strcmp` 是行为本体 | `Word.char *s` 用 `strcmp` 比较，`strcmp` 是“约束泛型调用 C 函数”的课题；`Str` 不能作 struct 字段（§4.70 硬错） | `Str` 可作字段且约束泛型可直接比较视图 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
-| E3-4 | `examples/23_generic_stack` | 泛型 struct/impl 结构体实参不可用 | 课题是 `Stack<T>` 的裸 `T` / `T *` / `T items[N]` 三种字段；`Stack<String>` 能生成布局，但 `impl<T> Stack<T>` 没有 String 实例（`no method 'push'`） | 泛型 struct/impl 的结构体实参可用 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
+| E3-4 | `examples/23_generic_stack` | **已迁出（2026-11-28）** | 改 `Stack<String>` + `String *`，`char *` 清零；`T *` / `T items[N]` 的布局教学点保留；输出逐字节不变 | 已关闭 | 本节历史行；无 allow 例外 |
 | E3-5 | `examples/tour/11_variadic/forward` | C 变参 ABI | `va_list` 转 `vprintf` / `vsnprintf`；`char *fmt` 是 C 变参 ABI 的 NUL 结尾格式串契约 | 不重判：属 E1 C 互操作，不是 E3 打印阻碍 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
 
-> 判定口径：E3-1…E3-4 的 `char *` 不是“打印没入口”（LANG-30 已落地），而是**泛型实例化能力**
-> 或**行为本体**；E3-5 实际是 E1 边界。E3-1/E3-2 未登记 allow 行，因为它们不 `#include` C 头，
+> 判定口径：E3-1…E3-3 的 `char *` 不是“打印没入口”（LANG-30 已落地），而是**泛型实例化能力**
+> 或**行为本体**；E3-5 实际是 E1 边界；E3-4 已迁出。E3-1/E3-2 未登记 allow 行，因为它们不 `#include` C 头，
 > 只在纯 Ct 代码里用 `char *` 作类型实参。
 
 ## 3 保留类：E1 / E2 / E4（67 个）

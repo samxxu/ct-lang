@@ -2,9 +2,9 @@
 //
 // `struct Stack<T>` is an ordinary template: each instantiation gets its own C
 // struct with the parameter substituted everywhere -- a bare `T` field, a `T *`
-// field and a `T items[N]` array. `Stack<int>` and `Stack<char *>` therefore
+// field and a `T items[N]` array. `Stack<int>` and `Stack<String>` therefore
 // share one source and two layouts, and `impl<T> Stack<T>` gives both the same
-// methods, statically dispatched (`Stack_int_push`, `Stack_char_p_push`).
+// methods, statically dispatched (`Stack_int_push`, `Stack_String_push`).
 //
 // License: MIT; see LICENSE.EXCEPTION
 //@ct-requires: ct-ast
@@ -46,10 +46,10 @@ impl<T> Stack<T> {
 int main(void)
 {
     Stack<int> a;
-    Stack<char *> names;
+    Stack<String> names;
     Stack<int> *pa;
     int *ip;
-    char **sp;
+    String *sp;
 
     a.n = 0;
     a.slot = 0;
@@ -62,10 +62,22 @@ int main(void)
 
     names.n = 0;
     names.slot = 0;
-    names.push("ada");
-    names.push("bob");
+    String ada = "ada";
+    String bob = "bob";
+    names.push(ada);
+    names.push(bob);
     sp = names.top();
-    printf("names: %s %s top=%s\n", names.get(0), names.get(1), *sp);
+    String n0 = names.get(0);
+    String n1 = names.get(1);
+    Str lab = "names: ";
+    Str gap = " ";
+    Str top = " top=";
+    lab.print();
+    n0.print();
+    gap.print();
+    n1.print();
+    top.print();
+    sp->println();
 
     /* The two instances are distinct C types with distinct layouts. */
     printf("layouts differ: %d\n", (int)sizeof(a) != (int)sizeof(names));

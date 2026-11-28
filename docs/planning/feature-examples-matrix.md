@@ -85,21 +85,22 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 指标 | 数值 |
 | --- | --- |
 | `examples/**/*.ct` | 237 个文件 / 71 个目录 |
-| 含 `char *` | 60 |
-| 含非 `self->` 的 `->` | 56 |
-| 含 `malloc` | 12 |
+| 含 `char *` | 39 文件 / 117 次（`grep -o`） |
+| 含非 `self->` 的 `->` | 56 文件（S8c 口径；`->` 仍是 E4 语言边界） |
+| 含 `malloc` | 13 文件 / 19 次（`grep -o 'malloc('`） |
 
 新增的 `67`–`69` 三个样例零 `char *` / `->` / `malloc`。E3 类 26 个文件已由
 [LANG-30](../../issues/lang/lang-30-str-print-api.md) 解锁：21 个改成 `print()` / `println()`，
-5 个（`18` / `19` / `21` / `23` / `tour/11_variadic/forward`）因泛型 struct 实例化或 C 互操作
-保留，逐条编号登记见 [pointer-free-exemptions](pointer-free-exemptions.md) §2.2；不得用 `cstr()` + `free` 假删。
+4 个（`18` / `19` / `21` / `tour/11_variadic/forward`）因泛型 struct 实例化或 C 互操作保留；
+`23_generic_stack` 已于 2026-11-28 改 `Stack<String>`，`char *` 清零、输出不变。逐条编号见
+[pointer-free-exemptions](pointer-free-exemptions.md) §2.2；不得用 `cstr()` + `free` 假删。
 
 文档指针现数（本次改动后，`grep -o` 计数；`self->` 不计入箭头）：
 
 | 文档 | `char *` | 非 `self->` 箭头 | `malloc` | 说明 |
 | --- | --- | --- | --- | --- |
 | `README.md` | 16 | 34 | 0 | 集中在 §0.1/§0.2/§0.8/§0.11/§0.13 的标注边界或对照表；§0.4 已改 `Map<String,int>`，§2/§3 只剩命令占位符与类型名说明 |
-| `docs/tutorial.md` | 69 | 49 | 7 | 集中在 §0 核心范式与 §9 map/bindings（已标注 C 互操作），§8 生命周期（E2），以及诊断文本里的 `got 'char *'` |
+| `docs/tutorial.md` | 70 | 49 | 7 | 集中在 §0 核心范式与 §9 map/bindings（已标注 C 互操作），§8 生命周期（E2），以及诊断文本里的 `got 'char *'` |
 | `docs/guide-for-c-programmers.md` | 17 | 5 | 3 | 全部在 §1.1 C 对照左列与 §10 C 互操作 |
 | `docs/idioms.md` | 7 | 2 | 0 | §1 语言事实与 §11.1 C 互操作表 |
 
