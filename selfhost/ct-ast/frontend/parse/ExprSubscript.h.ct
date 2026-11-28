@@ -490,6 +490,64 @@ static int ci_emit_failure(struct Expr *self, int code, const char *bty,
 }
 
 
+/* LANG-31 / D-031: the constant-key fold. A built-in handle's fields are
+   implementation detail (`.ptr` / `.h` / `tag` / `u`), so a literal key must
+   never bypass the dedicated member rules for them. Plain user structs are
+   the whole scope. */
+static int ckf_builtin_base(const char *base)
+{
+    if (strcmp(base, "Str") == 0 || strcmp(base, "String") == 0
+        || strcmp(base, "U16Str") == 0 || strcmp(base, "U16String") == 0
+        || strcmp(base, "ct_buf") == 0 || strcmp(base, "ct_Box_hdr") == 0)
+        return 1;
+    if (strncmp(base, "Vec_", 4) == 0 || strncmp(base, "Map_", 4) == 0
+        || strncmp(base, "Box_", 4) == 0 || strncmp(base, "Option_", 7) == 0
+        || strncmp(base, "Result_", 7) == 0)
+        return 1;
+    return 0;
+}
+
+/* 1 for an ADT (enum-with-payload), generic or not. An ADT's C fields are the
+   `tag` + `u` layout, not the payload names the user writes in a pattern; a
+   constant key must not reach them. */
+static int ckf_is_adt(struct Expr *self, const char *base)
+{
+    int ti, ii, ni, nti, tr;
+    struct StructInst *ins;
+    struct StructTmpl *tps;
+
+    ti = self->sym->find_type(base);
+    if (ti >= 0 && self->sym->types[ti].kind == 7) return 1;
+    ii = frontend::sym::ct_inst_find(base);
+    if (ii < 0) return 0;
+    ins = frontend::sym::ct_insts(&ni);
+    if (!ins || ii >= ni) return 0;
+    tr = ins[ii].tmpl_row;
+    if (tr < 0) tr = frontend::sym::ct_tmpl_find(ins[ii].tmpl, self->cur_unit);
+    tps = frontend::sym::ct_tmpls(&nti);
+    return tps && tr >= 0 && tr < nti && tps[tr].is_adt;
+}
+
+/* D52-4's "traceable to a variable or a field chain" receiver test, read
+   side: a field access never takes an address and needs no temporary, so the
+   accepted roots are the places (variable / element / deref), not call
+   results. */
+static int ckf_receiver_ok(struct Expr *self, int n)
+{
+    int k, guard = 0;
+
+    while (n >= 0 && n < self->arena->nnode && guard++ < 64) {
+        k = self->arena->nodes[n].kind;
+        if (k == N_MEMBER || k == N_ARROW || k == N_DEREF
+            || k == N_INDEX || k == N_SLICE_INDEX) {
+            n = self->arena->nodes[n].a;
+            continue;
+        }
+        return k == N_VAR;
+    }
+    return 0;
+}
+
 impl ExprSubscript for Expr {
     /* PH-52 D52-2: the diagnostics name the user's spelling, not the encoded
        instance tag. `Box<int>` comes from the instance row; a plain struct
@@ -624,6 +682,60 @@ impl ExprSubscript for Expr {
 fail:
         tool::sh::ct_text_free(&buf, &cap);
         return (const char *)0;
+    }
+
+    /* LANG-31 / D-031 T1: `p["x"]` reads as `p.x` when the key is one string
+       literal naming a field of a non-pointer user struct value. T1 folds
+       only the uncontested shape -- a type with no `get` at all; the
+       field-vs-get priority, ambiguity and the unknown-field text land in
+       T2. The fold is a plain `N_MEMBER`, so TIR (`TK_FIELD`) / LIR
+       (`LE_FIELD`) and the AST emitter inherit the ordinary field path: no
+       `get`, no temporary. */
+    int const_key_fold(const char *bty, int recv, int idx, int line, int col,
+                       int writable)
+    {
+        const char *lit, *fname, *base;
+        size_t n;
+        int si, fi, i, m, row, node, code;
+
+        if (writable) return 0;                 /* write / increment: D-028 owns it */
+        if (idx < 0 || idx >= self->arena->nnode) return 0;
+        if (self->arena->nodes[idx].kind != N_STR) return 0;
+        lit = self->arena->str_at((int)self->arena->nodes[idx].num);
+        if (!lit || lit[0] != '"') return 0;    /* a char literal is not a key */
+        n = strlen(lit);
+        if (n < 3 || lit[n - 1] != '"') return 0;
+        for (i = 1; i < (int)n - 1; i++)
+            if (lit[i] == '"' || lit[i] == '\\') return 0;
+        fname = runtime::text::ct_intern_len(lit + 1, (int)n - 2);
+        if (!fname) return self->sup->fail("out of memory");
+        if (!fname[0]) return 0;
+        if (!ckf_receiver_ok(self, recv)) return 0;
+        base = bty;
+        if (strncmp(base, "struct ", 7) == 0) base += 7;
+        else if (strncmp(base, "union ", 6) == 0) base += 6;
+        if (ckf_builtin_base(base)) return 0;
+        si = self->sym->find_struct(base);
+        if (si < 0) return 0;
+        if (!self->sym->struct_at(si)->defined) return 0;
+        if (ckf_is_adt(self, base)) return 0;
+        fi = -1;
+        for (i = 0; i < self->sym->struct_at(si)->nfields; i++)
+            if (strcmp(self->sym->struct_field_at(si, i)->name, fname) == 0) {
+                fi = i;
+                break;
+            }
+        code = ci_probe(self, bty, "get", 1, idx, 0, &m, &row, &node);
+        /* T1 scope: a `get` declaration keeps the D-028 path untouched; the
+           field-first rules and their diagnostics are T2. */
+        if (fi < 0 || code != CI_NONAME) return 0;
+        m = self->sup->new_node(N_MEMBER);
+        if (m < 0) return -1;
+        self->arena->nodes[m].a = recv;
+        self->arena->nodes[m].text2 = fname;
+        self->arena->nodes[m].line = line;
+        self->arena->nodes[m].num = col;
+        return m;
     }
 
 }

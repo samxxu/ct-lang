@@ -2223,6 +2223,34 @@ impl ExprOps for Expr {
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
                     if (self->sup->expect("]") != 0) return -1;
+                    /* LANG-31 / D-031: a single string-literal key naming a
+                       field of a non-pointer user struct value folds to the
+                       same field access as `p.x`. A write or increment
+                       target stays with the D-028 write path (the fold is a
+                       read form only), so this check runs before the sugar
+                       node is built. */
+                    {
+                        int wop = self->lex->tok == T_PUNCT
+                                  && (self->lex->tok_is("=")
+                                      || self->lex->tok_is("+=")
+                                      || self->lex->tok_is("-=")
+                                      || self->lex->tok_is("*=")
+                                      || self->lex->tok_is("/=")
+                                      || self->lex->tok_is("%=")
+                                      || self->lex->tok_is("&=")
+                                      || self->lex->tok_is("|=")
+                                      || self->lex->tok_is("^=")
+                                      || self->lex->tok_is("<<=")
+                                      || self->lex->tok_is(">>=")
+                                      || self->lex->tok_is("++")
+                                      || self->lex->tok_is("--"));
+                        m = self->const_key_fold(bty, n, idx, bl, bc, wop);
+                        if (m < 0) return -1;
+                        if (m > 0) {
+                            n = m;
+                            continue;
+                        }
+                    }
                     m = self->sup->new_node(N_MCALL);
                     if (m < 0) return -1;
                     self->arena->nodes[m].aux = 9;

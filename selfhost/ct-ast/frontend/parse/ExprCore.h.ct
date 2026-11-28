@@ -290,6 +290,13 @@ pub trait ExprSubscript {
        C-symbol suffix for an overloaded method. */
     int  custom_index_write_form(int e, int line, int col);
     const char *custom_index_suffix(const char *bty, int m, int row, int node);
+    /* LANG-31 / D-031: the constant-key fold. Answers a field-access node
+       (> 0) when the key is one string literal naming a visible field, 0 when
+       the caller must keep the D-028 `get` path, and -1 after a diagnostic
+       (`D031-1` ambiguity / `D031-2` unknown field). `writable` is 1 for a
+       write / increment target, which never folds. */
+    int  const_key_fold(const char *bty, int recv, int idx, int line, int col,
+                        int writable);
 }
 
 /* Phase 53: parser-level optional chain (`?.` / `?[`). Kept out of `ExprOps`
