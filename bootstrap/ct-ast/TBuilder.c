@@ -275,6 +275,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -753,7 +757,7 @@ static int tb_type_of(struct backend_tir_TBuilder * tb, int n, int hint) {
         }
         vi = sym->__frontend_sym_symbolops_vptr->find_var(sym, ar->nodes[n].text2);
         if (vi >= 0) {
-            sp = sym->vars[vi].type;
+            sp = sym->__frontend_sym_symbolops_vptr->var_at(sym, vi)->type;
             return backend_tir_tmod_type(tb->m, sp, (tb->in_template || backend_tir_tmod_spelling_free(sp)));
         }
         if (hint > 0) {
@@ -1314,9 +1318,9 @@ static int tb_target_var(struct backend_tir_TBuilder * tb, int eid, int n) {
     }
     vi = sym->__frontend_sym_symbolops_vptr->find_var(sym, ar->nodes[n].text2);
     if (vi >= 0) {
-        decl = tb_find_decl(m, TD_GLOBAL, sym->vars[vi].name);
+        decl = tb_find_decl(m, TD_GLOBAL, sym->__frontend_sym_symbolops_vptr->var_at(sym, vi)->name);
         if (decl <= 0) {
-            decl = tb_find_decl(m, TD_GLOBAL, sym->vars[vi].cname);
+            decl = tb_find_decl(m, TD_GLOBAL, sym->__frontend_sym_symbolops_vptr->var_at(sym, vi)->cname);
         }
         if (decl > 0) {
             return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, "");

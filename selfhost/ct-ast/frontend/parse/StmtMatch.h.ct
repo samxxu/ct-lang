@@ -1468,7 +1468,7 @@ impl StmtMatch for Stmt {
                 return self->sup->fail(e);
             }
             vi = self->sym->find_var(self->arena->nodes[bind].text);
-            if (vi >= 0) self->sym->vars[vi].initialized = 1;
+            if (vi >= 0) self->sym->var_at(vi)->initialized = 1;
             self->arena->nodes[decl].text = runtime::text::ct_intern(g_pat.btype[i]);
             self->arena->nodes[decl].text2 = runtime::text::ct_intern(g_pat.bname[i]);
             self->arena->nodes[decl].aux = 3;

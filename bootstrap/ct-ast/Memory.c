@@ -37,6 +37,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -220,9 +224,9 @@ static int backend_mem_Memory_backend_mem_MemoryOps_mark_owned(void *self, int n
         }
         vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
         if (vi >= 0) {
-            int sbase = ((_self->sym->nscope > 0) ? _self->sym->scope[(_self->sym->nscope - 1)] : 0);
+            int sbase = ((_self->sym->nscope > 0) ? _self->sym->__frontend_sym_symbolops_vptr->scope_at(_self->sym, (_self->sym->nscope - 1)) : 0);
             for (i = (_self->sym->nvar - 1); i >= sbase; i--) {
-                if (((i == vi) || (strcmp(_self->sym->vars[i].name, name) != 0))) {
+                if (((i == vi) || (strcmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name, name) != 0))) {
                     continue;
                 }
                 msg = runtime_text_ct_internf("duplicate 'own' binding for '%s'", name);
@@ -233,7 +237,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_mark_owned(void *self, int n
             }
         }
         if (vi >= 0) {
-            _self->sym->vars[vi].autodrop = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->autodrop = 1;
         }
         if (_self->nowner >= MAX_VARS) {
             return _self->__backend_mem_memoryops_vptr->fail(_self, "too many owned variables");
@@ -477,28 +481,28 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_decl(void *self, int n)
     }
     vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
     if (((vi >= 0) && (si >= 0))) {
-        _self->sym->vars[vi].st = si;
+        _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->st = si;
         if ((heap || call_owned)) {
-            _self->sym->vars[vi].owned = 1;
-            _self->sym->vars[vi].own_line = _self->arena->nodes[n].line;
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->owned = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->own_line = _self->arena->nodes[n].line;
         }
     }
     for (i = 0; i < _self->sym->nvar; i++) {
         if (i == vi) {
             continue;
         }
-        if (_self->sym->vars[i].borrowed) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->borrowed) {
             continue;
         }
-        if (((!_self->sym->vars[i].owned) && (!_self->sym->vars[i].autodrop))) {
+        if (((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop))) {
             continue;
         }
-        if ((!_self->__backend_mem_memoryops_vptr->expr_mentions(_self, e, _self->sym->vars[i].name))) {
+        if ((!_self->__backend_mem_memoryops_vptr->expr_mentions(_self, e, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name))) {
             continue;
         }
-        _self->sym->vars[i].owned = 0;
-        if (_self->__backend_mem_memoryops_vptr->expr_returns(_self, e, _self->sym->vars[i].name)) {
-            _self->sym->vars[i].autodrop = 0;
+        _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned = 0;
+        if (_self->__backend_mem_memoryops_vptr->expr_returns(_self, e, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name)) {
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop = 0;
         }
     }
     return 0;
@@ -509,7 +513,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_scope(void *self, int f
     int i;
     (void)(_self);
     for (i = from; i < to; i++) {
-        if (((_self->sym->vars[i].owned && (!_self->sym->vars[i].autodrop)) && (!_self->sym->vars[i].path_warned))) {
+        if (((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->path_warned))) {
             if (_self->__backend_mem_memoryops_vptr->warn_leak(_self, i, 0) != 0) {
                 return (-1);
             }
@@ -545,24 +549,24 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_assign(void *self, int 
         }
     }
     for (i = 0; i < _self->sym->nvar; i++) {
-        if (_self->sym->vars[i].borrowed) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->borrowed) {
             continue;
         }
         if (i == bv) {
-            if (((_self->sym->vars[i].autodrop && (lhs >= 0)) && (_self->arena->nodes[lhs].kind == N_VAR))) {
-                _self->sym->vars[i].autodrop = 0;
+            if (((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop && (lhs >= 0)) && (_self->arena->nodes[lhs].kind == N_VAR))) {
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop = 0;
             }
             continue;
         }
-        if (((!_self->sym->vars[i].owned) && (!_self->sym->vars[i].autodrop))) {
+        if (((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop))) {
             continue;
         }
-        if (((!_self->__backend_mem_memoryops_vptr->expr_mentions(_self, lhs, _self->sym->vars[i].name)) && (!_self->__backend_mem_memoryops_vptr->expr_mentions(_self, rhs, _self->sym->vars[i].name)))) {
+        if (((!_self->__backend_mem_memoryops_vptr->expr_mentions(_self, lhs, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name)) && (!_self->__backend_mem_memoryops_vptr->expr_mentions(_self, rhs, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name)))) {
             continue;
         }
-        _self->sym->vars[i].owned = 0;
-        if (_self->__backend_mem_memoryops_vptr->expr_returns(_self, rhs, _self->sym->vars[i].name)) {
-            _self->sym->vars[i].autodrop = 0;
+        _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned = 0;
+        if (_self->__backend_mem_memoryops_vptr->expr_returns(_self, rhs, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name)) {
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop = 0;
         }
     }
     return 0;
@@ -574,30 +578,30 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_return(void *self, int 
     (void)(_self);
     for (i = 0; i < _self->sym->nvar; i++) {
         int pos = 0;
-        if (_self->sym->vars[i].autodrop) {
-            if (((ret >= 0) && _self->__backend_mem_memoryops_vptr->expr_returns(_self, ret, _self->sym->vars[i].name))) {
-                _self->sym->vars[i].autodrop = 0;
-                _self->sym->vars[i].owned = 0;
+        if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop) {
+            if (((ret >= 0) && _self->__backend_mem_memoryops_vptr->expr_returns(_self, ret, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name))) {
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->autodrop = 0;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned = 0;
             }
             continue;
         }
-        if ((!_self->sym->vars[i].owned)) {
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned)) {
             continue;
         }
-        if (((ret >= 0) && _self->__backend_mem_memoryops_vptr->expr_returns(_self, ret, _self->sym->vars[i].name))) {
+        if (((ret >= 0) && _self->__backend_mem_memoryops_vptr->expr_returns(_self, ret, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->name))) {
             pos = 1;
         }
         if ((!conditional)) {
             if (pos) {
-                _self->sym->vars[i].owned = 0;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->owned = 0;
                 if ((!_self->leak_impl)) {
                     _self->ret_owned = 1;
                 }
             }
             continue;
         }
-        if (((!pos) && (!_self->sym->vars[i].path_warned))) {
-            _self->sym->vars[i].path_warned = 1;
+        if (((!pos) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->path_warned))) {
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, i)->path_warned = 1;
             if (_self->__backend_mem_memoryops_vptr->warn_leak(_self, i, line) != 0) {
                 return (-1);
             }
@@ -617,8 +621,8 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_delete(void *self, int 
     if (vi < 0) {
         return 0;
     }
-    _self->sym->vars[vi].owned = 0;
-    _self->sym->vars[vi].autodrop = 0;
+    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->owned = 0;
+    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->autodrop = 0;
     return 0;
 }
 
@@ -628,13 +632,13 @@ static int backend_mem_Memory_backend_mem_MemoryOps_warn_leak(void *self, int vi
     const char * tname;
     (void)(_self);
     kind = ((path_line > 0) ? 2 : 0);
-    if (_self->sym->vars[vi].st >= 0) {
-        tname = _self->sym->structs[_self->sym->vars[vi].st].name;
+    if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->st >= 0) {
+        tname = _self->sym->structs[_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->st].name;
     }
     else {
         tname = "";
     }
-    if (tool_diag_ct_leak_warn(kind, _self->sym->vars[vi].own_line, path_line, _self->path, _self->sym->vars[vi].name, tname) != 0) {
+    if (tool_diag_ct_leak_warn(kind, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->own_line, path_line, _self->path, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name, tname) != 0) {
         return _self->__backend_mem_memoryops_vptr->fail(_self, "too many warnings");
     }
     return 0;

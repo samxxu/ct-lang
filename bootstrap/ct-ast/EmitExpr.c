@@ -136,6 +136,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -471,7 +475,7 @@ static int backend_emit_Emitter_backend_emit_EmitExpr_emit_value_for(void *self,
     if (((want && (strcmp(want, "struct __ct_slice") == 0)) && (n >= 0))) {
         if (_self->arena->nodes[n].kind == N_VAR) {
             vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-            if (((vi >= 0) && _self->sym->vars[vi].is_fnparam)) {
+            if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_fnparam)) {
                 return _self->__backend_emit_emitexpr_vptr->emit_expr(_self, n);
             }
         }
@@ -6346,10 +6350,10 @@ const char * backend_emit_sb_expr_type_text(struct backend_emit_Emitter * self, 
         }
         i = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[n].text2);
         if (i >= 0) {
-            if (backend_emit_sb_is_tparam(self, self->sym->vars[i].type)) {
+            if (backend_emit_sb_is_tparam(self, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->type)) {
                 backend_emit_g_sb.hitparam = 1;
             }
-            return backend_emit_sb_norm_text(self, self->sym->vars[i].type);
+            return backend_emit_sb_norm_text(self, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->type);
         }
         return (const char *)(0);
     }
@@ -6520,7 +6524,7 @@ int backend_emit_sb_field_key(struct backend_emit_Emitter * self, int lhs, const
         return 1;
     }
     vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, (*base));
-    if (((vi >= 0) && self->sym->vars[vi].is_global)) {
+    if (((vi >= 0) && self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_global)) {
         (*owner) = (-1);
         return 1;
     }

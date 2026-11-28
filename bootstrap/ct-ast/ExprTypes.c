@@ -121,6 +121,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -1019,7 +1023,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_slice_view_from_array(vo
     }
     if (_self->arena->nodes[n].kind == N_VAR) {
         vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-        if (((vi >= 0) && _self->sym->vars[vi].is_fnparam)) {
+        if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_fnparam)) {
             return n;
         }
     }
@@ -1119,7 +1123,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_mcall_args(void *sel
                 else {
                     if (_self->arena->nodes[ca].kind == N_VAR) {
                         int cv = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[ca].text2);
-                        if (((cv >= 0) && _self->sym->vars[cv].is_closure)) {
+                        if (((cv >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, cv)->is_closure)) {
                             is_cl = 1;
                         }
                     }

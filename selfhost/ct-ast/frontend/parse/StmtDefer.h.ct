@@ -62,7 +62,7 @@ pub int autodrop_append(struct Stmt *self, int blk, int base, int *tail)
            innermost binding now, and asking by name would judge (and release)
            that one instead. */
         vi = self->mem->own_var[d];
-        if (vi >= 0 && !self->sym->vars[vi].autodrop) continue;
+        if (vi >= 0 && !self->sym->var_at(vi)->autodrop) continue;
         del = self->sup->new_node(N_DELETE);
         v = self->sup->new_node(N_VAR);
         if (del < 0 || v < 0) return -1;

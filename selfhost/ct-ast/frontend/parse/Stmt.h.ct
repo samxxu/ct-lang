@@ -166,9 +166,9 @@ static int retire_before_return(struct Stmt *self, int ret, int permanent)
     self->arena->nodes[ret].b = self->arena->nodes[blk].a;
     for (d = 0; d < self->mem->nowner; d++) {
         int vi = self->mem->own_var[d];
-        if (vi < 0 || !self->sym->vars[vi].autodrop) continue;
-        self->sym->vars[vi].owned = 0;
-        if (permanent) self->sym->vars[vi].autodrop = 0;
+        if (vi < 0 || !self->sym->var_at(vi)->autodrop) continue;
+        self->sym->var_at(vi)->owned = 0;
+        if (permanent) self->sym->var_at(vi)->autodrop = 0;
     }
     return ret;
 }
@@ -206,9 +206,9 @@ static int return_reads_autodrop(struct Stmt *self, int e)
     int i;
 
     for (i = 0; i < self->sym->nvar; i++) {
-        if (!self->sym->vars[i].autodrop) continue;
-        if (!self->mem->expr_mentions(e, self->sym->vars[i].name)) continue;
-        if (self->mem->expr_returns(e, self->sym->vars[i].name)) continue;
+        if (!self->sym->var_at(i)->autodrop) continue;
+        if (!self->mem->expr_mentions(e, self->sym->var_at(i)->name)) continue;
+        if (self->mem->expr_returns(e, self->sym->var_at(i)->name)) continue;
         return 1;
     }
     return 0;
@@ -247,7 +247,7 @@ static int closure_var_index(struct Stmt *self, int e)
 
     if (e < 0 || self->arena->nodes[e].kind != N_VAR) return -1;
     vi = self->sym->find_var(self->arena->nodes[e].text2);
-    if (vi < 0 || !self->sym->vars[vi].is_closure) return -1;
+    if (vi < 0 || !self->sym->var_at(vi)->is_closure) return -1;
     return vi;
 }
 
@@ -297,7 +297,7 @@ static int check_closure_assign(struct Stmt *self, int n, int col)
             return closure_error(self, self->arena->nodes[n].line, col,
                 tool::sh::ct_scratch_fmt(
                     "a closure cannot be stored in '%s' (its scope outlives the closure)",
-                    self->sym->vars[lv].name));
+                    self->sym->var_at(lv)->name));
     }
     return closure_error(self, self->arena->nodes[n].line, col,
                          "this closure is a binding, not a value (inline it or use a struct + trait)");
@@ -331,7 +331,7 @@ static int check_borrow_delete(struct Stmt *self, int e)
 
     if (e < 0 || self->arena->nodes[e].kind != N_VAR) return 0;
     vi = self->sym->find_var(self->arena->nodes[e].text2);
-    if (vi < 0 || !self->sym->vars[vi].borrowed) return 0;
+    if (vi < 0 || !self->sym->var_at(vi)->borrowed) return 0;
     return tool::diag::ct_sem_error(self->arena->nodes[e].line, 1,
                            "a borrowed pointer cannot be deleted", self->mem->path);
 }
@@ -353,7 +353,7 @@ static int check_borrow_store(struct Stmt *self, int n)
        one the exit still has to hand back (SH-35). */
     if (lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR) {
         lv = self->sym->find_var(self->arena->nodes[lhs].text2);
-        if (lv >= 0 && self->sym->vars[lv].borrowed)
+        if (lv >= 0 && self->sym->var_at(lv)->borrowed)
             return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1,
                                    "a borrowed pointer cannot be reassigned",
                                    self->mem->path);
@@ -366,7 +366,7 @@ static int check_borrow_store(struct Stmt *self, int n)
                  && self->arena->nodes[self->arena->nodes[rhs].a].kind == N_VAR)
             bv = self->sym->find_var(self->arena->nodes[self->arena->nodes[rhs].a].text2);
     }
-    if (bv < 0 || !self->sym->vars[bv].borrowed) return 0;
+    if (bv < 0 || !self->sym->var_at(bv)->borrowed) return 0;
     if (lhs < 0 || self->arena->nodes[lhs].kind != N_VAR) return 0;
     lv = self->sym->find_var(self->arena->nodes[lhs].text2);
     if (lv < 0) return 0;
@@ -375,7 +375,7 @@ static int check_borrow_store(struct Stmt *self, int n)
     return tool::diag::ct_sem_error(self->arena->nodes[n].line, 1,
         tool::sh::ct_scratch_fmt(
             "a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)",
-            self->sym->vars[lv].name), self->mem->path);
+            self->sym->var_at(lv)->name), self->mem->path);
 }
 
 /* The token after a leading `borrow` decides what the statement is: a type
@@ -487,10 +487,10 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
         }
         vi = self->sym->find_var(self->arena->nodes[d].text2);
         if (vi >= 0) {
-            self->sym->vars[vi].borrowed = 1;
-            self->sym->vars[vi].autodrop = 1;
-            self->sym->vars[vi].owned = 0;
-            self->sym->vars[vi].own_line = line;
+            self->sym->var_at(vi)->borrowed = 1;
+            self->sym->var_at(vi)->autodrop = 1;
+            self->sym->var_at(vi)->owned = 0;
+            self->sym->var_at(vi)->own_line = line;
         }
         /* the pools live in Memory, whose cap is 4096; the guard keeps the two
            arrays in step instead of running past the second one */
@@ -515,11 +515,11 @@ static int borrow_escape(struct Stmt *self, int ret, int line)
 
     if (ret < 0) return 0;
     for (i = 0; i < self->sym->nvar; i++) {
-        if (!self->sym->vars[i].borrowed) continue;
-        if (!self->mem->expr_returns(ret, self->sym->vars[i].name)) continue;
-        if (tool::diag::ct_borrow_warn(line, self->sym->vars[i].name, self->mem->path) != 0)
+        if (!self->sym->var_at(i)->borrowed) continue;
+        if (!self->mem->expr_returns(ret, self->sym->var_at(i)->name)) continue;
+        if (tool::diag::ct_borrow_warn(line, self->sym->var_at(i)->name, self->mem->path) != 0)
             return self->mem->fail("too many warnings");
-        if (!self->sym->vars[i].is_param) self->sym->vars[i].autodrop = 0;
+        if (!self->sym->var_at(i)->is_param) self->sym->var_at(i)->autodrop = 0;
     }
     return 0;
 }
@@ -577,9 +577,9 @@ static int str_escape_op(struct Stmt *self, int op, int e, const char *name, int
         if (ar->nodes[e].kind == N_STR && ar->nodes[e].aux == 1) im = 1;
         else if (ar->nodes[e].kind == N_VAR) {
             si = self->sym->find_var(ar->nodes[e].text2);
-            if (si >= 0) im = self->sym->vars[si].str_immortal;
+            if (si >= 0) im = self->sym->var_at(si)->str_immortal;
         }
-        self->sym->vars[vi].str_immortal = im;
+        self->sym->var_at(vi)->str_immortal = im;
         return 0;
     }
     if (op == 2) {
@@ -587,7 +587,7 @@ static int str_escape_op(struct Stmt *self, int op, int e, const char *name, int
            earlier binding already carried the finding. */
         k = str_escape_op(self, 0, e, name, vk, line, col, stmt_line, 0);
         vi = self->sym->find_var(name);
-        if (vi >= 0) self->sym->vars[vi].str_escape = k;
+        if (vi >= 0) self->sym->var_at(vi)->str_escape = k;
         if (k != 2) return 0;
         if (e >= 0 && ar->nodes[e].kind == N_VAR) return 0;
         if (str_escape_op(self, 4, -1, 0, 0, stmt_line, 0, 0, 0)
@@ -1360,7 +1360,7 @@ impl StmtOps for Stmt {
         }
         /* a scope that closes with a still-owned heap object leaks it (L2
            reports it at the same point, keeping the warning order) */
-        if (self->mem->leak_active && self->sup->leak_scope(self->sym->scope[self->sym->nscope - 1], self->sym->nvar) != 0) {
+        if (self->mem->leak_active && self->sup->leak_scope(self->sym->scope_at(self->sym->nscope - 1), self->sym->nvar) != 0) {
             self->sup->pop_scope();
             return -1;
         }
@@ -1605,8 +1605,8 @@ impl StmtOps for Stmt {
                     lvi = self->sym->find_var(
                         self->arena->nodes[self->arena->nodes[e].a].text2);
                 if (lvi >= 0 && self->arena->nodes[e].kind == N_VAR
-                    && self->sym->vars[lvi].is_slice
-                    && self->sym->vars[lvi].slice_escape) {
+                    && self->sym->var_at(lvi)->is_slice
+                    && self->sym->var_at(lvi)->slice_escape) {
                     if (tool::diag::ct_slice_warn(eline, ecol,
                             "slice escape: 'return' hands back a view of a local array",
                             self->sup->mem->path) != 0)
@@ -1614,10 +1614,10 @@ impl StmtOps for Stmt {
                 } else if (lvi >= 0 && self->arena->nodes[e].kind == N_VAR
                            && self->sym->ret_type[0]
                            && strcmp(self->sym->ret_type, "struct __ct_slice") == 0
-                           && self->sym->vars[lvi].is_array
-                           && !self->sym->vars[lvi].is_fnparam
-                           && !self->sym->vars[lvi].is_global
-                           && !self->sym->vars[lvi].is_static) {
+                           && self->sym->var_at(lvi)->is_array
+                           && !self->sym->var_at(lvi)->is_fnparam
+                           && !self->sym->var_at(lvi)->is_global
+                           && !self->sym->var_at(lvi)->is_static) {
                     /* SH-100: `return a;` on a local array is converted to a
                        slice view too, so it hands back dead storage exactly
                        like `return s;` above. */
@@ -1627,8 +1627,8 @@ impl StmtOps for Stmt {
                         return -1;
                 } else if (lvi >= 0 && self->arena->nodes[e].kind == N_SLICE_RANGE
                            && self->arena->nodes[e].aux == 1
-                           && !self->sym->vars[lvi].is_global
-                           && !self->sym->vars[lvi].is_static) {
+                           && !self->sym->var_at(lvi)->is_global
+                           && !self->sym->var_at(lvi)->is_static) {
                     if (tool::diag::ct_slice_warn(eline, ecol,
                             "slice escape: 'return' hands back a subslice of a local array",
                             self->sup->mem->path) != 0)
@@ -1709,9 +1709,9 @@ impl StmtOps for Stmt {
                         && src >= 0 && self->arena->nodes[src].kind == N_VAR
                         && strcmp(self->arena->nodes[src].text2, "self") != 0) {
                         int vi = self->sym->find_var(self->arena->nodes[src].text2);
-                        if (vi >= 0 && !self->sym->vars[vi].is_global
-                            && !self->sym->vars[vi].is_param
-                            && !self->sym->vars[vi].is_static)
+                        if (vi >= 0 && !self->sym->var_at(vi)->is_global
+                            && !self->sym->var_at(vi)->is_param
+                            && !self->sym->var_at(vi)->is_static)
                             self->arena->nodes[e].aux |= 8;
                     }
                 }
@@ -2270,7 +2270,7 @@ impl StmtOps for Stmt {
             self->sup->pop_scope();
             return -1;
         }
-        if (self->mem->leak_active && self->sup->leak_scope(self->sym->scope[self->sym->nscope - 1], self->sym->nvar) != 0) {
+        if (self->mem->leak_active && self->sup->leak_scope(self->sym->scope_at(self->sym->nscope - 1), self->sym->nvar) != 0) {
             self->sup->pop_scope();
             return -1;
         }
@@ -2487,20 +2487,20 @@ impl StmtOps for Stmt {
             if (is_slice) {
                 int svi0 = self->sym->find_var(name);
                 if (svi0 >= 0) {
-                    self->sym->vars[svi0].is_slice = 1;
-                    self->sym->vars[svi0].slice_elem =
+                    self->sym->var_at(svi0)->is_slice = 1;
+                    self->sym->var_at(svi0)->slice_elem =
                         runtime::text::ct_intern(slice_elem);
-                    if (!self->sym->vars[svi0].slice_elem)
+                    if (!self->sym->var_at(svi0)->slice_elem)
                         return self->sup->fail("out of memory");
-                    self->sym->vars[svi0].slice_const = slice_const;
+                    self->sym->var_at(svi0)->slice_const = slice_const;
                 }
             }
             if (self->static_decl) {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0) {
-                    self->sym->vars[vi].is_static = 1;
+                    self->sym->var_at(vi)->is_static = 1;
                     /* static storage is zero-initialised before `main` */
-                    self->sym->vars[vi].initialized = 1;
+                    self->sym->var_at(vi)->initialized = 1;
                 }
             }
             /* `int (*tbl[2])(int)`: the dimensions came with the declarator, and
@@ -2540,10 +2540,10 @@ impl StmtOps for Stmt {
             if (self->arena->nodes[n].text3[0]) {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0) {
-                    self->sym->vars[vi].is_array = 1;
-                    self->sym->vars[vi].dims =
+                    self->sym->var_at(vi)->is_array = 1;
+                    self->sym->var_at(vi)->dims =
                         runtime::text::ct_intern(self->arena->nodes[n].text3);
-                    if (!self->sym->vars[vi].dims)
+                    if (!self->sym->var_at(vi)->dims)
                         return self->sup->fail("out of memory");
                 }
             }
@@ -2551,7 +2551,7 @@ impl StmtOps for Stmt {
                 /* Phase 78 S2a: a local with an initialiser holds a value, so
                    an owning value may be passed as an `out` actual later. */
                 int dvi = self->sym->find_var(name);
-                if (dvi >= 0) self->sym->vars[dvi].initialized = 1;
+                if (dvi >= 0) self->sym->var_at(dvi)->initialized = 1;
                 self->sup->lex_next();
                 if (is_slice) {
                     /* P-7.2: a slice is a view, so its initialiser is an array
@@ -2574,23 +2574,23 @@ impl StmtOps for Stmt {
                         svi = self->sym->find_var(self->arena->nodes[e].text2);
                         if (svi < 0)
                             return self->sup->fail("slice initializer is not a declared value");
-                        if (self->sym->vars[svi].is_slice) {
-                            if (strcmp(self->sym->vars[svi].slice_elem, slice_elem) != 0)
+                        if (self->sym->var_at(svi)->is_slice) {
+                            if (strcmp(self->sym->var_at(svi)->slice_elem, slice_elem) != 0)
                                 return tool::diag::ct_sem_error(dline, dcol,
                                     "slice element type does not match the declaration",
                                     self->mem->path);
-                            sroot = self->sym->vars[svi].slice_escape;
-                        } else if (self->sym->vars[svi].is_array
-                                   && !self->sym->vars[svi].is_fnparam) {
-                            if (strcmp(self->sym->vars[svi].type, slice_elem) != 0)
+                            sroot = self->sym->var_at(svi)->slice_escape;
+                        } else if (self->sym->var_at(svi)->is_array
+                                   && !self->sym->var_at(svi)->is_fnparam) {
+                            if (strcmp(self->sym->var_at(svi)->type, slice_elem) != 0)
                                 return tool::diag::ct_sem_error(dline, dcol,
                                     "slice element type does not match the array",
                                     self->mem->path);
-                            if (strchr(self->sym->vars[svi].dims, '('))
+                            if (strchr(self->sym->var_at(svi)->dims, '('))
                                 return tool::diag::ct_sem_error(dline, dcol,
                                     "slice element type does not match the array declarator",
                                     self->mem->path);
-                            cname2 = self->sym->vars[svi].cname;
+                            cname2 = self->sym->var_at(svi)->cname;
                             raw2 = runtime::text::ct_internf(
                                      "(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }",
                                      cname2, cname2, cname2);
@@ -2604,8 +2604,8 @@ impl StmtOps for Stmt {
                             self->arena->str_end();
                             self->arena->nodes[e].num = off2;
                             self->arena->nodes[e].aux = 1;
-                            sroot = !self->sym->vars[svi].is_global
-                                    && !self->sym->vars[svi].is_static;
+                            sroot = !self->sym->var_at(svi)->is_global
+                                    && !self->sym->var_at(svi)->is_static;
                         } else {
                             return tool::diag::ct_sem_error(dline, dcol,
                                 "a slice can only be initialized from an array or another slice",
@@ -2632,10 +2632,10 @@ impl StmtOps for Stmt {
                             svi = self->sym->find_var(
                                 self->arena->nodes[self->arena->nodes[e].a].text2);
                         if (self->arena->nodes[e].aux == 1 && svi >= 0)
-                            sroot = !self->sym->vars[svi].is_global
-                                    && !self->sym->vars[svi].is_static;
+                            sroot = !self->sym->var_at(svi)->is_global
+                                    && !self->sym->var_at(svi)->is_static;
                         else if (svi >= 0)
-                            sroot = self->sym->vars[svi].slice_escape;
+                            sroot = self->sym->var_at(svi)->slice_escape;
                     } else {
                         return tool::diag::ct_sem_error(dline, dcol,
                             "a slice can only be initialized from an array or another slice",
@@ -2643,7 +2643,7 @@ impl StmtOps for Stmt {
                     }
                     if (is_slice) {
                         int svi2 = self->sym->find_var(name);
-                        if (svi2 >= 0) self->sym->vars[svi2].slice_escape = sroot;
+                        if (svi2 >= 0) self->sym->var_at(svi2)->slice_escape = sroot;
                     }
                 } else if (self->lex->tok == T_PUNCT && self->lex->tok_is("{")) {
                     /* local `static` tables can be long, so the text goes to the
@@ -2796,8 +2796,8 @@ impl StmtOps for Stmt {
                 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
                 int vi = self->sym->find_var(
                     self->arena->nodes[self->arena->nodes[n].a].text2);
-                if (vi >= 0 && !self->sym->vars[vi].cview
-                    && strcmp(self->sym->vars[vi].type, typebuf) == 0)
+                if (vi >= 0 && !self->sym->var_at(vi)->cview
+                    && strcmp(self->sym->var_at(vi)->type, typebuf) == 0)
                     return tool::diag::ct_sem_error(dline, dcol,
                         "a container is moved, not copied; use retain() or a function result",
                         self->sup->mem->path);
@@ -2810,7 +2810,7 @@ impl StmtOps for Stmt {
                 || frontend::sym::ct_is_string_value_type(typebuf)) {
                 int vi = self->sym->find_var(name);
                 if (vi >= 0)
-                    self->sym->vars[vi].cview =
+                    self->sym->var_at(vi)->cview =
                         frontend::parse::expr_borrow_root(self->ex,
                                                           self->arena->nodes[n].a);
             }
@@ -3051,7 +3051,7 @@ impl StmtOps for Stmt {
             /* a compound write leaves a value in the variable */
             if (k2 == N_VAR) {
                 int cvi = self->sym->find_var(self->arena->nodes[e].text2);
-                if (cvi >= 0) self->sym->vars[cvi].initialized = 1;
+                if (cvi >= 0) self->sym->var_at(cvi)->initialized = 1;
             }
             if (check_closure_assign(self, n, scol) != 0) return -1;
             if (check_borrow_store(self, n) != 0) return -1;
@@ -3146,8 +3146,8 @@ impl StmtOps for Stmt {
                 if (rhs < 0) return -1;
                 if (self->arena->nodes[rhs].kind == N_VAR) {
                     vi = self->sym->find_var(self->arena->nodes[rhs].text2);
-                    if (vi >= 0 && (self->sym->vars[vi].autodrop
-                                    || self->sym->vars[vi].borrowed))
+                    if (vi >= 0 && (self->sym->var_at(vi)->autodrop
+                                    || self->sym->var_at(vi)->borrowed))
                         return tool::diag::ct_sem_error(cl, cc,
                             "a custom subscript set cannot take an 'own' or 'borrow' value",
                             self->sup->mem->path);
@@ -3179,7 +3179,7 @@ impl StmtOps for Stmt {
                bare name may be a C library function, so it is emitted as-is. */
             if (k == N_VAR) {
                 int ttvi = self->sym->find_var(self->arena->nodes[e].text2);
-                if (ttvi >= 0) tt = self->sym->vars[ttvi].type;
+                if (ttvi >= 0) tt = self->sym->var_at(ttvi)->type;
             } else if (k == N_INDEX || k == N_MEMBER || k == N_ARROW) {
                 if (self->sup->expr_type_text(e, &tt) != 0) tt = "";
             }
@@ -3221,7 +3221,7 @@ impl StmtOps for Stmt {
             if (k == N_VAR) {
                 int gvi = self->sym->find_var(self->arena->nodes[e].text2);
                 if (gvi >= 0
-                    && (self->sym->vars[gvi].is_global || self->sym->vars[gvi].is_static)
+                    && (self->sym->var_at(gvi)->is_global || self->sym->var_at(gvi)->is_static)
                     && self->sup->str_store_warn(rhs, tt, rline, rcol) != 0)
                     return -1;
             }
@@ -3266,11 +3266,11 @@ impl StmtOps for Stmt {
                 /* Phase 78 S2a: a plain assignment initialises the variable
                    for the `out` owning-actual rule (declaration is not the
                    only way to hold a value). */
-                if (vi >= 0) self->sym->vars[vi].initialized = 1;
+                if (vi >= 0) self->sym->var_at(vi)->initialized = 1;
                 if (vi >= 0
-                    && (frontend::sym::ct_is_container_type(self->sym->vars[vi].type)
-                        || frontend::sym::ct_is_string_value_type(self->sym->vars[vi].type)))
-                    self->sym->vars[vi].cview =
+                    && (frontend::sym::ct_is_container_type(self->sym->var_at(vi)->type)
+                        || frontend::sym::ct_is_string_value_type(self->sym->var_at(vi)->type)))
+                    self->sym->var_at(vi)->cview =
                         frontend::parse::expr_borrow_root(self->ex, rhs);
                 /* Phase 31 S23b (L31-23): rebinding a view follows the source. */
                 frontend::parse::expr_view_bind(self->ex,

@@ -129,6 +129,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -397,7 +401,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_expr(void *self) {
         }
         if (k2 == N_VAR) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[left].text2);
-            if (((vi >= 0) && _self->sym->vars[vi].autodrop)) {
+            if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->autodrop)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "an 'own' variable can only be assigned in a statement");
             }
         }
@@ -465,7 +469,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_expr(void *self) {
         if ((((op == 0) && (k2 == N_VAR)) && (_self->arena->nodes[right].kind == N_VAR))) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[left].text2);
             int vj = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[right].text2);
-            if ((((((vi >= 0) && (vj >= 0)) && (!_self->sym->vars[vj].cview)) && frontend_sym_ct_is_container_type(_self->sym->vars[vi].type)) && (strcmp(_self->sym->vars[vi].type, _self->sym->vars[vj].type) == 0))) {
+            if ((((((vi >= 0) && (vj >= 0)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vj)->cview)) && frontend_sym_ct_is_container_type(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type)) && (strcmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vj)->type) == 0))) {
                 return tool_diag_ct_sem_error(aline, acol, "a container is moved, not copied; use retain() or a function result", _self->sup->mem->path);
             }
         }
@@ -528,7 +532,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_into_tail(void *self, int 
 {
             const char * ifc;
             int vi;
-            if ((_self->sup->__frontend_parse_supportops_vptr->is_iface_type_text(_self->sup, type, (&ifc)) || (((kind == N_VAR) && ((vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[recv].text2)) >= 0)) && _self->sym->vars[vi].autodrop))) {
+            if ((_self->sup->__frontend_parse_supportops_vptr->is_iface_type_text(_self->sup, type, (&ifc)) || (((kind == N_VAR) && ((vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[recv].text2)) >= 0)) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->autodrop))) {
                 tool_diag_ct_sem_error(line, col, "'into' cannot take an interface or 'own' receiver", _self->sup->mem->path);
                 return (-1);
             }
@@ -1205,10 +1209,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             if (mvi < 0) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "'$' target must be a declared variable");
             }
-            if ((_self->sym->vars[mvi].autodrop || _self->sym->vars[mvi].borrowed)) {
+            if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, mvi)->autodrop || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, mvi)->borrowed)) {
                 return tool_diag_ct_sem_error(dl, dc, "own/borrow cannot be a '$' target (PH-76)", _self->sup->mem->path);
             }
-            if (strncmp(_self->sym->vars[mvi].type, "const ", 6) == 0) {
+            if (strncmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, mvi)->type, "const ", 6) == 0) {
                 return tool_diag_ct_sem_error(dl, dc, "a const value cannot be a '$' target (PH-76)", _self->sup->mem->path);
             }
 {
@@ -1223,7 +1227,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     _self->chk_line = dl;
                     _self->chk_col = dc;
                     _self->chk_arg = 0;
-                    if (_self->__frontend_parse_exprtypes_vptr->chk_assignable(_self, _self->sym->vars[mvi].type, rty, 0, 8) != 0) {
+                    if (_self->__frontend_parse_exprtypes_vptr->chk_assignable(_self, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, mvi)->type, rty, 0, 8) != 0) {
                         return (-1);
                     }
                 }
@@ -1271,8 +1275,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             if (((n >= 0) && (_self->arena->nodes[n].kind == N_VAR))) {
                 svi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
                 if (svi >= 0) {
-                    s_slice = _self->sym->vars[svi].is_slice;
-                    s_array = ((_self->sym->vars[svi].is_array && (!s_slice)) && (!_self->sym->vars[svi].is_fnparam));
+                    s_slice = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_slice;
+                    s_array = ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_array && (!s_slice)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_fnparam));
                 }
             }
             if ((s_slice || (s_array && frontend_parse_slice_range_ahead(_self->lex)))) {
@@ -1280,9 +1284,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                 _self->sup->__frontend_parse_supportops_vptr->note_slice(_self->sup);
                 int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
                 const char * selem;
-                int sc = (s_slice ? _self->sym->vars[svi].slice_const : 0);
+                int sc = (s_slice ? _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->slice_const : 0);
                 int hi = (-1);
-                selem = (s_slice ? _self->sym->vars[svi].slice_elem : _self->sym->vars[svi].type);
+                selem = (s_slice ? _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->slice_elem : _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->type);
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 idx = _self->__frontend_parse_exprops_vptr->parse_expr(_self);
                 if (idx < 0) {
@@ -1300,7 +1304,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         return (-1);
                     }
                     if (s_array) {
-                        int an = frontend_parse_slice_array_len(_self->sym->vars[svi].dims);
+                        int an = frontend_parse_slice_array_len(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->dims);
                         if (((an >= 0) && (_self->arena->nodes[idx].kind == N_NUM))) {
                             int lo = (int)(_self->arena->nodes[idx].num);
                             int hv = ((hi < 0) ? an : ((_self->arena->nodes[hi].kind == N_NUM) ? (int)(_self->arena->nodes[hi].num) : (-1)));
@@ -1319,7 +1323,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     if ((!_self->arena->nodes[m].text)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
-                    _self->arena->nodes[m].text2 = runtime_text_ct_intern(_self->sym->vars[svi].cname);
+                    _self->arena->nodes[m].text2 = runtime_text_ct_intern(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->cname);
                     if ((!_self->arena->nodes[m].text2)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
@@ -1631,7 +1635,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
             if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "("))) {
                 if (((((!arrow) && (strcmp(fname, "get") == 0)) && (n >= 0)) && (_self->arena->nodes[n].kind == N_VAR))) {
                     int gvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-                    if (((gvi >= 0) && _self->sym->vars[gvi].is_slice)) {
+                    if (((gvi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, gvi)->is_slice)) {
                         const char * gelem;
                         _self->sup->__frontend_parse_supportops_vptr->note_slice(_self->sup);
                         args = _self->__frontend_parse_exprops_vptr->parse_args(_self);
@@ -1645,8 +1649,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         if (m < 0) {
                             return (-1);
                         }
-                        gelem = _self->sym->vars[gvi].slice_elem;
-                        if (_self->sym->vars[gvi].slice_const) {
+                        gelem = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, gvi)->slice_elem;
+                        if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, gvi)->slice_const) {
                             _self->arena->nodes[m].text = runtime_text_ct_internf("const %s", gelem);
                             if ((!_self->arena->nodes[m].text)) {
                                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -1658,7 +1662,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                         if ((!_self->arena->nodes[m].text)) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                         }
-                        _self->arena->nodes[m].aux = _self->sym->vars[gvi].slice_const;
+                        _self->arena->nodes[m].aux = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, gvi)->slice_const;
                         _self->arena->nodes[m].a = n;
                         _self->arena->nodes[m].b = args;
                         _self->arena->nodes[m].line = mline;
@@ -1821,7 +1825,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                             if (vi < 0) {
                                                 continue;
                                             }
-                                            if ((_self->sym->vars[vi].autodrop || _self->sym->vars[vi].borrowed)) {
+                                            if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->autodrop || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->borrowed)) {
                                                 return tool_diag_ct_sem_error(mline, mcol, "a container cannot hold an 'own' or 'borrow' value", _self->sup->mem->path);
                                             }
                                         }
@@ -1933,7 +1937,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                                 const char * rt2 = rtype;
                                 if (_self->arena->nodes[n].kind == N_VAR) {
                                     int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-                                    if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
+                                    if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array)) {
                                         rt2 = runtime_text_ct_internf("%s *", rt2);
                                         if ((!rt2)) {
                                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -2206,7 +2210,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                             else {
                                 if (_self->arena->nodes[ca].kind == N_VAR) {
                                     int cv = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[ca].text2);
-                                    if (((cv >= 0) && _self->sym->vars[cv].is_closure)) {
+                                    if (((cv >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, cv)->is_closure)) {
                                         is_cl = 1;
                                     }
                                 }
@@ -2997,11 +3001,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         }
 {
             int rvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-            if (((rvi >= 0) && _self->sym->vars[rvi].ref_param)) {
+            if (((rvi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, rvi)->ref_param)) {
                 _self->arena->nodes[n].aux = 2;
             }
             else {
-                if (((rvi >= 0) && _self->sym->vars[rvi].out_param)) {
+                if (((rvi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, rvi)->out_param)) {
                     _self->arena->nodes[n].aux = 3;
                 }
             }
@@ -3181,7 +3185,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 }
                 if (_self->arena->nodes[args].kind == N_VAR) {
                     int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[args].text2);
-                    if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
+                    if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array)) {
                         rtype = runtime_text_ct_internf("%s *", rtype);
                         if ((!rtype)) {
                             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -4503,10 +4507,10 @@ static int ref_arg_place(struct frontend_parse_Expr * self, int n) {
     if (k == N_VAR) {
         vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[n].text2);
         if (vi >= 0) {
-            if (self->sym->vars[vi].is_const) {
+            if (self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_const) {
                 return 0;
             }
-            if (frontend_parse_ref_type_is_const_value(self->sym->vars[vi].type)) {
+            if (frontend_parse_ref_type_is_const_value(self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->type)) {
                 return 0;
             }
             return 1;
@@ -4608,7 +4612,7 @@ static int check_refout_arg(struct frontend_parse_Expr * self, int a, int ann, c
     }
     if ((((ann == 3) && type_is_owning(self, ptype)) && (self->arena->nodes[a].kind == N_VAR))) {
         vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[a].text2);
-        if (((vi < 0) || (!self->sym->vars[vi].initialized))) {
+        if (((vi < 0) || (!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->initialized))) {
             return tool_diag_ct_sem_error(self->arena->nodes[a].line, 1, "out owning argument must be initialized", self->sup->mem->path);
         }
     }
@@ -4989,7 +4993,7 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
             }
             vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name);
             if (vi >= 0) {
-                self->sym->vars[vi].initialized = 1;
+                self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->initialized = 1;
             }
             rev = bind_conv_explicit(self, t, at, line, col);
             if (rev < 0) {
@@ -5113,7 +5117,7 @@ int frontend_parse_expr_borrow_root(struct frontend_parse_Expr * self, int n) {
         }
         if (k == N_VAR) {
             int vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[n].text2);
-            return ((vi >= 0) && self->sym->vars[vi].cview);
+            return ((vi >= 0) && self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->cview);
         }
         if ((((k == N_MCALL) && ((self->arena->nodes[n].aux == 9) || (self->arena->nodes[n].aux == 10))) && ((strcmp(self->arena->nodes[n].text2, "get") == 0) || (strcmp(self->arena->nodes[n].text2, "entry") == 0)))) {
             const char * ty = self->arena->nodes[n].text;

@@ -126,6 +126,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -1159,7 +1163,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_commit(void *self) {
         }
         vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[bind].text);
         if (vi >= 0) {
-            _self->sym->vars[vi].initialized = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->initialized = 1;
         }
         _self->arena->nodes[decl].text = runtime_text_ct_intern(frontend_parse_g_pat.btype[i]);
         _self->arena->nodes[decl].text2 = runtime_text_ct_intern(frontend_parse_g_pat.bname[i]);

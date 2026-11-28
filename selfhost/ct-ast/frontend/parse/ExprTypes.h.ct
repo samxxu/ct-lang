@@ -786,7 +786,7 @@ impl ExprTypes for Expr {
         if (!t || d != 1) return n;
         if (self->arena->nodes[n].kind == N_VAR) {
             vi = self->sym->find_var(self->arena->nodes[n].text2);
-            if (vi >= 0 && self->sym->vars[vi].is_fnparam) return n;
+            if (vi >= 0 && self->sym->var_at(vi)->is_fnparam) return n;
         }
         m = self->sup->new_node(N_SLICE_RANGE);
         if (m < 0) return -1;
@@ -865,7 +865,7 @@ impl ExprTypes for Expr {
                     clnode = ca;
                 } else if (self->arena->nodes[ca].kind == N_VAR) {
                     int cv = self->sym->find_var(self->arena->nodes[ca].text2);
-                    if (cv >= 0 && self->sym->vars[cv].is_closure) is_cl = 1;
+                    if (cv >= 0 && self->sym->var_at(cv)->is_closure) is_cl = 1;
                 }
                 if (!is_cl) continue;
                 if (clnode >= 0 && pair_ok) {

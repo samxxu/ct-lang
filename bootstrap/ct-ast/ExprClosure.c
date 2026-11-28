@@ -124,6 +124,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -319,7 +323,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_arg_is_closure(void *s
     }
     name = _self->arena->nodes[a].text2;
     vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
-    return ((vi >= 0) && _self->sym->vars[vi].is_closure);
+    return ((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_closure);
 }
 
 static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_count(void *self, int args) {
@@ -383,7 +387,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_check(void
             }
             else {
                 int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[cur].text2);
-                if ((((vi >= 0) && _self->sym->vars[vi].is_closure) && (frontend_parse_closure_match(_self, _self->sym->vars[vi].closure_id, ft, 1, 0) != 0))) {
+                if ((((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_closure) && (frontend_parse_closure_match(_self, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->closure_id, ft, 1, 0) != 0))) {
                     return (-1);
                 }
             }
@@ -435,7 +439,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_map_closure_check(void
             }
             else {
                 int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[cur].text2);
-                if ((((vi >= 0) && _self->sym->vars[vi].is_closure) && (frontend_parse_closure_match(_self, _self->sym->vars[vi].closure_id, ft, 1, 0) != 0))) {
+                if ((((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_closure) && (frontend_parse_closure_match(_self, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->closure_id, ft, 1, 0) != 0))) {
                     return (-1);
                 }
             }
@@ -472,11 +476,11 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_bind(void *sel
     if (vi < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a closure cannot be used where a plain function pointer is expected");
     }
-    if ((_self->sym->vars[vi].is_global || _self->sym->vars[vi].is_static)) {
+    if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_global || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_static)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("a closure cannot be stored in '%s' (its scope outlives the closure)", vname));
     }
-    _self->sym->vars[vi].is_closure = 1;
-    _self->sym->vars[vi].closure_id = ci;
+    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_closure = 1;
+    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->closure_id = ci;
     return 0;
 }
 
@@ -644,21 +648,21 @@ int frontend_parse_closure_copy(struct frontend_parse_Expr * self, const char * 
 }
 int frontend_parse_closure_capture_add(struct frontend_parse_Expr * self, int ci, int vi, int line) {
     struct frontend_sym_Closure * c = (&self->sym->closures[ci]);
-    const char * name = self->sym->vars[vi].name;
+    const char * name = self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->name;
     char msg[512];
     int k;
-    if ((self->sym->vars[vi].autodrop || self->sym->vars[vi].borrowed)) {
+    if ((self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->autodrop || self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->borrowed)) {
         snprintf(msg, sizeof(msg), "a closure cannot capture '%s' (it is 'own' or 'borrow')", name);
         return frontend_parse_closure_capture_error(self, line, msg);
     }
-    if (self->sym->vars[vi].is_closure) {
+    if (self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_closure) {
         return frontend_parse_closure_capture_error(self, line, "a closure cannot capture another closure");
     }
-    if (self->sym->vars[vi].is_array) {
+    if (self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_array) {
         snprintf(msg, sizeof(msg), "a closure cannot capture the array '%s' (capture a pointer to it instead)", name);
         return frontend_parse_closure_capture_error(self, line, msg);
     }
-    if (self->sym->vars[vi].is_slice) {
+    if (self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_slice) {
         snprintf(msg, sizeof(msg), "a closure cannot capture the slice '%s' (a view cannot outlive its array)", name);
         return frontend_parse_closure_capture_error(self, line, msg);
     }
@@ -671,7 +675,7 @@ int frontend_parse_closure_capture_add(struct frontend_parse_Expr * self, int ci
     if (frontend_parse_closure_copy(self, (&c->cap_name[c->ncap]), name, "a captured name") != 0) {
         return (-1);
     }
-    if (frontend_parse_closure_copy(self, (&c->cap_type[c->ncap]), self->sym->vars[vi].type, "a captured type") != 0) {
+    if (frontend_parse_closure_copy(self, (&c->cap_type[c->ncap]), self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->type, "a captured type") != 0) {
         return (-1);
     }
     c->ncap++;
@@ -697,7 +701,7 @@ int frontend_parse_closure_capture_add(struct frontend_parse_Expr * self, int ci
         if (frontend_parse_closure_copy(self, (&oc->cap_name[oc->ncap]), name, "a captured name") != 0) {
             return (-1);
         }
-        if (frontend_parse_closure_copy(self, (&oc->cap_type[oc->ncap]), self->sym->vars[vi].type, "a captured type") != 0) {
+        if (frontend_parse_closure_copy(self, (&oc->cap_type[oc->ncap]), self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->type, "a captured type") != 0) {
             return (-1);
         }
         oc->ncap++;
@@ -716,7 +720,7 @@ int frontend_parse_closure_walk(struct frontend_parse_Expr * self, int ci, int n
     }
     if (nd->kind == N_CALL) {
         vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, nd->text2);
-        if (((((vi >= 0) && (vi < pstart)) && (!self->sym->vars[vi].is_global)) && self->sym->vars[vi].is_closure)) {
+        if (((((vi >= 0) && (vi < pstart)) && (!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_global)) && self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_closure)) {
             return frontend_parse_closure_capture_error(self, nd->line, "a closure cannot capture another closure");
         }
     }
@@ -725,7 +729,7 @@ int frontend_parse_closure_walk(struct frontend_parse_Expr * self, int ci, int n
         if (((vi < 0) || (vi >= pstart))) {
             return 0;
         }
-        if (self->sym->vars[vi].is_global) {
+        if (self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_global) {
             return 0;
         }
         return frontend_parse_closure_capture_add(self, ci, vi, nd->line);

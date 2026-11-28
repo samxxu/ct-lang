@@ -62,6 +62,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -591,7 +595,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_expr_ctype(void *self, 
         if (vi < 0) {
             return (-1);
         }
-        w = snprintf(out, (size_t)(cap), "%s%s%s", _self->sym->vars[vi].type, ((((strcmp(_self->arena->nodes[n].text2, "self") == 0) && (strncmp(_self->sym->vars[vi].type, "struct ", 7) == 0)) && (!strchr(_self->sym->vars[vi].type, '*'))) ? " *" : ""), (_self->sym->vars[vi].is_array ? "[]" : ""));
+        w = snprintf(out, (size_t)(cap), "%s%s%s", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type, ((((strcmp(_self->arena->nodes[n].text2, "self") == 0) && (strncmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type, "struct ", 7) == 0)) && (!strchr(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type, '*'))) ? " *" : ""), (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array ? "[]" : ""));
         if (((w < 0) || (w >= cap))) {
             return (-1);
         }
@@ -1096,7 +1100,7 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
                 struct runtime_arena_NodeKind __ct_match8 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
                 if (__ct_match8.tag == 10) {
                     int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-                    if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
+                    if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array)) {
                         return n;
                     }
                 }
@@ -2075,13 +2079,13 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
             continue;
         }
         vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, id);
-        if (((vi >= 0) && _self->sym->vars[vi].ambiguous)) {
+        if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->ambiguous)) {
             msg = tool_sh_ct_scratch_fmt("global '%s' is declared by more than one import and"" cannot be named in a static initializer", id);
             return _self->__frontend_type_typeops_vptr->fail(_self, msg);
         }
-        if (((vi >= 0) && (strcmp(_self->sym->vars[vi].cname, id) != 0))) {
-            snprintf((out + w), (size_t)((cap - w)), "%s", _self->sym->vars[vi].cname);
-            w += (int)(strlen(_self->sym->vars[vi].cname));
+        if (((vi >= 0) && (strcmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->cname, id) != 0))) {
+            snprintf((out + w), (size_t)((cap - w)), "%s", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->cname);
+            w += (int)(strlen(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->cname));
             last = id;
             continue;
         }
@@ -2280,7 +2284,7 @@ static int tc_expr_index(struct frontend_type_TypeCheck * self, int n, char * ou
     }
     if (((self->arena->nodes[n].a >= 0) && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR))) {
         int vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[self->arena->nodes[n].a].text2);
-        if (((vi >= 0) && self->sym->vars[vi].is_array)) {
+        if (((vi >= 0) && self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_array)) {
             return 0;
         }
     }

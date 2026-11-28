@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=95994 io_cap=2048
+     emitted_before=48223 emitted_after=96750 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -268,6 +268,13 @@
       藏在 `FnParamSet` 指针后，行搬移只搬句柄；Symbols 的 `funcs` 与参数表
       realloc 4 处归零。发射 C 95088 -> 95994 行（+906：两个 `Vec` 实例与
       行访问器；用户语料生成物逐字节不变），切片清单仍为 76)
+     (S8B-REM-1 R6 后复测：`Symbols.vars` 与 `scope` 作用域栈改 `Vec` 行块——
+      变量表是 `Vec<struct Var>` 藏在 `VarTable` 指针后，作用域栈是 `Vec<int>`
+      藏在 `ScopeStack` 指针后；`varcap`/`scopecap` 两个容量字段消失，逐单元
+      复位只把 `nvar`/`nscope` 归零，复用行不重分配，读写全部走 `var_at` /
+      `scope_at`。Symbols 的 `vars`/`scope` realloc 2 处归零。发射 C
+      95994 -> 96750 行（+756：两个 `Vec` 实例与行访问器；用户语料生成物逐字节
+      不变），切片清单仍为 76)
 -->
 
 ## 1 切片清单

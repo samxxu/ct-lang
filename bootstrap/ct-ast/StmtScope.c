@@ -28,6 +28,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -161,7 +165,7 @@ static void __attribute__((unused)) Result_char_p_int_Drop_drop(void *self) {
 int frontend_parse_var_scope(struct frontend_sym_Symbols * sym, int vi) {
     int s;
     for (s = (sym->nscope - 1); s >= 0; s--) {
-        if (sym->scope[s] <= vi) {
+        if (sym->__frontend_sym_symbolops_vptr->scope_at(sym, s) <= vi) {
             return s;
         }
     }
@@ -171,7 +175,7 @@ int frontend_parse_outlives(struct frontend_sym_Symbols * sym, int target, int s
     if (((target < 0) || (source < 0))) {
         return 0;
     }
-    if ((sym->vars[target].is_global || sym->vars[target].is_static)) {
+    if ((sym->__frontend_sym_symbolops_vptr->var_at(sym, target)->is_global || sym->__frontend_sym_symbolops_vptr->var_at(sym, target)->is_static)) {
         return 1;
     }
     return (frontend_parse_var_scope(sym, target) < frontend_parse_var_scope(sym, source));

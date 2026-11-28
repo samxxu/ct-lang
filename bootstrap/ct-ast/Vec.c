@@ -27,6 +27,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -147,6 +151,8 @@ extern void U16String_Drop_drop(void *self);
 
 static void Vec_char_p__elem_retain(char * *e);
 static void Vec_char_p__elem_release(char * *e);
+static void Vec_int__elem_retain(int *e);
+static void Vec_int__elem_release(int *e);
 struct Vec_char_p Vec_char_p_from(char * * items, int n) {
     struct Vec_char_p v;
     void * raw;
@@ -353,12 +359,228 @@ int Vec_char_p_release(void *self) {
     return ((left < 0) ? 0 : left);
 }
 
+struct Vec_int Vec_int_from(int * items, int n) {
+    struct Vec_int v;
+    void * raw;
+    int * nd;
+    int i;
+    v.h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+    if (v.h == 0) {
+        abort();
+    }
+    v.h->refs = 1;
+    v.h->len = 0;
+    v.h->cap = 0;
+    v.h->data = 0;
+    if (((items == 0) || (n <= 0))) {
+        return v;
+    }
+    raw = malloc((size_t)((n * (int)(sizeof(items[0])))));
+    if (raw == 0) {
+        abort();
+    }
+    nd = raw;
+    v.h->data = nd;
+    memcpy(v.h->data, items, (size_t)((n * (int)(sizeof(items[0])))));
+    for (i = 0; i < n; i++) {
+        Vec_int__elem_retain((&nd[i]));
+    }
+    v.h->len = n;
+    v.h->cap = n;
+    return v;
+}
+
+int Vec_int_len(void *self) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return _self->h->len;
+}
+
+int Vec_int_get(void *self, int i) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    int z;
+    int * d;
+    memset((&z), 0, sizeof(z));
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return z;
+    }
+    d = _self->h->data;
+    return d[i];
+}
+
+int Vec_int_has(void *self, int i) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return ((i >= 0) && (i < _self->h->len));
+}
+
+int * Vec_int_at(void *self, int i) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    int * d;
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return 0;
+    }
+    d = _self->h->data;
+    return (&d[i]);
+}
+
+void Vec_int_set(void *self, int i, int v) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    int * d;
+    void * raw;
+    int nc;
+    if (i < 0) {
+        abort();
+    }
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (((i >= _self->h->len) && ((i - _self->h->len) > 1024))) {
+        fprintf(stderr, "ctc: warning: Vec growth span %d exceeds CT_VEC_GROW_WARN_SPAN (1024)\n", (i - _self->h->len));
+    }
+    if (i >= _self->h->cap) {
+        nc = ((_self->h->cap == 0) ? 4 : _self->h->cap);
+        while (nc <= i) {
+            nc = (nc * 2);
+        }
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            abort();
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    if (i >= _self->h->len) {
+        memset((&d[_self->h->len]), 0, (size_t)((((i + 1) - _self->h->len) * (int)(sizeof(v)))));
+        _self->h->len = (i + 1);
+    }
+    Vec_int__elem_retain((&v));
+    Vec_int__elem_release((&d[i]));
+    d[i] = v;
+}
+
+int Vec_int_push(void *self, int v) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    int * d;
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (_self->h->len == _self->h->cap) {
+        int nc;
+        void * raw;
+        nc = ((_self->h->cap == 0) ? 4 : (_self->h->cap * 2));
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            return 0;
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    Vec_int__elem_retain((&v));
+    d[_self->h->len] = v;
+    _self->h->len = (_self->h->len + 1);
+    return 1;
+}
+
+int Vec_int_pop(void *self) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    int z;
+    int * d;
+    memset((&z), 0, sizeof(z));
+    if (((_self->h == 0) || (_self->h->len == 0))) {
+        return z;
+    }
+    _self->h->len = (_self->h->len - 1);
+    d = _self->h->data;
+    z = d[_self->h->len];
+    Vec_int__elem_retain((&z));
+    Vec_int__elem_release((&d[_self->h->len]));
+    return z;
+}
+
+void Vec_int_clear(void *self) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    int i;
+    int * d;
+    if (_self->h == 0) {
+        return;
+    }
+    d = _self->h->data;
+    for (i = 0; i < _self->h->len; i++) {
+        Vec_int__elem_release((&d[i]));
+    }
+    _self->h->len = 0;
+}
+
+struct Vec_int Vec_int_retain(void *self) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    struct Vec_int r;
+    r.h = _self->h;
+    if (r.h != 0) {
+        r.h->refs = (r.h->refs + 1);
+    }
+    return r;
+}
+
+int Vec_int_release(void *self) {
+    struct Vec_int *_self = (struct Vec_int *)self;
+    int left;
+    int i;
+    int * d;
+    if (_self->h == 0) {
+        fprintf(stderr, "Vec: release on a released handle\n");
+        abort();
+    }
+    _self->h->refs = (_self->h->refs - 1);
+    left = _self->h->refs;
+    if (left <= 0) {
+        d = _self->h->data;
+        for (i = 0; i < _self->h->len; i++) {
+            Vec_int__elem_release((&d[i]));
+        }
+        free(_self->h->data);
+        free(_self->h);
+    }
+    _self->h = 0;
+    return ((left < 0) ? 0 : left);
+}
+
 static void __attribute__((unused)) Vec_char_p__elem_retain(char * *e)
 {
     (void)e;
 }
 
 static void __attribute__((unused)) Vec_char_p__elem_release(char * *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_int__elem_retain(int *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_int__elem_release(int *e)
 {
     (void)e;
 }

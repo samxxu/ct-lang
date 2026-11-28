@@ -437,7 +437,7 @@ impl EmitExpr for Emitter {
         if (want && strcmp(want, "struct __ct_slice") == 0 && n >= 0) {
             if (self->arena->nodes[n].kind == N_VAR) {
                 vi = self->sym->find_var(self->arena->nodes[n].text2);
-                if (vi >= 0 && self->sym->vars[vi].is_fnparam)
+                if (vi >= 0 && self->sym->var_at(vi)->is_fnparam)
                     return self->emit_expr(n);
             }
             if (hoist_ctype(n, t, TEXT_LIMIT, &d) && d == 1) {
@@ -5295,8 +5295,8 @@ pub const char *sb_expr_type_text(struct Emitter *self, int n)
         }
         i = self->sym->find_var(self->arena->nodes[n].text2);
         if (i >= 0) {
-            if (sb_is_tparam(self, self->sym->vars[i].type)) g_sb.hitparam = 1;
-            return sb_norm_text(self, self->sym->vars[i].type);
+            if (sb_is_tparam(self, self->sym->var_at(i)->type)) g_sb.hitparam = 1;
+            return sb_norm_text(self, self->sym->var_at(i)->type);
         }
         return (const char *)0;
     }
@@ -5434,7 +5434,7 @@ pub int sb_field_key(struct Emitter *self, int lhs, const char **base,
         return 1;
     }
     vi = self->sym->find_var(*base);
-    if (vi >= 0 && self->sym->vars[vi].is_global) {
+    if (vi >= 0 && self->sym->var_at(vi)->is_global) {
         *owner = -1;
         return 1;
     }

@@ -322,11 +322,11 @@ impl StmtLoop for Stmt {
             vi = -1;
             if (self->arena->nodes[e].kind == N_VAR)
                 vi = self->sym->find_var(self->arena->nodes[e].text2);
-            if (vi >= 0 && self->sym->vars[vi].is_array) {
+            if (vi >= 0 && self->sym->var_at(vi)->is_array) {
                 return tool::diag::ct_sem_error(line, col,
                     tool::sh::ct_scratch_fmt(
                          "a loop bound must be an integer (got the array '%s')",
-                         self->sym->vars[vi].name), self->mem->path);
+                         self->sym->var_at(vi)->name), self->mem->path);
             }
             /* An array that is not a plain variable -- `m.cells`, a field
                declared with dimensions -- only shows its `[]` in the
@@ -465,13 +465,13 @@ impl StmtLoop for Stmt {
         aux = 0;
         /* S1a-0 C2p-6: `Var.type` / `.slice_elem` are pool texts, so a 2000-byte
            element type is not cut by the old `elem`/`iname`/`tr` rows. */
-        iname = self->sym->vars[vi].type;
+        iname = self->sym->var_at(vi)->type;
         if (strncmp(iname, "struct ", 7) == 0) iname += 7;
         /* P-7.2: a slice iterates through its `{ptr,len}` view. `item` is a
            by-value copy of the element, like the array path. */
-        if (self->sym->vars[vi].is_slice) {
+        if (self->sym->var_at(vi)->is_slice) {
             aux = 3;
-            elem = self->sym->vars[vi].slice_elem;
+            elem = self->sym->var_at(vi)->slice_elem;
         }
         inst = frontend::sym::ct_inst_find(iname);
         if (inst >= 0) {
@@ -527,43 +527,43 @@ impl StmtLoop for Stmt {
         if (aux == 0) {
         /* `int a[]` as a parameter is `int *a` in C; `sizeof` would answer the
            pointer's size and silently iterate the wrong count. */
-        if (self->sym->vars[vi].is_param || self->sym->vars[vi].is_fnparam) {
+        if (self->sym->var_at(vi)->is_param || self->sym->var_at(vi)->is_fnparam) {
             return tool::diag::ct_sem_error(line, col,
                 tool::sh::ct_scratch_fmt(
                      "foreach cannot iterate the array parameter '%s' (its length is lost)",
-                     self->sym->vars[vi].name), self->mem->path);
+                     self->sym->var_at(vi)->name), self->mem->path);
         }
-        if (!self->sym->vars[vi].dims[0]) {
+        if (!self->sym->var_at(vi)->dims[0]) {
             return tool::diag::ct_sem_error(line, col,
                 tool::sh::ct_scratch_fmt(
                      "foreach needs an array or a Vec/Map; '%s' is not iterable",
-                     self->sym->vars[vi].name), self->mem->path);
+                     self->sym->var_at(vi)->name), self->mem->path);
         }
-        elem = self->sym->vars[vi].type;
+        elem = self->sym->var_at(vi)->type;
         /* A function-pointer array stores its declarator in `text3` instead of
            plain `[N]`; `int item = handlers[i];` would be illegal C. */
-        if (self->sym->vars[vi].dims[0] != '[' || strchr(elem, '(')) {
+        if (self->sym->var_at(vi)->dims[0] != '[' || strchr(elem, '(')) {
             return tool::diag::ct_sem_error(line, col,
                 tool::sh::ct_scratch_fmt(
                      "foreach cannot iterate '%s'; its declarator is not a plain array",
-                     self->sym->vars[vi].name), self->mem->path);
+                     self->sym->var_at(vi)->name), self->mem->path);
         }
         nd = 0;
-        for (p = self->sym->vars[vi].dims; *p; p++)
+        for (p = self->sym->var_at(vi)->dims; *p; p++)
             if (*p == '[') nd++;
         if (nd > 1) {
             return tool::diag::ct_sem_error(line, col,
                 tool::sh::ct_scratch_fmt(
                      "foreach does not support multidimensional arrays ('%s')",
-                     self->sym->vars[vi].name), self->mem->path);
+                     self->sym->var_at(vi)->name), self->mem->path);
         }
         /* A file-scope `int a[];` stays incomplete; the local `int a[] = {…}`
            is completed by its initialiser, which only C sees. */
-        if (self->sym->vars[vi].is_global && strstr(self->sym->vars[vi].dims, "[]")) {
+        if (self->sym->var_at(vi)->is_global && strstr(self->sym->var_at(vi)->dims, "[]")) {
             return tool::diag::ct_sem_error(line, col,
                 tool::sh::ct_scratch_fmt(
                      "foreach needs an array with a known length ('%s')",
-                     self->sym->vars[vi].name), self->mem->path);
+                     self->sym->var_at(vi)->name), self->mem->path);
         }
         /* A typedef can hide an array element (`typedef int Row[4]; Row a[2];`);
            `Row item = a[i];` is not C, so refuse it like a second dimension. */
@@ -576,7 +576,7 @@ impl StmtLoop for Stmt {
             return tool::diag::ct_sem_error(line, col,
                 tool::sh::ct_scratch_fmt(
                      "foreach does not support multidimensional arrays ('%s')",
-                     self->sym->vars[vi].name), self->mem->path);
+                     self->sym->var_at(vi)->name), self->mem->path);
         }
         /* An interface value is a (vptr, data) pair; a by-value copy would
            bypass the vptr discipline, and the element type gives no owner. */
@@ -584,7 +584,7 @@ impl StmtLoop for Stmt {
             return tool::diag::ct_sem_error(line, col,
                 tool::sh::ct_scratch_fmt(
                      "foreach cannot copy interface values ('%s')",
-                     self->sym->vars[vi].name), self->mem->path);
+                     self->sym->var_at(vi)->name), self->mem->path);
         }
         }   /* aux == 0: the Phase 27 array path ends here */
         if (self->sup->push_scope() != 0) return -1;
@@ -596,7 +596,7 @@ impl StmtLoop for Stmt {
            view of the stored element, never an owner. */
         if (aux != 0) {
             int ivi = self->sym->find_var("item");
-            if (ivi >= 0) self->sym->vars[ivi].cview = 1;
+            if (ivi >= 0) self->sym->var_at(ivi)->cview = 1;
         }
         /* D29-14: an array or `Vec` also binds the read-only index `i`. A `Map`
            binds it too, so that naming it reports L29-18 instead of an
@@ -669,7 +669,7 @@ impl StmtLoop for Stmt {
            the emitter calls `len` / `get` / `entry` on. */
         self->arena->nodes[s].aux = aux;
         if (aux == 3) {
-                self->arena->nodes[s].text2 = runtime::text::ct_intern(self->sym->vars[vi].cname);
+                self->arena->nodes[s].text2 = runtime::text::ct_intern(self->sym->var_at(vi)->cname);
                 if (!self->arena->nodes[s].text2) return self->sup->fail("out of memory");
         }
         else {

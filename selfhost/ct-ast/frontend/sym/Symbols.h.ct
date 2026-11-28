@@ -245,6 +245,23 @@ pub struct Var {
     int  str_immortal;
 }
 
+/* S8b R6: the backing store of the variable table. `struct Symbols` is
+   published in the generated header, so its field is a pointer to this record
+   and the `Vec` itself stays in this unit's `.c`. A `Var` row is plain data
+   (its spellings are interned texts the row borrows), so moving the block
+   moves rows and invalidates no caller. */
+struct VarTable {
+    Vec<struct Var> rows;
+}
+
+/* S8b R6: the scope stack. A row remembers `nvar` at `push_scope`, so
+   `pop_scope` restores the outer variable count. It is an opaque pointer for
+   the same reason as `VarTable`; `Vec<int>` keeps the stack growing past the
+   old MAX_SCOPE instead of a fixed inline array running out. */
+struct ScopeStack {
+    Vec<int> rows;
+}
+
 /* One non-escaping closure literal. The parser fills this table; the emitter
    reads it in S3. Parameter and capture lists are copied by value because the
    `Var` rows they came from die when the enclosing scope is popped. */
@@ -424,6 +441,13 @@ pub trait SymbolOps {
     /* S1a-0 C2p-10: the pool-text form of `var_type`, so a 2000-byte
        variable type is not cut before a caller compares or quotes it. */
     const char *var_type_text(const char *name);
+    /* S8b R6: the variable row named by index and the scope-stack reader.
+       `var_at` answers 0 for an index with no row; `scope_at` answers 0 for a
+       slot with no row, the way the zeroed block did. Both replace the direct
+       `vars[i]` / `scope[i]` reads, which can no longer be taken across a
+       `Vec` growth. */
+    struct Var *var_at(int i);
+    int  scope_at(int i);
     int  find_func(const char *cname);
     /* S8b R5: grow the function table to `need` row slots. The row block is a
        `Vec` behind `ftab`; a new slot is a zeroed row and a reused slot keeps
@@ -813,13 +837,15 @@ pub struct BareTypeRow {
 }
 
 pub struct Symbols {
-    /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
-       as inline arrays in the file-scope instance they put ~21 MB of zeroes
-       into __DATA. Their caps stay literal, mirroring the MAX_* values above.
+    /* The big tables are heap blocks allocated in `symbols_get` (SH-42): as
+       inline arrays in the file-scope instance they put ~21 MB of zeroes into
+       __DATA. The caps of the remaining block tables stay literal, mirroring
+       the MAX_* values above.
        S8b R5: the function table is a `Vec<struct Fn>` behind `ftab` (the
        backing record is opaque to the header); `nfunc` is the live count of
        the unit being parsed and the rows are reused across units, so the
-       table is reset by index only and never freed. */
+       table is reset by index only and never freed. S8b R6 does the same for
+       `vars` (`vtab`) and the scope stack (`sstack`). */
     struct FnTable *ftab;
     int  nfunc;
     /* Phase 41: any ct_atomic_* builtin was lowered in this program, so the
@@ -833,12 +859,15 @@ pub struct Symbols {
     struct GenericInst *ginsts;
     int  nginsts;
     int  ginstcap;
-    struct Var  *vars;
+    /* S8b R6: the variable table is a `Vec<struct Var>` behind `vtab` and the
+       scope stack is a `Vec<int>` behind `sstack` (both backing records are
+       opaque to the header). `nvar` / `nscope` are the live counts of the unit
+       being parsed; the rows are reused across units, so a per-unit reset sets
+       the counts back to 0 and never reallocates either table. */
+    struct VarTable *vtab;
     int  nvar;
-    int  varcap;
-    int  *scope;
+    struct ScopeStack *sstack;
     int  nscope;
-    int  scopecap;
     /* S8b D2: one row block replaces the old three parallel blocks
        (`types` / `type_kind` / `type_target`). S1a-0 C2p-3 keeps the name and
        target columns as pointer rows, so a 2000-byte struct name is not cut at
@@ -937,26 +966,25 @@ pub struct Symbols *symbols_get(void);
 
 
 impl SymbolOps for Symbols {
-    /* Give the four big tables their backing store. calloc keeps the zero-filled
-       semantics the static arrays had, and it runs before any writer -- the parser
-       appends to the function table directly -- so no access can meet a NULL
-       table. S8b R5: the function table's `Vec` lives behind `ftab`, which is
-       still a heap allocation (SH-42: never the file-scope __DATA instance). */
+    /* Give the big tables their backing store. calloc keeps the zero-filled
+       semantics the static arrays had, and it runs before any writer -- the
+       parser appends to the function table directly -- so no access can meet a
+       NULL table. S8b R5/R6: the function, variable and scope tables are `Vec`
+       row blocks behind opaque pointers; each backing record is still a heap
+       allocation (SH-42: never the file-scope __DATA instance). */
     int grow(void)
     {
         if (!self->ftab) {
             self->ftab = (struct FnTable *)calloc(1, sizeof(struct FnTable));
             if (!self->ftab) return -1;
         }
-        if (!self->vars) {
-            self->vars = calloc(MAX_VARS, sizeof(*self->vars));
-            if (!self->vars) return -1;
-            self->varcap = MAX_VARS;
+        if (!self->vtab) {
+            self->vtab = (struct VarTable *)calloc(1, sizeof(struct VarTable));
+            if (!self->vtab) return -1;
         }
-        if (!self->scope) {
-            self->scope = calloc(MAX_SCOPE, sizeof(*self->scope));
-            if (!self->scope) return -1;
-            self->scopecap = MAX_SCOPE;
+        if (!self->sstack) {
+            self->sstack = (struct ScopeStack *)calloc(1, sizeof(struct ScopeStack));
+            if (!self->sstack) return -1;
         }
         if (!self->ginsts) {
             self->ginsts = calloc(MAX_GENERIC_INSTS, sizeof(*self->ginsts));
@@ -1139,44 +1167,56 @@ impl SymbolOps for Symbols {
         return 0;
     }
 
-    /* S1a-0 C1: MAX_VARS/MAX_SCOPE are starting capacities. Both blocks are
-       owned by the singleton and reset only by index (`nvar`/`nscope`), so a
-       moved block invalidates no caller: every reader re-indexes through
-       `self`. */
+    /* S8b R6: both tables are `Vec` row blocks behind opaque handles. A slot
+       that already exists is left alone (a reused row keeps its contents and
+       the per-unit reset is just `nvar`/`nscope` going back to 0); only slots
+       past the current length are appended as zeroed rows. A `Var` row is
+       plain data, so a moved block is a memcpy and nothing dangles. */
     int ensure_var_capacity(int need)
     {
-        int cap;
-        struct Var *grown;
-        (void)self;
-        if (need <= self->varcap) return 0;
-        cap = self->varcap > 0 ? self->varcap : MAX_VARS;
-        while (cap < need && cap < CAP_LIMIT) cap *= 2;
-        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
-        if (need > cap) return self->fail("out of memory");
-        grown = (struct Var *)realloc(self->vars, (size_t)cap * sizeof(*grown));
-        if (!grown) return self->fail("out of memory");
-        memset(grown + self->varcap, 0, (size_t)(cap - self->varcap) * sizeof(*grown));
-        self->vars = grown;
-        self->varcap = cap;
+        struct Var z;
+        if (need <= 0) return 0;
+        if (need > CAP_LIMIT) return self->fail("out of memory");
+        if (!self->vtab) {
+            self->vtab = (struct VarTable *)calloc(1, sizeof(struct VarTable));
+            if (!self->vtab) return self->fail("out of memory");
+        }
+        while (self->vtab->rows.len() < need) {
+            memset(&z, 0, sizeof(z));
+            if (self->vtab->rows.push(z) == 0) return self->fail("out of memory");
+        }
         return 0;
     }
 
     int ensure_scope_capacity(int need)
     {
-        int cap;
-        int *grown;
-        (void)self;
-        if (need <= self->scopecap) return 0;
-        cap = self->scopecap > 0 ? self->scopecap : MAX_SCOPE;
-        while (cap < need && cap < CAP_LIMIT) cap *= 2;
-        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
-        if (need > cap) return self->fail("out of memory");
-        grown = (int *)realloc(self->scope, (size_t)cap * sizeof(*grown));
-        if (!grown) return self->fail("out of memory");
-        memset(grown + self->scopecap, 0, (size_t)(cap - self->scopecap) * sizeof(*grown));
-        self->scope = grown;
-        self->scopecap = cap;
+        if (need <= 0) return 0;
+        if (need > CAP_LIMIT) return self->fail("out of memory");
+        if (!self->sstack) {
+            self->sstack = (struct ScopeStack *)calloc(1, sizeof(struct ScopeStack));
+            if (!self->sstack) return self->fail("out of memory");
+        }
+        while (self->sstack->rows.len() < need) {
+            if (self->sstack->rows.push(0) == 0) return self->fail("out of memory");
+        }
         return 0;
+    }
+
+    /* S8b R6: the variable row named by index. 0 for an index with no row. */
+    struct Var *var_at(int i)
+    {
+        if (!self->vtab || i < 0) return (struct Var *)0;
+        return self->vtab->rows.at(i);
+    }
+
+    /* S8b R6: the scope-stack reader. 0 for a slot with no row, the value the
+       zeroed block answered before the table became a `Vec`. */
+    int scope_at(int i)
+    {
+        int *p;
+        if (!self->sstack || i < 0) return 0;
+        p = self->sstack->rows.at(i);
+        return p ? *p : 0;
     }
 
     /* S8b D2: one row block, one realloc. The old three-block version could
@@ -1302,7 +1342,7 @@ impl SymbolOps for Symbols {
     {
         (void)self;
         if (self->ensure_scope_capacity(self->nscope + 1) != 0) return -1;
-        self->scope[self->nscope] = self->nvar;
+        self->sstack->rows.set(self->nscope, self->nvar);
         self->nscope++;
         return 0;
     }
@@ -1312,7 +1352,7 @@ impl SymbolOps for Symbols {
         (void)self;
         if (self->nscope <= 0) return self->fail("scope stack underflow");
         self->nscope--;
-        self->nvar = self->scope[self->nscope];
+        self->nvar = self->scope_at(self->nscope);
         return 0;
     }
 
@@ -1348,6 +1388,7 @@ impl SymbolOps for Symbols {
     int declare_var(const char *name, const char *type)
     {
         int i;
+        struct Var *r;
         (void)self;
         /* `__ct_` names the compiler's own locals and closure products; a user
            declaration could otherwise collide with them in the generated C. */
@@ -1355,43 +1396,47 @@ impl SymbolOps for Symbols {
             return self->fail("identifier '__ct_' is reserved for the compiler");
         if (self->ensure_var_capacity(self->nvar + 1) != 0) return -1;
         i = self->nvar;
-        self->vars[i].name = runtime::text::ct_intern(name);
-        if (!self->vars[i].name) return self->fail("out of memory");
-        self->vars[i].type = runtime::text::ct_intern(type);
-        if (!self->vars[i].type) return self->fail("out of memory");
-        self->vars[i].cname = runtime::text::ct_intern(name);
-        if (!self->vars[i].cname) return self->fail("out of memory");
-        self->vars[i].ns = runtime::text::ct_intern("");
-        if (!self->vars[i].ns) return self->fail("out of memory");
-        self->vars[i].is_global = 0;
-        self->vars[i].is_static = 0;
-        self->vars[i].imported = 0;
-        self->vars[i].ambiguous = 0;
-        self->vars[i].is_array = 0;
-        self->vars[i].dims = runtime::text::ct_intern("");
-        if (!self->vars[i].dims) return self->fail("out of memory");
-        self->vars[i].st = -1;
-        self->vars[i].owned = 0;
-        self->vars[i].own_line = 0;
-        self->vars[i].autodrop = 0;
-        self->vars[i].path_warned = 0;
-        self->vars[i].borrowed = 0;
-        self->vars[i].ref_param = 0;
-        self->vars[i].out_param = 0;
-        self->vars[i].initialized = 0;
-        self->vars[i].cview = 0;
-        self->vars[i].is_param = 0;
-        self->vars[i].is_fnparam = 0;
-        self->vars[i].is_const = 0;
-        self->vars[i].is_closure = 0;
-        self->vars[i].closure_id = -1;
-        self->vars[i].is_slice = 0;
-        self->vars[i].slice_elem = runtime::text::ct_intern("");
-        if (!self->vars[i].slice_elem) return self->fail("out of memory");
-        self->vars[i].slice_const = 0;
-        self->vars[i].slice_escape = 0;
-        self->vars[i].str_escape = 0;
-        self->vars[i].str_immortal = 0;
+        /* S8b R6: the row is fetched once. No later statement grows the
+           variable table (only `ct_intern` runs), so the pointer stays valid. */
+        r = self->var_at(i);
+        if (!r) return self->fail("variable table out of range");
+        r->name = runtime::text::ct_intern(name);
+        if (!r->name) return self->fail("out of memory");
+        r->type = runtime::text::ct_intern(type);
+        if (!r->type) return self->fail("out of memory");
+        r->cname = runtime::text::ct_intern(name);
+        if (!r->cname) return self->fail("out of memory");
+        r->ns = runtime::text::ct_intern("");
+        if (!r->ns) return self->fail("out of memory");
+        r->is_global = 0;
+        r->is_static = 0;
+        r->imported = 0;
+        r->ambiguous = 0;
+        r->is_array = 0;
+        r->dims = runtime::text::ct_intern("");
+        if (!r->dims) return self->fail("out of memory");
+        r->st = -1;
+        r->owned = 0;
+        r->own_line = 0;
+        r->autodrop = 0;
+        r->path_warned = 0;
+        r->borrowed = 0;
+        r->ref_param = 0;
+        r->out_param = 0;
+        r->initialized = 0;
+        r->cview = 0;
+        r->is_param = 0;
+        r->is_fnparam = 0;
+        r->is_const = 0;
+        r->is_closure = 0;
+        r->closure_id = -1;
+        r->is_slice = 0;
+        r->slice_elem = runtime::text::ct_intern("");
+        if (!r->slice_elem) return self->fail("out of memory");
+        r->slice_const = 0;
+        r->slice_escape = 0;
+        r->str_escape = 0;
+        r->str_immortal = 0;
         self->nvar++;
         return 0;
     }
@@ -1405,56 +1450,61 @@ impl SymbolOps for Symbols {
                        const char *ns, int imported)
     {
         int i, k;
+        struct Var *r;
         (void)self;
         if (self->reserved_name(name))
             return self->fail("identifier '__ct_' is reserved for the compiler");
         if (self->ensure_var_capacity(self->nvar + 1) != 0) return -1;
         i = self->nvar;
         self->nvar++;
-        self->vars[i].name = runtime::text::ct_intern(name);
-        if (!self->vars[i].name) return self->fail("out of memory");
-        self->vars[i].type = runtime::text::ct_intern(type);
-        if (!self->vars[i].type) return self->fail("out of memory");
-        self->vars[i].cname = runtime::text::ct_intern(cname);
-        if (!self->vars[i].cname) return self->fail("out of memory");
-        self->vars[i].ns = runtime::text::ct_intern(ns);
-        if (!self->vars[i].ns) return self->fail("out of memory");
-        self->vars[i].is_global = 1;
-        self->vars[i].is_static = 0;
-        self->vars[i].imported = imported;
-        self->vars[i].ambiguous = 0;
-        self->vars[i].is_array = 0;
-        self->vars[i].dims = runtime::text::ct_intern("");
-        if (!self->vars[i].dims) return self->fail("out of memory");
-        self->vars[i].st = -1;
-        self->vars[i].owned = 0;
-        self->vars[i].own_line = 0;
-        self->vars[i].autodrop = 0;
-        self->vars[i].path_warned = 0;
-        self->vars[i].borrowed = 0;
-        self->vars[i].ref_param = 0;
-        self->vars[i].out_param = 0;
+        /* S8b R6: fetch the row once; the loop below only reads earlier rows
+           and never grows the table. */
+        r = self->var_at(i);
+        if (!r) return self->fail("variable table out of range");
+        r->name = runtime::text::ct_intern(name);
+        if (!r->name) return self->fail("out of memory");
+        r->type = runtime::text::ct_intern(type);
+        if (!r->type) return self->fail("out of memory");
+        r->cname = runtime::text::ct_intern(cname);
+        if (!r->cname) return self->fail("out of memory");
+        r->ns = runtime::text::ct_intern(ns);
+        if (!r->ns) return self->fail("out of memory");
+        r->is_global = 1;
+        r->is_static = 0;
+        r->imported = imported;
+        r->ambiguous = 0;
+        r->is_array = 0;
+        r->dims = runtime::text::ct_intern("");
+        if (!r->dims) return self->fail("out of memory");
+        r->st = -1;
+        r->owned = 0;
+        r->own_line = 0;
+        r->autodrop = 0;
+        r->path_warned = 0;
+        r->borrowed = 0;
+        r->ref_param = 0;
+        r->out_param = 0;
         /* A file-scope object exists (zero- or explicitly initialised) from
            program start, so it satisfies the `out` owning-actual rule. */
-        self->vars[i].initialized = 1;
-        self->vars[i].cview = 0;
-        self->vars[i].is_param = 0;
-        self->vars[i].is_fnparam = 0;
-        self->vars[i].is_const = 0;
-        self->vars[i].is_slice = 0;
-        self->vars[i].slice_elem = runtime::text::ct_intern("");
-        if (!self->vars[i].slice_elem) return self->fail("out of memory");
-        self->vars[i].slice_const = 0;
-        self->vars[i].slice_escape = 0;
-        self->vars[i].str_escape = 0;
-        self->vars[i].str_immortal = 0;
+        r->initialized = 1;
+        r->cview = 0;
+        r->is_param = 0;
+        r->is_fnparam = 0;
+        r->is_const = 0;
+        r->is_slice = 0;
+        r->slice_elem = runtime::text::ct_intern("");
+        if (!r->slice_elem) return self->fail("out of memory");
+        r->slice_const = 0;
+        r->slice_escape = 0;
+        r->str_escape = 0;
+        r->str_immortal = 0;
         if (imported)
             for (k = 0; k < i; k++)
-                if (self->vars[k].is_global && self->vars[k].imported
-                    && strcmp(self->vars[k].name, name) == 0
-                    && strcmp(self->vars[k].cname, cname) != 0) {
-                    self->vars[k].ambiguous = 1;
-                    self->vars[i].ambiguous = 1;
+                if (self->var_at(k)->is_global && self->var_at(k)->imported
+                    && strcmp(self->var_at(k)->name, name) == 0
+                    && strcmp(self->var_at(k)->cname, cname) != 0) {
+                    self->var_at(k)->ambiguous = 1;
+                    r->ambiguous = 1;
                 }
         return i;
     }
@@ -1467,7 +1517,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->declare_global(name, "int", cname, ns, imported);
         if (i < 0) return -1;
-        self->vars[i].is_const = 1;
+        self->var_at(i)->is_const = 1;
         return i;
     }
 
@@ -1476,7 +1526,7 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         i = self->find_var(name);
-        return (i >= 0) ? self->vars[i].is_const : 0;
+        return (i >= 0) ? self->var_at(i)->is_const : 0;
     }
 
     int var_cname(const char *name, char *out, int cap)
@@ -1485,7 +1535,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->find_var(name);
         if (i < 0) return -1;
-        return (snprintf(out, (size_t)cap, "%s", self->vars[i].cname) >= cap) ? -1 : 0;
+        return (snprintf(out, (size_t)cap, "%s", self->var_at(i)->cname) >= cap) ? -1 : 0;
     }
 
     /* S1a-0 C2p-9: the pool-text form. A global's C spelling is already an
@@ -1497,7 +1547,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->find_var(name);
         if (i < 0) return (const char *)0;
-        return self->vars[i].cname;
+        return self->var_at(i)->cname;
     }
 
     int var_ambiguous(const char *name)
@@ -1505,7 +1555,7 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         i = self->find_var(name);
-        return (i >= 0) ? self->vars[i].ambiguous : 0;
+        return (i >= 0) ? self->var_at(i)->ambiguous : 0;
     }
 
     /* `A::B::h` in an expression: match the path (underscore form, no trailing
@@ -1515,9 +1565,9 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         for (i = self->nvar - 1; i >= 0; i--)
-            if (self->vars[i].is_global && strcmp(self->vars[i].name, name) == 0
-                && strcmp(self->vars[i].ns, qual) == 0)
-                return self->vars[i].cname;
+            if (self->var_at(i)->is_global && strcmp(self->var_at(i)->name, name) == 0
+                && strcmp(self->var_at(i)->ns, qual) == 0)
+                return self->var_at(i)->cname;
         return (const char *)0;
     }
 
@@ -1526,7 +1576,7 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         for (i = self->nvar - 1; i >= 0; i--)
-            if (strcmp(self->vars[i].name, name) == 0) return i;
+            if (strcmp(self->var_at(i)->name, name) == 0) return i;
         return -1;
     }
 
@@ -1536,7 +1586,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->find_var(name);
         if (i < 0) return -1;
-        w = snprintf(out, (size_t)cap, "%s", self->vars[i].type);
+        w = snprintf(out, (size_t)cap, "%s", self->var_at(i)->type);
         if (w < 0 || w >= cap) return -1;
         return 0;
     }
@@ -1547,7 +1597,7 @@ impl SymbolOps for Symbols {
         (void)self;
         i = self->find_var(name);
         if (i < 0) return (const char *)0;
-        return self->vars[i].type;
+        return self->var_at(i)->type;
     }
 
     /* Rows are keyed by the C spelling, not by the source name: two namespaces

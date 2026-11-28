@@ -29,13 +29,13 @@ pub int var_scope(struct Symbols *sym, int vi)
     int s;
 
     for (s = sym->nscope - 1; s >= 0; s--)
-        if (sym->scope[s] <= vi) return s;
+        if (sym->scope_at(s) <= vi) return s;
     return -1;
 }
 
 pub int outlives(struct Symbols *sym, int target, int source)
 {
     if (target < 0 || source < 0) return 0;
-    if (sym->vars[target].is_global || sym->vars[target].is_static) return 1;
+    if (sym->var_at(target)->is_global || sym->var_at(target)->is_static) return 1;
     return var_scope(sym, target) < var_scope(sym, source);
 }

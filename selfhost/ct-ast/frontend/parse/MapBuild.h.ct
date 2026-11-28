@@ -846,7 +846,7 @@ impl MapBuildOps for MapBuild {
             }
             /* `Var.cname` is already a pool text (S1a-0 C2p-5), so the C
                spelling is copied by pointer, never cut by a caller row. */
-            icn = self->sym->vars[k].cname;
+            icn = self->sym->var_at(k)->cname;
         } else if (self->lex->tok == T_ID && self->lex->tok_is("namespace")) {
             /* SH-20: the host is a namespace, not an object. Nothing is declared,
                so the binding names its symbols after the namespace path and the

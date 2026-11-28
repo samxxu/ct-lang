@@ -143,19 +143,19 @@ impl MemoryOps for Memory {
                left alone. */
             if (vi >= 0) {
                 int sbase = self->sym->nscope > 0
-                            ? self->sym->scope[self->sym->nscope - 1] : 0;
+                            ? self->sym->scope_at(self->sym->nscope - 1) : 0;
                 /* Any earlier same-scope row with this name is a C
                    redeclaration; when the new one is `own` the pair is exactly
                    L49-2 (a zero-initialised first binding counts too). */
                 for (i = self->sym->nvar - 1; i >= sbase; i--) {
-                    if (i == vi || strcmp(self->sym->vars[i].name, name) != 0) continue;
+                    if (i == vi || strcmp(self->sym->var_at(i)->name, name) != 0) continue;
                     msg = runtime::text::ct_internf(
                         "duplicate 'own' binding for '%s'", name);
                     if (!msg) return self->fail("out of memory");
                     return tool::diag::ct_sem_error(line, 1, msg, self->path);
                 }
             }
-            if (vi >= 0) self->sym->vars[vi].autodrop = 1;
+            if (vi >= 0) self->sym->var_at(vi)->autodrop = 1;
             if (self->nowner >= MAX_VARS) return self->fail("too many owned variables");
             self->own_kind[self->nowner] = 0;
             self->own_var[self->nowner] = vi;
@@ -333,20 +333,20 @@ impl MemoryOps for Memory {
         }
         vi = self->sym->find_var(self->arena->nodes[n].text2);
         if (vi >= 0 && si >= 0) {
-            self->sym->vars[vi].st = si;
+            self->sym->var_at(vi)->st = si;
             if (heap || call_owned) {
-                self->sym->vars[vi].owned = 1;
-                self->sym->vars[vi].own_line = self->arena->nodes[n].line;
+                self->sym->var_at(vi)->owned = 1;
+                self->sym->var_at(vi)->own_line = self->arena->nodes[n].line;
             }
         }
         for (i = 0; i < self->sym->nvar; i++) {
             if (i == vi) continue;
             /* a borrow keeps its handback (SH-35) */
-            if (self->sym->vars[i].borrowed) continue;
-            if (!self->sym->vars[i].owned && !self->sym->vars[i].autodrop) continue;
-            if (!self->expr_mentions(e, self->sym->vars[i].name)) continue;
-            self->sym->vars[i].owned = 0;
-            if (self->expr_returns(e, self->sym->vars[i].name)) self->sym->vars[i].autodrop = 0;
+            if (self->sym->var_at(i)->borrowed) continue;
+            if (!self->sym->var_at(i)->owned && !self->sym->var_at(i)->autodrop) continue;
+            if (!self->expr_mentions(e, self->sym->var_at(i)->name)) continue;
+            self->sym->var_at(i)->owned = 0;
+            if (self->expr_returns(e, self->sym->var_at(i)->name)) self->sym->var_at(i)->autodrop = 0;
         }
         return 0;
     }
@@ -357,7 +357,7 @@ impl MemoryOps for Memory {
         int i;
         (void)self;
         for (i = from; i < to; i++)
-            if (self->sym->vars[i].owned && !self->sym->vars[i].autodrop && !self->sym->vars[i].path_warned)
+            if (self->sym->var_at(i)->owned && !self->sym->var_at(i)->autodrop && !self->sym->var_at(i)->path_warned)
                 if (self->warn_leak(i, 0) != 0) return -1;
         return 0;
     }
@@ -389,17 +389,17 @@ impl MemoryOps for Memory {
             /* a borrow keeps its handback: its escape rules live in
                check_borrow_store, and the exit must still hand the object back
                (SH-35) */
-            if (self->sym->vars[i].borrowed) continue;
+            if (self->sym->var_at(i)->borrowed) continue;
             if (i == bv) {
-                if (self->sym->vars[i].autodrop && lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR)
-                    self->sym->vars[i].autodrop = 0;
+                if (self->sym->var_at(i)->autodrop && lhs >= 0 && self->arena->nodes[lhs].kind == N_VAR)
+                    self->sym->var_at(i)->autodrop = 0;
                 continue;
             }
-            if (!self->sym->vars[i].owned && !self->sym->vars[i].autodrop) continue;
-            if (!self->expr_mentions(lhs, self->sym->vars[i].name)
-                && !self->expr_mentions(rhs, self->sym->vars[i].name)) continue;
-            self->sym->vars[i].owned = 0;
-            if (self->expr_returns(rhs, self->sym->vars[i].name)) self->sym->vars[i].autodrop = 0;
+            if (!self->sym->var_at(i)->owned && !self->sym->var_at(i)->autodrop) continue;
+            if (!self->expr_mentions(lhs, self->sym->var_at(i)->name)
+                && !self->expr_mentions(rhs, self->sym->var_at(i)->name)) continue;
+            self->sym->var_at(i)->owned = 0;
+            if (self->expr_returns(rhs, self->sym->var_at(i)->name)) self->sym->var_at(i)->autodrop = 0;
         }
         return 0;
     }
@@ -414,28 +414,28 @@ impl MemoryOps for Memory {
         (void)self;
         for (i = 0; i < self->sym->nvar; i++) {
             int pos = 0;
-            if (self->sym->vars[i].autodrop) {
+            if (self->sym->var_at(i)->autodrop) {
                 /* Only a real transfer cancels the exit call: `return b->n;`
                    reads a field and still has to release (SH-36); a returned
                    `p` moves the ownership to the caller, so it must not be
                    reported as a leak either (SH-41). */
-                if (ret >= 0 && self->expr_returns(ret, self->sym->vars[i].name)) {
-                    self->sym->vars[i].autodrop = 0;
-                    self->sym->vars[i].owned = 0;
+                if (ret >= 0 && self->expr_returns(ret, self->sym->var_at(i)->name)) {
+                    self->sym->var_at(i)->autodrop = 0;
+                    self->sym->var_at(i)->owned = 0;
                 }
                 continue;
             }
-            if (!self->sym->vars[i].owned) continue;
-            if (ret >= 0 && self->expr_returns(ret, self->sym->vars[i].name)) pos = 1;
+            if (!self->sym->var_at(i)->owned) continue;
+            if (ret >= 0 && self->expr_returns(ret, self->sym->var_at(i)->name)) pos = 1;
             if (!conditional) {
                 if (pos) {
-                    self->sym->vars[i].owned = 0;
+                    self->sym->var_at(i)->owned = 0;
                     if (!self->leak_impl) self->ret_owned = 1;
                 }
                 continue;
             }
-            if (!pos && !self->sym->vars[i].path_warned) {
-                self->sym->vars[i].path_warned = 1;
+            if (!pos && !self->sym->var_at(i)->path_warned) {
+                self->sym->var_at(i)->path_warned = 1;
                 if (self->warn_leak(i, line) != 0) return -1;
             }
         }
@@ -449,8 +449,8 @@ impl MemoryOps for Memory {
         if (e < 0 || self->arena->nodes[e].kind != N_VAR) return 0;
         vi = self->sym->find_var(self->arena->nodes[e].text2);
         if (vi < 0) return 0;
-        self->sym->vars[vi].owned = 0;
-        self->sym->vars[vi].autodrop = 0;
+        self->sym->var_at(vi)->owned = 0;
+        self->sym->var_at(vi)->autodrop = 0;
         return 0;
     }
 
@@ -463,12 +463,12 @@ impl MemoryOps for Memory {
         const char *tname;
         (void)self;
         kind = (path_line > 0) ? 2 : 0;
-        if (self->sym->vars[vi].st >= 0)
-            tname = self->sym->structs[self->sym->vars[vi].st].name;
+        if (self->sym->var_at(vi)->st >= 0)
+            tname = self->sym->structs[self->sym->var_at(vi)->st].name;
         else
             tname = "";
-        if (tool::diag::ct_leak_warn(kind, self->sym->vars[vi].own_line, path_line, self->path,
-                         self->sym->vars[vi].name, tname) != 0)
+        if (tool::diag::ct_leak_warn(kind, self->sym->var_at(vi)->own_line, path_line, self->path,
+                         self->sym->var_at(vi)->name, tname) != 0)
             return self->fail("too many warnings");
         return 0;
     }

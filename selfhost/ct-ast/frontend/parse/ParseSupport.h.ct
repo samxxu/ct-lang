@@ -259,7 +259,7 @@ impl SupportOps for ParseSupport {
         if (n < 0) return 0;
         if (self->arena->nodes[n].kind == N_VAR) {
             vi = self->sym->find_var(self->arena->nodes[n].text2);
-            return vi >= 0 && self->sym->vars[vi].is_slice;
+            return vi >= 0 && self->sym->var_at(vi)->is_slice;
         }
         if (self->arena->nodes[n].kind == N_SLICE_RANGE) return 1;
         if (self->arena->nodes[n].kind == N_CALL) {
@@ -316,7 +316,7 @@ impl SupportOps for ParseSupport {
         if (k == N_VAR) {
             vi = self->sym->find_var(self->arena->nodes[e].text2);
             if (vi < 0) return 0;
-            return self->sym->vars[vi].str_escape;
+            return self->sym->var_at(vi)->str_escape;
         }
         if (k == N_MCALL) {
             const char *mn = self->arena->nodes[e].text2;
@@ -336,11 +336,11 @@ impl SupportOps for ParseSupport {
                 if (strcmp(self->arena->nodes[r].text2, "self") == 0) return 0;
                 vi = self->sym->find_var(self->arena->nodes[r].text2);
                 if (vi < 0) return 0;
-                if (self->sym->vars[vi].is_global || self->sym->vars[vi].is_static)
+                if (self->sym->var_at(vi)->is_global || self->sym->var_at(vi)->is_static)
                     return 0;
-                if (self->sym->vars[vi].is_fnparam || self->sym->vars[vi].is_param)
+                if (self->sym->var_at(vi)->is_fnparam || self->sym->var_at(vi)->is_param)
                     return 0;
-                if (self->sym->vars[vi].str_immortal) return 0;
+                if (self->sym->var_at(vi)->str_immortal) return 0;
                 return 1;
             }
             if (self->arena->nodes[r].kind == N_MEMBER

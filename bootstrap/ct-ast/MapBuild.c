@@ -46,6 +46,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -762,7 +766,7 @@ static int frontend_parse_MapBuild_frontend_parse_MapBuildOps_parse(void *self, 
         if (k < 0) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("map instance '%s' is not declared (use 'void *%s;' as its host)", inst, inst));
         }
-        icn = _self->sym->vars[k].cname;
+        icn = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, k)->cname;
     }
     else {
         if (((_self->lex->tok == T_ID) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "namespace"))) {

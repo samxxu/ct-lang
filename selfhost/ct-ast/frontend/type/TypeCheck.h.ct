@@ -213,7 +213,7 @@ static int tc_expr_index(struct TypeCheck *self, int n, char *out, int cap)
             if (self->expr_type(self->arena->nodes[n].a, out, cap) != 0) return -1;
             if (self->arena->nodes[n].a >= 0 && self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR) {
                 int vi = self->sym->find_var(self->arena->nodes[self->arena->nodes[n].a].text2);
-                if (vi >= 0 && self->sym->vars[vi].is_array) return 0;
+                if (vi >= 0 && self->sym->var_at(vi)->is_array) return 0;
             }
             ln = strlen(out);
             while (ln > 0 && out[ln - 1] == ' ') ln--;
@@ -792,11 +792,11 @@ impl TypeOps for TypeCheck {
                 int vi = self->sym->find_var(self->arena->nodes[n].text2);
                 int w;
                 if (vi < 0) return -1;
-                w = snprintf(out, (size_t)cap, "%s%s%s", self->sym->vars[vi].type,
+                w = snprintf(out, (size_t)cap, "%s%s%s", self->sym->var_at(vi)->type,
                              (strcmp(self->arena->nodes[n].text2, "self") == 0
-                              && strncmp(self->sym->vars[vi].type, "struct ", 7) == 0
-                              && !strchr(self->sym->vars[vi].type, '*')) ? " *" : "",
-                             self->sym->vars[vi].is_array ? "[]" : "");
+                              && strncmp(self->sym->var_at(vi)->type, "struct ", 7) == 0
+                              && !strchr(self->sym->var_at(vi)->type, '*')) ? " *" : "",
+                             self->sym->var_at(vi)->is_array ? "[]" : "");
                 if (w < 0 || w >= cap) return -1;
                 return 0;
             
@@ -1062,7 +1062,7 @@ impl TypeOps for TypeCheck {
                     match ((NodeKind){ .tag = nk }) {
                         NodeKind.NK_VAR() => {
                             int vi = self->sym->find_var(self->arena->nodes[n].text2);
-                            if (vi >= 0 && self->sym->vars[vi].is_array) return n;
+                            if (vi >= 0 && self->sym->var_at(vi)->is_array) return n;
                         }
                         NodeKind.NK_UNUSED0() => { }
                         NodeKind.NK_PROG() => { }
@@ -1681,15 +1681,15 @@ impl TypeOps for TypeCheck {
             /* M4: a bare name two imports spell differently has no single C
                spelling, so emitting it verbatim only moves the failure to `cc`.
                Diagnose it here instead. */
-            if (vi >= 0 && self->sym->vars[vi].ambiguous) {
+            if (vi >= 0 && self->sym->var_at(vi)->ambiguous) {
                 msg = tool::sh::ct_scratch_fmt(
                     "global '%s' is declared by more than one import and"
                     " cannot be named in a static initializer", id);
                 return self->fail(msg);
             }
-            if (vi >= 0 && strcmp(self->sym->vars[vi].cname, id) != 0) {
-                snprintf(out + w, (size_t)(cap - w), "%s", self->sym->vars[vi].cname);
-                w += (int)strlen(self->sym->vars[vi].cname);
+            if (vi >= 0 && strcmp(self->sym->var_at(vi)->cname, id) != 0) {
+                snprintf(out + w, (size_t)(cap - w), "%s", self->sym->var_at(vi)->cname);
+                w += (int)strlen(self->sym->var_at(vi)->cname);
                 last = id;
                 continue;
             }

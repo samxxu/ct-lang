@@ -44,6 +44,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -582,7 +586,7 @@ int frontend_parse_autodrop_append(struct frontend_parse_Stmt * self, int blk, i
         const char * tp;
         size_t bl;
         vi = self->mem->own_var[d];
-        if (((vi >= 0) && (!self->sym->vars[vi].autodrop))) {
+        if (((vi >= 0) && (!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->autodrop))) {
             continue;
         }
         del = self->sup->__frontend_parse_supportops_vptr->new_node(self->sup, N_DELETE);

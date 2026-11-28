@@ -41,6 +41,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -299,7 +303,7 @@ static int mem2_lhs_escapes(struct runtime_arena_Arena * ar, struct frontend_sym
         if (vi < 0) {
             return 0;
         }
-        return (sym->vars[vi].is_global || sym->vars[vi].is_static);
+        return (sym->__frontend_sym_symbolops_vptr->var_at(sym, vi)->is_global || sym->__frontend_sym_symbolops_vptr->var_at(sym, vi)->is_static);
     }
     return ((((k == N_ARROW) || (k == N_MEMBER)) || (k == N_INDEX)) || (k == N_DEREF));
 }
@@ -318,7 +322,7 @@ static int mem2_receiver_is_container(struct runtime_arena_Arena * ar, struct fr
     if (vi < 0) {
         return 0;
     }
-    return frontend_sym_ct_is_container_type(sym->vars[vi].type);
+    return frontend_sym_ct_is_container_type(sym->__frontend_sym_symbolops_vptr->var_at(sym, vi)->type);
 }
 static void mem2_mark_direct(struct runtime_arena_Arena * ar, int pnode, int line) {
     if (pnode < 0) {

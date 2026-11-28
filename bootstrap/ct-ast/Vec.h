@@ -30,6 +30,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -155,6 +159,10 @@ struct Vec_char_p {
     struct ct_buf * h;
 };
 
+struct Vec_int {
+    struct ct_buf * h;
+};
+
 struct Vec_char_p Vec_char_p_from(char * * items, int n);
 int Vec_char_p_len(void *self);
 char * Vec_char_p_get(void *self, int i);
@@ -166,5 +174,16 @@ char * Vec_char_p_pop(void *self);
 void Vec_char_p_clear(void *self);
 struct Vec_char_p Vec_char_p_retain(void *self);
 int Vec_char_p_release(void *self);
+struct Vec_int Vec_int_from(int * items, int n);
+int Vec_int_len(void *self);
+int Vec_int_get(void *self, int i);
+int Vec_int_has(void *self, int i);
+int * Vec_int_at(void *self, int i);
+void Vec_int_set(void *self, int i, int v);
+int Vec_int_push(void *self, int v);
+int Vec_int_pop(void *self);
+void Vec_int_clear(void *self);
+struct Vec_int Vec_int_retain(void *self);
+int Vec_int_release(void *self);
 
 #endif

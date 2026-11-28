@@ -164,10 +164,10 @@ pub const char *ctype_var(struct Expr *self, int n, int *array_depth, int depth)
     (void)depth;
     i = self->sym->find_var(self->arena->nodes[n].text2);
     if (i < 0) return (const char *)0;
-    ty = self->ctype_expand_text(self->sym->vars[i].type, 0);
+    ty = self->ctype_expand_text(self->sym->var_at(i)->type, 0);
     if (!ty) return (const char *)0;
-    if (self->sym->vars[i].is_array) {
-        for (dim = self->sym->vars[i].dims; *dim; dim++)
+    if (self->sym->var_at(i)->is_array) {
+        for (dim = self->sym->var_at(i)->dims; *dim; dim++)
             if (*dim == '[') (*array_depth)++;
     }
     return ty;
@@ -315,7 +315,7 @@ pub const char *ctype_call(struct Expr *self, int n, int *array_depth, int depth
     /* `fp()` on a function-pointer variable (a plain name). */
     i = self->sym->find_var(self->arena->nodes[n].text2);
     if (i < 0) return (const char *)0;
-    tmp = self->ctype_expand_text(self->sym->vars[i].type, 0);
+    tmp = self->ctype_expand_text(self->sym->var_at(i)->type, 0);
     if (!tmp) return (const char *)0;
     return self->fnptr_ret_text(tmp);
 }
@@ -1142,10 +1142,10 @@ impl ExprStaticType for Expr {
         name = self->arena->nodes[e].text2;
         vi = self->sym->find_var(name);
         if (vi >= 0) {
-            if (self->sym->vars[vi].is_closure) return (const char *)0;
-            if (self->sym->vars[vi].type
-                && strstr(self->sym->vars[vi].type, "(*)"))
-                return self->sym->vars[vi].type;
+            if (self->sym->var_at(vi)->is_closure) return (const char *)0;
+            if (self->sym->var_at(vi)->type
+                && strstr(self->sym->var_at(vi)->type, "(*)"))
+                return self->sym->var_at(vi)->type;
             return (const char *)0;
         }
         fi = self->sym->find_func(name);

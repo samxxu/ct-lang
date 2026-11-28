@@ -54,6 +54,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -250,7 +254,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_expr_is_slice(v
     }
     if (_self->arena->nodes[n].kind == N_VAR) {
         vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[n].text2);
-        return ((vi >= 0) && _self->sym->vars[vi].is_slice);
+        return ((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_slice);
     }
     if (_self->arena->nodes[n].kind == N_SLICE_RANGE) {
         return 1;
@@ -334,7 +338,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_str_escape_clas
         if (vi < 0) {
             return 0;
         }
-        return _self->sym->vars[vi].str_escape;
+        return _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->str_escape;
     }
     if (k == N_MCALL) {
         const char * mn = _self->arena->nodes[e].text2;
@@ -366,13 +370,13 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_str_escape_clas
             if (vi < 0) {
                 return 0;
             }
-            if ((_self->sym->vars[vi].is_global || _self->sym->vars[vi].is_static)) {
+            if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_global || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_static)) {
                 return 0;
             }
-            if ((_self->sym->vars[vi].is_fnparam || _self->sym->vars[vi].is_param)) {
+            if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_fnparam || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_param)) {
                 return 0;
             }
-            if (_self->sym->vars[vi].str_immortal) {
+            if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->str_immortal) {
                 return 0;
             }
             return 1;

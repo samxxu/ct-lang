@@ -133,6 +133,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -1008,9 +1012,9 @@ static int frontend_module_Module_frontend_module_ModuleOps_load_unit(void *self
             if (_self->arena->nodes[gn].text3[0]) {
                 int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, gname);
                 if (vi >= 0) {
-                    _self->sym->vars[vi].is_array = 1;
-                    _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[gn].text3);
-                    if ((!_self->sym->vars[vi].dims)) {
+                    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array = 1;
+                    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims = runtime_text_ct_intern(_self->arena->nodes[gn].text3);
+                    if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims)) {
                         return _self->__frontend_module_moduleops_vptr->fail(_self, "out of memory");
                     }
                 }

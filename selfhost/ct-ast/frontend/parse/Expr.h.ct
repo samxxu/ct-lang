@@ -380,8 +380,8 @@ static int ref_arg_place(struct Expr *self, int n)
     if (k == N_VAR) {
         vi = self->sym->find_var(self->arena->nodes[n].text2);
         if (vi >= 0) {
-            if (self->sym->vars[vi].is_const) return 0;
-            if (ref_type_is_const_value(self->sym->vars[vi].type)) return 0;
+            if (self->sym->var_at(vi)->is_const) return 0;
+            if (ref_type_is_const_value(self->sym->var_at(vi)->type)) return 0;
             return 1;
         }
         /* an unknown name may be a C library global; a known function is not a
@@ -470,7 +470,7 @@ static int check_refout_arg(struct Expr *self, int a, int ann, const char *ptype
     if (ann == 3 && type_is_owning(self, ptype)
         && self->arena->nodes[a].kind == N_VAR) {
         vi = self->sym->find_var(self->arena->nodes[a].text2);
-        if (vi < 0 || !self->sym->vars[vi].initialized)
+        if (vi < 0 || !self->sym->var_at(vi)->initialized)
             return tool::diag::ct_sem_error(self->arena->nodes[a].line, 1,
                 "out owning argument must be initialized", self->sup->mem->path);
     }
@@ -878,7 +878,7 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
             self->arena->nodes[t].num = col;
             if (self->sym->declare_var(name, ft) != 0) return -1;
             vi = self->sym->find_var(name);
-            if (vi >= 0) self->sym->vars[vi].initialized = 1;
+            if (vi >= 0) self->sym->var_at(vi)->initialized = 1;
             rev = bind_conv_explicit(self, t, at, line, col);
             if (rev < 0) return -1;
             wb = self->sup->new_node(N_ASSIGN);
@@ -1217,7 +1217,7 @@ impl ExprOps for Expr {
                so it is refused instead of silently leaking. */
             if (k2 == N_VAR) {
                 int vi = self->sym->find_var(self->arena->nodes[left].text2);
-                if (vi >= 0 && self->sym->vars[vi].autodrop)
+                if (vi >= 0 && self->sym->var_at(vi)->autodrop)
                     return self->sup->fail("an 'own' variable can only be assigned in a statement");
             }
             if (oc == '+') op = 1;
@@ -1251,10 +1251,10 @@ impl ExprOps for Expr {
                 && self->arena->nodes[right].kind == N_VAR) {
                 int vi = self->sym->find_var(self->arena->nodes[left].text2);
                 int vj = self->sym->find_var(self->arena->nodes[right].text2);
-                if (vi >= 0 && vj >= 0 && !self->sym->vars[vj].cview
-                    && frontend::sym::ct_is_container_type(self->sym->vars[vi].type)
-                    && strcmp(self->sym->vars[vi].type,
-                              self->sym->vars[vj].type) == 0)
+                if (vi >= 0 && vj >= 0 && !self->sym->var_at(vj)->cview
+                    && frontend::sym::ct_is_container_type(self->sym->var_at(vi)->type)
+                    && strcmp(self->sym->var_at(vi)->type,
+                              self->sym->var_at(vj)->type) == 0)
                     return tool::diag::ct_sem_error(aline, acol,
                         "a container is moved, not copied; use retain() or a function result",
                         self->sup->mem->path);
@@ -1329,7 +1329,7 @@ impl ExprOps for Expr {
                 if (self->sup->is_iface_type_text(type, &ifc)
                     || (kind == N_VAR
                         && (vi = self->sym->find_var(self->arena->nodes[recv].text2)) >= 0
-                        && self->sym->vars[vi].autodrop)) {
+                        && self->sym->var_at(vi)->autodrop)) {
                     tool::diag::ct_sem_error(line, col,
                         "'into' cannot take an interface or 'own' receiver",
                         self->sup->mem->path);
@@ -1905,11 +1905,11 @@ impl ExprOps for Expr {
                 mvi = self->sym->find_var(mname);
                 if (mvi < 0)
                     return self->sup->fail("'$' target must be a declared variable");
-                if (self->sym->vars[mvi].autodrop || self->sym->vars[mvi].borrowed)
+                if (self->sym->var_at(mvi)->autodrop || self->sym->var_at(mvi)->borrowed)
                     return tool::diag::ct_sem_error(dl, dc,
                         "own/borrow cannot be a '$' target (PH-76)",
                         self->sup->mem->path);
-                if (strncmp(self->sym->vars[mvi].type, "const ", 6) == 0)
+                if (strncmp(self->sym->var_at(mvi)->type, "const ", 6) == 0)
                     return tool::diag::ct_sem_error(dl, dc,
                         "a const value cannot be a '$' target (PH-76)",
                         self->sup->mem->path);
@@ -1932,7 +1932,7 @@ impl ExprOps for Expr {
                         self->chk_line = dl;
                         self->chk_col = dc;
                         self->chk_arg = 0;
-                        if (self->chk_assignable(self->sym->vars[mvi].type, rty, 0, 8) != 0)
+                        if (self->chk_assignable(self->sym->var_at(mvi)->type, rty, 0, 8) != 0)
                             return -1;
                     }
                     (void)mz;
@@ -1979,9 +1979,9 @@ impl ExprOps for Expr {
                 if (n >= 0 && self->arena->nodes[n].kind == N_VAR) {
                     svi = self->sym->find_var(self->arena->nodes[n].text2);
                     if (svi >= 0) {
-                        s_slice = self->sym->vars[svi].is_slice;
-                        s_array = self->sym->vars[svi].is_array && !s_slice
-                                  && !self->sym->vars[svi].is_fnparam;
+                        s_slice = self->sym->var_at(svi)->is_slice;
+                        s_array = self->sym->var_at(svi)->is_array && !s_slice
+                                  && !self->sym->var_at(svi)->is_fnparam;
                     }
                 }
                 if (s_slice || (s_array && slice_range_ahead(self->lex))) {
@@ -1989,10 +1989,10 @@ impl ExprOps for Expr {
                     self->sup->note_slice();
                     int bc = self->lex->tokstart - self->lex->lstart + 1;
                     const char *selem;
-                    int sc = s_slice ? self->sym->vars[svi].slice_const : 0;
+                    int sc = s_slice ? self->sym->var_at(svi)->slice_const : 0;
                     int hi = -1;
-                    selem = s_slice ? self->sym->vars[svi].slice_elem
-                                    : self->sym->vars[svi].type;
+                    selem = s_slice ? self->sym->var_at(svi)->slice_elem
+                                    : self->sym->var_at(svi)->type;
                     self->sup->lex_next();          /* `[` */
                     idx = self->parse_expr();
                     if (idx < 0) return -1;
@@ -2009,7 +2009,7 @@ impl ExprOps for Expr {
                            inferred `[]` length and a slice base are checked at
                            run time by `__ct_slice_range` instead. */
                         if (s_array) {
-                            int an = slice_array_len(self->sym->vars[svi].dims);
+                            int an = slice_array_len(self->sym->var_at(svi)->dims);
                             if (an >= 0 && self->arena->nodes[idx].kind == N_NUM) {
                                 int lo = (int)self->arena->nodes[idx].num;
                                 int hv = (hi < 0) ? an
@@ -2029,7 +2029,7 @@ impl ExprOps for Expr {
                         if (m < 0) return -1;
                         self->arena->nodes[m].text = runtime::text::ct_intern(selem);
                         if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
-                        self->arena->nodes[m].text2 = runtime::text::ct_intern(self->sym->vars[svi].cname);
+                        self->arena->nodes[m].text2 = runtime::text::ct_intern(self->sym->var_at(svi)->cname);
                         if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
                         self->arena->nodes[m].aux = s_array ? 1 : 2;
                         self->arena->nodes[m].a = n;
@@ -2327,7 +2327,7 @@ impl ExprOps for Expr {
                     if (!arrow && strcmp(fname, "get") == 0
                         && n >= 0 && self->arena->nodes[n].kind == N_VAR) {
                         int gvi = self->sym->find_var(self->arena->nodes[n].text2);
-                        if (gvi >= 0 && self->sym->vars[gvi].is_slice) {
+                        if (gvi >= 0 && self->sym->var_at(gvi)->is_slice) {
                             const char *gelem;
                             self->sup->note_slice();
                             args = self->parse_args();
@@ -2336,15 +2336,15 @@ impl ExprOps for Expr {
                                 return self->sup->fail("slice get() takes exactly one index");
                             m = self->sup->new_node(N_SLICE_GET);
                             if (m < 0) return -1;
-                            gelem = self->sym->vars[gvi].slice_elem;
-                            if (self->sym->vars[gvi].slice_const) {
+                            gelem = self->sym->var_at(gvi)->slice_elem;
+                            if (self->sym->var_at(gvi)->slice_const) {
                                     self->arena->nodes[m].text = runtime::text::ct_internf("const %s", gelem);
                                     if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
                             }
                             else
                                 self->arena->nodes[m].text = runtime::text::ct_intern(gelem);
                                 if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
-                            self->arena->nodes[m].aux = self->sym->vars[gvi].slice_const;
+                            self->arena->nodes[m].aux = self->sym->var_at(gvi)->slice_const;
                             self->arena->nodes[m].a = n;
                             self->arena->nodes[m].b = args;
                             self->arena->nodes[m].line = mline;
@@ -2573,8 +2573,8 @@ impl ExprOps for Expr {
                                     if (self->arena->nodes[ai].kind != N_VAR) continue;
                                     vi = self->sym->find_var(self->arena->nodes[ai].text2);
                                     if (vi < 0) continue;
-                                    if (self->sym->vars[vi].autodrop
-                                        || self->sym->vars[vi].borrowed)
+                                    if (self->sym->var_at(vi)->autodrop
+                                        || self->sym->var_at(vi)->borrowed)
                                         return tool::diag::ct_sem_error(mline, mcol,
                                             "a container cannot hold an 'own' or 'borrow' value",
                                             self->sup->mem->path);
@@ -2712,7 +2712,7 @@ impl ExprOps for Expr {
                                 const char *rt2 = rtype;
                                 if (self->arena->nodes[n].kind == N_VAR) {
                                     int vi = self->sym->find_var(self->arena->nodes[n].text2);
-                                    if (vi >= 0 && self->sym->vars[vi].is_array) {
+                                    if (vi >= 0 && self->sym->var_at(vi)->is_array) {
                                         rt2 = runtime::text::ct_internf("%s *", rt2);
                                         if (!rt2) return self->sup->fail("out of memory");
                                     }
@@ -3039,7 +3039,7 @@ impl ExprOps for Expr {
                                     clnode = ca;
                                 } else if (self->arena->nodes[ca].kind == N_VAR) {
                                     int cv = self->sym->find_var(self->arena->nodes[ca].text2);
-                                    if (cv >= 0 && self->sym->vars[cv].is_closure) is_cl = 1;
+                                    if (cv >= 0 && self->sym->var_at(cv)->is_closure) is_cl = 1;
                                 }
                                 if (!is_cl) continue;
                                 if (clnode >= 0 && pair_ok
@@ -3720,9 +3720,9 @@ impl ExprOps for Expr {
                parameter from a same-named shadow. */
             {
                 int rvi = self->sym->find_var(self->arena->nodes[n].text2);
-                if (rvi >= 0 && self->sym->vars[rvi].ref_param)
+                if (rvi >= 0 && self->sym->var_at(rvi)->ref_param)
                     self->arena->nodes[n].aux = 2;
-                else if (rvi >= 0 && self->sym->vars[rvi].out_param)
+                else if (rvi >= 0 && self->sym->var_at(rvi)->out_param)
                     self->arena->nodes[n].aux = 3;
             }
             self->sup->lex_next();
@@ -3903,7 +3903,7 @@ impl ExprOps for Expr {
                         return self->sup->fail("cannot infer the receiver type of a qualified method call");
                     if (self->arena->nodes[args].kind == N_VAR) {
                         int vi = self->sym->find_var(self->arena->nodes[args].text2);
-                        if (vi >= 0 && self->sym->vars[vi].is_array) {
+                        if (vi >= 0 && self->sym->var_at(vi)->is_array) {
                             rtype = runtime::text::ct_internf("%s *", rtype);
                             if (!rtype) return self->sup->fail("out of memory");
                         }
@@ -5127,7 +5127,7 @@ int expr_borrow_root(struct Expr *self, int n)
         }
         if (k == N_VAR) {
             int vi = self->sym->find_var(self->arena->nodes[n].text2);
-            return vi >= 0 && self->sym->vars[vi].cview;
+            return vi >= 0 && self->sym->var_at(vi)->cview;
         }
         if (k == N_MCALL
             && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)

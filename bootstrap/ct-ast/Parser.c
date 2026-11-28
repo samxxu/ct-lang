@@ -103,6 +103,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -1573,9 +1577,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             if (_self->arena->nodes[g].text3[0]) {
                 int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
                 if (vi >= 0) {
-                    _self->sym->vars[vi].is_array = 1;
-                    _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[g].text3);
-                    if ((!_self->sym->vars[vi].dims)) {
+                    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array = 1;
+                    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims = runtime_text_ct_intern(_self->arena->nodes[g].text3);
+                    if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
                 }
@@ -2205,26 +2209,26 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_params(void *self
 {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (vi >= 0) {
-                _self->sym->vars[vi].is_fnparam = 1;
-                _self->sym->vars[vi].ref_param = seen_ref;
-                _self->sym->vars[vi].out_param = seen_out;
-                _self->sym->vars[vi].initialized = (seen_out ? 0 : 1);
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_fnparam = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->ref_param = seen_ref;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->out_param = seen_out;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->initialized = (seen_out ? 0 : 1);
                 if (is_slice) {
-                    _self->sym->vars[vi].is_slice = 1;
-                    _self->sym->vars[vi].slice_elem = runtime_text_ct_intern(slice_elem);
-                    if ((!_self->sym->vars[vi].slice_elem)) {
+                    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_slice = 1;
+                    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->slice_elem = runtime_text_ct_intern(slice_elem);
+                    if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->slice_elem)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
-                    _self->sym->vars[vi].slice_const = slice_const;
+                    _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->slice_const = slice_const;
                 }
             }
         }
         if (_self->arena->nodes[p].text3[0]) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (vi >= 0) {
-                _self->sym->vars[vi].is_array = 1;
-                _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[p].text3);
-                if ((!_self->sym->vars[vi].dims)) {
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims = runtime_text_ct_intern(_self->arena->nodes[p].text3);
+                if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
             }
@@ -5365,9 +5369,9 @@ static int check_borrow_param(struct frontend_parse_Parser * self, int pnode, in
     }
     vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[pnode].text2);
     if (vi >= 0) {
-        self->sym->vars[vi].borrowed = 1;
-        self->sym->vars[vi].is_param = 1;
-        self->sym->vars[vi].own_line = line;
+        self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->borrowed = 1;
+        self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_param = 1;
+        self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->own_line = line;
     }
     return 0;
 }
@@ -5396,18 +5400,18 @@ static int parse_trait_body(struct frontend_parse_Parser * self, int ti, int mi,
 {
             int vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[p].text2);
             if (vi >= 0) {
-                self->sym->vars[vi].is_fnparam = 1;
-                self->sym->vars[vi].ref_param = (self->arena->nodes[p].aux == 2);
-                self->sym->vars[vi].out_param = (self->arena->nodes[p].aux == 3);
-                self->sym->vars[vi].initialized = ((self->arena->nodes[p].aux == 3) ? 0 : 1);
+                self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_fnparam = 1;
+                self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->ref_param = (self->arena->nodes[p].aux == 2);
+                self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->out_param = (self->arena->nodes[p].aux == 3);
+                self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->initialized = ((self->arena->nodes[p].aux == 3) ? 0 : 1);
             }
         }
         if (self->arena->nodes[p].text3[0]) {
             int vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[p].text2);
             if (vi >= 0) {
-                self->sym->vars[vi].is_array = 1;
-                self->sym->vars[vi].dims = runtime_text_ct_intern(self->arena->nodes[p].text3);
-                if ((!self->sym->vars[vi].dims)) {
+                self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_array = 1;
+                self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->dims = runtime_text_ct_intern(self->arena->nodes[p].text3);
+                if ((!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->dims)) {
                     return self->sup->__frontend_parse_supportops_vptr->fail(self->sup, "out of memory");
                 }
             }

@@ -121,6 +121,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -594,7 +598,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_block(void *self) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
-    if ((_self->mem->leak_active && (_self->sup->__frontend_parse_supportops_vptr->leak_scope(_self->sup, _self->sym->scope[(_self->sym->nscope - 1)], _self->sym->nvar) != 0))) {
+    if ((_self->mem->leak_active && (_self->sup->__frontend_parse_supportops_vptr->leak_scope(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->scope_at(_self->sym, (_self->sym->nscope - 1)), _self->sym->nvar) != 0))) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
@@ -857,19 +861,19 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                     lvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[_self->arena->nodes[e].a].text2);
                 }
             }
-            if (((((lvi >= 0) && (_self->arena->nodes[e].kind == N_VAR)) && _self->sym->vars[lvi].is_slice) && _self->sym->vars[lvi].slice_escape)) {
+            if (((((lvi >= 0) && (_self->arena->nodes[e].kind == N_VAR)) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_slice) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->slice_escape)) {
                 if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a view of a local array", _self->sup->mem->path) != 0) {
                     return (-1);
                 }
             }
             else {
-                if (((((((((lvi >= 0) && (_self->arena->nodes[e].kind == N_VAR)) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "struct __ct_slice") == 0)) && _self->sym->vars[lvi].is_array) && (!_self->sym->vars[lvi].is_fnparam)) && (!_self->sym->vars[lvi].is_global)) && (!_self->sym->vars[lvi].is_static))) {
+                if (((((((((lvi >= 0) && (_self->arena->nodes[e].kind == N_VAR)) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "struct __ct_slice") == 0)) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_array) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_fnparam)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_global)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_static))) {
                     if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a view of a local array", _self->sup->mem->path) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if ((((((lvi >= 0) && (_self->arena->nodes[e].kind == N_SLICE_RANGE)) && (_self->arena->nodes[e].aux == 1)) && (!_self->sym->vars[lvi].is_global)) && (!_self->sym->vars[lvi].is_static))) {
+                    if ((((((lvi >= 0) && (_self->arena->nodes[e].kind == N_SLICE_RANGE)) && (_self->arena->nodes[e].aux == 1)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_global)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_static))) {
                         if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a subslice of a local array", _self->sup->mem->path) != 0) {
                             return (-1);
                         }
@@ -929,7 +933,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                 }
                 if (((((((e != src) && _self->arena->nodes[e].text2[0]) && ((_self->arena->nodes[e].aux & 7) == 0)) && (src >= 0)) && (_self->arena->nodes[src].kind == N_VAR)) && (strcmp(_self->arena->nodes[src].text2, "self") != 0))) {
                     int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[src].text2);
-                    if (((((vi >= 0) && (!_self->sym->vars[vi].is_global)) && (!_self->sym->vars[vi].is_param)) && (!_self->sym->vars[vi].is_static))) {
+                    if (((((vi >= 0) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_global)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_param)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_static))) {
                         _self->arena->nodes[e].aux |= 8;
                     }
                 }
@@ -1615,7 +1619,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_branch(void *self) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
-    if ((_self->mem->leak_active && (_self->sup->__frontend_parse_supportops_vptr->leak_scope(_self->sup, _self->sym->scope[(_self->sym->nscope - 1)], _self->sym->nvar) != 0))) {
+    if ((_self->mem->leak_active && (_self->sup->__frontend_parse_supportops_vptr->leak_scope(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->scope_at(_self->sym, (_self->sym->nscope - 1)), _self->sym->nvar) != 0))) {
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
@@ -1754,19 +1758,19 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         if (is_slice) {
             int svi0 = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (svi0 >= 0) {
-                _self->sym->vars[svi0].is_slice = 1;
-                _self->sym->vars[svi0].slice_elem = runtime_text_ct_intern(slice_elem);
-                if ((!_self->sym->vars[svi0].slice_elem)) {
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi0)->is_slice = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi0)->slice_elem = runtime_text_ct_intern(slice_elem);
+                if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi0)->slice_elem)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->sym->vars[svi0].slice_const = slice_const;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi0)->slice_const = slice_const;
             }
         }
         if (_self->static_decl) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (vi >= 0) {
-                _self->sym->vars[vi].is_static = 1;
-                _self->sym->vars[vi].initialized = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_static = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->initialized = 1;
             }
         }
         if ((_self->ex->fnptr_state && _self->ex->fnptr_dims[0])) {
@@ -1808,9 +1812,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         if (_self->arena->nodes[n].text3[0]) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (vi >= 0) {
-                _self->sym->vars[vi].is_array = 1;
-                _self->sym->vars[vi].dims = runtime_text_ct_intern(_self->arena->nodes[n].text3);
-                if ((!_self->sym->vars[vi].dims)) {
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims = runtime_text_ct_intern(_self->arena->nodes[n].text3);
+                if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
             }
@@ -1818,7 +1822,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "="))) {
             int dvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (dvi >= 0) {
-                _self->sym->vars[dvi].initialized = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, dvi)->initialized = 1;
             }
             _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
             if (is_slice) {
@@ -1841,21 +1845,21 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                     if (svi < 0) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "slice initializer is not a declared value");
                     }
-                    if (_self->sym->vars[svi].is_slice) {
-                        if (strcmp(_self->sym->vars[svi].slice_elem, slice_elem) != 0) {
+                    if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_slice) {
+                        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->slice_elem, slice_elem) != 0) {
                             return tool_diag_ct_sem_error(dline, dcol, "slice element type does not match the declaration", _self->mem->path);
                         }
-                        sroot = _self->sym->vars[svi].slice_escape;
+                        sroot = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->slice_escape;
                     }
                     else {
-                        if ((_self->sym->vars[svi].is_array && (!_self->sym->vars[svi].is_fnparam))) {
-                            if (strcmp(_self->sym->vars[svi].type, slice_elem) != 0) {
+                        if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_array && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_fnparam))) {
+                            if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->type, slice_elem) != 0) {
                                 return tool_diag_ct_sem_error(dline, dcol, "slice element type does not match the array", _self->mem->path);
                             }
-                            if (strchr(_self->sym->vars[svi].dims, '(')) {
+                            if (strchr(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->dims, '(')) {
                                 return tool_diag_ct_sem_error(dline, dcol, "slice element type does not match the array declarator", _self->mem->path);
                             }
-                            cname2 = _self->sym->vars[svi].cname;
+                            cname2 = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->cname;
                             raw2 = runtime_text_ct_internf("(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }", cname2, cname2, cname2);
                             if ((!raw2)) {
                                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -1873,7 +1877,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                             _self->arena->__runtime_arena_arenaops_vptr->str_end(_self->arena);
                             _self->arena->nodes[e].num = off2;
                             _self->arena->nodes[e].aux = 1;
-                            sroot = ((!_self->sym->vars[svi].is_global) && (!_self->sym->vars[svi].is_static));
+                            sroot = ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_global) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_static));
                         }
                         else {
                             return tool_diag_ct_sem_error(dline, dcol, "a slice can only be initialized from an array or another slice", _self->mem->path);
@@ -1898,11 +1902,11 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                                 svi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[_self->arena->nodes[e].a].text2);
                             }
                             if (((_self->arena->nodes[e].aux == 1) && (svi >= 0))) {
-                                sroot = ((!_self->sym->vars[svi].is_global) && (!_self->sym->vars[svi].is_static));
+                                sroot = ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_global) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_static));
                             }
                             else {
                                 if (svi >= 0) {
-                                    sroot = _self->sym->vars[svi].slice_escape;
+                                    sroot = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->slice_escape;
                                 }
                             }
                         }
@@ -1914,7 +1918,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                 if (is_slice) {
                     int svi2 = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
                     if (svi2 >= 0) {
-                        _self->sym->vars[svi2].slice_escape = sroot;
+                        _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi2)->slice_escape = sroot;
                     }
                 }
             }
@@ -2050,14 +2054,14 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
         }
         if (((((_self->arena->nodes[n].a >= 0) && (_self->arena->nodes[n].text3[0] == 0)) && frontend_sym_ct_is_container_type(typebuf)) && (_self->arena->nodes[_self->arena->nodes[n].a].kind == N_VAR))) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[_self->arena->nodes[n].a].text2);
-            if ((((vi >= 0) && (!_self->sym->vars[vi].cview)) && (strcmp(_self->sym->vars[vi].type, typebuf) == 0))) {
+            if ((((vi >= 0) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->cview)) && (strcmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type, typebuf) == 0))) {
                 return tool_diag_ct_sem_error(dline, dcol, "a container is moved, not copied; use retain() or a function result", _self->sup->mem->path);
             }
         }
         if ((frontend_sym_ct_is_container_type(typebuf) || frontend_sym_ct_is_string_value_type(typebuf))) {
             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
             if (vi >= 0) {
-                _self->sym->vars[vi].cview = frontend_parse_expr_borrow_root(_self->ex, _self->arena->nodes[n].a);
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->cview = frontend_parse_expr_borrow_root(_self->ex, _self->arena->nodes[n].a);
             }
         }
         if ((((!_self->static_decl) && (_self->arena->nodes[n].text3[0] == 0)) && (frontend_sym_ct_is_string_value_type(typebuf) || stmt_owning_struct(_self, typebuf)))) {
@@ -2313,7 +2317,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
         if (k2 == N_VAR) {
             int cvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
             if (cvi >= 0) {
-                _self->sym->vars[cvi].initialized = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, cvi)->initialized = 1;
             }
         }
         if (check_closure_assign(_self, n, scol) != 0) {
@@ -2407,7 +2411,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         }
                         if (_self->arena->nodes[rhs].kind == N_VAR) {
                             vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[rhs].text2);
-                            if (((vi >= 0) && (_self->sym->vars[vi].autodrop || _self->sym->vars[vi].borrowed))) {
+                            if (((vi >= 0) && (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->autodrop || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->borrowed))) {
                                 return tool_diag_ct_sem_error(cl, cc, "a custom subscript set cannot take an 'own' or 'borrow' value", _self->sup->mem->path);
                             }
                         }
@@ -2444,7 +2448,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         if (k == N_VAR) {
                             int ttvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
                             if (ttvi >= 0) {
-                                tt = _self->sym->vars[ttvi].type;
+                                tt = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, ttvi)->type;
                             }
                         }
                         else {
@@ -2486,7 +2490,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         }
                         if (k == N_VAR) {
                             int gvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
-                            if ((((gvi >= 0) && (_self->sym->vars[gvi].is_global || _self->sym->vars[gvi].is_static)) && (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, rhs, tt, rline, rcol) != 0))) {
+                            if ((((gvi >= 0) && (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, gvi)->is_global || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, gvi)->is_static)) && (_self->sup->__frontend_parse_supportops_vptr->str_store_warn(_self->sup, rhs, tt, rline, rcol) != 0))) {
                                 return (-1);
                             }
                         }
@@ -2529,10 +2533,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_expr_stmt_node(void 
                         if (k == N_VAR) {
                             int vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
                             if (vi >= 0) {
-                                _self->sym->vars[vi].initialized = 1;
+                                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->initialized = 1;
                             }
-                            if (((vi >= 0) && (frontend_sym_ct_is_container_type(_self->sym->vars[vi].type) || frontend_sym_ct_is_string_value_type(_self->sym->vars[vi].type)))) {
-                                _self->sym->vars[vi].cview = frontend_parse_expr_borrow_root(_self->ex, rhs);
+                            if (((vi >= 0) && (frontend_sym_ct_is_container_type(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type) || frontend_sym_ct_is_string_value_type(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type)))) {
+                                _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->cview = frontend_parse_expr_borrow_root(_self->ex, rhs);
                             }
                             frontend_parse_expr_view_bind(_self->ex, _self->arena->nodes[e].text2, rhs);
                         }
@@ -2637,12 +2641,12 @@ static int retire_before_return(struct frontend_parse_Stmt * self, int ret, int 
     self->arena->nodes[ret].b = self->arena->nodes[blk].a;
     for (d = 0; d < self->mem->nowner; d++) {
         int vi = self->mem->own_var[d];
-        if (((vi < 0) || (!self->sym->vars[vi].autodrop))) {
+        if (((vi < 0) || (!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->autodrop))) {
             continue;
         }
-        self->sym->vars[vi].owned = 0;
+        self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->owned = 0;
         if (permanent) {
-            self->sym->vars[vi].autodrop = 0;
+            self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->autodrop = 0;
         }
     }
     return ret;
@@ -2669,13 +2673,13 @@ static int retire_before_jump(struct frontend_parse_Stmt * self, int jump, int b
 static int return_reads_autodrop(struct frontend_parse_Stmt * self, int e) {
     int i;
     for (i = 0; i < self->sym->nvar; i++) {
-        if ((!self->sym->vars[i].autodrop)) {
+        if ((!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->autodrop)) {
             continue;
         }
-        if ((!self->mem->__backend_mem_memoryops_vptr->expr_mentions(self->mem, e, self->sym->vars[i].name))) {
+        if ((!self->mem->__backend_mem_memoryops_vptr->expr_mentions(self->mem, e, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->name))) {
             continue;
         }
-        if (self->mem->__backend_mem_memoryops_vptr->expr_returns(self->mem, e, self->sym->vars[i].name)) {
+        if (self->mem->__backend_mem_memoryops_vptr->expr_returns(self->mem, e, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->name)) {
             continue;
         }
         return 1;
@@ -2693,7 +2697,7 @@ static int closure_var_index(struct frontend_parse_Stmt * self, int e) {
         return (-1);
     }
     vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[e].text2);
-    if (((vi < 0) || (!self->sym->vars[vi].is_closure))) {
+    if (((vi < 0) || (!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->is_closure))) {
         return (-1);
     }
     return vi;
@@ -2743,7 +2747,7 @@ static int check_closure_assign(struct frontend_parse_Stmt * self, int n, int co
     if (kind == N_VAR) {
         lv = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[lhs].text2);
         if (((lv >= 0) && frontend_parse_outlives(self->sym, lv, bv))) {
-            return closure_error(self, self->arena->nodes[n].line, col, tool_sh_ct_scratch_fmt("a closure cannot be stored in '%s' (its scope outlives the closure)", self->sym->vars[lv].name));
+            return closure_error(self, self->arena->nodes[n].line, col, tool_sh_ct_scratch_fmt("a closure cannot be stored in '%s' (its scope outlives the closure)", self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, lv)->name));
         }
     }
     return closure_error(self, self->arena->nodes[n].line, col, "this closure is a binding, not a value (inline it or use a struct + trait)");
@@ -2772,7 +2776,7 @@ static int check_borrow_delete(struct frontend_parse_Stmt * self, int e) {
         return 0;
     }
     vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[e].text2);
-    if (((vi < 0) || (!self->sym->vars[vi].borrowed))) {
+    if (((vi < 0) || (!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->borrowed))) {
         return 0;
     }
     return tool_diag_ct_sem_error(self->arena->nodes[e].line, 1, "a borrowed pointer cannot be deleted", self->mem->path);
@@ -2789,7 +2793,7 @@ static int check_borrow_store(struct frontend_parse_Stmt * self, int n) {
     rhs = self->arena->nodes[n].b;
     if (((lhs >= 0) && (self->arena->nodes[lhs].kind == N_VAR))) {
         lv = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[lhs].text2);
-        if (((lv >= 0) && self->sym->vars[lv].borrowed)) {
+        if (((lv >= 0) && self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, lv)->borrowed)) {
             return tool_diag_ct_sem_error(self->arena->nodes[n].line, 1, "a borrowed pointer cannot be reassigned", self->mem->path);
         }
     }
@@ -2804,7 +2808,7 @@ static int check_borrow_store(struct frontend_parse_Stmt * self, int n) {
             }
         }
     }
-    if (((bv < 0) || (!self->sym->vars[bv].borrowed))) {
+    if (((bv < 0) || (!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, bv)->borrowed))) {
         return 0;
     }
     if (((lhs < 0) || (self->arena->nodes[lhs].kind != N_VAR))) {
@@ -2817,7 +2821,7 @@ static int check_borrow_store(struct frontend_parse_Stmt * self, int n) {
     if ((!frontend_parse_outlives(self->sym, lv, bv))) {
         return 0;
     }
-    return tool_diag_ct_sem_error(self->arena->nodes[n].line, 1, tool_sh_ct_scratch_fmt("a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)", self->sym->vars[lv].name), self->mem->path);
+    return tool_diag_ct_sem_error(self->arena->nodes[n].line, 1, tool_sh_ct_scratch_fmt("a borrowed pointer cannot be stored in '%s' (its scope outlives the borrow)", self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, lv)->name), self->mem->path);
 }
 static int borrow_decl_ahead(struct frontend_parse_Stmt * self) {
     const char * save_text_ptr;
@@ -2928,10 +2932,10 @@ static int mark_borrow(struct frontend_parse_Stmt * self, int n, int line, int c
         }
         vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[d].text2);
         if (vi >= 0) {
-            self->sym->vars[vi].borrowed = 1;
-            self->sym->vars[vi].autodrop = 1;
-            self->sym->vars[vi].owned = 0;
-            self->sym->vars[vi].own_line = line;
+            self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->borrowed = 1;
+            self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->autodrop = 1;
+            self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->owned = 0;
+            self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->own_line = line;
         }
         if (self->mem->nowner >= 4096) {
             return self->mem->__backend_mem_memoryops_vptr->fail(self->mem, "too many owned variables");
@@ -2950,17 +2954,17 @@ static int borrow_escape(struct frontend_parse_Stmt * self, int ret, int line) {
         return 0;
     }
     for (i = 0; i < self->sym->nvar; i++) {
-        if ((!self->sym->vars[i].borrowed)) {
+        if ((!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->borrowed)) {
             continue;
         }
-        if ((!self->mem->__backend_mem_memoryops_vptr->expr_returns(self->mem, ret, self->sym->vars[i].name))) {
+        if ((!self->mem->__backend_mem_memoryops_vptr->expr_returns(self->mem, ret, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->name))) {
             continue;
         }
-        if (tool_diag_ct_borrow_warn(line, self->sym->vars[i].name, self->mem->path) != 0) {
+        if (tool_diag_ct_borrow_warn(line, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->name, self->mem->path) != 0) {
             return self->mem->__backend_mem_memoryops_vptr->fail(self->mem, "too many warnings");
         }
-        if ((!self->sym->vars[i].is_param)) {
-            self->sym->vars[i].autodrop = 0;
+        if ((!self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->is_param)) {
+            self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->autodrop = 0;
         }
     }
     return 0;
@@ -3014,18 +3018,18 @@ static int str_escape_op(struct frontend_parse_Stmt * self, int op, int e, const
             if (ar->nodes[e].kind == N_VAR) {
                 si = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, ar->nodes[e].text2);
                 if (si >= 0) {
-                    im = self->sym->vars[si].str_immortal;
+                    im = self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, si)->str_immortal;
                 }
             }
         }
-        self->sym->vars[vi].str_immortal = im;
+        self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->str_immortal = im;
         return 0;
     }
     if (op == 2) {
         k = str_escape_op(self, 0, e, name, vk, line, col, stmt_line, 0);
         vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, name);
         if (vi >= 0) {
-            self->sym->vars[vi].str_escape = k;
+            self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, vi)->str_escape = k;
         }
         if (k != 2) {
             return 0;

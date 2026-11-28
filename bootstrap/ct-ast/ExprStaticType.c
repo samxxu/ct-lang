@@ -127,6 +127,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -1085,11 +1089,11 @@ static const char * frontend_parse_Expr_frontend_parse_ExprStaticType_expr_fnptr
     name = _self->arena->nodes[e].text2;
     vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);
     if (vi >= 0) {
-        if (_self->sym->vars[vi].is_closure) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_closure) {
             return (const char *)(0);
         }
-        if ((_self->sym->vars[vi].type && strstr(_self->sym->vars[vi].type, "(*)"))) {
-            return _self->sym->vars[vi].type;
+        if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type && strstr(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type, "(*)"))) {
+            return _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type;
         }
         return (const char *)(0);
     }
@@ -1244,12 +1248,12 @@ const char * frontend_parse_ctype_var(struct frontend_parse_Expr * self, int n, 
     if (i < 0) {
         return (const char *)(0);
     }
-    ty = self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(self, self->sym->vars[i].type, 0);
+    ty = self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(self, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->type, 0);
     if ((!ty)) {
         return (const char *)(0);
     }
-    if (self->sym->vars[i].is_array) {
-        for (dim = self->sym->vars[i].dims; (*dim); dim++) {
+    if (self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->is_array) {
+        for (dim = self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->dims; (*dim); dim++) {
             if ((*dim) == '[') {
                 (*array_depth)++;
             }
@@ -1408,7 +1412,7 @@ const char * frontend_parse_ctype_call(struct frontend_parse_Expr * self, int n,
     if (i < 0) {
         return (const char *)(0);
     }
-    tmp = self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(self, self->sym->vars[i].type, 0);
+    tmp = self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(self, self->sym->__frontend_sym_symbolops_vptr->var_at(self->sym, i)->type, 0);
     if ((!tmp)) {
         return (const char *)(0);
     }

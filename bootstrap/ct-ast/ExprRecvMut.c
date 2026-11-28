@@ -118,6 +118,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -261,7 +265,7 @@ static int frontend_parse_Expr_frontend_parse_ExprRecvMut_recv_mut_check(void *s
     }
     if (((!why) && (k == N_VAR))) {
         vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[recv].text2);
-        if (((vi >= 0) && (strncmp(_self->sym->vars[vi].type, "const ", 6) == 0))) {
+        if (((vi >= 0) && (strncmp(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type, "const ", 6) == 0))) {
             why = 2;
         }
     }

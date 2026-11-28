@@ -638,7 +638,7 @@ static int tb_type_of(struct TBuilder *tb, int n, int hint)
         if (vi > 0) return tb->m->vars[vi - 1].type;
         vi = sym->find_var(ar->nodes[n].text2);
         if (vi >= 0) {
-            sp = sym->vars[vi].type;
+            sp = sym->var_at(vi)->type;
             return tmod_type(tb->m, sp,
                              tb->in_template || tmod_spelling_free(sp));
         }
@@ -1136,8 +1136,8 @@ static int tb_target_var(struct TBuilder *tb, int eid, int n)
     if (vi > 0) return tb_set_target(m, eid, RT_VAR, vi, BI_NONE, "");
     vi = sym->find_var(ar->nodes[n].text2);
     if (vi >= 0) {
-        decl = tb_find_decl(m, TD_GLOBAL, sym->vars[vi].name);
-        if (decl <= 0) decl = tb_find_decl(m, TD_GLOBAL, sym->vars[vi].cname);
+        decl = tb_find_decl(m, TD_GLOBAL, sym->var_at(vi)->name);
+        if (decl <= 0) decl = tb_find_decl(m, TD_GLOBAL, sym->var_at(vi)->cname);
         if (decl > 0) return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, "");
         return tb_set_target(m, eid, RT_BUILTIN, 0, BI_EXTERNAL,
                              ar->nodes[n].text2);

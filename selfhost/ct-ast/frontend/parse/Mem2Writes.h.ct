@@ -171,7 +171,7 @@ static int mem2_lhs_escapes(struct Arena *ar, struct Symbols *sym, int lhs)
     if (k == N_VAR) {
         vi = sym->find_var(ar->nodes[lhs].text2);
         if (vi < 0) return 0;
-        return sym->vars[vi].is_global || sym->vars[vi].is_static;
+        return sym->var_at(vi)->is_global || sym->var_at(vi)->is_static;
     }
     return k == N_ARROW || k == N_MEMBER || k == N_INDEX || k == N_DEREF;
 }
@@ -192,7 +192,7 @@ static int mem2_receiver_is_container(struct Arena *ar, struct Symbols *sym, int
     if (ar->nodes[recv].kind != N_VAR) return 0;
     vi = sym->find_var(ar->nodes[recv].text2);
     if (vi < 0) return 0;
-    return frontend::sym::ct_is_container_type(sym->vars[vi].type);
+    return frontend::sym::ct_is_container_type(sym->var_at(vi)->type);
 }
 
 /* Mark one parameter as directly escaping. First write wins so the diagnostic

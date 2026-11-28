@@ -115,6 +115,10 @@ struct frontend_sym_Fn;
 struct frontend_sym_FnTable;
 struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
+struct frontend_sym_VarTable;
+struct Vec_frontend__sym__Var;
+struct frontend_sym_ScopeStack;
+struct Vec_int;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
@@ -324,8 +328,8 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_loop(void *self) {
         if (_self->arena->nodes[e].kind == N_VAR) {
             vi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
         }
-        if (((vi >= 0) && _self->sym->vars[vi].is_array)) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a loop bound must be an integer (got the array '%s')", _self->sym->vars[vi].name), _self->mem->path);
+        if (((vi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_array)) {
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a loop bound must be an integer (got the array '%s')", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
         if (((_self->sup->__frontend_parse_supportops_vptr->expr_ctype_text(_self->sup, e, (&ct)) == 0) && strchr(ct, '['))) {
             return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("a loop bound must be an integer (got '%s')", ct), _self->mem->path);
@@ -446,13 +450,13 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
         return tool_diag_ct_sem_error(line, col, "foreach needs a declared array", _self->mem->path);
     }
     aux = 0;
-    iname = _self->sym->vars[vi].type;
+    iname = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type;
     if (strncmp(iname, "struct ", 7) == 0) {
         iname += 7;
     }
-    if (_self->sym->vars[vi].is_slice) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_slice) {
         aux = 3;
-        elem = _self->sym->vars[vi].slice_elem;
+        elem = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->slice_elem;
     }
     inst = frontend_sym_ct_inst_find(iname);
     if (inst >= 0) {
@@ -494,27 +498,27 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
         }
     }
     if (aux == 0) {
-        if ((_self->sym->vars[vi].is_param || _self->sym->vars[vi].is_fnparam)) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot iterate the array parameter '%s' (its length is lost)", _self->sym->vars[vi].name), _self->mem->path);
+        if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_param || _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_fnparam)) {
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot iterate the array parameter '%s' (its length is lost)", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
-        if ((!_self->sym->vars[vi].dims[0])) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach needs an array or a Vec/Map; '%s' is not iterable", _self->sym->vars[vi].name), _self->mem->path);
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims[0])) {
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach needs an array or a Vec/Map; '%s' is not iterable", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
-        elem = _self->sym->vars[vi].type;
-        if (((_self->sym->vars[vi].dims[0] != '[') || strchr(elem, '('))) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot iterate '%s'; its declarator is not a plain array", _self->sym->vars[vi].name), _self->mem->path);
+        elem = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->type;
+        if (((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims[0] != '[') || strchr(elem, '('))) {
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot iterate '%s'; its declarator is not a plain array", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
         nd = 0;
-        for (p = _self->sym->vars[vi].dims; (*p); p++) {
+        for (p = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims; (*p); p++) {
             if ((*p) == '[') {
                 nd++;
             }
         }
         if (nd > 1) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name), _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach does not support multidimensional arrays ('%s')", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
-        if ((_self->sym->vars[vi].is_global && strstr(_self->sym->vars[vi].dims, "[]"))) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach needs an array with a known length ('%s')", _self->sym->vars[vi].name), _self->mem->path);
+        if ((_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->is_global && strstr(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->dims, "[]"))) {
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach needs an array with a known length ('%s')", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
         bare = 1;
         for (q = elem; (*q); q++) {
@@ -523,10 +527,10 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
             }
         }
         if (((bare && (_self->sym->__frontend_sym_typealiasops_vptr->expand_type_alias_text(_self->sym, elem, (&ex)) == 0)) && strchr(ex, '['))) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach does not support multidimensional arrays ('%s')", _self->sym->vars[vi].name), _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach does not support multidimensional arrays ('%s')", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
         if ((_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, elem, (&tr), (&ip)) && (!ip))) {
-            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot copy interface values ('%s')", _self->sym->vars[vi].name), _self->mem->path);
+            return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("foreach cannot copy interface values ('%s')", _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->name), _self->mem->path);
         }
     }
     if (_self->sup->__frontend_parse_supportops_vptr->push_scope(_self->sup) != 0) {
@@ -539,7 +543,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     if (aux != 0) {
         int ivi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, "item");
         if (ivi >= 0) {
-            _self->sym->vars[ivi].cview = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, ivi)->cview = 1;
         }
     }
     if (_self->sup->__frontend_parse_supportops_vptr->declare_var(_self->sup, "i", "int") != 0) {
@@ -595,7 +599,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtLoop_parse_foreach(void *self)
     }
     _self->arena->nodes[s].aux = aux;
     if (aux == 3) {
-        _self->arena->nodes[s].text2 = runtime_text_ct_intern(_self->sym->vars[vi].cname);
+        _self->arena->nodes[s].text2 = runtime_text_ct_intern(_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->cname);
         if ((!_self->arena->nodes[s].text2)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
