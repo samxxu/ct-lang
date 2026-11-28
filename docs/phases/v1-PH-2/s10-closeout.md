@@ -12,10 +12,11 @@
 | --- | --- |
 | S0–S8 尾、S8c、S9 | 已入库；S8r2 单文件默认 LIR、known-gap 清零；S8 尾 D5/D6/外壳落盘（`Emitter.h.ct` 9872→1545）；S8 收尾 D-013 真 lowering（自举 1638/1638、语料 498/498）与外壳行化（882 夹具 0 差异） |
 | S8 §5 签字 | **已完成（`0e2edb15`，2026-11-28）**：两份 S8 文档 REV 均「复核通过」，dogfooding §3.7 可读性通过，`D-030` 转 `accepted` |
-| S8a（LANG-31，可砍） | **deferred**：未开工，issue 已转 `deferred`；触发条件见卡 §6 E-V3-9d |
+| S8a（LANG-31，可砍） | **改为必做（2026-11-28 撤回 deferred）**：issue 转回 `open`，施工卡已有；与 I2 共用 D-028 解析表 |
+| I2（接口值下标） | **新纳入 1.2**（E-V3-9e）：未开工，先出 ADR（拟 `D-034`）并裁定 I2-Q2–Q4 |
 | S8b 剩余 | §3.6 已补 D6/D4/D2 行块/D3a–c；**R1/R2 已完成**（`6ba2a627` Pkg 53→51、`1d93fd77` Symbols 41→24；审计表 `docs/design/s8b-rem-audit.tsv`）；R3/R4/R5–R7/R8 待开 |
 | 未关闭 issue | DESIGN-1、TEST-27（`open`） |
-| ADR | `D-030` 已 `accepted`（REVIEW 2026-11-28）；`D-032` 已 `accepted`（REVIEW 2026-11-28，`bdc505fe`） |
+| ADR | `D-030`、`D-032` 已 `accepted`；`D-031`（I1）与 `D-034`（I2）待立 |
 | 判据 | `E-V3-10` 已由 [CR-V3-1](card.md#8-判据变更记录) 改写为「selfhost/ct-ast 与 lib/core 各一处 manifest allow」；实施卡 [D032-C1](../../design/d032-internal-c-boundary-construction.md) 已交 |
 
 ## 2 开工闸（不清零不进 S10）
@@ -152,11 +153,11 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | **已完成**（`6ba2a627`、`1d93fd77`） | DEV | 无 | [S8B 施工卡](../../design/s8b-remaining-construction.md)、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 排在 S8B-REM-1 R8（同属 `backend/emit`）之后，避免同文件集冲突 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
-| Q-8 | I2 接口值下标（四问待所有者裁定） | **登记（未立项）** | 所有者裁定 | 无 | RFC 评估 §3、§4 |
+| Q-8 | I2 接口值下标 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-034`）→ DEV | 先裁 I2-Q2–Q4 | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
 | Q-9 | dist 产物冒烟 | **立项（`planned`）** | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
-| Q-12 | LANG-31（常量键折叠） | 登记（deferred） | 下一窗口重评 | 所有者决定窗口 | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md) |
+| Q-12 | LANG-31（常量键折叠，I1） | **待开（2026-11-28 撤回 deferred）** | DEV | ADR `D-031` + spec §4.79（施工卡已有） | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | 待开 | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 
 > **Q-9 立项口径（所有者 2026-11-28 选 C）**：在 CI 增加一步——用 `selfhost/make-dist.sh`

@@ -7,10 +7,10 @@
 | 严重度 | **Medium**（不影响既有程序；收益是静态 struct 的零开销下标） |
 | 锚点 | `4b57567d`（2026-11-27） |
 | 依据 | [RFC-0000 评估](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md) §3、[lang31-const-key-fold-construction](../../docs/design/lang31-const-key-fold-construction.md)、[D-028](../../docs/decisions/D-028.md) |
-| 状态 | deferred |
+| 状态 | open |
 | 负责人 | DEV（实施）；REVIEW（ADR 签收）；REQ（验收） |
-| 交付窗口 | **v1.2 的 S8a，可砍**：排在 S8（IR-2）之后；若 S8 收口后窗口不足，整体降到 1.2 之后，不另立版本号，S10 收口记录里记 deferred |
-| 处置证据 | 施工卡已交 DEV（2026-11-27）：[lang31-const-key-fold-construction](../../docs/design/lang31-const-key-fold-construction.md)；前置 ADR 与 spec 新节。**2026-11-28 转 `deferred`**：v1.2 窗口不足，按 [卡 §6 E-V3-9d](../../docs/phases/v1-PH-2/card.md) 的授权整体顺延到下一窗口重评；触发条件与判据不变，重评时补 `D-031` + spec 新节。 |
+| 交付窗口 | **v1.2 必做（所有者 2026-11-28 撤回 deferred）**：与 I2 一起随 1.2 交付；1.2.0 已提交但未打 tag，tag 推迟到本项与 I2 落地后 |
+| 处置证据 | 施工卡已交 DEV（2026-11-27）：[lang31-const-key-fold-construction](../../docs/design/lang31-const-key-fold-construction.md)；前置 ADR 与 spec 新节。**2026-11-28 转回 `open`**：所有者裁定不再后推，随 [卡 §8 CR-V3-2](../../docs/phases/v1-PH-2/card.md#8-判据变更记录) 纳入 1.2；与 I2 共用 D-028 的下标解析表，但独立交付。 |
 
 ## 1 现象
 

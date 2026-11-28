@@ -394,10 +394,23 @@ v0-PH-52 的 D52-6 指向本条。
 | `what` | 字符串**字面量**键在编译期解析到结构体字段并折叠为字段访问；未知字段/非字面量键/非结构体接收者硬错；字段优先、并存 `get(char *)` 时给歧义诊断；只做读形态。 |
 | `why` | 来稿 RFC-0000 的核心卖点（静态零开销下标），Ct 目前只有运行期 `get`；动态键已经可用，缺的只是“编译期已知的键”。 |
 | `priority` | `P2` |
-| `status` | `planned`（**v1.2 S8a，可砍**；排在 S8 之后，窗口不足即 deferred，不另立版本） |
+| `status` | `planned`（**v1.2 必做，2026-11-28 撤回 deferred**；与 I2 共用 D-028 的下标解析表） |
 | `owner` | DEV（实施）；REVIEW（ADR 签收）；REQ（验收） |
-| `last-touched` | 2026-11-27 |
-| `block` | 前置 ADR `D-031` + spec 新节；在 S8 的 LIR 上实现，避免写两遍；不阻塞 S8b/S9/S10 |
+| `last-touched` | 2026-11-28 |
+| `block` | 前置 ADR `D-031` + spec 新节（施工卡已交）；按所有者 2026-11-28 裁定随 1.2 交付，1.2.0 的 tag 推迟到本项与 I2 落地后 |
+
+## REQ-I2-1 — 接口值下标（I2）
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-I2-1` |
+| `what` | 接口值（trait 对象）支持 `o[k]`：按该 trait 的 `get(K)` 方法经 vtable 槽解析；读写范围与 ABI 承诺按 I2-Q2–Q4 的裁定执行。 |
+| `why` | 让同一段下标代码既能用于静态 struct（I1 / D-028），也能用于多实现的接口值；来稿 RFC-0000 的统一访问动机之一。Ct 目前只认固有 impl，接口值只能显式 `o.get(k)`。 |
+| `priority` | `P2` |
+| `status` | `planned`（**所有者 2026-11-28 裁定纳入 1.2 必做**；未开工，四问裁定中） |
+| `owner` | ARCH（ADR 设计）；DEV（实施）；REVIEW（复核）；REQ（验收） |
+| `last-touched` | 2026-11-28 |
+| `block` | 前置 ADR（拟 `D-034`）与 [RFC 评估 §3.1](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md) 的 I2-Q2–Q4 裁定；不得破坏 D-028 的固有 impl 路径 |
 
 ## REQ-POINTERFREE-1 — 日常代码的指针退场
 
