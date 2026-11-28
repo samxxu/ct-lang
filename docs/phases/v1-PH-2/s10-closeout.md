@@ -161,7 +161,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-4 | D032-C1 实施 M3（lib/core 8 个 shim 退场，含 utf16 子树） | **已完成**（`653dec09`，8 → 0；seed 5 → 3；REQ 验收见下） | DEV | Q-3 | 同上 |
 | Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | **已完成**（`6ba2a627`、`1d93fd77`） | DEV | 无 | [S8B 施工卡](../../design/s8b-remaining-construction.md)、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
-| Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 排在 S8B-REM-1 R8（同属 `backend/emit`）之后，避免同文件集冲突 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
+| Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
 | Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`** | ARCH 起草 `D-034` → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) 已交 | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
 | Q-9 | dist 产物冒烟 | **立项（`planned`）** | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
@@ -169,6 +169,19 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-12 | LANG-31（常量键折叠，I1） | **待开（2026-11-28 撤回 deferred）** | DEV | ADR `D-031` + spec §4.79（施工卡已有） | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | 待开 | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 
+> **Q-7 排期口径（2026-11-28）**：本条是架构债、无用户可见收益，**不进 1.2 窗口**
+> （窗口已由 I1/I2 占满）；建议放在 `v1.2.0` tag 之后的技术债批，不单独立版本。三步：
+> ① 阶段 0（可立即并行、不占 DEV）ARCH 起草 `D-033`，定拼写表字段、不变量、作用域与
+> "生成 C 逐字节不变"判据；ARCH 长期不在场时参照 `D-030` 由 REQ 起草、REV 签收，
+> 并与 `D-034` 同批以减少往返；② 阶段 1 DEV 在 S8B-REM-1 R8 之后开工，切片为
+> S1 盘点+拼写表字段 → S2 `write_abi_header` → S3 `emit_adt_life_defs`（差异清单里
+> 原名 `emit_drop_defs`）→ S4 map prologue + 删残留 `sym->`，每片沿用 S8B §4 统一验收
+> （`CT_C_BOUNDARY=allow` goldens 25/25、`check-ast`、自举 fixpoint 2 轮、`check-seed`
+> 两轮、`check-all` 8 门、`check-warnings` 0）；③ 阶段 2 REV 只读复核 → EDITOR 落状态。
+> 与 R5/R7（`Symbols` 表转 `Vec`）共用读取点，必须让它们先行。REQ 盘点输入：
+> `backend/emit/**` 现约 361 处 `sym->`，本条只涉 ABI header / ADT 生命周期 / map prologue
+> 三条路径，逐条清单由 S1 冻结。本条等待 ARCH **不阻塞** S8B R3–R8 与 I1。
+>
 > **Q-9 立项口径（所有者 2026-11-28 选 C）**：在 CI 增加一步——用 `selfhost/make-dist.sh`
 > 产出 `ct-linux-x64.tar.gz`，**解包后用包内的 `ct`** 跑 `ct -v` 与 `examples/50_ref_out`
 > （期望 `2 3 4`）、`examples/52_box_new`（期望 `4 4`）；测的是"上传的那份产物"，
@@ -186,4 +199,6 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 3. I1（Q-12）：`D-031` 由 **DEV 起草**（先例 [D-030](../../decisions/D-030.md)，DEV 起草、REV 签收），
    **不等 ARCH**；签收后按 `T1–T5` 开工；
 4. I2（Q-8）：`D-034` 由 **ARCH 起草**；ARCH 不在场时 **I2 停在这里**，不阻塞第 1–3 项；
-5. REQ 的 spec / c-shim-contract 同步（M3 后）与 REV 的复核都**不进 DEV 前置**。
+5. Q-7（拼写表）：**不进 1.2**，`D-033` 可随时由 ARCH 起草（与 `D-034` 同批更省往返）；
+   实施排在 S8B R8 之后、`v1.2.0` tag 后的技术债批，见本节 Q-7 注；
+6. REQ 的 spec / c-shim-contract 同步（M3 后）与 REV 的复核都**不进 DEV 前置**。
