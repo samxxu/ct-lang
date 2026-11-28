@@ -216,9 +216,11 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 >    `REQ/REVIEW/USER`，并明确拒绝 `EDITOR`；需改为 ADR 也接受 `EDITOR`（函数
 >    `check_signoffs` 的 ADR 分支：放宽正则、删除 `elif m.group(1) == "EDITOR"` 拒绝、
 >    同步 docstring 与报错文案），改后跑 `check-docs.py` 与 `--selftest`；
-> 2. **规范对齐（EDITOR）**：[AGENTS.md §0.7](../../../AGENTS.md#07-主编签收项目加严t-8) 的
->    表格现写「ADR / battle 判决：作者 EDITOR，签收 REQ 或 REVIEW」，与新口径冲突；需改为
->    「ADR：作者 ARCH，签收 EDITOR（battle 判决维持原行）」。
+> 2. **规范对齐（EDITOR）**：三处同批改——① [AGENTS.md §0.7](../../../AGENTS.md#07-主编签收项目加严t-8)
+>    表格把 ADR 行拆出（ADR：作者 ARCH、签收 EDITOR；battle 判决维持原行）；②
+>    [ai-coding-workflow §5.2](../../spec/ai-coding-workflow.md#52-矩阵) 的「决策记录」列按同一口径
+>    拆分；③ 该文件的 `docs/spec` sha256 pin（g0 校验）随之更新。REQ 单改 ② 会触发 g0 红，
+>    故 ②③ 必须由 EDITOR 同批落。
 > 两项落地前 `D-031` 头部保留 `签收：REVIEW（待签）` 并注明终签归 EDITOR，避免门禁红。
 > 同一口径适用于 `D-033`（Q-7）与 `D-034`（Q-8）。
 >
