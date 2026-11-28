@@ -3,6 +3,7 @@
 #include "Lower.h"
 #include "Intern.h"
 #include "Unit.h"
+#include "ExprTypeText.h"
 #include "Symbols.h"
 #include "Arena.h"
 #include "TModule.h"
@@ -1038,7 +1039,8 @@ static int lw_method_param_ref(struct backend_lir_Lower * w, struct backend_tir_
         if (ti >= 0) {
             for (mi = 0; mi < sym->traits[ti].nm; mi++) {
                 struct frontend_sym_MethodSig * ms = (&sym->traits[ti].m[mi]);
-                if (((!ms->name) || (strcmp(ms->name, t->text) != 0))) {
+                const char * sl = frontend_parse_ct_trait_slot_text(ti, mi);
+                if ((((!sl) || (!t->text)) || (strcmp(sl, t->text) != 0))) {
                     continue;
                 }
                 if (idx >= ms->nparams) {

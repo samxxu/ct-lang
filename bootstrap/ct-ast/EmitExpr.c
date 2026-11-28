@@ -2443,6 +2443,7 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
     (void)(c);
     const char * tname;
     const char * low;
+    const char * slot;
     int i;
     int c2;
     int rk;
@@ -2862,6 +2863,38 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
         tmp[i] = 0;
         low = tmp;
     }
+{
+        int ti_e = (-1);
+        int mi_e = (-1);
+        int i_e;
+        slot = self->arena->nodes[n].text2;
+        if ((self->arena->nodes[n].suffix && self->arena->nodes[n].suffix[0])) {
+            slot = runtime_text_ct_internf("%s%s", slot, self->arena->nodes[n].suffix);
+            if ((!slot)) {
+                return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+            }
+        }
+        else {
+            if (((self->arena->nodes[n].aux == 3) || (self->arena->nodes[n].aux == 4))) {
+                ti_e = self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, tname);
+                for (i_e = 0; ((ti_e >= 0) && (i_e < self->sym->traits[ti_e].nm)); i_e++) {
+                    if ((self->sym->traits[ti_e].m[i_e].name && (strcmp(self->sym->traits[ti_e].m[i_e].name, self->arena->nodes[n].text2) == 0))) {
+                        mi_e = i_e;
+                        break;
+                    }
+                }
+                if (mi_e >= 0) {
+                    slot = frontend_parse_ct_trait_slot_text(ti_e, mi_e);
+                    if ((!slot)) {
+                        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+                    }
+                }
+            }
+        }
+        if ((!slot)) {
+            return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+        }
+    }
     if (self->arena->nodes[n].aux == 4) {
         if ((self->runtime_checks && (*self->runtime_checks))) {
             fputs("((struct ", self->out);
@@ -2871,9 +2904,9 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
                 return (-1);
             }
             fprintf(self->out, ")->vt, __FILE__, %d, \"", self->arena->nodes[n].line);
-            fputs(self->arena->nodes[n].text2, self->out);
+            fputs(slot, self->out);
             fputs("\"))->", self->out);
-            fputs(self->arena->nodes[n].text2, self->out);
+            fputs(slot, self->out);
             fputs("((", self->out);
             if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                 return (-1);
@@ -2884,7 +2917,7 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
             if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                 return (-1);
             }
-            fprintf(self->out, "->vt->%s(", self->arena->nodes[n].text2);
+            fprintf(self->out, "->vt->%s(", slot);
             if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                 return (-1);
             }
@@ -2901,9 +2934,9 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
                     return (-1);
                 }
                 fprintf(self->out, ").vt, __FILE__, %d, \"", self->arena->nodes[n].line);
-                fputs(self->arena->nodes[n].text2, self->out);
+                fputs(slot, self->out);
                 fputs("\"))->", self->out);
-                fputs(self->arena->nodes[n].text2, self->out);
+                fputs(slot, self->out);
                 fputs("((", self->out);
                 if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                     return (-1);
@@ -2914,7 +2947,7 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
                 if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                     return (-1);
                 }
-                fprintf(self->out, ".vt->%s(", self->arena->nodes[n].text2);
+                fprintf(self->out, ".vt->%s(", slot);
                 if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
                     return (-1);
                 }
@@ -2985,7 +3018,8 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
     ai2 = 0;
     if (tm2 >= 0) {
         for (i = 0; i < self->sym->traits[tm2].nm; i++) {
-            if (strcmp(self->sym->traits[tm2].m[i].name, self->arena->nodes[n].text2) == 0) {
+            const char * sl = frontend_parse_ct_trait_slot_text(tm2, i);
+            if ((sl && (strcmp(sl, slot) == 0))) {
                 mm2 = i;
                 break;
             }

@@ -209,8 +209,10 @@ impl EmitDecl for Emitter {
             if (t < 0 || t >= self->sym->ntraits) continue;
             fprintf(self->out, "struct %s_vtbl {\n", self->sym->traits[t].name);
             for (m = 0; m < self->sym->traits[t].nm; m++) {
+                const char *fslot = frontend::parse::ct_trait_slot_text(t, m);
+                if (!fslot) return self->fail("out of memory");
                 fprintf(self->out, "    %s (*%s)(void *", self->sym->traits[t].m[m].ret,
-                        self->sym->traits[t].m[m].name);
+                        fslot);
                 for (k = 0; k < self->sym->traits[t].m[m].nparams; k++) {
                     fprintf(self->out, ", %s", self->sym->traits[t].m[m].ptype[k]);
                     if (self->sym->traits[t].m[m].pann[k] == 2
@@ -561,6 +563,7 @@ impl EmitDecl for Emitter {
     int emit_impls(int prog)
     {
         int n, m, k, u, body, dm;
+        const char *mslot;
         int nr = backend::lir::lmod_plan_row_count(), r;
         (void)self;
         (void)prog;
@@ -594,6 +597,13 @@ impl EmitDecl for Emitter {
                          self->sym->struct_at(si)->name, tname,
                          self->arena->nodes[m].text2);
                 if (!owner) return self->fail("out of memory");
+                /* D-034 (I2): the vtable slot this body fills. A trait that
+                   declares the name twice spells it with its key suffix; the
+                   closure key above stays the parser's plain spelling. */
+                mslot = ti >= 0
+                        ? frontend::parse::ct_trait_impl_slot_text(ti, self->arena, m)
+                        : self->arena->nodes[m].text2;
+                if (!mslot) return self->fail("out of memory");
                 if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
                 self->nclvar = 0;
                 self->closure_ci = 0;
@@ -616,7 +626,7 @@ impl EmitDecl for Emitter {
                         fputs("__attribute__((unused)) ", self->out);
                 }
                 fprintf(self->out, "%s_%s_%s(void *self",
-                        self->sym->struct_at(si)->name, tname, self->arena->nodes[m].text2);
+                        self->sym->struct_at(si)->name, tname, mslot);
                 k = self->arena->nodes[m].a;
                 while (k > 0) {
                     fputs(", ", self->out);
@@ -661,10 +671,13 @@ impl EmitDecl for Emitter {
                     (const char *, void *, int, int, int *, int) => int body_hook = g_body_hook;
                     int printed = 0;
                     if (body_hook) {
+                        /* D-034 (I2): the seam key is the emitted symbol, so
+                           a duplicate trait name carries its slot suffix here
+                           too (the closure key above stays the plain one). */
                         const char *key = tool::sh::ct_scratch_fmt("%s_%s%s%s",
                                 self->sym->struct_at(si)->name, tname,
                                 (tname && tname[0]) ? "_" : "",
-                                self->arena->nodes[m].text2);
+                                mslot);
                         int new_ntmp = self->ntmp;
                         int hr = body_hook(key, self->out, 1, self->ntmp,
                                            &new_ntmp, 1);
@@ -705,9 +718,13 @@ impl EmitDecl for Emitter {
                             tname, self->sym->struct_at(si)->name, tname);
                 u = 0;
                 for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
+                    const char *vsl = ti >= 0
+                        ? frontend::parse::ct_trait_impl_slot_text(ti, self->arena, m)
+                        : self->arena->nodes[m].text2;
+                    if (!vsl) return self->fail("out of memory");
                     if (u > 0) fputs(",\n", self->out);
-                    fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
-                            self->sym->struct_at(si)->name, tname, self->arena->nodes[m].text2);
+                    fprintf(self->out, "    .%s = %s_%s_%s", vsl,
+                            self->sym->struct_at(si)->name, tname, vsl);
                     u++;
                 }
                 /* inherited defaults fill the remaining slots */
@@ -715,9 +732,11 @@ impl EmitDecl for Emitter {
                     for (dm = 0; dm < self->sym->traits[ti].nm; dm++) {
                         if (self->sym->traits[ti].m[dm].body < 0) continue;
                         if (impl_writes(self->arena, n, self->sym->traits[ti].m[dm].name)) continue;
+                        const char *dsl = frontend::parse::ct_trait_slot_text(ti, dm);
+                        if (!dsl) return self->fail("out of memory");
                         if (u > 0) fputs(",\n", self->out);
-                        fprintf(self->out, "    .%s = %s_%s_%s", self->sym->traits[ti].m[dm].name,
-                                self->sym->struct_at(si)->name, tname, self->sym->traits[ti].m[dm].name);
+                        fprintf(self->out, "    .%s = %s_%s_%s", dsl,
+                                self->sym->struct_at(si)->name, tname, dsl);
                         u++;
                     }
                 fputs("\n};\n\n", self->out);
@@ -893,9 +912,11 @@ impl EmitDecl for Emitter {
                     fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
                             tname, self->sym->struct_at(si)->name, tname);
                 for (dm = 0; dm < self->sym->traits[ti].nm; dm++) {
+                    const char *asl = frontend::parse::ct_trait_slot_text(ti, dm);
+                    if (!asl) return self->fail("out of memory");
                     if (dm > 0) fputs(",\n", self->out);
-                    fprintf(self->out, "    .%s = %s_%s_%s", self->sym->traits[ti].m[dm].name,
-                            self->sym->struct_at(si)->name, tname, self->sym->traits[ti].m[dm].name);
+                    fprintf(self->out, "    .%s = %s_%s_%s", asl,
+                            self->sym->struct_at(si)->name, tname, asl);
                 }
                 fputs("\n};\n\n", self->out);
             }
@@ -1560,9 +1581,13 @@ pub int emit_default_method(struct Emitter *e, int si, const char *stype, int ti
                  sig->line, e->sym->struct_at(si)->name, fld);
         return e->fail_from(at, msg);
     }
-    fprintf(e->out, "static %s ", sig->ret);
-    fprintf(e->out, "%s_%s_%s(void *self",
-            e->sym->struct_at(si)->name, e->sym->traits[ti].name, sig->name);
+    {
+        const char *dslot = frontend::parse::ct_trait_slot_text(ti, mi);
+        if (!dslot) return e->fail("out of memory");
+        fprintf(e->out, "static %s ", sig->ret);
+        fprintf(e->out, "%s_%s_%s(void *self",
+                e->sym->struct_at(si)->name, e->sym->traits[ti].name, dslot);
+    }
     ai = 0;
     for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
         fputs(", ", e->out);

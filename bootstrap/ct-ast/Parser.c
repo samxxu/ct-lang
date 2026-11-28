@@ -237,6 +237,7 @@ static int borrow_struct_of(struct frontend_parse_Parser *, const char *, int);
 static const char * struct_name_text(const char *);
 static int check_borrow_param(struct frontend_parse_Parser *, int, int, int);
 static const char * trait_sig_text(struct frontend_parse_Parser *, int, int);
+static int trait_method_params_match(struct frontend_parse_Parser *, int, int, int, int);
 static int trait_index_marker(struct frontend_parse_Parser *, int, int, int, int);
 static int parse_trait_body(struct frontend_parse_Parser *, int, int, const char *);
 static void trait_default_edges(struct runtime_arena_Arena *, int, struct frontend_sym_Symbols *, int, int, char *, int);
@@ -4378,9 +4379,27 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         }
         tm_i = 0;
         if (ti >= 0) {
-            for (tm_i = 0; tm_i < _self->sym->traits[ti].nm; tm_i++) {
-                if (strcmp(_self->sym->traits[ti].m[tm_i].name, mname) == 0) {
-                    break;
+            int first = (-1);
+            int pick = (-1);
+            int cand;
+            tm_i = _self->sym->traits[ti].nm;
+            for (cand = 0; cand < _self->sym->traits[ti].nm; cand++) {
+                if (strcmp(_self->sym->traits[ti].m[cand].name, mname) != 0) {
+                    continue;
+                }
+                if (first < 0) {
+                    first = cand;
+                }
+                if (((pick < 0) && trait_method_params_match(_self, ti, cand, params, nimpl))) {
+                    pick = cand;
+                }
+            }
+            if (pick >= 0) {
+                tm_i = pick;
+            }
+            else {
+                if (first >= 0) {
+                    tm_i = first;
                 }
             }
         }
@@ -4489,6 +4508,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         _self->arena->nodes[mnode].b = body;
         _self->arena->nodes[mnode].num = ti;
         _self->arena->nodes[mnode].aux = si;
+        _self->arena->nodes[mnode].d = (((ti >= 0) && (tm_i < _self->sym->traits[ti].nm)) ? tm_i : (-1));
         if (tail < 0) {
             _self->arena->nodes[node].a = mnode;
         }
@@ -5444,6 +5464,45 @@ static const char * trait_sig_text(struct frontend_parse_Parser * self, int ti, 
         ;
         tool_sh_ct_text_free((&buf), (&cap));
         return (const char *)(0);
+}
+static int trait_method_params_match(struct frontend_parse_Parser * self, int ti, int mi, int params, int nimpl) {
+    struct frontend_sym_MethodSig * m;
+    int k;
+    int pk;
+    const char * ik;
+    m = (&self->sym->traits[ti].m[mi]);
+    if (m->nparams != nimpl) {
+        return 0;
+    }
+    for ((k = params, pk = 0); k > 0; (k = self->arena->nodes[k].next, pk++)) {
+        const char * pt = m->ptype[pk];
+        if ((!pt)) {
+            return 0;
+        }
+        if (self->arena->nodes[k].text3[0]) {
+            const char * jt = runtime_text_ct_intern_join(self->arena->nodes[k].text, self->arena->nodes[k].text3);
+            if ((!jt)) {
+                return 0;
+            }
+            ik = frontend_type_type_key_text(jt);
+        }
+        else {
+            ik = frontend_type_type_key_text(self->arena->nodes[k].text);
+        }
+        if ((!ik)) {
+            return 0;
+        }
+{
+            const char * tk = frontend_type_type_key_text(pt);
+            if ((!tk)) {
+                return 0;
+            }
+            if (strcmp(ik, tk) != 0) {
+                return 0;
+            }
+        }
+    }
+    return 1;
 }
 static int trait_index_marker(struct frontend_parse_Parser * self, int ti, int mi, int nline, int ncol) {
     struct frontend_sym_MethodSig * m;

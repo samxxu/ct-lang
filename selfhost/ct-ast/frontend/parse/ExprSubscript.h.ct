@@ -754,11 +754,9 @@ impl ExprSubscript for Expr {
             return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
         }
         if (call_node >= 0 && call_node < self->arena->nnode) {
-            /* The call shape is the explicit `o.get(k)` one. A trait that
-               declares the same name twice needs distinct vtable slots; that
-               slot spelling arrives with I2-3, so this slice keeps the bare
-               slot (one indexed get per name, the D-034 default). */
-            self->arena->nodes[call_node].suffix = "";
+            const char *suf = ct_trait_slot_suffix(ti, match);
+            if (!suf) return self->sup->fail("out of memory");
+            self->arena->nodes[call_node].suffix = suf;
         }
         return 0;
 oom:

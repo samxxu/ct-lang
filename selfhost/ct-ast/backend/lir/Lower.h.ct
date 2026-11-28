@@ -45,6 +45,7 @@
 
 import runtime::text::Intern;
 import frontend::module::Unit;
+import frontend::parse::ExprTypeText;
 import frontend::sym::Symbols;
 import runtime::arena::Arena;
 import frontend::sym::Symbols::MethodSig as MethodSig;
@@ -867,7 +868,10 @@ static int lw_method_param_ref(struct Lower *w, struct ct_texpr *t, int idx)
         if (ti >= 0) {
             for (mi = 0; mi < sym->traits[ti].nm; mi++) {
                 struct MethodSig *ms = &sym->traits[ti].m[mi];
-                if (!ms->name || strcmp(ms->name, t->text) != 0) continue;
+                /* D-034 (I2): a duplicate trait name spells its slot with a
+                   key suffix; a unique name is the bare method. */
+                const char *sl = frontend::parse::ct_trait_slot_text(ti, mi);
+                if (!sl || !t->text || strcmp(sl, t->text) != 0) continue;
                 if (idx >= ms->nparams) return 0;
                 return ms->pann[idx] == 2 || ms->pann[idx] == 3;
             }

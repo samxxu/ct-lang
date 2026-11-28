@@ -184,6 +184,9 @@ int frontend_parse_subst_tparam(const char *, char * *, char * *, int, char *, i
 int frontend_parse_ct_overload_count(int, const char *);
 int frontend_parse_ct_overload_pos(int, int);
 const char * frontend_parse_ct_overload_key_text(const char *);
+const char * frontend_parse_ct_trait_slot_text(int, int);
+const char * frontend_parse_ct_trait_slot_suffix(int, int);
+const char * frontend_parse_ct_trait_impl_slot_text(int, struct runtime_arena_Arena *, int);
 const char * frontend_parse_subst_tparam_text(const char *, char * *, char * *, int);
 void frontend_parse_tbase(const char *, char *, int);
 int frontend_parse_tclass(const char *, const char *);

@@ -181,6 +181,9 @@ int frontend_parse_subst_tparam(const char *, char * *, char * *, int, char *, i
 int frontend_parse_ct_overload_count(int, const char *);
 int frontend_parse_ct_overload_pos(int, int);
 const char * frontend_parse_ct_overload_key_text(const char *);
+const char * frontend_parse_ct_trait_slot_text(int, int);
+const char * frontend_parse_ct_trait_slot_suffix(int, int);
+const char * frontend_parse_ct_trait_impl_slot_text(int, struct runtime_arena_Arena *, int);
 const char * frontend_parse_subst_tparam_text(const char *, char * *, char * *, int);
 void frontend_parse_tbase(const char *, char *, int);
 int frontend_parse_tclass(const char *, const char *);
@@ -188,6 +191,7 @@ void frontend_parse_tnorm(const char *, char *, int);
 int frontend_parse_tnumeric(const char *);
 int frontend_parse_tscalar(const char *);
 int frontend_parse_tstars(const char *);
+static int trait_slot_dup(int, int);
 static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
     struct Result_int_int *_self = (struct Result_int_int *)self;
     (void)_self;
@@ -779,4 +783,140 @@ const char * frontend_parse_ct_overload_key_text(const char * type) {
         ;
         tool_sh_ct_text_free((&buf), (&cap));
         return (const char *)(0);
+}
+static int trait_slot_dup(int ti, int mi) {
+    struct frontend_sym_Symbols * sym = frontend_sym_symbols_get();
+    const char * name;
+    int j;
+    if ((((!sym) || (ti < 0)) || (ti >= sym->ntraits))) {
+        return 0;
+    }
+    if (((mi < 0) || (mi >= sym->traits[ti].nm))) {
+        return 0;
+    }
+    name = sym->traits[ti].m[mi].name;
+    if ((!name)) {
+        return 0;
+    }
+    for (j = 0; j < sym->traits[ti].nm; j++) {
+        if (j == mi) {
+            continue;
+        }
+        if ((sym->traits[ti].m[j].name && (strcmp(sym->traits[ti].m[j].name, name) == 0))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+const char * frontend_parse_ct_trait_slot_suffix(int ti, int mi) {
+    struct frontend_sym_Symbols * sym = frontend_sym_symbols_get();
+    struct frontend_sym_MethodSig * m;
+    char * buf = 0;
+    int cap = 0;
+    int k;
+    const char * out;
+    if ((!trait_slot_dup(ti, mi))) {
+        return "";
+    }
+    m = (&sym->traits[ti].m[mi]);
+    if (tool_sh_ct_text_init((&buf), (&cap), 32) != 0) {
+        return (const char *)(0);
+    }
+    for (k = 0; k < m->nparams; k++) {
+        const char * ek = frontend_parse_ct_overload_key_text(m->ptype[k]);
+        if ((!ek)) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), "$") != 0) {
+            goto fail;
+        }
+        if (tool_sh_ct_text_cat((&buf), (&cap), ek) != 0) {
+            goto fail;
+        }
+    }
+    out = runtime_text_ct_intern(buf);
+    tool_sh_ct_text_free((&buf), (&cap));
+    return (out ? out : (const char *)(0));
+    fail:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return (const char *)(0);
+}
+const char * frontend_parse_ct_trait_slot_text(int ti, int mi) {
+    struct frontend_sym_Symbols * sym = frontend_sym_symbols_get();
+    const char * suf;
+    if ((((!sym) || (ti < 0)) || (ti >= sym->ntraits))) {
+        return "";
+    }
+    if (((mi < 0) || (mi >= sym->traits[ti].nm))) {
+        return "";
+    }
+    suf = frontend_parse_ct_trait_slot_suffix(ti, mi);
+    if ((!suf)) {
+        return (const char *)(0);
+    }
+    if ((!suf[0])) {
+        return sym->traits[ti].m[mi].name;
+    }
+    return runtime_text_ct_internf("%s%s", sym->traits[ti].m[mi].name, suf);
+}
+const char * frontend_parse_ct_trait_impl_slot_text(int ti, struct runtime_arena_Arena * ar, int mnode) {
+    struct frontend_sym_Symbols * sym = frontend_sym_symbols_get();
+    const char * name;
+    int first = (-1);
+    int pick = (-1);
+    int cand;
+    int k;
+    int np = 0;
+    int pk;
+    const char * txt[64];
+    if (((((!sym) || (!ar)) || (ti < 0)) || (ti >= sym->ntraits))) {
+        return "";
+    }
+    if (((mnode < 0) || (mnode >= ar->nnode))) {
+        return "";
+    }
+    name = ar->nodes[mnode].text2;
+    if ((!name)) {
+        return "";
+    }
+    for (k = ar->nodes[mnode].a; ((k > 0) && (np < 64)); k = ar->nodes[k].next) {
+        txt[np] = (ar->nodes[k].text3[0] ? runtime_text_ct_intern_join(ar->nodes[k].text, ar->nodes[k].text3) : ar->nodes[k].text);
+        if ((!txt[np])) {
+            return (const char *)(0);
+        }
+        np++;
+    }
+    for (cand = 0; cand < sym->traits[ti].nm; cand++) {
+        struct frontend_sym_MethodSig * m = (&sym->traits[ti].m[cand]);
+        int ok;
+        if (((!m->name) || (strcmp(m->name, name) != 0))) {
+            continue;
+        }
+        if (first < 0) {
+            first = cand;
+        }
+        if (m->nparams != np) {
+            continue;
+        }
+        ok = 1;
+        for (pk = 0; ((pk < np) && ok); pk++) {
+            const char * a = frontend_parse_ct_overload_key_text(txt[pk]);
+            const char * b = frontend_parse_ct_overload_key_text(m->ptype[pk]);
+            if ((((!a) || (!b)) || (strcmp(a, b) != 0))) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            pick = cand;
+            break;
+        }
+    }
+    if (pick < 0) {
+        pick = first;
+    }
+    if (pick < 0) {
+        return "";
+    }
+    return frontend_parse_ct_trait_slot_text(ti, pick);
 }

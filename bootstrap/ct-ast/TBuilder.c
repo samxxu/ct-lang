@@ -729,7 +729,11 @@ static const char * tb_trait_ret(const char * trait, const char * method, int * 
         return (const char *)(0);
     }
     for (mi = 0; mi < sym->traits[ti].nm; mi++) {
-        if (strcmp(sym->traits[ti].m[mi].name, method) != 0) {
+        const char * sl = frontend_parse_ct_trait_slot_text(ti, mi);
+        if ((!sl)) {
+            continue;
+        }
+        if (strcmp(sl, method) != 0) {
             continue;
         }
         if (slot) {
@@ -1290,12 +1294,19 @@ static int tb_target_mcall(struct backend_tir_TBuilder * tb, int eid, int n) {
     }
     ti = (trait ? sym->__frontend_sym_symbolops_vptr->find_trait(sym, trait) : (-1));
     if (ti >= 0) {
+        const char * vslot = method;
         slot = (-1);
-        if (((tb_trait_ret(trait, method, (&slot)) != (const char *)(0)) || (slot >= 0))) {
+        if ((ar->nodes[n].suffix && ar->nodes[n].suffix[0])) {
+            vslot = runtime_text_ct_internf("%s%s", (method ? method : ""), ar->nodes[n].suffix);
+            if ((!vslot)) {
+                return (-1);
+            }
+        }
+        if (((tb_trait_ret(trait, vslot, (&slot)) != (const char *)(0)) || (slot >= 0))) {
             const char * canon;
             canon = tb_trait_canon(trait);
             tdecl = tb_ensure_trait(tb, trait);
-            return tb_set_target(m, eid, RT_VIRTUAL, tdecl, slot, runtime_text_ct_internf("%s.%s", canon, method));
+            return tb_set_target(m, eid, RT_VIRTUAL, tdecl, slot, runtime_text_ct_internf("%s.%s", canon, vslot));
         }
     }
     if ((((ti < 0) && trait) && trait[0])) {
@@ -1593,7 +1604,12 @@ static int tb_expr(struct backend_tir_TBuilder * tb, int n, int hint) {
             m->exprs[(eid - 1)].op = ((ar->nodes[n].aux == 0) ? 1 : ((ar->nodes[n].aux == 1) ? 2 : ((ar->nodes[n].aux == 2) ? 3 : 4)));
             break;
         case N_MCALL:
-            m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            if ((ar->nodes[n].suffix && ar->nodes[n].suffix[0])) {
+                m->exprs[(eid - 1)].text = runtime_text_ct_internf("%s%s", (ar->nodes[n].text2 ? ar->nodes[n].text2 : ""), ar->nodes[n].suffix);
+            }
+            else {
+                m->exprs[(eid - 1)].text = runtime_text_ct_intern(ar->nodes[n].text2);
+            }
             m->exprs[(eid - 1)].op = 2;
             m->exprs[(eid - 1)].aux = ar->nodes[n].aux;
             break;
@@ -2745,8 +2761,19 @@ static int tb_impl(struct backend_tir_TBuilder * tb, int n) {
         }
         if (((si >= 0) && (si < sym->nstructs))) {
             const char * msuf = ((trait && trait[0]) ? "" : tb_overload_suffix(tb, n, c));
+            const char * mname2 = (ar->nodes[c].text2 ? ar->nodes[c].text2 : "");
+            if ((trait && trait[0])) {
+                int ti_l = sym->__frontend_sym_symbolops_vptr->find_trait(sym, trait);
+                if (ti_l >= 0) {
+                    const char * sl = frontend_parse_ct_trait_impl_slot_text(ti_l, ar, c);
+                    if ((!sl)) {
+                        return (-1);
+                    }
+                    mname2 = sl;
+                }
+            }
             m->decls[(mdecl - 1)].is_method = 1;
-            m->decls[(mdecl - 1)].cname = runtime_text_ct_internf("%s_%s%s%s%s", sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->name, ((trait && trait[0]) ? trait : ""), ((trait && trait[0]) ? "_" : ""), (ar->nodes[c].text2 ? ar->nodes[c].text2 : ""), (msuf ? msuf : ""));
+            m->decls[(mdecl - 1)].cname = runtime_text_ct_internf("%s_%s%s%s%s", sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->name, ((trait && trait[0]) ? trait : ""), ((trait && trait[0]) ? "_" : ""), mname2, (msuf ? msuf : ""));
             if ((!m->decls[(mdecl - 1)].cname)) {
                 return (-1);
             }

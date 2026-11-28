@@ -612,7 +612,12 @@ static const char *tb_trait_ret(const char *trait, const char *method, int *slot
     ti = sym->find_trait(trait);
     if (ti < 0) return (const char *)0;
     for (mi = 0; mi < sym->traits[ti].nm; mi++) {
-        if (strcmp(sym->traits[ti].m[mi].name, method) != 0) continue;
+        /* D-034 (I2): the parser records the chosen slot, which for a
+           duplicate name carries its key suffix; a unique name is the bare
+           method spelling, exactly as before. */
+        const char *sl = frontend::parse::ct_trait_slot_text(ti, mi);
+        if (!sl) continue;
+        if (strcmp(sl, method) != 0) continue;
         if (slot) *slot = mi;
         return sym->traits[ti].m[mi].ret;
     }
@@ -1099,16 +1104,23 @@ static int tb_target_mcall(struct TBuilder *tb, int eid, int n)
         if (fid >= 0) return tb_set_target(m, eid, RT_BUILTIN, 0, BI_CONTAINER, key);
         return tb_set_target(m, eid, RT_BUILTIN, 0, BI_EXTERNAL, key);
     }
-    /* dynamic dispatch: the parser recorded the trait name in `text` */
+    /* dynamic dispatch: the parser recorded the trait name in `text`; the
+       slot is `text2` plus the D-034 key suffix the subscript resolved. */
     ti = trait ? sym->find_trait(trait) : -1;
     if (ti >= 0) {
+        const char *vslot = method;
         slot = -1;
-        if (tb_trait_ret(trait, method, &slot) != (const char *)0 || slot >= 0) {
+        if (ar->nodes[n].suffix && ar->nodes[n].suffix[0]) {
+            vslot = runtime::text::ct_internf("%s%s", method ? method : "",
+                                              ar->nodes[n].suffix);
+            if (!vslot) return -1;
+        }
+        if (tb_trait_ret(trait, vslot, &slot) != (const char *)0 || slot >= 0) {
             const char *canon;
             canon = tb_trait_canon(trait);
             tdecl = tb_ensure_trait(tb, trait);
             return tb_set_target(m, eid, RT_VIRTUAL, tdecl, slot,
-                                 runtime::text::ct_internf("%s.%s", canon, method));
+                                 runtime::text::ct_internf("%s.%s", canon, vslot));
         }
     }
     /* a bounded-template call (aux 7/8) records the bound trait in `text` */
@@ -1430,7 +1442,14 @@ static int tb_expr(struct TBuilder *tb, int n, int hint)
                                     : (ar->nodes[n].aux == 2 ? 3 : 4));
             break;
         case N_MCALL:
-            m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
+            /* D-034 (I2): an interface subscript resolved a slot; a unique
+               trait name (the normal case) is still just `text2`. */
+            if (ar->nodes[n].suffix && ar->nodes[n].suffix[0])
+                m->exprs[eid - 1].text = runtime::text::ct_internf(
+                    "%s%s", ar->nodes[n].text2 ? ar->nodes[n].text2 : "",
+                    ar->nodes[n].suffix);
+            else
+                m->exprs[eid - 1].text = runtime::text::ct_intern(ar->nodes[n].text2);
             m->exprs[eid - 1].op = 2;   /* method call */
             /* the dispatch form: 0 struct value, 2 pointer, 3 iface value,
                4 iface pointer; recipes use 5/6/12 and are not this path */
@@ -2459,14 +2478,28 @@ static int tb_impl(struct TBuilder *tb, int n)
            `cname` is the exact seam key the emitter can pass back. */
         if (impl_tmpl) m->decls[mdecl - 1].is_template = 1;
         if (si >= 0 && si < sym->nstructs) {
+            /* D-034 (I2): a trait may declare the same method name twice (two
+               indexed `get`s); the slot spelling then carries its key suffix,
+               so the seam key must be the slot the emitter writes. A unique
+               name is the bare method, unchanged. */
             const char *msuf = (trait && trait[0]) ? ""
                                : tb_overload_suffix(tb, n, c);
+            const char *mname2 = ar->nodes[c].text2 ? ar->nodes[c].text2 : "";
+            if (trait && trait[0]) {
+                int ti_l = sym->find_trait(trait);
+                if (ti_l >= 0) {
+                    const char *sl = frontend::parse::ct_trait_impl_slot_text(
+                                         ti_l, ar, c);
+                    if (!sl) return -1;
+                    mname2 = sl;
+                }
+            }
             m->decls[mdecl - 1].is_method = 1;
             m->decls[mdecl - 1].cname = runtime::text::ct_internf("%s_%s%s%s%s",
                 sym->struct_at(si)->name,
                 (trait && trait[0]) ? trait : "",
                 (trait && trait[0]) ? "_" : "",
-                ar->nodes[c].text2 ? ar->nodes[c].text2 : "",
+                mname2,
                 msuf ? msuf : "");
             if (!m->decls[mdecl - 1].cname) return -1;
         }

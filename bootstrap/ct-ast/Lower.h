@@ -11,6 +11,7 @@
 
 #include "Intern.h"
 #include "Unit.h"
+#include "ExprTypeText.h"
 #include "Symbols.h"
 #include "Arena.h"
 #include "TModule.h"

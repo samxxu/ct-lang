@@ -1320,7 +1320,16 @@ int backend_emit_impl_emit_method(struct backend_emit_Emitter * self, int ki, in
     mret = (self->arena->nodes[m].text[0] ? self->arena->nodes[m].text : "void");
     backend_emit_impl_inst_bind(self, ki, ii);
     if (tname[0]) {
-        cname = runtime_text_ct_internf("%s_%s_%s", iname, tname, self->arena->nodes[m].text2);
+        const char * tslot = self->arena->nodes[m].text2;
+        int ti_e = self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, tname);
+        if (ti_e >= 0) {
+            const char * sl = frontend_parse_ct_trait_impl_slot_text(ti_e, self->arena, m);
+            if ((!sl)) {
+                return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+            }
+            tslot = sl;
+        }
+        cname = runtime_text_ct_internf("%s_%s_%s", iname, tname, tslot);
     }
     else {
         const char * suf = backend_emit_emit_overload_suffix(self, im[ki].node, m);
@@ -1452,10 +1461,19 @@ int backend_emit_impl_emit_one(struct backend_emit_Emitter * self, int ki, int i
             }
             fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", cuse, ins[ii].name, cuse);
             for (m = self->arena->nodes[im[ki].node].a; m >= 0; m = self->arena->nodes[m].next) {
+                int ti_e = self->sym->__frontend_sym_symbolops_vptr->find_trait(self->sym, cuse);
+                const char * vsl = self->arena->nodes[m].text2;
+                if (ti_e >= 0) {
+                    const char * sl = frontend_parse_ct_trait_impl_slot_text(ti_e, self->arena, m);
+                    if ((!sl)) {
+                        return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
+                    }
+                    vsl = sl;
+                }
                 if ((!first)) {
                     fputs(",\n", self->out);
                 }
-                fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2, ins[ii].name, cuse, self->arena->nodes[m].text2);
+                fprintf(self->out, "    .%s = %s_%s_%s", vsl, ins[ii].name, cuse, vsl);
                 first = 0;
             }
             fputs("\n};\n\n", self->out);

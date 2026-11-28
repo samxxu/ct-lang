@@ -447,7 +447,11 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_iface_index_method(v
         return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
     }
     if (((call_node >= 0) && (call_node < _self->arena->nnode))) {
-        _self->arena->nodes[call_node].suffix = "";
+        const char * suf = frontend_parse_ct_trait_slot_suffix(ti, match);
+        if ((!suf)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        _self->arena->nodes[call_node].suffix = suf;
     }
     return 0;
     oom:

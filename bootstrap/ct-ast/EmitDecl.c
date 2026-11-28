@@ -306,7 +306,11 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_trait_decls(void *sel
         }
         fprintf(_self->out, "struct %s_vtbl {\n", _self->sym->traits[t].name);
         for (m = 0; m < _self->sym->traits[t].nm; m++) {
-            fprintf(_self->out, "    %s (*%s)(void *", _self->sym->traits[t].m[m].ret, _self->sym->traits[t].m[m].name);
+            const char * fslot = frontend_parse_ct_trait_slot_text(t, m);
+            if ((!fslot)) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
+            fprintf(_self->out, "    %s (*%s)(void *", _self->sym->traits[t].m[m].ret, fslot);
             for (k = 0; k < _self->sym->traits[t].m[m].nparams; k++) {
                 fprintf(_self->out, ", %s", _self->sym->traits[t].m[m].ptype[k]);
                 if (((_self->sym->traits[t].m[m].pann[k] == 2) || (_self->sym->traits[t].m[m].pann[k] == 3))) {
@@ -879,6 +883,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
     int u;
     int body;
     int dm;
+    const char * mslot;
     int nr = backend_lir_lmod_plan_row_count();
     int r;
     (void)(_self);
@@ -918,6 +923,10 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
             if ((!owner)) {
                 return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
             }
+            mslot = ((ti >= 0) ? frontend_parse_ct_trait_impl_slot_text(ti, _self->arena, m) : _self->arena->nodes[m].text2);
+            if ((!mslot)) {
+                return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+            }
             if (backend_emit_emit_closures(_self, owner, _self->arena->nodes[m].line) != 0) {
                 return (-1);
             }
@@ -932,7 +941,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                     fputs("__attribute__((unused)) ", _self->out);
                 }
             }
-            fprintf(_self->out, "%s_%s_%s(void *self", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->arena->nodes[m].text2);
+            fprintf(_self->out, "%s_%s_%s(void *self", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, mslot);
             k = _self->arena->nodes[m].a;
             while (k > 0) {
                 fputs(", ", _self->out);
@@ -977,7 +986,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                 int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
                 int printed = 0;
                 if (body_hook) {
-                    const char * key = tool_sh_ct_scratch_fmt("%s_%s%s%s", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, ((tname && tname[0]) ? "_" : ""), _self->arena->nodes[m].text2);
+                    const char * key = tool_sh_ct_scratch_fmt("%s_%s%s%s", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, ((tname && tname[0]) ? "_" : ""), mslot);
                     int new_ntmp = _self->ntmp;
                     int hr = (*body_hook)(key, _self->out, 1, _self->ntmp, (&new_ntmp), 1);
                     if (hr < 0) {
@@ -1026,10 +1035,14 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
             }
             u = 0;
             for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
+                const char * vsl = ((ti >= 0) ? frontend_parse_ct_trait_impl_slot_text(ti, _self->arena, m) : _self->arena->nodes[m].text2);
+                if ((!vsl)) {
+                    return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+                }
                 if (u > 0) {
                     fputs(",\n", _self->out);
                 }
-                fprintf(_self->out, "    .%s = %s_%s_%s", _self->arena->nodes[m].text2, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->arena->nodes[m].text2);
+                fprintf(_self->out, "    .%s = %s_%s_%s", vsl, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, vsl);
                 u++;
             }
             if (ti >= 0) {
@@ -1040,10 +1053,14 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                     if (backend_emit_impl_writes(_self->arena, n, _self->sym->traits[ti].m[dm].name)) {
                         continue;
                     }
+                    const char * dsl = frontend_parse_ct_trait_slot_text(ti, dm);
+                    if ((!dsl)) {
+                        return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+                    }
                     if (u > 0) {
                         fputs(",\n", _self->out);
                     }
-                    fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->sym->traits[ti].m[dm].name);
+                    fprintf(_self->out, "    .%s = %s_%s_%s", dsl, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, dsl);
                     u++;
                 }
             }
@@ -1244,10 +1261,14 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                 fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname);
             }
             for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
+                const char * asl = frontend_parse_ct_trait_slot_text(ti, dm);
+                if ((!asl)) {
+                    return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
+                }
                 if (dm > 0) {
                     fputs(",\n", _self->out);
                 }
-                fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->sym->traits[ti].m[dm].name);
+                fprintf(_self->out, "    .%s = %s_%s_%s", asl, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, asl);
             }
             fputs("\n};\n\n", _self->out);
         }
@@ -1999,8 +2020,14 @@ int backend_emit_emit_default_method(struct backend_emit_Emitter * e, int si, co
         msg = tool_sh_ct_scratch_fmt("trait %s::%s (declared at %s:%d) cannot be expanded for struct %s: no field '%s'", e->sym->traits[ti].name, sig->name, e->sym->traits[ti].path, sig->line, e->sym->__frontend_sym_symbolops_vptr->struct_at(e->sym, si)->name, fld);
         return e->__backend_emit_emitops_vptr->fail_from(e, at, msg);
     }
-    fprintf(e->out, "static %s ", sig->ret);
-    fprintf(e->out, "%s_%s_%s(void *self", e->sym->__frontend_sym_symbolops_vptr->struct_at(e->sym, si)->name, e->sym->traits[ti].name, sig->name);
+{
+        const char * dslot = frontend_parse_ct_trait_slot_text(ti, mi);
+        if ((!dslot)) {
+            return e->__backend_emit_emitops_vptr->fail(e, "out of memory");
+        }
+        fprintf(e->out, "static %s ", sig->ret);
+        fprintf(e->out, "%s_%s_%s(void *self", e->sym->__frontend_sym_symbolops_vptr->struct_at(e->sym, si)->name, e->sym->traits[ti].name, dslot);
+    }
     ai = 0;
     for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
         fputs(", ", e->out);

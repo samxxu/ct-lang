@@ -360,6 +360,42 @@ fail:
     return (const char *)0;
 }
 
+/* D-034 D3 / A2: 1 when the impl's parameter list fills trait method `mi` by
+   name and key types as well as the row the trait declared. A trait may declare
+   the same name twice with different key types (two indexed `get`s); picking the
+   row by signature is what makes the impl fill the right vtable slot, and it is
+   independent of the impl's declaration order. */
+static int trait_method_params_match(struct Parser *self, int ti, int mi,
+                                     int params, int nimpl)
+{
+    struct MethodSig *m;
+    int k, pk;
+    const char *ik;
+
+    m = &self->sym->traits[ti].m[mi];
+    if (m->nparams != nimpl) return 0;
+    for (k = params, pk = 0; k > 0;
+         k = self->arena->nodes[k].next, pk++) {
+        const char *pt = m->ptype[pk];
+        if (!pt) return 0;
+        if (self->arena->nodes[k].text3[0]) {
+            const char *jt = runtime::text::ct_intern_join(
+                self->arena->nodes[k].text, self->arena->nodes[k].text3);
+            if (!jt) return 0;
+            ik = frontend::type::type_key_text(jt);
+        } else {
+            ik = frontend::type::type_key_text(self->arena->nodes[k].text);
+        }
+        if (!ik) return 0;
+        {
+            const char *tk = frontend::type::type_key_text(pt);
+            if (!tk) return 0;
+            if (strcmp(ik, tk) != 0) return 0;
+        }
+    }
+    return 1;
+}
+
 /* D-034 D5 / D6 / D7: validate the postfix `index` marker of the trait method
    row just recorded. The cursor sits after `)` (and after any `mut`, which a
    dynamic trait rejects later anyway). `index` is not a reserved word: it is
@@ -4641,9 +4677,24 @@ impl ParseOps for Parser {
             nimpl = 0;
             for (k2 = params; k2 > 0; k2 = self->arena->nodes[k2].next) nimpl++;
             tm_i = 0;
-            if (ti >= 0)
-                for (tm_i = 0; tm_i < self->sym->traits[ti].nm; tm_i++)
-                    if (strcmp(self->sym->traits[ti].m[tm_i].name, mname) == 0) break;
+            if (ti >= 0) {
+                /* D-034 D3 / A2: a trait may declare the same name more than
+                   once (two indexed `get`s with different key types), so a
+                   matching signature always wins over the first name match. A
+                   unique name resolves exactly as before. */
+                int first = -1, pick = -1, cand;
+                tm_i = self->sym->traits[ti].nm;
+                for (cand = 0; cand < self->sym->traits[ti].nm; cand++) {
+                    if (strcmp(self->sym->traits[ti].m[cand].name, mname) != 0)
+                        continue;
+                    if (first < 0) first = cand;
+                    if (pick < 0
+                        && trait_method_params_match(self, ti, cand, params, nimpl))
+                        pick = cand;
+                }
+                if (pick >= 0) tm_i = pick;
+                else if (first >= 0) tm_i = first;
+            }
             if (ti >= 0 && tm_i < self->sym->traits[ti].nm) {
                 const char *wmsg;
                 if (ret[0] && strcmp(ret, self->sym->traits[ti].m[tm_i].ret) != 0) {
@@ -4762,6 +4813,13 @@ impl ParseOps for Parser {
             self->arena->nodes[mnode].b = body;
             self->arena->nodes[mnode].num = ti;
             self->arena->nodes[mnode].aux = si;
+            /* D-034 D3: the trait row this body fills. A trait impl's `d` is
+               otherwise unused (an inherent impl keeps its `pub` flag there),
+               and the emitters need the row to spell a duplicate name's vtable
+               slot. -1 keeps the "no trait row" case explicit. */
+            self->arena->nodes[mnode].d = (ti >= 0
+                                           && tm_i < self->sym->traits[ti].nm)
+                                          ? tm_i : -1;
             if (tail < 0) self->arena->nodes[node].a = mnode;
             else self->arena->nodes[tail].next = mnode;
             tail = mnode;
