@@ -73,3 +73,24 @@ selfhost/ct-ast/frontend/sym/Symbols.h.ct:2563	(method)	b	改 ct_internf；逐�
 selfhost/ct-ast/frontend/sym/Symbols.h.ct:2575	(method)	b	改 ct_internf；逐字链改 scratch+intern
 selfhost/ct-ast/frontend/sym/Symbols.h.ct:2577	(method)	b	改 ct_internf；逐字链改 scratch+intern
 selfhost/ct-ast/frontend/sym/Symbols.h.ct:2578	(method)	b	改 ct_internf；逐字链改 scratch+intern
+
+# S8B-REM-1 R3 审计（baseline 653dec09）：Symbols.h.ct c 类取值 API 15 处 / 10 个 API
+file:line	api	sites	callers	text-form	edit-points	action
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1601	var_cname	1	0	var_cname_text	2	不改：无调用方；text 形态已接管，删 buffer 形态属死代码清理
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1652	var_type	1	1	var_type_text	5	不改：唯一调用方是 expr_type(out,cap) 有界管线，text+拷贝只把 snprintf 挪位
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:1827	type_target_of	1	0	type_target_text	2	不改：无调用方；text 形态已接管
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2264	impl_use_concrete	1	3	（无）	5	不改：先编码/实例化 trait 行再拷名；text 变体需改查表内部，2 站点换 3 调用点不抵
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2282	impl_use_concrete	1	3	（无）	5	不改：同上（同一函数的第二处输出）
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2314	method_trait	1	0	method_trait_text	4	不改：无调用方；text 形态已接管
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2392	method_trait_amb	1	0	method_trait_amb_text	4	不改：无调用方；text 形态已接管
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2403	ns_decl_name	1	0	ns_decl_text	4	不改：无调用方；text 形态已接管
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2512	resolve_type	1	1	resolve_type_text	5	不改：C2p-3 明确保留有界路径以维持 "name is too long"/歧义诊断；纯 text 会动诊断
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2527	resolve_type	1	1	resolve_type_text	5	不改：同上
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2537	resolve_type	1	1	resolve_type_text	5	不改：同上
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2541	resolve_type	1	1	resolve_type_text	5	不改：同上
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:2765	find_global_type_alias	1	1	（无）	3	不改：返 (path, line)，text 变体要加 line 出参/新行返回，1 站点不抵
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:3478	ct_inst_resolve	1	8	（无）	10	不改：8 个调用点传 TEXT_LIMIT/CAP_LIMIT 并就地拼接，text 化需 8 点重排换 2 站点
+selfhost/ct-ast/frontend/sym/Symbols.h.ct:3484	ct_inst_resolve	1	8	（无）	10	不改：同上
+# R3 判定：15/15 不改。合计 44 个机械改点（2 个 trait 的声明+实现 + 9 个源文件的 14 个 live 调用）；
+# 收益为 Symbols snprintf 24→9（−15），但 5 个 API（5 站点）已无调用方、5 个站点受诊断/管线约束，
+# 判"收益不抵迁移面"，只登记；5 个死 buffer API 可在独立清理片删除。
