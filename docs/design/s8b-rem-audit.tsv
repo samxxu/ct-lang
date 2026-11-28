@@ -118,3 +118,22 @@ selfhost/ct-ast/tool/pkg/Pkg.h.ct:4267	IndexRow.tag	index 刷新	不改：索引
 # owned 文本）；9 站点登记不改（3 处 ct.lock 文本、2 处 LockRow、3 处 LockParsedRow、1 处
 # IndexRow.tag）。Pkg snprintf 51→43；`ct.lock` 与 `ct get` 文本/JSON 输出逐字节不变
 # （test/pkg 165/0、goldens 25/25、check-seed 两轮逐字节）。
+
+# S8B-REM-1 R8 审计（baseline 653dec09）：`else if (…kind == …)` 链，条件=同一主语且 ≥3 臂
+file:line	chain	arms	subject	action
+selfhost/ct-ast/tool/diag/Diag.h.ct:658-769	JSON 警告输出	13	w->kind（int 1..13）	转 match（字面量模式；旧 else → `_`）
+selfhost/ct-ast/tool/diag/Diag.h.ct:803-842	文本警告输出	13	w->kind（int 1..13）	转 match（字面量模式；旧 else → `_`）
+selfhost/ct-ast/frontend/parse/Expr.h.ct:794-806	out-conv 三类接收者	3	kind（int 0/1/2）	转 match（守卫带 a/b 条件；旧 else → `_`）
+selfhost/ct-ast/frontend/parse/ExprTypeParse.h.ct:687-693	限定类型关键字	4	self->sym->types[qti].kind（1/5/6/7）	转 match（字面量模式；无 else → `_`）
+selfhost/ct-ast/frontend/parse/ExprTypeParse.h.ct:853-871	裸 tag 关键字/iface	5	self->sym->types[ti].kind（1/5/6/7/3）	转 match（1/5/6/7 落公共尾，3 臂 continue）
+selfhost/ct-ast/frontend/parse/Stmt.h.ct:1611-1632	返回切片逃逸 lint	3	self->arena->nodes[e].kind（N_VAR/N_VAR/N_SLICE_RANGE）	转 NodeKind match（两条守卫 NK_VAR）
+selfhost/ct-ast/frontend/parse/Stmt.h.ct:2577-2629	切片初始化来源	3	self->arena->nodes[e].kind（N_VAR/N_CALL/N_SLICE_RANGE）	转 NodeKind match（旧 else 报错 → `_`）
+selfhost/ct-ast/backend/emit/EmitExpr.h.ct:2816-2835	声明初始化器分派	4/7	self->arena->nodes[n].a >= 0 && nodes[a].kind（INIT_*）	转 NodeKind match；a<0 的 3 个非 kind 臂留在外层 else if
+selfhost/ct-ast/backend/emit/EmitExpr.h.ct:2869-2875	多声明符初始化器分派	4	self->arena->nodes[nodes[c].a].kind（INIT_*）	转 NodeKind match；旧 else（` = expr`）→ `_`
+selfhost/ct-ast/backend/lir/Lower.h.ct:1432-1438	一元/转换节点构造	4	t->kind（TK_INDEX 5 / TK_DEREF 6 / TK_ADDR 7 / TK_UNARY 9）	不改：模式文法只收整数字面量/绑定，TK_* 宏名会被当绑定（实测 K_A 被当通配臂）；用裸数字丢符号名
+selfhost/ct-ast/backend/verify/Verifier.h.ct:222-245	call target 检查	4	e->target_kind（RT_VIRTUAL 3 / RT_DIRECT 1 / RT_RECIPE 5 / RT_INDIRECT 2）	不改：同上（RT_* 宏常量，且值非连续）
+selfhost/ct-ast/backend/emit/EmitHeader.h.ct:151-171	模块计划行输出	3	kind（LPS_VTBLFWD 22 / LPS_DROPPROTO 23 / LPS_HANDBAK 24）	不改：同上（LPS_* 宏常量，转写只能写裸 22/23/24）
+# R8 判定：≥3 臂同主语链 12 条 / 63 臂；转 9 条 / 52 臂（Diag 2、ExprTypeParse 2、Stmt 2、
+# EmitExpr 2、Expr 1），不改 3 条 / 11 臂（Lower / Verifier / EmitHeader，宏常量不能做模式）。
+# 其余 2 臂链与单点 guard 按施工卡规则不转；节点池 `kind` 仍是 int，match 只借 `NodeKind` 视图。
+# match 主语全部先绑局部（`ek`/`iv`/`ik`/`wk`），复合字面量里不出现 `self`（§3.6 sharp edge）。

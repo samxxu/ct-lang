@@ -789,28 +789,33 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
     int cur, prev, k, np, pi;
 
     /* kind 0 = free function (`a` = func index), 1 = trait method
-       (`a` = trait, `b` = method), 2 = inherent method (`a` = first N_PARAM) */
+       (`a` = trait, `b` = method), 2 = inherent method (`a` = first N_PARAM).
+       S8B-REM-1 R8 / D4: one subject, three arms — the closed dispatch is a
+       `match` so the kind is read once and the fall-through is explicit. */
     np = 0;
-    if (kind == 0 && a >= 0) {
-        np = self->sym->fn_at(a)->nparams;
-        for (k = 0; k < np && k < 16; k++) {
-            fts[k] = self->sym->fn_ptype(a, k);
-            anns[k] = (int)(unsigned char)self->sym->fn_pann(a, k);
+    match (kind) {
+        0 if a >= 0 => {
+            np = self->sym->fn_at(a)->nparams;
+            for (k = 0; k < np && k < 16; k++) {
+                fts[k] = self->sym->fn_ptype(a, k);
+                anns[k] = (int)(unsigned char)self->sym->fn_pann(a, k);
+            }
         }
-    } else if (kind == 1 && a >= 0 && b >= 0) {
-        np = self->sym->traits[a].m[b].nparams;
-        for (k = 0; k < np && k < 16; k++) {
-            fts[k] = self->sym->traits[a].m[b].ptype[k];
-            anns[k] = (int)(unsigned char)self->sym->traits[a].m[b].pann[k];
+        1 if a >= 0 && b >= 0 => {
+            np = self->sym->traits[a].m[b].nparams;
+            for (k = 0; k < np && k < 16; k++) {
+                fts[k] = self->sym->traits[a].m[b].ptype[k];
+                anns[k] = (int)(unsigned char)self->sym->traits[a].m[b].pann[k];
+            }
         }
-    } else if (kind == 2) {
-        for (pi = a; pi > 0 && np < 16; pi = self->arena->nodes[pi].next) {
-            fts[np] = self->arena->nodes[pi].text;
-            anns[np] = (int)(unsigned char)self->arena->nodes[pi].aux;
-            np++;
+        2 => {
+            for (pi = a; pi > 0 && np < 16; pi = self->arena->nodes[pi].next) {
+                fts[np] = self->arena->nodes[pi].text;
+                anns[np] = (int)(unsigned char)self->arena->nodes[pi].aux;
+                np++;
+            }
         }
-    } else {
-        return args;
+        _ => { return args; }
     }
     if (!bind_conv_on() || call < 0 || args <= 0 || np <= 0) return args;
     ret = "";

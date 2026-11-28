@@ -680,6 +680,7 @@ static int tool_diag_Diag_tool_diag_DiagStore_emit(void *self, int json, int to_
         fputs("{\"warnings\":[", jf);
         for (i = 0; i < _self->nwarns; i++) {
             struct tool_diag_Warn * w = (&_self->warns[i]);
+            int wk;
             if (i) {
                 fputc(',', jf);
             }
@@ -690,7 +691,9 @@ static int tool_diag_Diag_tool_diag_DiagStore_emit(void *self, int json, int to_
             if ((((_self->strict == 1) || ((w->kind == 1) && (_self->strict == 2))) || (_self->leaks_error && (((w->kind == 0) || (w->kind == 2)) || (w->kind == 10))))) {
                 fputs("\"severity\":\"error\",", jf);
             }
-            if (w->kind == 1) {
+            wk = w->kind;
+            int __ct_match3 __attribute__((unused)) = (wk);
+            if (1 && (__ct_match3 == 1)) {
                 fputs("\"type\":\"signature_mismatch\",\"file\":\"", jf);
                 _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
                 fprintf(jf, "\",\"line\":%d,", w->line);
@@ -707,172 +710,148 @@ static int tool_diag_Diag_tool_diag_DiagStore_emit(void *self, int json, int to_
                 _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
                 fputs("\"}", jf);
             }
+            else if (1 && (__ct_match3 == 2)) {
+                fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
+                fputs("\",\"type_name\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->tname);
+                fprintf(jf, "*\",\"message\":\"may leak on a return path\",""\"path_line\":%d}", w->path_line);
+            }
+            else if (1 && (__ct_match3 == 3)) {
+                fputs("\"type\":\"borrow_escape\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
+                fputs("\",\"message\":\"a borrowed pointer escapes through 'return'\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 4)) {
+                fputs("\"type\":\"arity_mismatch\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"callee\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
+                fputs("\",\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 5)) {
+                fputs("\"type\":\"type_mismatch\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"callee\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
+                fputs("\",\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 6)) {
+                fputs("\"type\":\"ambiguous_method\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"method\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
+                fputs("\",\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 7)) {
+                fputs("\"type\":\"loop_shadow\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 8)) {
+                fputs("\"type\":\"std_shadow\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 9)) {
+                fputs("\"type\":\"slice_escape\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 11)) {
+                fputs("\"type\":\"str_escape\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 12)) {
+                fputs("\"type\":\"deprecated_alias\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 13)) {
+                fputs("\"type\":\"receiver_mutability\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"method\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
+                fputs("\",\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
+            else if (1 && (__ct_match3 == 10)) {
+                fputs("\"type\":\"potential_cycle\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,", w->line);
+                if ((_self->strict && (w->col > 0))) {
+                    fprintf(jf, "\"col\":%d,", w->col);
+                }
+                fputs("\"message\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
+                fputs("\"}", jf);
+            }
             else {
-                if (w->kind == 2) {
-                    fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
-                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
-                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
-                    fputs("\",\"type_name\":\"", jf);
-                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->tname);
-                    fprintf(jf, "*\",\"message\":\"may leak on a return path\",""\"path_line\":%d}", w->path_line);
-                }
-                else {
-                    if (w->kind == 3) {
-                        fputs("\"type\":\"borrow_escape\",\"file\":\"", jf);
-                        _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                        fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
-                        _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
-                        fputs("\",\"message\":\"a borrowed pointer escapes through 'return'\"}", jf);
-                    }
-                    else {
-                        if (w->kind == 4) {
-                            fputs("\"type\":\"arity_mismatch\",\"file\":\"", jf);
-                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                            fprintf(jf, "\",\"line\":%d,", w->line);
-                            if ((_self->strict && (w->col > 0))) {
-                                fprintf(jf, "\"col\":%d,", w->col);
-                            }
-                            fputs("\"callee\":\"", jf);
-                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
-                            fputs("\",\"message\":\"", jf);
-                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                            fputs("\"}", jf);
-                        }
-                        else {
-                            if (w->kind == 5) {
-                                fputs("\"type\":\"type_mismatch\",\"file\":\"", jf);
-                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                fprintf(jf, "\",\"line\":%d,", w->line);
-                                if ((_self->strict && (w->col > 0))) {
-                                    fprintf(jf, "\"col\":%d,", w->col);
-                                }
-                                fputs("\"callee\":\"", jf);
-                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
-                                fputs("\",\"message\":\"", jf);
-                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                fputs("\"}", jf);
-                            }
-                            else {
-                                if (w->kind == 6) {
-                                    fputs("\"type\":\"ambiguous_method\",\"file\":\"", jf);
-                                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                    fprintf(jf, "\",\"line\":%d,", w->line);
-                                    if ((_self->strict && (w->col > 0))) {
-                                        fprintf(jf, "\"col\":%d,", w->col);
-                                    }
-                                    fputs("\"method\":\"", jf);
-                                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
-                                    fputs("\",\"message\":\"", jf);
-                                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                    fputs("\"}", jf);
-                                }
-                                else {
-                                    if (w->kind == 7) {
-                                        fputs("\"type\":\"loop_shadow\",\"file\":\"", jf);
-                                        _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                        fprintf(jf, "\",\"line\":%d,", w->line);
-                                        if ((_self->strict && (w->col > 0))) {
-                                            fprintf(jf, "\"col\":%d,", w->col);
-                                        }
-                                        fputs("\"message\":\"", jf);
-                                        _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                        fputs("\"}", jf);
-                                    }
-                                    else {
-                                        if (w->kind == 8) {
-                                            fputs("\"type\":\"std_shadow\",\"file\":\"", jf);
-                                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                            fprintf(jf, "\",\"line\":%d,", w->line);
-                                            if ((_self->strict && (w->col > 0))) {
-                                                fprintf(jf, "\"col\":%d,", w->col);
-                                            }
-                                            fputs("\"message\":\"", jf);
-                                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                            fputs("\"}", jf);
-                                        }
-                                        else {
-                                            if (w->kind == 9) {
-                                                fputs("\"type\":\"slice_escape\",\"file\":\"", jf);
-                                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                                fprintf(jf, "\",\"line\":%d,", w->line);
-                                                if ((_self->strict && (w->col > 0))) {
-                                                    fprintf(jf, "\"col\":%d,", w->col);
-                                                }
-                                                fputs("\"message\":\"", jf);
-                                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                                fputs("\"}", jf);
-                                            }
-                                            else {
-                                                if (w->kind == 11) {
-                                                    fputs("\"type\":\"str_escape\",\"file\":\"", jf);
-                                                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                                    fprintf(jf, "\",\"line\":%d,", w->line);
-                                                    if ((_self->strict && (w->col > 0))) {
-                                                        fprintf(jf, "\"col\":%d,", w->col);
-                                                    }
-                                                    fputs("\"message\":\"", jf);
-                                                    _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                                    fputs("\"}", jf);
-                                                }
-                                                else {
-                                                    if (w->kind == 12) {
-                                                        fputs("\"type\":\"deprecated_alias\",\"file\":\"", jf);
-                                                        _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                                        fprintf(jf, "\",\"line\":%d,", w->line);
-                                                        if ((_self->strict && (w->col > 0))) {
-                                                            fprintf(jf, "\"col\":%d,", w->col);
-                                                        }
-                                                        fputs("\"message\":\"", jf);
-                                                        _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                                        fputs("\"}", jf);
-                                                    }
-                                                    else {
-                                                        if (w->kind == 13) {
-                                                            fputs("\"type\":\"receiver_mutability\",\"file\":\"", jf);
-                                                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                                            fprintf(jf, "\",\"line\":%d,", w->line);
-                                                            if ((_self->strict && (w->col > 0))) {
-                                                                fprintf(jf, "\"col\":%d,", w->col);
-                                                            }
-                                                            fputs("\"method\":\"", jf);
-                                                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
-                                                            fputs("\",\"message\":\"", jf);
-                                                            _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                                            fputs("\"}", jf);
-                                                        }
-                                                        else {
-                                                            if (w->kind == 10) {
-                                                                fputs("\"type\":\"potential_cycle\",\"file\":\"", jf);
-                                                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                                                fprintf(jf, "\",\"line\":%d,", w->line);
-                                                                if ((_self->strict && (w->col > 0))) {
-                                                                    fprintf(jf, "\"col\":%d,", w->col);
-                                                                }
-                                                                fputs("\"message\":\"", jf);
-                                                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->msg);
-                                                                fputs("\"}", jf);
-                                                            }
-                                                            else {
-                                                                fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
-                                                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
-                                                                fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
-                                                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
-                                                                fputs("\",\"type_name\":\"", jf);
-                                                                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->tname);
-                                                                fputs("*\",\"message\":\"allocated but never deleted\"}", jf);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->file);
+                fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->var);
+                fputs("\",\"type_name\":\"", jf);
+                _self->__tool_diag_diagstore_vptr->put_json(_self, jf, w->tname);
+                fputs("*\",\"message\":\"allocated but never deleted\"}", jf);
             }
         }
         fputs("]}\n", jf);
@@ -889,76 +868,54 @@ static int tool_diag_Diag_tool_diag_DiagStore_emit(void *self, int json, int to_
                 csuf[0] = 0;
             }
             diag_loc(tf, w, _self->strict);
-            if (w->kind == 1) {
+            int wk = w->kind;
+            int __ct_match4 __attribute__((unused)) = (wk);
+            if (1 && (__ct_match4 == 1)) {
                 fprintf(tf, " %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n", sigsev, w->var, w->tname, w->stype, w->msg, csuf);
             }
-            else {
-                if (w->kind == 2) {
-                    fprintf(tf, " %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n", leaksev, w->var, w->tname, w->path_line, csuf);
+            else if (1 && (__ct_match4 == 2)) {
+                fprintf(tf, " %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n", leaksev, w->var, w->tname, w->path_line, csuf);
+            }
+            else if (1 && (__ct_match4 == 3)) {
+                fprintf(tf, " %s: a borrowed pointer escapes through 'return'%s\n", sev, csuf);
+            }
+            else if (1 && (__ct_match4 == 4)) {
+                fprintf(tf, " %s: arity mismatch: '%s' %s%s\n", sev, w->var, w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 5)) {
+                if (w->var[0]) {
+                    fprintf(tf, " %s: type mismatch: '%s' %s%s\n", sev, w->var, w->msg, csuf);
                 }
                 else {
-                    if (w->kind == 3) {
-                        fprintf(tf, " %s: a borrowed pointer escapes through 'return'%s\n", sev, csuf);
-                    }
-                    else {
-                        if (w->kind == 4) {
-                            fprintf(tf, " %s: arity mismatch: '%s' %s%s\n", sev, w->var, w->msg, csuf);
-                        }
-                        else {
-                            if (w->kind == 5) {
-                                if (w->var[0]) {
-                                    fprintf(tf, " %s: type mismatch: '%s' %s%s\n", sev, w->var, w->msg, csuf);
-                                }
-                                else {
-                                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                                }
-                            }
-                            else {
-                                if (w->kind == 6) {
-                                    fprintf(tf, " %s: ambiguous method: '%s' %s%s\n", sev, w->var, w->msg, csuf);
-                                }
-                                else {
-                                    if (w->kind == 7) {
-                                        fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                                    }
-                                    else {
-                                        if (w->kind == 8) {
-                                            fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                                        }
-                                        else {
-                                            if (w->kind == 9) {
-                                                fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                                            }
-                                            else {
-                                                if (w->kind == 11) {
-                                                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                                                }
-                                                else {
-                                                    if (w->kind == 12) {
-                                                        fprintf(tf, " warning: %s%s\n", w->msg, csuf);
-                                                    }
-                                                    else {
-                                                        if (w->kind == 13) {
-                                                            fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                                                        }
-                                                        else {
-                                                            if (w->kind == 10) {
-                                                                fprintf(tf, " %s: %s%s\n", leaksev, w->msg, csuf);
-                                                            }
-                                                            else {
-                                                                fprintf(tf, " %s: potential leak: '%s' (%s*) allocated but never deleted%s\n", leaksev, w->var, w->tname, csuf);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
                 }
+            }
+            else if (1 && (__ct_match4 == 6)) {
+                fprintf(tf, " %s: ambiguous method: '%s' %s%s\n", sev, w->var, w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 7)) {
+                fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 8)) {
+                fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 9)) {
+                fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 11)) {
+                fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 12)) {
+                fprintf(tf, " warning: %s%s\n", w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 13)) {
+                fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+            }
+            else if (1 && (__ct_match4 == 10)) {
+                fprintf(tf, " %s: %s%s\n", leaksev, w->msg, csuf);
+            }
+            else {
+                fprintf(tf, " %s: potential leak: '%s' (%s*) allocated but never deleted%s\n", leaksev, w->var, w->tname, csuf);
             }
         }
     }

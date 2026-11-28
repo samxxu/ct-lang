@@ -4887,32 +4887,46 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
     int np;
     int pi;
     np = 0;
-    if (((kind == 0) && (a >= 0))) {
-        np = self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, a)->nparams;
-        for (k = 0; ((k < np) && (k < 16)); k++) {
-            fts[k] = self->sym->__frontend_sym_symbolops_vptr->fn_ptype(self->sym, a, k);
-            anns[k] = (int)((unsigned char)(self->sym->__frontend_sym_symbolops_vptr->fn_pann(self->sym, a, k)));
-        }
-    }
-    else {
-        if ((((kind == 1) && (a >= 0)) && (b >= 0))) {
-            np = self->sym->traits[a].m[b].nparams;
-            for (k = 0; ((k < np) && (k < 16)); k++) {
-                fts[k] = self->sym->traits[a].m[b].ptype[k];
-                anns[k] = (int)((unsigned char)(self->sym->traits[a].m[b].pann[k]));
-            }
-        }
-        else {
-            if (kind == 2) {
-                for (pi = a; ((pi > 0) && (np < 16)); pi = self->arena->nodes[pi].next) {
-                    fts[np] = self->arena->nodes[pi].text;
-                    anns[np] = (int)((unsigned char)(self->arena->nodes[pi].aux));
-                    np++;
+    int __ct_match15 __attribute__((unused)) = (kind);
+    int __ct_matched15 __attribute__((unused)) = 0;
+    if (!__ct_matched15 && (1 && (__ct_match15 == 0))) {
+        if ((a >= 0)) {
+            __ct_matched15 = 1;
+            {
+                np = self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, a)->nparams;
+                for (k = 0; ((k < np) && (k < 16)); k++) {
+                    fts[k] = self->sym->__frontend_sym_symbolops_vptr->fn_ptype(self->sym, a, k);
+                    anns[k] = (int)((unsigned char)(self->sym->__frontend_sym_symbolops_vptr->fn_pann(self->sym, a, k)));
                 }
             }
-            else {
-                return args;
+        }
+    }
+    if (!__ct_matched15 && (1 && (__ct_match15 == 1))) {
+        if (((a >= 0) && (b >= 0))) {
+            __ct_matched15 = 1;
+            {
+                np = self->sym->traits[a].m[b].nparams;
+                for (k = 0; ((k < np) && (k < 16)); k++) {
+                    fts[k] = self->sym->traits[a].m[b].ptype[k];
+                    anns[k] = (int)((unsigned char)(self->sym->traits[a].m[b].pann[k]));
+                }
             }
+        }
+    }
+    if (!__ct_matched15 && (1 && (__ct_match15 == 2))) {
+        __ct_matched15 = 1;
+        {
+            for (pi = a; ((pi > 0) && (np < 16)); pi = self->arena->nodes[pi].next) {
+                fts[np] = self->arena->nodes[pi].text;
+                anns[np] = (int)((unsigned char)(self->arena->nodes[pi].aux));
+                np++;
+            }
+        }
+    }
+    if (!__ct_matched15 && (1)) {
+        __ct_matched15 = 1;
+        {
+            return args;
         }
     }
     if (((((!frontend_parse_bind_conv_on()) || (call < 0)) || (args <= 0)) || (np <= 0))) {

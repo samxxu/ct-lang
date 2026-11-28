@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1594 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=97860 io_cap=2048
+     emitted_before=48223 emitted_after=97845 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -287,6 +287,14 @@
       `selfhost/ct-ast/ct.pkg` 与 `lib/core/ct.pkg` 两处内部层 manifest；
       Module.h.ct 4676 -> 4853，发射 C 97535 -> 97707 行（+172：解析 helper 与
       `find_builtin` 的根记录；用户语料生成物逐字节不变），切片清单仍为 76)
+     (S8B-REM-1 R8 后复测：D4 把 9 条 ≥3 臂同主语 `else if (…kind == …)` 链改
+      `match`（Diag 2 / ExprTypeParse 2 / Stmt 2 / EmitExpr 2 / Expr 1），
+      节点池 `kind` 仍为 int，match 主语先绑局部；Lower / Verifier / EmitHeader
+      的 3 条链因模式文法不收宏常量而登记不改。发射 C 97860 -> 97845 行
+      （cat 口径 -15；按文件计 .c 97869 -> 97845 = -24：Diag 两条 13 臂链
+      -43、EmitExpr -6、ExprTypeParse -8，Stmt +19 / Expr +14 为 match
+      临时量与臂块；其余单元只是 `__ct_matchN` 编号位移。用户语料生成物
+      逐字节不变），切片清单仍为 76)
 -->
 
 ## 1 切片清单

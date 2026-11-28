@@ -706,8 +706,8 @@ static const char * tb_trait_canon(const char * name) {
     if (((!name) || (!name[0]))) {
         return name;
     }
-    struct frontend_sym_Symbols * __ct_tmp16 = tb_sym();
-    ti = __ct_tmp16->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp16, name);
+    struct frontend_sym_Symbols * __ct_tmp23 = tb_sym();
+    ti = __ct_tmp23->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp23, name);
     if (ti < 0) {
         return name;
     }
@@ -2622,8 +2622,8 @@ static int tb_trait(struct backend_tir_TBuilder * tb, int ti) {
 static int tb_ensure_trait(struct backend_tir_TBuilder * tb, const char * name) {
     int ti;
     int decl;
-    struct frontend_sym_Symbols * __ct_tmp17 = tb_sym();
-    ti = __ct_tmp17->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp17, name);
+    struct frontend_sym_Symbols * __ct_tmp24 = tb_sym();
+    ti = __ct_tmp24->__frontend_sym_symbolops_vptr->find_trait(__ct_tmp24, name);
     if (ti < 0) {
         return 0;
     }

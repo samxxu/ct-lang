@@ -336,17 +336,17 @@ static int backend_mem_Memory_backend_mem_MemoryOps_expr_mentions(void *self, in
         return 0;
     }
     k = _self->arena->nodes[e].kind;
-    struct runtime_arena_NodeKind __ct_match3 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
-    if (__ct_match3.tag == 10) {
+    struct runtime_arena_NodeKind __ct_match5 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
+    if (__ct_match5.tag == 10) {
         return (strcmp(_self->arena->nodes[e].text2, name) == 0);
     }
-    else if (1 && (((__ct_match3.tag == 24)) || ((__ct_match3.tag == 25)))) {
+    else if (1 && (((__ct_match5.tag == 24)) || ((__ct_match5.tag == 25)))) {
         if (strcmp(_self->arena->nodes[e].text2, name) == 0) {
             return 1;
         }
         return _self->__backend_mem_memoryops_vptr->expr_mentions(_self, _self->arena->nodes[e].a, name);
     }
-    else if (__ct_match3.tag == 7) {
+    else if (__ct_match5.tag == 7) {
         if (strcmp(_self->arena->nodes[e].text2, name) == 0) {
             return 1;
         }
@@ -383,17 +383,17 @@ static int backend_mem_Memory_backend_mem_MemoryOps_expr_returns(void *self, int
         return 0;
     }
     k = _self->arena->nodes[e].kind;
-    struct runtime_arena_NodeKind __ct_match4 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
-    if (__ct_match4.tag == 10) {
+    struct runtime_arena_NodeKind __ct_match6 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
+    if (__ct_match6.tag == 10) {
         return (strcmp(_self->arena->nodes[e].text2, name) == 0);
     }
-    else if (1 && (((__ct_match4.tag == 24)) || ((__ct_match4.tag == 25)))) {
+    else if (1 && (((__ct_match6.tag == 24)) || ((__ct_match6.tag == 25)))) {
         return 0;
     }
-    else if (__ct_match4.tag == 26) {
+    else if (__ct_match6.tag == 26) {
         return _self->__backend_mem_memoryops_vptr->expr_returns(_self, _self->arena->nodes[e].a, name);
     }
-    else if (__ct_match4.tag == 7) {
+    else if (__ct_match6.tag == 7) {
         for (p = _self->arena->nodes[e].a; p >= 0; p = _self->arena->nodes[p].next) {
             if (_self->__backend_mem_memoryops_vptr->expr_returns(_self, p, name)) {
                 return 1;
@@ -540,11 +540,11 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_assign(void *self, int 
     bv = (-1);
     if (lhs >= 0) {
         k = _self->arena->nodes[lhs].kind;
-        struct runtime_arena_NodeKind __ct_match5 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
-        if (__ct_match5.tag == 10) {
+        struct runtime_arena_NodeKind __ct_match7 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = k });
+        if (__ct_match7.tag == 10) {
             bv = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[lhs].text2);
         }
-        else if (1 && (((__ct_match5.tag == 24)) || ((__ct_match5.tag == 25)))) {
+        else if (1 && (((__ct_match7.tag == 24)) || ((__ct_match7.tag == 25)))) {
             int b = _self->arena->nodes[lhs].a;
             if (((b >= 0) && (_self->arena->nodes[b].kind == N_VAR))) {
                 bv = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[b].text2);

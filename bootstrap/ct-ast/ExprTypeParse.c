@@ -566,31 +566,28 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     if (qti < 0) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "unknown qualified type name");
                     }
-                    if (_self->sym->types[qti].kind == 1) {
+                    int __ct_match13 __attribute__((unused)) = (_self->sym->types[qti].kind);
+                    if (1 && (__ct_match13 == 1)) {
+                        if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
+                            return (-1);
+                        }
+                    }
+                    else if (1 && (__ct_match13 == 5)) {
+                        if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
+                            return (-1);
+                        }
+                    }
+                    else if (1 && (__ct_match13 == 6)) {
+                        if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
+                            return (-1);
+                        }
+                    }
+                    else if (1 && (__ct_match13 == 7)) {
                         if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                             return (-1);
                         }
                     }
                     else {
-                        if (_self->sym->types[qti].kind == 5) {
-                            if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
-                                return (-1);
-                            }
-                        }
-                        else {
-                            if (_self->sym->types[qti].kind == 6) {
-                                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
-                                    return (-1);
-                                }
-                            }
-                            else {
-                                if (_self->sym->types[qti].kind == 7) {
-                                    if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                                        return (-1);
-                                    }
-                                }
-                            }
-                        }
                     }
                     if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
                         return (-1);
@@ -726,7 +723,8 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                 }
                 break;
             }
-            if (_self->sym->types[ti].kind == 1) {
+            int __ct_match14 __attribute__((unused)) = (_self->sym->types[ti].kind);
+            if (1 && (__ct_match14 == 1)) {
                 if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
                     return (-1);
                 }
@@ -735,66 +733,60 @@ static int frontend_parse_Expr_frontend_parse_ExprTypeParse_parse_type(void *sel
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
             }
-            else {
-                if (_self->sym->types[ti].kind == 5) {
-                    if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
+            else if (1 && (__ct_match14 == 5)) {
+                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "enum") != 0) {
+                    return (-1);
+                }
+                _self->last_bare_tag = runtime_text_ct_internf("enum %s", rname);
+                if ((!_self->last_bare_tag)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+            }
+            else if (1 && (__ct_match14 == 6)) {
+                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
+                    return (-1);
+                }
+                _self->last_bare_tag = runtime_text_ct_internf("union %s", rname);
+                if ((!_self->last_bare_tag)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+            }
+            else if (1 && (__ct_match14 == 7)) {
+                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
+                    return (-1);
+                }
+                _self->last_bare_tag = runtime_text_ct_internf("struct %s", rname);
+                if ((!_self->last_bare_tag)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+            }
+            else if (1 && (__ct_match14 == 3)) {
+                int sti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rname);
+                _self->saw_trait = 1;
+                if (((sti >= 0) && _self->sym->traits[sti].is_static)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a static trait has no interface value");
+                }
+                if (((sti >= 0) && (_self->sym->traits[sti].ntparams > 0))) {
+                    if (_self->__frontend_parse_exprtraitinst_vptr->parse_trait_inst_type(_self, out, cap) != 0) {
                         return (-1);
                     }
-                    _self->last_bare_tag = runtime_text_ct_internf("enum %s", rname);
-                    if ((!_self->last_bare_tag)) {
-                        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                    }
+                    n = (int)(strlen(out));
+                    continue;
                 }
-                else {
-                    if (_self->sym->types[ti].kind == 6) {
-                        if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "union") != 0) {
-                            return (-1);
-                        }
-                        _self->last_bare_tag = runtime_text_ct_internf("union %s", rname);
-                        if ((!_self->last_bare_tag)) {
-                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                        }
-                    }
-                    else {
-                        if (_self->sym->types[ti].kind == 7) {
-                            if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                                return (-1);
-                            }
-                            _self->last_bare_tag = runtime_text_ct_internf("struct %s", rname);
-                            if ((!_self->last_bare_tag)) {
-                                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                            }
-                        }
-                        else {
-                            if (_self->sym->types[ti].kind == 3) {
-                                int sti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, rname);
-                                _self->saw_trait = 1;
-                                if (((sti >= 0) && _self->sym->traits[sti].is_static)) {
-                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "a static trait has no interface value");
-                                }
-                                if (((sti >= 0) && (_self->sym->traits[sti].ntparams > 0))) {
-                                    if (_self->__frontend_parse_exprtraitinst_vptr->parse_trait_inst_type(_self, out, cap) != 0) {
-                                        return (-1);
-                                    }
-                                    n = (int)(strlen(out));
-                                    continue;
-                                }
-                                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
-                                    return (-1);
-                                }
-                                iface = runtime_text_ct_internf("%s_iface", rname);
-                                if ((!iface)) {
-                                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
-                                }
-                                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), iface) != 0) {
-                                    return (-1);
-                                }
-                                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
-                                continue;
-                            }
-                        }
-                    }
+                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), "struct") != 0) {
+                    return (-1);
                 }
+                iface = runtime_text_ct_internf("%s_iface", rname);
+                if ((!iface)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), iface) != 0) {
+                    return (-1);
+                }
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                continue;
+            }
+            else {
             }
             if (_self->__frontend_parse_exprtypeparse_vptr->type_append(_self, out, cap, (&n), rname) != 0) {
                 return (-1);

@@ -860,6 +860,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
         }
 {
             int lvi = (-1);
+            int ek;
             if (_self->arena->nodes[e].kind == N_VAR) {
                 lvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
             }
@@ -868,23 +869,42 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                     lvi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[_self->arena->nodes[e].a].text2);
                 }
             }
-            if (((((lvi >= 0) && (_self->arena->nodes[e].kind == N_VAR)) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_slice) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->slice_escape)) {
-                if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a view of a local array", _self->sup->mem->path) != 0) {
-                    return (-1);
-                }
-            }
-            else {
-                if (((((((((lvi >= 0) && (_self->arena->nodes[e].kind == N_VAR)) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "struct __ct_slice") == 0)) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_array) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_fnparam)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_global)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_static))) {
-                    if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a view of a local array", _self->sup->mem->path) != 0) {
-                        return (-1);
+            ek = _self->arena->nodes[e].kind;
+            struct runtime_arena_NodeKind __ct_match25 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = ek });
+            int __ct_matched25 __attribute__((unused)) = 0;
+            if (!__ct_matched25 && (__ct_match25.tag == 10)) {
+                if ((((lvi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_slice) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->slice_escape)) {
+                    __ct_matched25 = 1;
+                    {
+                        if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a view of a local array", _self->sup->mem->path) != 0) {
+                            return (-1);
+                        }
                     }
                 }
-                else {
-                    if ((((((lvi >= 0) && (_self->arena->nodes[e].kind == N_SLICE_RANGE)) && (_self->arena->nodes[e].aux == 1)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_global)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_static))) {
+            }
+            if (!__ct_matched25 && (__ct_match25.tag == 10)) {
+                if ((((((((lvi >= 0) && _self->sym->ret_type[0]) && (strcmp(_self->sym->ret_type, "struct __ct_slice") == 0)) && _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_array) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_fnparam)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_global)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_static))) {
+                    __ct_matched25 = 1;
+                    {
+                        if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a view of a local array", _self->sup->mem->path) != 0) {
+                            return (-1);
+                        }
+                    }
+                }
+            }
+            if (!__ct_matched25 && (__ct_match25.tag == 75)) {
+                if (((((lvi >= 0) && (_self->arena->nodes[e].aux == 1)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_global)) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, lvi)->is_static))) {
+                    __ct_matched25 = 1;
+                    {
                         if (tool_diag_ct_slice_warn(eline, ecol, "slice escape: 'return' hands back a subslice of a local array", _self->sup->mem->path) != 0) {
                             return (-1);
                         }
                     }
+                }
+            }
+            if (!__ct_matched25 && (1)) {
+                __ct_matched25 = 1;
+                {
                 }
             }
         }
@@ -1837,6 +1857,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                 int off2;
                 int k2;
                 int sroot;
+                int ek;
                 const char * raw2;
                 const char * cname2;
                 if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "{"))) {
@@ -1847,7 +1868,9 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                     return (-1);
                 }
                 sroot = 0;
-                if (_self->arena->nodes[e].kind == N_VAR) {
+                ek = _self->arena->nodes[e].kind;
+                struct runtime_arena_NodeKind __ct_match26 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = ek });
+                if (__ct_match26.tag == 10) {
                     svi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[e].text2);
                     if (svi < 0) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "slice initializer is not a declared value");
@@ -1891,36 +1914,32 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_decl_node(void *self
                         }
                     }
                 }
-                else {
-                    if (_self->arena->nodes[e].kind == N_CALL) {
-                        const char * rt = "";
-                        if (((_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&rt)) != 0) || (strcmp(rt, "struct __ct_slice") != 0))) {
-                            return tool_diag_ct_sem_error(dline, dcol, "a slice can only be initialized from an array, a slice or a slice-returning call", _self->mem->path);
-                        }
-                        sroot = 0;
+                else if (__ct_match26.tag == 7) {
+                    const char * rt = "";
+                    if (((_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, e, (&rt)) != 0) || (strcmp(rt, "struct __ct_slice") != 0))) {
+                        return tool_diag_ct_sem_error(dline, dcol, "a slice can only be initialized from an array, a slice or a slice-returning call", _self->mem->path);
+                    }
+                    sroot = 0;
+                }
+                else if (__ct_match26.tag == 75) {
+                    if (strcmp(_self->arena->nodes[e].text, slice_elem) != 0) {
+                        return tool_diag_ct_sem_error(dline, dcol, "subslice element type does not match the declaration", _self->mem->path);
+                    }
+                    svi = (-1);
+                    if (_self->arena->nodes[e].a >= 0) {
+                        svi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[_self->arena->nodes[e].a].text2);
+                    }
+                    if (((_self->arena->nodes[e].aux == 1) && (svi >= 0))) {
+                        sroot = ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_global) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_static));
                     }
                     else {
-                        if (_self->arena->nodes[e].kind == N_SLICE_RANGE) {
-                            if (strcmp(_self->arena->nodes[e].text, slice_elem) != 0) {
-                                return tool_diag_ct_sem_error(dline, dcol, "subslice element type does not match the declaration", _self->mem->path);
-                            }
-                            svi = (-1);
-                            if (_self->arena->nodes[e].a >= 0) {
-                                svi = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, _self->arena->nodes[_self->arena->nodes[e].a].text2);
-                            }
-                            if (((_self->arena->nodes[e].aux == 1) && (svi >= 0))) {
-                                sroot = ((!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_global) && (!_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->is_static));
-                            }
-                            else {
-                                if (svi >= 0) {
-                                    sroot = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->slice_escape;
-                                }
-                            }
-                        }
-                        else {
-                            return tool_diag_ct_sem_error(dline, dcol, "a slice can only be initialized from an array or another slice", _self->mem->path);
+                        if (svi >= 0) {
+                            sroot = _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, svi)->slice_escape;
                         }
                     }
+                }
+                else {
+                    return tool_diag_ct_sem_error(dline, dcol, "a slice can only be initialized from an array or another slice", _self->mem->path);
                 }
                 if (is_slice) {
                     int svi2 = _self->sym->__frontend_sym_symbolops_vptr->find_var(_self->sym, name);

@@ -646,6 +646,7 @@ impl DiagStore for Diag {
             fputs("{\"warnings\":[", jf);
             for (i = 0; i < self->nwarns; i++) {
                 struct Warn *w = &self->warns[i];
+                int wk;
                 if (i) fputc(',', jf);
                 fputc('{', jf);
                 fputs("\"code\":\"", jf);
@@ -655,135 +656,153 @@ impl DiagStore for Diag {
                     || (self->leaks_error
                         && (w->kind == 0 || w->kind == 2 || w->kind == 10)))
                     fputs("\"severity\":\"error\",", jf);
-                if (w->kind == 1) {
-                    fputs("\"type\":\"signature_mismatch\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"method\":\"", jf);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"trait\":\"", jf);
-                    self->put_json(jf, w->tname);
-                    fputs("\",\"struct\":\"", jf);
-                    self->put_json(jf, w->stype);
-                    fputs("\",\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 2) {
-                    fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"type_name\":\"", jf);
-                    self->put_json(jf, w->tname);
-                    fprintf(jf, "*\",\"message\":\"may leak on a return path\","
-                                 "\"path_line\":%d}", w->path_line);
-                } else if (w->kind == 3) {
-                    fputs("\"type\":\"borrow_escape\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"message\":\"a borrowed pointer escapes through 'return'\"}", jf);
-                } else if (w->kind == 4) {
-                    fputs("\"type\":\"arity_mismatch\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"callee\":\"", jf);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 5) {
-                    fputs("\"type\":\"type_mismatch\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"callee\":\"", jf);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 6) {
-                    fputs("\"type\":\"ambiguous_method\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"method\":\"", jf);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 7) {
-                    fputs("\"type\":\"loop_shadow\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 8) {
-                    fputs("\"type\":\"std_shadow\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 9) {
-                    fputs("\"type\":\"slice_escape\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 11) {
-                    fputs("\"type\":\"str_escape\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 12) {
-                    /* LANG-24: a compatibility notice, never escalated. */
-                    fputs("\"type\":\"deprecated_alias\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 13) {
-                    /* SH-60: a `mut` method on a read-only receiver. */
-                    fputs("\"type\":\"receiver_mutability\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"method\":\"", jf);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else if (w->kind == 10) {
-                    /* PH-82: a direct `Box<X>` field cycle; `message` already
-                       names the chain, so JSON carries no separate field. */
-                    fputs("\"type\":\"potential_cycle\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,", w->line);
-                    if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
-                    fputs("\"message\":\"", jf);
-                    self->put_json(jf, w->msg);
-                    fputs("\"}", jf);
-                } else {
-                    fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
-                    self->put_json(jf, w->file);
-                    fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
-                    self->put_json(jf, w->var);
-                    fputs("\",\"type_name\":\"", jf);
-                    self->put_json(jf, w->tname);
-                    fputs("*\",\"message\":\"allocated but never deleted\"}", jf);
+                wk = w->kind;
+                /* S8B-REM-1 R8 / D4: one subject, thirteen warning kinds;
+                   the old `else` fallback is the wildcard arm. */
+                match (wk) {
+                    1 => {
+                        fputs("\"type\":\"signature_mismatch\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"method\":\"", jf);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"trait\":\"", jf);
+                        self->put_json(jf, w->tname);
+                        fputs("\",\"struct\":\"", jf);
+                        self->put_json(jf, w->stype);
+                        fputs("\",\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    2 => {
+                        fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"type_name\":\"", jf);
+                        self->put_json(jf, w->tname);
+                        fprintf(jf, "*\",\"message\":\"may leak on a return path\","
+                                     "\"path_line\":%d}", w->path_line);
+                    }
+                    3 => {
+                        fputs("\"type\":\"borrow_escape\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"message\":\"a borrowed pointer escapes through 'return'\"}", jf);
+                    }
+                    4 => {
+                        fputs("\"type\":\"arity_mismatch\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"callee\":\"", jf);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    5 => {
+                        fputs("\"type\":\"type_mismatch\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"callee\":\"", jf);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    6 => {
+                        fputs("\"type\":\"ambiguous_method\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"method\":\"", jf);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    7 => {
+                        fputs("\"type\":\"loop_shadow\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    8 => {
+                        fputs("\"type\":\"std_shadow\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    9 => {
+                        fputs("\"type\":\"slice_escape\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    11 => {
+                        fputs("\"type\":\"str_escape\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    12 => {
+                        /* LANG-24: a compatibility notice, never escalated. */
+                        fputs("\"type\":\"deprecated_alias\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    13 => {
+                        /* SH-60: a `mut` method on a read-only receiver. */
+                        fputs("\"type\":\"receiver_mutability\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"method\":\"", jf);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    10 => {
+                        /* PH-82: a direct `Box<X>` field cycle; `message` already
+                           names the chain, so JSON carries no separate field. */
+                        fputs("\"type\":\"potential_cycle\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,", w->line);
+                        if (self->strict && w->col > 0) fprintf(jf, "\"col\":%d,", w->col);
+                        fputs("\"message\":\"", jf);
+                        self->put_json(jf, w->msg);
+                        fputs("\"}", jf);
+                    }
+                    _ => {
+                        fputs("\"type\":\"potential_leak\",\"file\":\"", jf);
+                        self->put_json(jf, w->file);
+                        fprintf(jf, "\",\"line\":%d,\"variable\":\"", w->line);
+                        self->put_json(jf, w->var);
+                        fputs("\",\"type_name\":\"", jf);
+                        self->put_json(jf, w->tname);
+                        fputs("*\",\"message\":\"allocated but never deleted\"}", jf);
+                    }
                 }
             }
             fputs("]}\n", jf);
@@ -800,50 +819,68 @@ impl DiagStore for Diag {
                 /* S1a-0 C2l: the location prints from the owned path; the old
                    fixed `loc` copy cut it at the 1024-byte cap. */
                 diag_loc(tf, w, self->strict);
-                if (w->kind == 1)
-                    fprintf(tf, " %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n",
-                            sigsev, w->var, w->tname, w->stype, w->msg, csuf);
-                else if (w->kind == 2)
-                    fprintf(tf, " %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n",
-                            leaksev, w->var, w->tname, w->path_line, csuf);
-                else if (w->kind == 3)
-                    fprintf(tf, " %s: a borrowed pointer escapes through 'return'%s\n",
-                            sev, csuf);
-                else if (w->kind == 4)
-                    fprintf(tf, " %s: arity mismatch: '%s' %s%s\n",
-                            sev, w->var, w->msg, csuf);
-                else if (w->kind == 5) {
-                    /* Phase 32: an empty callee means the message already
-                       carries its own label (`initializer: …`), so nothing
-                       is prefixed. */
-                    if (w->var[0])
-                        fprintf(tf, " %s: type mismatch: '%s' %s%s\n",
+                int wk = w->kind;
+                /* S8B-REM-1 R8 / D4: one subject, thirteen warning kinds;
+                   the old `else` fallback is the wildcard arm. */
+                match (wk) {
+                    1 => {
+                        fprintf(tf, " %s: signature mismatch: '%s' in impl of '%s' for '%s': %s%s\n",
+                                sigsev, w->var, w->tname, w->stype, w->msg, csuf);
+                    }
+                    2 => {
+                        fprintf(tf, " %s: potential leak: '%s' (%s*) may leak on a return path (line %d)%s\n",
+                                leaksev, w->var, w->tname, w->path_line, csuf);
+                    }
+                    3 => {
+                        fprintf(tf, " %s: a borrowed pointer escapes through 'return'%s\n",
+                                sev, csuf);
+                    }
+                    4 => {
+                        fprintf(tf, " %s: arity mismatch: '%s' %s%s\n",
                                 sev, w->var, w->msg, csuf);
-                    else
+                    }
+                    5 => {
+                        /* Phase 32: an empty callee means the message already
+                           carries its own label (`initializer: …`), so nothing
+                           is prefixed. */
+                        if (w->var[0])
+                            fprintf(tf, " %s: type mismatch: '%s' %s%s\n",
+                                    sev, w->var, w->msg, csuf);
+                        else
+                            fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+                    }
+                    6 => {
+                        fprintf(tf, " %s: ambiguous method: '%s' %s%s\n",
+                                sev, w->var, w->msg, csuf);
+                    }
+                    7 => {
                         fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+                    }
+                    8 => {
+                        fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+                    }
+                    9 => {
+                        fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+                    }
+                    11 => {
+                        fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+                    }
+                    12 => {
+                        /* LANG-24: the deprecated alias always prints `warning:`,
+                           even when `ct check` escalates the other findings. */
+                        fprintf(tf, " warning: %s%s\n", w->msg, csuf);
+                    }
+                    13 => {
+                        fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
+                    }
+                    10 => {
+                        fprintf(tf, " %s: %s%s\n", leaksev, w->msg, csuf);
+                    }
+                    _ => {
+                        fprintf(tf, " %s: potential leak: '%s' (%s*) allocated but never deleted%s\n",
+                                leaksev, w->var, w->tname, csuf);
+                    }
                 }
-                else if (w->kind == 6)
-                    fprintf(tf, " %s: ambiguous method: '%s' %s%s\n",
-                            sev, w->var, w->msg, csuf);
-                else if (w->kind == 7)
-                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                else if (w->kind == 8)
-                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                else if (w->kind == 9)
-                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                else if (w->kind == 11)
-                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                else if (w->kind == 12)
-                    /* LANG-24: the deprecated alias always prints `warning:`,
-                       even when `ct check` escalates the other findings. */
-                    fprintf(tf, " warning: %s%s\n", w->msg, csuf);
-                else if (w->kind == 13)
-                    fprintf(tf, " %s: %s%s\n", sev, w->msg, csuf);
-                else if (w->kind == 10)
-                    fprintf(tf, " %s: %s%s\n", leaksev, w->msg, csuf);
-                else
-                    fprintf(tf, " %s: potential leak: '%s' (%s*) allocated but never deleted%s\n",
-                            leaksev, w->var, w->tname, csuf);
             }
         }
         /* PH-82: the leak escalation is the run's failure signal even when

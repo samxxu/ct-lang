@@ -1601,42 +1601,48 @@ impl StmtOps for Stmt {
                lint names only the direct forms; pass-through paths are the
                documented author responsibility (A.4 P-4.5). */
             {
-                int lvi = -1;
+                int lvi = -1, ek;
                 if (self->arena->nodes[e].kind == N_VAR)
                     lvi = self->sym->find_var(self->arena->nodes[e].text2);
                 else if (self->arena->nodes[e].kind == N_SLICE_RANGE
                          && self->arena->nodes[e].a >= 0)
                     lvi = self->sym->find_var(
                         self->arena->nodes[self->arena->nodes[e].a].text2);
-                if (lvi >= 0 && self->arena->nodes[e].kind == N_VAR
-                    && self->sym->var_at(lvi)->is_slice
-                    && self->sym->var_at(lvi)->slice_escape) {
-                    if (tool::diag::ct_slice_warn(eline, ecol,
-                            "slice escape: 'return' hands back a view of a local array",
-                            self->sup->mem->path) != 0)
-                        return -1;
-                } else if (lvi >= 0 && self->arena->nodes[e].kind == N_VAR
-                           && self->sym->ret_type[0]
-                           && strcmp(self->sym->ret_type, "struct __ct_slice") == 0
-                           && self->sym->var_at(lvi)->is_array
-                           && !self->sym->var_at(lvi)->is_fnparam
-                           && !self->sym->var_at(lvi)->is_global
-                           && !self->sym->var_at(lvi)->is_static) {
-                    /* SH-100: `return a;` on a local array is converted to a
-                       slice view too, so it hands back dead storage exactly
-                       like `return s;` above. */
-                    if (tool::diag::ct_slice_warn(eline, ecol,
-                            "slice escape: 'return' hands back a view of a local array",
-                            self->sup->mem->path) != 0)
-                        return -1;
-                } else if (lvi >= 0 && self->arena->nodes[e].kind == N_SLICE_RANGE
-                           && self->arena->nodes[e].aux == 1
-                           && !self->sym->var_at(lvi)->is_global
-                           && !self->sym->var_at(lvi)->is_static) {
-                    if (tool::diag::ct_slice_warn(eline, ecol,
-                            "slice escape: 'return' hands back a subslice of a local array",
-                            self->sup->mem->path) != 0)
-                        return -1;
+                ek = self->arena->nodes[e].kind;
+                match ((NodeKind){ .tag = ek }) {
+                    NodeKind.NK_VAR() if lvi >= 0
+                        && self->sym->var_at(lvi)->is_slice
+                        && self->sym->var_at(lvi)->slice_escape => {
+                        if (tool::diag::ct_slice_warn(eline, ecol,
+                                "slice escape: 'return' hands back a view of a local array",
+                                self->sup->mem->path) != 0)
+                            return -1;
+                    }
+                    NodeKind.NK_VAR() if lvi >= 0
+                        && self->sym->ret_type[0]
+                        && strcmp(self->sym->ret_type, "struct __ct_slice") == 0
+                        && self->sym->var_at(lvi)->is_array
+                        && !self->sym->var_at(lvi)->is_fnparam
+                        && !self->sym->var_at(lvi)->is_global
+                        && !self->sym->var_at(lvi)->is_static => {
+                        /* SH-100: `return a;` on a local array is converted to a
+                           slice view too, so it hands back dead storage exactly
+                           like `return s;` above. */
+                        if (tool::diag::ct_slice_warn(eline, ecol,
+                                "slice escape: 'return' hands back a view of a local array",
+                                self->sup->mem->path) != 0)
+                            return -1;
+                    }
+                    NodeKind.NK_SLICE_RANGE() if lvi >= 0
+                        && self->arena->nodes[e].aux == 1
+                        && !self->sym->var_at(lvi)->is_global
+                        && !self->sym->var_at(lvi)->is_static => {
+                        if (tool::diag::ct_slice_warn(eline, ecol,
+                                "slice escape: 'return' hands back a subslice of a local array",
+                                self->sup->mem->path) != 0)
+                            return -1;
+                    }
+                    _ => { }
                 }
             }
             /* SH-106: a `Str` / `U16Str` return that hands back a view of a
@@ -2562,7 +2568,7 @@ impl StmtOps for Stmt {
                        or another slice (never a brace list). The array case
                        becomes a `{ptr,len}` compound literal; `sizeof` answers
                        the inferred length for `T a[] = {…}` too. */
-                    int svi, off2, k2, sroot;
+                    int svi, off2, k2, sroot, ek;
                     const char *raw2;
                     const char *cname2;
                     if (self->lex->tok == T_PUNCT
@@ -2574,76 +2580,82 @@ impl StmtOps for Stmt {
                     e = self->ex->parse_expr();
                     if (e < 0) return -1;
                     sroot = 0;
-                    if (self->arena->nodes[e].kind == N_VAR) {
-                        svi = self->sym->find_var(self->arena->nodes[e].text2);
-                        if (svi < 0)
-                            return self->sup->fail("slice initializer is not a declared value");
-                        if (self->sym->var_at(svi)->is_slice) {
-                            if (strcmp(self->sym->var_at(svi)->slice_elem, slice_elem) != 0)
+                    ek = self->arena->nodes[e].kind;
+                    match ((NodeKind){ .tag = ek }) {
+                        NodeKind.NK_VAR() => {
+                            svi = self->sym->find_var(self->arena->nodes[e].text2);
+                            if (svi < 0)
+                                return self->sup->fail("slice initializer is not a declared value");
+                            if (self->sym->var_at(svi)->is_slice) {
+                                if (strcmp(self->sym->var_at(svi)->slice_elem, slice_elem) != 0)
+                                    return tool::diag::ct_sem_error(dline, dcol,
+                                        "slice element type does not match the declaration",
+                                        self->mem->path);
+                                sroot = self->sym->var_at(svi)->slice_escape;
+                            } else if (self->sym->var_at(svi)->is_array
+                                       && !self->sym->var_at(svi)->is_fnparam) {
+                                if (strcmp(self->sym->var_at(svi)->type, slice_elem) != 0)
+                                    return tool::diag::ct_sem_error(dline, dcol,
+                                        "slice element type does not match the array",
+                                        self->mem->path);
+                                if (strchr(self->sym->var_at(svi)->dims, '('))
+                                    return tool::diag::ct_sem_error(dline, dcol,
+                                        "slice element type does not match the array declarator",
+                                        self->mem->path);
+                                cname2 = self->sym->var_at(svi)->cname;
+                                raw2 = runtime::text::ct_internf(
+                                         "(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }",
+                                         cname2, cname2, cname2);
+                                if (!raw2) return self->sup->fail("out of memory");
+                                e = self->sup->new_node(N_RAW);
+                                if (e < 0) return -1;
+                                off2 = self->arena->str_begin();
+                                for (k2 = 0; raw2[k2]; k2++)
+                                    if (self->arena->str_put(raw2[k2]) != 0)
+                                        return self->sup->fail("initializer is too long");
+                                self->arena->str_end();
+                                self->arena->nodes[e].num = off2;
+                                self->arena->nodes[e].aux = 1;
+                                sroot = !self->sym->var_at(svi)->is_global
+                                        && !self->sym->var_at(svi)->is_static;
+                            } else {
                                 return tool::diag::ct_sem_error(dline, dcol,
-                                    "slice element type does not match the declaration",
+                                    "a slice can only be initialized from an array or another slice",
                                     self->mem->path);
-                            sroot = self->sym->var_at(svi)->slice_escape;
-                        } else if (self->sym->var_at(svi)->is_array
-                                   && !self->sym->var_at(svi)->is_fnparam) {
-                            if (strcmp(self->sym->var_at(svi)->type, slice_elem) != 0)
+                            }
+                        }
+                        NodeKind.NK_CALL() => {
+                            /* A callee that returns a slice is a view it owns the
+                               contract for; the direct local-array lint does not
+                               follow through a call (P-4.5 pass-through). */
+                            const char *rt = "";
+                            if (self->sup->expr_type_text(e, &rt) != 0
+                                || strcmp(rt, "struct __ct_slice") != 0)
                                 return tool::diag::ct_sem_error(dline, dcol,
-                                    "slice element type does not match the array",
+                                    "a slice can only be initialized from an array, a slice or a slice-returning call",
                                     self->mem->path);
-                            if (strchr(self->sym->var_at(svi)->dims, '('))
+                            sroot = 0;
+                        }
+                        NodeKind.NK_SLICE_RANGE() => {
+                            if (strcmp(self->arena->nodes[e].text, slice_elem) != 0)
                                 return tool::diag::ct_sem_error(dline, dcol,
-                                    "slice element type does not match the array declarator",
+                                    "subslice element type does not match the declaration",
                                     self->mem->path);
-                            cname2 = self->sym->var_at(svi)->cname;
-                            raw2 = runtime::text::ct_internf(
-                                     "(struct __ct_slice){ (void *)(%s), (int)(sizeof(%s) / sizeof((%s)[0])) }",
-                                     cname2, cname2, cname2);
-                            if (!raw2) return self->sup->fail("out of memory");
-                            e = self->sup->new_node(N_RAW);
-                            if (e < 0) return -1;
-                            off2 = self->arena->str_begin();
-                            for (k2 = 0; raw2[k2]; k2++)
-                                if (self->arena->str_put(raw2[k2]) != 0)
-                                    return self->sup->fail("initializer is too long");
-                            self->arena->str_end();
-                            self->arena->nodes[e].num = off2;
-                            self->arena->nodes[e].aux = 1;
-                            sroot = !self->sym->var_at(svi)->is_global
-                                    && !self->sym->var_at(svi)->is_static;
-                        } else {
+                            svi = -1;
+                            if (self->arena->nodes[e].a >= 0)
+                                svi = self->sym->find_var(
+                                    self->arena->nodes[self->arena->nodes[e].a].text2);
+                            if (self->arena->nodes[e].aux == 1 && svi >= 0)
+                                sroot = !self->sym->var_at(svi)->is_global
+                                        && !self->sym->var_at(svi)->is_static;
+                            else if (svi >= 0)
+                                sroot = self->sym->var_at(svi)->slice_escape;
+                        }
+                        _ => {
                             return tool::diag::ct_sem_error(dline, dcol,
                                 "a slice can only be initialized from an array or another slice",
                                 self->mem->path);
                         }
-                    } else if (self->arena->nodes[e].kind == N_CALL) {
-                        /* A callee that returns a slice is a view it owns the
-                           contract for; the direct local-array lint does not
-                           follow through a call (P-4.5 pass-through). */
-                        const char *rt = "";
-                        if (self->sup->expr_type_text(e, &rt) != 0
-                            || strcmp(rt, "struct __ct_slice") != 0)
-                            return tool::diag::ct_sem_error(dline, dcol,
-                                "a slice can only be initialized from an array, a slice or a slice-returning call",
-                                self->mem->path);
-                        sroot = 0;
-                    } else if (self->arena->nodes[e].kind == N_SLICE_RANGE) {
-                        if (strcmp(self->arena->nodes[e].text, slice_elem) != 0)
-                            return tool::diag::ct_sem_error(dline, dcol,
-                                "subslice element type does not match the declaration",
-                                self->mem->path);
-                        svi = -1;
-                        if (self->arena->nodes[e].a >= 0)
-                            svi = self->sym->find_var(
-                                self->arena->nodes[self->arena->nodes[e].a].text2);
-                        if (self->arena->nodes[e].aux == 1 && svi >= 0)
-                            sroot = !self->sym->var_at(svi)->is_global
-                                    && !self->sym->var_at(svi)->is_static;
-                        else if (svi >= 0)
-                            sroot = self->sym->var_at(svi)->slice_escape;
-                    } else {
-                        return tool::diag::ct_sem_error(dline, dcol,
-                            "a slice can only be initialized from an array or another slice",
-                            self->mem->path);
                     }
                     if (is_slice) {
                         int svi2 = self->sym->find_var(name);

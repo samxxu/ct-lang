@@ -613,257 +613,257 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_type_decl(void *self,
     int nk;
     (void)(_self);
     nk = _self->arena->nodes[n].kind;
-    struct runtime_arena_NodeKind __ct_match15 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
-    if (__ct_match15.tag == 0) {
+    struct runtime_arena_NodeKind __ct_match22 __attribute__((unused)) = ((struct runtime_arena_NodeKind){ .tag = nk });
+    if (__ct_match22.tag == 0) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 1) {
+    else if (__ct_match22.tag == 1) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 2) {
+    else if (__ct_match22.tag == 2) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 3) {
+    else if (__ct_match22.tag == 3) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 4) {
+    else if (__ct_match22.tag == 4) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 5) {
+    else if (__ct_match22.tag == 5) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 6) {
+    else if (__ct_match22.tag == 6) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 7) {
+    else if (__ct_match22.tag == 7) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 8) {
+    else if (__ct_match22.tag == 8) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 9) {
+    else if (__ct_match22.tag == 9) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 10) {
+    else if (__ct_match22.tag == 10) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 11) {
+    else if (__ct_match22.tag == 11) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 12) {
+    else if (__ct_match22.tag == 12) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 13) {
+    else if (__ct_match22.tag == 13) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 14) {
+    else if (__ct_match22.tag == 14) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 15) {
+    else if (__ct_match22.tag == 15) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 16) {
+    else if (__ct_match22.tag == 16) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 17) {
+    else if (__ct_match22.tag == 17) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 18) {
+    else if (__ct_match22.tag == 18) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 19) {
+    else if (__ct_match22.tag == 19) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 20) {
+    else if (__ct_match22.tag == 20) {
         return backend_emit_em_decl_struct(_self, n, ind, with_semi, N_STRUCT);
     }
-    else if (__ct_match15.tag == 21) {
+    else if (__ct_match22.tag == 21) {
         return backend_emit_em_decl_typedef(_self, n, ind, with_semi, N_TYPEDEF);
     }
-    else if (__ct_match15.tag == 22) {
+    else if (__ct_match22.tag == 22) {
         return backend_emit_em_decl_global(_self, n, ind, with_semi, N_GLOBAL);
     }
-    else if (__ct_match15.tag == 23) {
+    else if (__ct_match22.tag == 23) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 24) {
+    else if (__ct_match22.tag == 24) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 25) {
+    else if (__ct_match22.tag == 25) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 26) {
+    else if (__ct_match22.tag == 26) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 27) {
+    else if (__ct_match22.tag == 27) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 28) {
+    else if (__ct_match22.tag == 28) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 29) {
+    else if (__ct_match22.tag == 29) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 30) {
+    else if (__ct_match22.tag == 30) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 31) {
+    else if (__ct_match22.tag == 31) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 32) {
+    else if (__ct_match22.tag == 32) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 33) {
+    else if (__ct_match22.tag == 33) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 34) {
+    else if (__ct_match22.tag == 34) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 35) {
+    else if (__ct_match22.tag == 35) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 36) {
+    else if (__ct_match22.tag == 36) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 37) {
+    else if (__ct_match22.tag == 37) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 38) {
+    else if (__ct_match22.tag == 38) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 39) {
+    else if (__ct_match22.tag == 39) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 40) {
+    else if (__ct_match22.tag == 40) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 41) {
+    else if (__ct_match22.tag == 41) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 42) {
+    else if (__ct_match22.tag == 42) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 43) {
+    else if (__ct_match22.tag == 43) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 44) {
+    else if (__ct_match22.tag == 44) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 45) {
+    else if (__ct_match22.tag == 45) {
         if ((_self->arena->nodes[n].aux & 2)) {
             return backend_emit_em_decl_enum_adt(_self, n, ind, with_semi, N_ENUM);
         }
         return backend_emit_em_decl_enum(_self, n, ind, with_semi, N_ENUM);
     }
-    else if (__ct_match15.tag == 46) {
+    else if (__ct_match22.tag == 46) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 47) {
+    else if (__ct_match22.tag == 47) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 48) {
+    else if (__ct_match22.tag == 48) {
         return backend_emit_em_decl_union(_self, n, ind, with_semi, N_UNION);
     }
-    else if (__ct_match15.tag == 49) {
+    else if (__ct_match22.tag == 49) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 50) {
+    else if (__ct_match22.tag == 50) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 51) {
+    else if (__ct_match22.tag == 51) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 52) {
+    else if (__ct_match22.tag == 52) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 53) {
+    else if (__ct_match22.tag == 53) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 54) {
+    else if (__ct_match22.tag == 54) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 55) {
+    else if (__ct_match22.tag == 55) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 56) {
+    else if (__ct_match22.tag == 56) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 57) {
+    else if (__ct_match22.tag == 57) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 58) {
+    else if (__ct_match22.tag == 58) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 59) {
+    else if (__ct_match22.tag == 59) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 60) {
+    else if (__ct_match22.tag == 60) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 61) {
+    else if (__ct_match22.tag == 61) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 62) {
+    else if (__ct_match22.tag == 62) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 63) {
+    else if (__ct_match22.tag == 63) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 64) {
+    else if (__ct_match22.tag == 64) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 65) {
+    else if (__ct_match22.tag == 65) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 66) {
+    else if (__ct_match22.tag == 66) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 67) {
+    else if (__ct_match22.tag == 67) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 68) {
+    else if (__ct_match22.tag == 68) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 69) {
+    else if (__ct_match22.tag == 69) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 70) {
+    else if (__ct_match22.tag == 70) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 71) {
+    else if (__ct_match22.tag == 71) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 72) {
+    else if (__ct_match22.tag == 72) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 73) {
+    else if (__ct_match22.tag == 73) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 74) {
+    else if (__ct_match22.tag == 74) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 75) {
+    else if (__ct_match22.tag == 75) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 76) {
+    else if (__ct_match22.tag == 76) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 77) {
+    else if (__ct_match22.tag == 77) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 78) {
+    else if (__ct_match22.tag == 78) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 79) {
+    else if (__ct_match22.tag == 79) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 80) {
+    else if (__ct_match22.tag == 80) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 81) {
+    else if (__ct_match22.tag == 81) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
-    else if (__ct_match15.tag == 82) {
+    else if (__ct_match22.tag == 82) {
         return _self->__backend_emit_emitops_vptr->fail_from(_self, n, "unknown declaration node");
     }
     else {
