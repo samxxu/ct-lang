@@ -184,18 +184,24 @@ struct PkgRec {
     const char *name;
     const char *version;
     const char *publisher;
-    char kind[16];
+    /* S8B-REM-1 R4: the four fixed report columns are borrowed spellings, not
+       fixed `char[N]` copies. `kind` / `action` are literals, `commit` /
+       `digest` are command-scope owned texts, so a column is never truncated
+       and the record block only carries pointers. The values are the same
+       bytes the old `snprintf` rows held, so `ct get` text/JSON output and
+       `ct.lock` stay byte-identical. */
+    const char *kind;
     /* S1a-0 C2e: the source URL grows with the command text, so it is owned
        by the Pkg command scope (`pkg_owned_*`) instead of a fixed
        MAX_PKG_CMD field. */
     char *url;
     const char *tag;
-    char commit[64];
+    const char *commit;
     /* S1a-0 C2k: the store path grows with $CT_HOME; the record owns an
        exact-size string for the command scope. */
     char *store;
-    char digest[80];
-    char action[16];
+    const char *digest;
+    const char *action;
 };
 
 /* S1a-0 C1: the lock's four columns travel together, and `install` adds the
@@ -2162,15 +2168,17 @@ impl PkgOps for Pkg {
             if (!rec->name) return -1;
             rec->version = mver;
             rec->publisher = publisher;
-            snprintf(rec->kind, sizeof rec->kind, "git");
+            rec->kind = "git";
             rec->url = self->text_dup(url);
             if (rec->url == 0) return -1;
             rec->store = self->text_dup(store);
             if (rec->store == 0) return -1;
             rec->tag = tag[0] ? tag : "-";
-            snprintf(rec->commit, sizeof rec->commit, "%s", commit);
-            snprintf(rec->digest, sizeof rec->digest, "%s", dig);
-            snprintf(rec->action, sizeof rec->action, "%s", existed ? "reused" : "installed");
+            rec->commit = self->text_dup(commit);
+            if (rec->commit == 0) return -1;
+            rec->digest = self->text_dup(dig);
+            if (rec->digest == 0) return -1;
+            rec->action = existed ? "reused" : "installed";
         }
         return 0;
     }
@@ -2419,15 +2427,16 @@ impl PkgOps for Pkg {
             if (!rec->name) return -1;
             rec->version = ver;
             rec->publisher = publisher;
-            snprintf(rec->kind, sizeof rec->kind, "dir");
+            rec->kind = "dir";
             rec->url = self->text_dup(dir);
             if (rec->url == 0) return -1;
             rec->store = self->text_dup(store);
             if (rec->store == 0) return -1;
             rec->tag = "-";
-            snprintf(rec->commit, sizeof rec->commit, "-");
-            snprintf(rec->digest, sizeof rec->digest, "%s", dig);
-            snprintf(rec->action, sizeof rec->action, "%s", existed ? "reused" : "installed");
+            rec->commit = "-";
+            rec->digest = self->text_dup(dig);
+            if (rec->digest == 0) return -1;
+            rec->action = existed ? "reused" : "installed";
         }
         return 0;
     }

@@ -94,3 +94,27 @@ selfhost/ct-ast/frontend/sym/Symbols.h.ct:3484	ct_inst_resolve	1	8	（无）	10	
 # R3 判定：15/15 不改。合计 44 个机械改点（2 个 trait 的声明+实现 + 9 个源文件的 14 个 live 调用）；
 # 收益为 Symbols snprintf 24→9（−15），但 5 个 API（5 站点）已无调用方、5 个站点受诊断/管线约束，
 # 判"收益不抵迁移面"，只登记；5 个死 buffer API 可在独立清理片删除。
+
+# S8B-REM-1 R4 审计（baseline 653dec09）：Pkg.h.ct d 类定长字段 17 处
+file:line	field	group	action
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2171	PkgRec.kind	PkgRec	改借用文本："git"
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2177	PkgRec.commit	PkgRec	改借用文本：text_dup(commit)
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2179	PkgRec.digest	PkgRec	改借用文本：text_dup(dig)
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2181	PkgRec.action	PkgRec	改借用文本：existed ? "reused" : "installed"
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2430	PkgRec.kind	PkgRec	改借用文本："dir"
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2436	PkgRec.commit	PkgRec	改借用文本："-"
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2437	PkgRec.digest	PkgRec	改借用文本：text_dup(dig)
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2439	PkgRec.action	PkgRec	改借用文本：existed ? "reused" : "installed"
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2147	self->lock 追加	get_git	不改：ct.lock 冻结字节；已是动态增长循环
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:2407	self->lock 追加	get_dir	不改：同上
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5210	ct.lock 迁移输出	ct_pkg_update	不改：ct.lock 冻结字节；整行拼装 + 动态扩容
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4634	LockRow.ver	lock 读侧	不改：从 lock 行截断拷贝（32 字节）；改指针会去掉上限、改变超长列行为
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4641	LockRow.dig	lock 读侧	不改：同上（80 字节）
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5429	LockParsedRow.ver	lock 读侧	不改：同上（32 字节）
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5435	LockParsedRow.typ	lock 读侧	不改：同上（16 字节）
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:5438	LockParsedRow.dig	lock 读侧	不改：同上（80 字节）
+selfhost/ct-ast/tool/pkg/Pkg.h.ct:4267	IndexRow.tag	index 刷新	不改：索引格式冻结；保留 "tag is too long" 诊断（64 字节）
+# R4 判定：PkgRec 4 个字段 × 2 条路径 = 8 站点改借用文本（`const char *` + 字面量/命令域
+# owned 文本）；9 站点登记不改（3 处 ct.lock 文本、2 处 LockRow、3 处 LockParsedRow、1 处
+# IndexRow.tag）。Pkg snprintf 51→43；`ct.lock` 与 `ct get` 文本/JSON 输出逐字节不变
+# （test/pkg 165/0、goldens 25/25、check-seed 两轮逐字节）。

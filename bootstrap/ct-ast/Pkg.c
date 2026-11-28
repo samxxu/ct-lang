@@ -248,13 +248,13 @@ struct tool_pkg_PkgRec {
     const char * name;
     const char * version;
     const char * publisher;
-    char kind[16];
+    const char * kind;
     char * url;
     const char * tag;
-    char commit[64];
+    const char * commit;
     char * store;
-    char digest[80];
-    char action[16];
+    const char * digest;
+    const char * action;
 };
 struct tool_pkg_LockRow {
     const char * name;
@@ -2048,7 +2048,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
         }
         rec->version = mver;
         rec->publisher = publisher;
-        snprintf(rec->kind, sizeof(rec->kind), "git");
+        rec->kind = "git";
         rec->url = _self->__tool_pkg_pkgops_vptr->text_dup(_self, url);
         if (rec->url == 0) {
             return (-1);
@@ -2058,9 +2058,15 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_fetch_git(void *self, const char * url, 
             return (-1);
         }
         rec->tag = (tag[0] ? tag : "-");
-        snprintf(rec->commit, sizeof(rec->commit), "%s", commit);
-        snprintf(rec->digest, sizeof(rec->digest), "%s", dig);
-        snprintf(rec->action, sizeof(rec->action), "%s", (existed ? "reused" : "installed"));
+        rec->commit = _self->__tool_pkg_pkgops_vptr->text_dup(_self, commit);
+        if (rec->commit == 0) {
+            return (-1);
+        }
+        rec->digest = _self->__tool_pkg_pkgops_vptr->text_dup(_self, dig);
+        if (rec->digest == 0) {
+            return (-1);
+        }
+        rec->action = (existed ? "reused" : "installed");
     }
     return 0;
 }
@@ -2302,7 +2308,7 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_one(void *self, const char * dir, co
         }
         rec->version = ver;
         rec->publisher = publisher;
-        snprintf(rec->kind, sizeof(rec->kind), "dir");
+        rec->kind = "dir";
         rec->url = _self->__tool_pkg_pkgops_vptr->text_dup(_self, dir);
         if (rec->url == 0) {
             return (-1);
@@ -2312,9 +2318,12 @@ static int tool_pkg_Pkg_tool_pkg_PkgOps_get_one(void *self, const char * dir, co
             return (-1);
         }
         rec->tag = "-";
-        snprintf(rec->commit, sizeof(rec->commit), "-");
-        snprintf(rec->digest, sizeof(rec->digest), "%s", dig);
-        snprintf(rec->action, sizeof(rec->action), "%s", (existed ? "reused" : "installed"));
+        rec->commit = "-";
+        rec->digest = _self->__tool_pkg_pkgops_vptr->text_dup(_self, dig);
+        if (rec->digest == 0) {
+            return (-1);
+        }
+        rec->action = (existed ? "reused" : "installed");
     }
     return 0;
 }
