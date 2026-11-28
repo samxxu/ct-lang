@@ -176,7 +176,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | **已完成**（`9eb519c4`） | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 | Q-14 | T-8 门禁允许 EDITOR 签收 ADR（B1） | **已完成**（`f0ce1746`；待 EDITOR 审核） | REQ（所有者 2026-11-28 授权直接修复）→ EDITOR | 无 | 本节 Q-12 注；`test/docs/check-docs.py` |
 | Q-15 | ADR 规范对齐（B2：`AGENTS §0.7` + 规范矩阵 + sha pin） | **已完成**（`b4f3a568`；待 EDITOR 审核） | REQ（所有者授权直接修复）→ EDITOR | 外部主规范副本需 EDITOR 后续同步（见注） | `AGENTS.md`、`docs/spec/ai-coding-workflow.md` |
-| Q-16 | E-V3-9b 条件通过裁定（方案 A） | **已完成**（REQ 2026-11-28 裁定；待 REV 补签） | REQ 裁定 → REV 补 `dogfooding §3.8` 计数与抽查 → REV 签 | 无 | [REV 现状评估](../../reviews/2026-11-28-review-priority-assessment.md) §2；卡 §6 E-V3-9b |
+| Q-16 | E-V3-9b 条件通过裁定（方案 A） | **已完成**（REQ 2026-11-28 裁定；计数已备 [§3.8.1](../../planning/dogfooding.md)，待 REV 出结论） | REQ 裁定 → REV 在 `docs/reviews/` 出结论 → EDITOR 落 card 状态 | 无 | [REV 现状评估](../../reviews/2026-11-28-review-priority-assessment.md) §2；卡 §6 E-V3-9b |
 
 > **Q-7 排期口径（2026-11-28）**：本条是架构债、无用户可见收益，**不进 1.2 窗口**
 > （窗口已由 I1/I2 占满）；建议放在 `v1.2.0` tag 之后的技术债批，不单独立版本。三步：
@@ -236,14 +236,19 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 >    的「决策记录」列同步拆分并加口径注；③ `docs/spec` 的 sha256 pin 已随副本更新。
 >    **遗留**：外部主规范副本（`~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md`）不在本仓，
 >    需 EDITOR 在下次 `sync-agents.sh` 前把同一改动带回主规范，否则刷新块会覆盖本仓口径。
-> 门禁与规范已对齐；`D-031` 头部暂按过渡行处理，**待 ARCH 技术审定后由 EDITOR 落签**。
-> 同一口径适用于 `D-033`（Q-7）与 `D-034`（Q-8）。
+> 门禁与规范已对齐；`D-031` 已由 ARCH 审定、EDITOR 签收（`accepted`）。
+> 同一口径适用于 `D-033`（Q-7）与 `D-034`（Q-8，已签收）。
 >
 > **Q-15 规范改造口径（2026-11-28）**：工程规范正在拆分为 **AI engineering** 与 **engineering**
 > 两份外链文件，`AGENTS.md` 将只保留项目自身特殊规定。本次落在本仓 `AGENTS §0.7` 与
 > `docs/spec §5.2` 的口径（ADR = ARCH 写、EDITOR 签），在拆分完成后应落到 **engineering**
 > 文档的对应节；旧主规范路径（`~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md`）
 > 在拆分落地后作废。`docs/spec` 副本与 sha pin 的同步由 EDITOR 在拆分时一次完成。
+>
+> **Q-16 签字落点（2026-11-28，角色边界）**：E-V3-9b 的计数与复现命令由 REQ 记在
+> [dogfooding §3.8.1](../../planning/dogfooding.md)；**评审结论由 REV 写在 `docs/reviews/`**；
+> `card §6` 的状态由 EDITOR 据 REV 结论落。REV 不改 planning 文档，避免与「REV 只写评审报告
+> 与状态词」冲突。
 >
 > **Q-12 审定输入**：`D-031` 的 ARCH 技术审定包已备在
 > [2026-11-28-d031-arch-review-packet](../../reviews/2026-11-28-d031-arch-review-packet.md)

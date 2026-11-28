@@ -183,6 +183,29 @@ a 2 / b 17 / c 1 / d 7 / bounded 38 / vsnprintf 5；c/d 只登记不改）。
 门禁：`check-all OK (8 gates)`、`check-ast 1741/0`、`goldens 25/25`、`test/pkg 165/0`、
 `check-seed` 两轮、`sanitizers 662`、`docs`/`g1`/`g6`/`g8` 绿。
 
+### 3.8.1 R3–R8 最终计数与长行残留（REQ 实测 2026-11-28，待 REV 复核）
+
+| 指标 | 现测 | 说明 |
+| --- | ---: | --- |
+| `selfhost/ct-ast/**/*.ct` 的 `snprintf(` | 292 | 与本节 §3.8 的「卡口径 289」**不同 scope**，不作前后对比 |
+| `selfhost/ct-ast/**/*.ct` 的 `realloc(` | 87 | 与卡 §6 一致 |
+| `Pkg.h.ct` 的 `snprintf(` | 43 | 与卡 §6 一致 |
+| `Symbols.h.ct` 的 `snprintf(` | 24 | 与卡 §6 一致 |
+| `bootstrap/ct-ast/Symbols.c` >120 字符行 | 76 | SH-123 残留（P2） |
+| `bootstrap/ct-ast/EmitExpr.c` >120 字符行 | 171 | SH-123 残留（P2） |
+
+复现：
+```sh
+grep -rho 'snprintf(' selfhost/ct-ast --include='*.ct' | wc -l
+grep -rho 'realloc('  selfhost/ct-ast --include='*.ct' | wc -l
+awk 'length>120' bootstrap/ct-ast/Symbols.c   | wc -l
+awk 'length>120' bootstrap/ct-ast/EmitExpr.c  | wc -l
+```
+
+结论口径：REQ 2026-11-28 裁定 **方案 A（条件通过，SH-123 保留、不按 clean 签）**。
+**REV 的评审结论写在 `docs/reviews/`**（评审报告/状态词归 REV），本节只记录计数与指针；
+`card §6` 的 E-V3-9b 状态由 REV 结论 + EDITOR 落。
+
 ## 4 非目标
 
 - 不把 Arena 节点池改成 ADT（D32 布局与性能契约不动）；
