@@ -172,7 +172,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-9 | dist 产物冒烟 | **已完成**（`0911029a`；本地方案 B 复跑通过，见下注） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
-| Q-12 | LANG-31（常量键折叠，I1） | **待开（2026-11-28 撤回 deferred）** | ARCH 起草 `D-031` → EDITOR 签收 → REQ 排期 → DEV | spec §4.79（施工卡已有） | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
+| Q-12 | LANG-31（常量键折叠，I1） | **ADR 初稿已入库（`b6fe515d`）；签收口径待拍板（见下注）** | DEV 初稿 → ARCH 技术审定 → 主编/REVIEW 签收（待定）→ REQ 排期 → DEV | spec §4.79（施工卡已有） | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | 待开 | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 
 > **Q-7 排期口径（2026-11-28）**：本条是架构债、无用户可见收益，**不进 1.2 窗口**
@@ -210,6 +210,16 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > ② 容器内从仓库根运行或设 `CT_CORE_DIR=<repo>/lib/core`，否则 `Str` 等内置类型找不到。
 > CI 仍是最终判据；本地复跑只作提前验证。
 >
+> **Q-12 签收口径与门禁冲突（2026-11-28）**：所有者裁定走 **ARCH 技术审定 → 主编 EDITOR
+> 终签 → REQ 排期**。`D-031` 已有 DEV 初稿（`b6fe515d`），按此路径转交。**但**现行
+> `test/docs/check-docs.py` 的 T-8 对 ADR 只接受 `REQ/REVIEW/USER`，并明确拒绝 `EDITOR`
+> （"EDITOR authors the verdict"）；不扩 gate 就写 `签收：EDITOR` 会让 `check-docs` 红。
+> 需所有者拍板：**(a)** 扩 T-8 允许 EDITOR 签 ADR（与 Q-11 的 issue 状态口径一致，推荐，
+> 由 DEV 改 gate）；**(b)** ADR 仍由 REVIEW 签收，EDITOR 只签 issue/phase 状态。
+> 拍板前 `D-031` 头部保留 `签收：REVIEW（待签）` 并注明终签归 EDITOR，避免门禁红。
+> 同一限制适用于 `D-033`（Q-7）与 `D-034`（Q-8）：三者都须在 T-8 扩展后才能把 EDITOR 写进
+> ADR 的 `签收:` 行。
+>
 > **实施记录（2026-11-28，`0911029a`）**：`ci.yml` 新增 "distribution artefact smoke (Q-9)"
 > 一步——`make-dist.sh --out /tmp/ct-dist` 出包、`tar -xzf` 解包、先跑包内 `ct -v`，
 > 再用**包内 `ct`** 构建并运行 `examples/50_ref_out`（期望 `2 3 4`）与
@@ -221,11 +231,12 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 1. D-032 线：M1 ✅（`feb6caa5`）→ M2 ✅（`981f2ee9`）→ M3 ✅（`653dec09`，lib/core 8 → 0、
    seed 5 → 3）；**D032-C1 三片已全部落地**，余 REV 只读复核与 EDITOR 落状态；
 2. 可并行：S8B R3–R8（Q-6）、dogfooding §3.8（Q-13），与 D-032 线文件集不重叠；
-3. I1（Q-12）：`D-031` 由 **ARCH 起草**、**EDITOR 签收**，签收后由 REQ 排期、DEV 按 `T1–T5` 开工；
-4. I2（Q-8）：`D-034` 由 **ARCH 起草**、**EDITOR 签收**，签收后由 REQ 排期；DEV 随后按
-   I2-1 → I2-2（只读，`E-V3-9e`）→ I2-3 → I2-4（写入，`E-V3-9f`）→ I2-5 实施，每片独立提交
-   （见 [I2-C1 §9](../../design/i2-interface-subscript-construction.md)）。`D-034` 未签期间
-   **I2 不动代码**，不阻塞第 1–2 项；I1 的 `T1`/`T2` 先于 I2-2 改同一张解析表；
+3. I1（Q-12）：`D-031` 初稿已入库（`b6fe515d`，DEV 初稿）→ ARCH 技术审定 → 签收
+   （EDITOR/REVIEW 待 T-8 拍板，见 Q-12 注）→ REQ 排期 → DEV 按 `T1–T5` 开工；签收前不改实现；
+4. I2（Q-8）：`D-034` 由 **ARCH 起草**、签收口径同 Q-12 注（T-8 扩展后才可写 EDITOR），
+   签收后由 REQ 排期；DEV 随后按 I2-1 → I2-2（只读，`E-V3-9e`）→ I2-3 → I2-4（写入，`E-V3-9f`）
+   → I2-5 实施，每片独立提交（见 [I2-C1 §9](../../design/i2-interface-subscript-construction.md)）。
+   `D-034` 未签期间 **I2 不动代码**，不阻塞第 1–2 项；I1 的 `T1`/`T2` 先于 I2-2 改同一张解析表；
 5. Q-7（拼写表）：**不进 1.2**，`D-033` 由 ARCH 起草、EDITOR 签收（与 `D-034` 同批更省往返）；
    实施排在 S8B R8 之后、`v1.2.0` tag 后的技术债批，见本节 Q-7 注；
 6. REQ 的 spec / c-shim-contract 同步（M3 后）与 REV 的复核都**不进 DEV 前置**。
