@@ -430,3 +430,19 @@ v0-PH-52 的 D52-6 指向本条。
 
 > 边界：本条只主张**能力覆盖**，不主张新增语言语法；`#include` 的 strict 默认不变，
 > 补头集合（spec §4.67）也不因本条扩张。缺口清单与 API 形态由 CTPKG 提包提案。
+
+## REQ-SPELL-1 — emitter 的"拼写表"迁入 `LModulePlan`（S8 剩余）
+
+| 字段 | 值 |
+| --- | --- |
+| `id` | `REQ-SPELL-1` |
+| `what` | 把 emitter 生成 C 名与类型文本时对符号表的直接读取（`sym->funcs[i].cname`、参数/返回类型文本、trait 方法返回类型等）改为消费 `LModulePlan` 的"拼写表"；`write_abi_header`、`emit_drop_defs`、map prologue 不再查 `Symbols`。 |
+| `why` | S8 已把"选择"（哪些导出、哪些 Drop、哪些 map）迁入 plan，"拼写"仍是最后一条 emitter→Symbols 依赖；它挡住 emitter 的独立复用与多后端演进，也让 S8 的"emitter 只消费 LModule"无法真正成立。无用户可见收益，属架构债。 |
+| `priority` | P3 |
+| `status` | `planned`（所有者 2026-11-28 裁定立项；未排入当前窗口） |
+| `owner` | ARCH（ADR 设计）；DEV（实施）；REV（复核） |
+| `last-touched` | 2026-11-28 |
+| `block` | 需新 ADR（拟 `D-033`）定义拼写表字段与不变量；排期建议在 S8B-REM-1 R8（同属 `backend/emit`）之后，避免同文件集冲突 |
+
+> 现状与边界见 [S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md) §3d 第 1 条、§3f；
+> 立项不等于开工，开工前先出 ADR，不改 E-V3-9 已签的边界。

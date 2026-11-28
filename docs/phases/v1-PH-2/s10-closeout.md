@@ -151,7 +151,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-4 | D032-C1 实施 M3（lib/core 8 个 shim 退场，含 utf16 子树） | 待开 | DEV | Q-3 | 同上 |
 | Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | **已完成**（`6ba2a627`、`1d93fd77`） | DEV | 无 | [S8B 施工卡](../../design/s8b-remaining-construction.md)、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
-| Q-7 | S8「拼写表迁 `LModulePlan`」 | **登记（未立项）** | ARCH / REQ 出 ADR | 无 | 差异清单 §3d；需新 ADR，不属本卡 |
+| Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 排在 S8B-REM-1 R8（同属 `backend/emit`）之后，避免同文件集冲突 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
 | Q-8 | I2 接口值下标（四问待所有者裁定） | **登记（未立项）** | 所有者裁定 | 无 | RFC 评估 §3、§4 |
 | Q-9 | dist 冒烟 | 登记 | 所有者 / CI | tag 时 `release.yml` 在 ubuntu 上跑同组冒烟 | 卡 §7.3；本文 §5 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
