@@ -1,4 +1,5 @@
-/* PH-52 L52-1: a struct value with no inherent `get`. */
+/* PH-52 L52-1: a struct value with no inherent `get`. D-031 refines the
+   literal-key case into the field-oriented error below. */
 struct X {
     int n;
 }

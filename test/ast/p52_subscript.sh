@@ -110,7 +110,9 @@ neg() {
         ok_msg "$name ($pos)"
     fi
 }
-neg p52_no_get      10:13 "type 'X' has no subscript: declare 'V get(K)' in impl X"
+# D-031: a literal key on a struct with no `get` is now the field-oriented
+# error (it lists the fields) instead of L52-1.
+neg p52_no_get      11:13 "type 'X' has no field 'k': candidates are 'n'"
 neg p52_no_set      16:6  "type 'X' has a read-only subscript: declare 'void set(K, V)' in impl X"
 neg p52_get_arity   17:13 "type 'X' has no subscript: 'get' must take 1 parameter"
 neg p52_set_arity   20:6  "type 'X' has no writable subscript: 'set' must take 2 parameters"
