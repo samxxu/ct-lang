@@ -61,6 +61,30 @@ jobs:
             }
           done
 
+      # Q-9: prove the artefact that would be uploaded, not a fresh build. The
+      # package's own `ct` runs two corpus programs; a missing/incorrect output
+      # is a hard failure, never a skip.
+      - name: distribution artefact smoke (Q-9)
+        run: |
+          set -eu
+          rm -rf /tmp/ct-dist
+          bash selfhost/make-dist.sh --out /tmp/ct-dist
+          mkdir -p /tmp/ct-dist/unpack
+          tar -xzf /tmp/ct-dist/ct-linux-x64.tar.gz -C /tmp/ct-dist/unpack
+          /tmp/ct-dist/unpack/ct -v
+          run_case() {
+            name=$1; dir=$2; want=$3
+            out=/tmp/ct-dist/$name
+            /tmp/ct-dist/unpack/ct build "examples/$dir/prog.ct" -o "$out"
+            got=$("$out")
+            test "$got" = "$want" || {
+              echo "::error::$dir: want '$want', got '$got'"
+              exit 1
+            }
+          }
+          run_case q9_ref_out 50_ref_out "2 3 4"
+          run_case q9_box_new 52_box_new "4 4"
+
       - name: failure summary
         if: failure()
         run: |
