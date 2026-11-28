@@ -21,8 +21,8 @@
 ## 2 前置（开工前必须）
 
 1. ARCH 出 **`D-034`**：`index` 的语法位与词法规则、接口值解析、与 D-028 的 (i) 分裂 / (ii) 统一、两阶段边界、诊断文案；
-2. **EDITOR 签收** `D-034`（非作者席位），签收后由 REQ 排期；前置：T-8 门禁允许 EDITOR 签 ADR
-   （DEV 扩 `test/docs/check-docs.py`，AGENTS §0.7 同步，见 [s10 Q-12 注](../phases/v1-PH-2/s10-closeout.md#12-收口后队列2026-11-28)）；
+2. **EDITOR 签收** `D-034`（非作者席位），签收后由 REQ 排期；T-8 门禁已允许 EDITOR 签 ADR
+   （`f0ce1746`，待 EDITOR 审核），AGENTS §0.7 对齐见 [s10 Q-12 注](../phases/v1-PH-2/s10-closeout.md#12-收口后队列2026-11-28)；
 3. `D-034` 签收并合入后才动代码；未签不得实施。
 
 ## 3 切片
