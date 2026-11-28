@@ -410,7 +410,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `status` | `planned`（四问已裁定 2026-11-28：Q1 立项、Q2 方法级 `index`、Q3 两阶段、Q4 暂不承诺 ABI；等 `D-034`） |
 | `owner` | ARCH（ADR 设计）；DEV（实施）；REVIEW（复核）；REQ（验收） |
 | `last-touched` | 2026-11-28 |
-| `block` | 前置 ADR `D-034`（ARCH 起草）；不得破坏 D-028 的固有 impl 路径；`v1.2.0` 的 tag 推迟到 I1 与 I2 两阶段落地后 |
+| `block` | 前置 ADR `D-034`（ARCH 起草）；不得破坏 D-028 的固有 impl 路径；`v1.2.0` 的 tag 推迟到 I1 与 I2 两阶段落地后。排期见 [I2-C1 §9](../design/i2-interface-subscript-construction.md)：`D-034` → I2-1 → I2-2（只读）→ I2-3 → I2-4（写入）→ I2-5；I1 的 `T1`/`T2` 先于 I2-2 改同一张解析表 |
 
 > **四问裁定**：Q1 立项（随 1.2）；Q2 合并为方法级 `index`，取消 `Indexable`；
 > Q3 阶段一只读、阶段二写入（同属 1.2）；Q4 暂不承诺 vtable 槽 ABI，语言稳定后统一发布。

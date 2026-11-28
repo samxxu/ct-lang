@@ -59,7 +59,8 @@
 
 ### I2-5 文档与样例
 
-- spec 新增节（`index` 修饰词 + 接口值下标 + 两阶段语义）、glossary、tutorial；
+- spec 新增节（`index` 修饰词 + 接口值下标 + 两阶段语义）、glossary、tutorial：**REQ 落笔**
+  （DEV 提供生成 C 实测与夹具路径，REV 复核）；
 - `docs/planning/feature-examples-matrix.md` 加行；README 片段可选；
 - 判据：`check-docs` OK（含 `--selftest`）。
 
@@ -112,3 +113,28 @@ bash tools/check.sh g1 && bash tools/check.sh g6 && bash tools/check.sh g8
 | REV | 签收 `D-034`；实施后只读复核（正负例、生成 C 一致、shim/seed 无回归） |
 | DEV | 按 I2-1 → I2-2 → I2-3 → I2-4 → I2-5 实施，各片独立提交 |
 | REQ | 验收 `E-V3-9e` / `E-V3-9f`；同步 spec 与矩阵 |
+
+## 9 排期（2026-11-28）
+
+| # | 任务 | 写者 | 前置 | 交付/验收 |
+| --- | --- | --- | --- | --- |
+| P-1 | `D-034` 起草（语法位、接口值解析、D-028 的 (i)/(ii) 口径、两阶段边界、诊断文案） | ARCH | 无（四问已裁） | ADR 合入 `docs/decisions/` |
+| P-2 | 签收 `D-034` | REV（非作者席位） | P-1 | 签名行；未签不动代码 |
+| I2-1 | 语法位：`index` 上下文修饰词 | DEV | P-2 | 独立提交；`test/ast` 正负例 |
+| I2-2 | 接口值只读解析与检查（**E-V3-9e**） | DEV | I2-1 | 独立提交；`check-ast` 0 失败 |
+| I2-3 | 发射与跨单元（与显式 `o.get(k)` 逐字节一致） | DEV | I2-2 | 独立提交；语料 25/25、自举 2 轮 |
+| I2-4 | 阶段二写入（**E-V3-9f**）：`set(K,V) index` | DEV | I2-3 | 独立提交；ASAN；语料逐字节 |
+| I2-5 | 文档与样例（REQ 落 spec/glossary/matrix；DEV 给夹具与实测；REV 复核） | REQ / DEV / REV | I2-1 后先落只读部分；I2-4 后补写形态 | `check-docs` + `--selftest` |
+
+**串行点与冲突**
+
+- I1（LANG-31）的 `T1` 与 I2-2 共用 D-028 解析表：**I1 先落 `T1`/`T2`，I2-2 再改同一函数**；
+  若两片不改同一函数，可并行提交（各自独立提交，不混片）。
+- 与 S8B-REM-1 R3–R8 文件集不重叠，可并行。
+- 每片末 `gen-seed.sh` + `check-seed` 两轮；`v1.2.0` 的 tag 在 I1 与 I2 两阶段都落地后由所有者执行。
+
+**不阻塞声明**：P-1 等 ARCH 期间，DEV 继续 S8B R3–R8、Q-13、I1（`D-031` 由 DEV 起草），
+I2 停留不阻塞任何一项；REQ 的 spec 同步与 REV 复核都不进 DEV 提交前置。
+
+**开放项（待所有者）**：ARCH 长期不在场时，是否允许按 `D-030` 先例由 REQ 起草 `D-034`、
+REV 签收。未裁定前按"ARCH 起草"执行。
