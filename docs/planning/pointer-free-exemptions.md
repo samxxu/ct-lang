@@ -55,15 +55,15 @@ LANG-30（`Str.print()` / `println()`，[spec §4.78](../language-spec.md)、[D-
 
 ### 2.1 迁移结果（2026-11-27，LANG-30 收口）
 
-**已迁 21 个**（`char *` / `cstr()` / `free` 清零，输出逐字节不变；字符串字段改
+**已迁 22 个**（`char *` / `cstr()` / `free` 清零，输出逐字节不变；字符串字段改
 `String`、借用位置改 `Str`，打印走 `print()` / `println()`）：
 `01_greeter`、`02_market`、`03_receivers`、`04_rvalue`、`22_foreach_map`、`25_wordcount`、
 `26_range_vec`、`27_map_keys`、`29_into_block`、`30_iface_container`、`32_container_subscript`、
 `34_map_literal`、`35_type_safety`、`39_generic_trait`、`45_error_return_contract`、
 `46_result_try`、`62_try_cleanup`、`65_generic_trait_instances`、`tour/01_vtable/two_impls`、
-`tour/02_iface_value/param`、`tour/02_iface_value/return_pick`。
+`tour/02_iface_value/param`、`tour/02_iface_value/return_pick`、`23_generic_stack`（2026-11-28 迁 `Stack<String>`）。
 
-**保留 5 个（不是拒绝迁移，是当前语言/用例边界）**：
+**保留 4 个（不是拒绝迁移，是当前语言/用例边界）**：
 
 | 文件 | 为什么保留 | 触发条件 / 关联 |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ E3 的 26 个文件里 22 个已迁；下面 4 个是**有编号的保留例外*
 | E3-1 | `examples/18_generic_string_table` | 泛型自由函数、结构体类型实参不可用 | 课题是 `nth<char *>` / `count_if<char *>` 的显式实例化；`nth<Str>` 报 `cannot convert 'Str' to 'struct Str *'`，改成具体类型会删掉教学点 | 泛型自由函数支持结构体类型实参（`nth<Str>` / `count_if<Str>` 可编译） | 本表；矩阵 §3；`char *` 是主题 |
 | E3-2 | `examples/19_container_each_generic` | 同上 + `(fn, env)` 回调 | `walk<char *>` 的实例化与回调环境是课题；`T=Str` 的自由函数实例化同样不可用 | 同 E3-1 | 本表；矩阵 §3 |
 | E3-3 | `examples/21_generic_bound` | `strcmp` 是行为本体 | `Word.char *s` 用 `strcmp` 比较，`strcmp` 是“约束泛型调用 C 函数”的课题；`Str` 不能作 struct 字段（§4.70 硬错） | `Str` 可作字段且约束泛型可直接比较视图 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
-| E3-4 | `examples/23_generic_stack` | **已迁出（2026-11-28）** | 改 `Stack<String>` + `String *`，`char *` 清零；`T *` / `T items[N]` 的布局教学点保留；输出逐字节不变 | 已关闭 | 本节历史行；无 allow 例外 |
+| E3-4 | `examples/23_generic_stack` | **已迁出（2026-11-28）** | 改 `Stack<String>` + `String *`，`char *` 清零；`T *` / `T items[N]` 的布局教学点保留；输出逐字节不变 | 已关闭 | 本节历史行；`test/c-boundary-allow.tsv` 仍保留 `memset` 的 C 互操作 allow |
 | E3-5 | `examples/tour/11_variadic/forward` | C 变参 ABI | `va_list` 转 `vprintf` / `vsnprintf`；`char *fmt` 是 C 变参 ABI 的 NUL 结尾格式串契约 | 不重判：属 E1 C 互操作，不是 E3 打印阻碍 | 本表；[test/c-boundary-allow.tsv](../../test/c-boundary-allow.tsv) 已登记 |
 
 > 判定口径：E3-1…E3-3 的 `char *` 不是“打印没入口”（LANG-30 已落地），而是**泛型实例化能力**
@@ -149,12 +149,12 @@ Ct 目前没有「结构体引用」这一形态，`ref struct` 只在形参位�
 | `48_string_steps` 标注「为什么必须指针」 | ✅ 2026-11-27（C 类型宿主 + shim，代码不动） |
 | `67_adt_patterns` / `68_adt_guards` / `69_generic_adt` | ✅ 2026-11-27（S4/S5/S6 样例，零 `char *` / `->` / `malloc`） |
 | E1/E2/E4 的 C 边界显式 allow | ✅ S9 M4 起登记在 `test/c-boundary-allow.tsv`（逐路径 + 理由），不再用文件内注释；`--c-boundary=allow` 只对这些路径生效 |
-| E3 的 26 个文件 | ✅ 2026-11-27：迁 21（`print()` / `println()`），保留 5（§2.1 理由 + §2.2 逐条编号 E3-1…E3-5） |
+| E3 的 26 个文件 | ✅ 2026-11-27：迁 22（`print()` / `println()`），保留 4（§2.1 理由 + §2.2 逐条编号 E3-1…E3-3、E3-5；E3-4 已迁出） |
 
 ## 6 建议的下一步
 
 1. **print API 已落地**（[LANG-30 施工卡](../design/lang30-str-print-construction.md) / D-030）；
-   E3 的 21 个文件已迁，5 个保留项按 §2.1 的触发条件重判；
+   E3 的 22 个文件已迁，4 个保留项按 §2.1 的触发条件重判；
 2. E1/E2/E4 的 C 边界 allow 已在 `test/c-boundary-allow.tsv` 登记，不再逐文件加注释；
 3. E4 的长期解是「结构体引用」形态；在那之前不要为去指针而把样例改成 `self` 方法（会改变教学点）。
 

@@ -66,8 +66,8 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | B-1b | 自定义下标（§4.64）无样例 | `examples/59_custom_subscript`；S2 按键分派的并存形态由 `test/ast/index_overload_both` / `jsaccess_overload_both` 钉住 | 已补 |
 | B-2 | `match` / `defer` / `errdefer` / `?` / `ref` / 泛型 trait 只有 1–2 个样例 | `60`–`65`；defer / errdefer 升「有」，其余按需补反例 | 已补 |
 | B-3 | `String` / `Str` 样例仍以 `char *` 混写 | `40_str_ownership` 去 `cstr` + `free`，改 `as_str()`；`48_string_steps` 判为 C 类型宿主例外并注明理由 | 已补 |
-| B-4 | 非 C 互操作用例的指针 | 逐文件判定见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写；2026-11-27 LANG-30 落地后 E3 迁 21、保留 5（逐条理由见该文件 §2.1） | 部分 |
-| B-5 | 文档可执行片段偏少 | README 现有 12 个 `// source:` 来源（10 个 `docs/snippets/README/` standalone + 2 个 examples 摘录）；新增 `0.12_adt_tour`（S4/S5/S6）与 `0.13_c_boundary`（C 边界对照），矩阵 25 行的 doc 单元全部落到 README 小节；`check-docs` 12 sources、`check-warnings` 逐片段编译运行（H1–H4 逐片表仍在 TEST-27 §8，issue 状态由 REV 复核；本轮按指示不改 issue） | 已补 |
+| B-4 | 非 C 互操作用例的指针 | 逐文件判定见 [pointer-free-exemptions](pointer-free-exemptions.md)；`40` / `59` 已改写；2026-11-27 LANG-30 落地后 E3 迁 22、保留 4（`23` 于 2026-11-28 迁出；逐条理由见该文件 §2.1） | 部分 |
+| B-5 | 文档可执行片段偏少 | README 现有 12 个 `// source:` 来源（10 个 `docs/snippets/README/` standalone + 2 个 examples 摘录）；新增 `0.12_adt_tour`（S4/S5/S6）与 `0.13_c_boundary`（C 边界对照），矩阵 26 行的 doc 单元全部落到 README 小节；`check-docs` 12 sources、`check-warnings` 逐片段编译运行（H1–H4 逐片表仍在 TEST-27 §8，issue 状态由 REV 复核；本轮按指示不改 issue） | 已补 |
 | B-6 | S2 下标协议、S3 函子、S4–S6 模式 | `59`（S2）、`66`（S3）、`67`（S4）、`68`（S5）、`69`（S6）各 ≥1 个 example | 已补 |
 | B-7 | 文档去指针 | README / tutorial / guide / idioms 的非互操作段改 `String` / `Str` / `Vec` / `Map` / `Box` / 切片 / `ref`·`out`；C 互操作段（README §0.1/§0.2/§0.11/§0.13、tutorial §0/§9、guide §1.1/§10、idioms §11.1）保留并逐段标注理由；`Map<char *, V>` 词表改 `Map<String, V>` | 已补 |
 
@@ -84,13 +84,13 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 
 | 指标 | 数值 |
 | --- | --- |
-| `examples/**/*.ct` | 237 个文件 / 71 个目录 |
+| `examples/**/*.ct` | 238 个文件 / 72 个目录 |
 | 含 `char *` | 39 文件 / 117 次（`grep -o`） |
 | 含非 `self->` 的 `->` | 56 文件（S8c 口径；`->` 仍是 E4 语言边界） |
-| 含 `malloc` | 13 文件 / 19 次（`grep -o 'malloc('`） |
+| 含 `malloc(` | 11 文件 / 19 次（`grep -o 'malloc('`） |
 
 新增的 `67`–`69` 三个样例零 `char *` / `->` / `malloc`。E3 类 26 个文件已由
-[LANG-30](../../issues/lang/lang-30-str-print-api.md) 解锁：21 个改成 `print()` / `println()`，
+[LANG-30](../../issues/lang/lang-30-str-print-api.md) 解锁：22 个改成 `print()` / `println()`，
 4 个（`18` / `19` / `21` / `tour/11_variadic/forward`）因泛型 struct 实例化或 C 互操作保留；
 `23_generic_stack` 已于 2026-11-28 改 `Stack<String>`，`char *` 清零、输出不变。逐条编号见
 [pointer-free-exemptions](pointer-free-exemptions.md) §2.2；不得用 `cstr()` + `free` 假删。
