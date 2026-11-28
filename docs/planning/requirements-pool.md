@@ -404,13 +404,18 @@ v0-PH-52 的 D52-6 指向本条。
 | 字段 | 值 |
 | --- | --- |
 | `id` | `REQ-I2-1` |
-| `what` | 接口值（trait 对象）支持 `o[k]`：按该 trait 的 `get(K)` 方法经 vtable 槽解析；读写范围与 ABI 承诺按 I2-Q2–Q4 的裁定执行。 |
+| `what` | 接口值（trait 对象）支持 `o[k]`：在 trait 的 `get(K)` 签名后标 `index` 即表示该 `get` 是 `[]` 的解析目标，经 vtable 槽调用；单 trait、无独立标记 trait；读形态先行，写形态第二。 |
 | `why` | 让同一段下标代码既能用于静态 struct（I1 / D-028），也能用于多实现的接口值；来稿 RFC-0000 的统一访问动机之一。Ct 目前只认固有 impl，接口值只能显式 `o.get(k)`。 |
 | `priority` | `P2` |
-| `status` | `planned`（**所有者 2026-11-28 裁定纳入 1.2 必做**；未开工，四问裁定中） |
+| `status` | `planned`（四问已裁定 2026-11-28：Q1 立项、Q2 方法级 `index`、Q3 两阶段、Q4 暂不承诺 ABI；等 `D-034`） |
 | `owner` | ARCH（ADR 设计）；DEV（实施）；REVIEW（复核）；REQ（验收） |
 | `last-touched` | 2026-11-28 |
-| `block` | 前置 ADR（拟 `D-034`）与 [RFC 评估 §3.1](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md) 的 I2-Q2–Q4 裁定；不得破坏 D-028 的固有 impl 路径 |
+| `block` | 前置 ADR `D-034`（ARCH 起草）；不得破坏 D-028 的固有 impl 路径；`v1.2.0` 的 tag 推迟到 I1 与 I2 两阶段落地后 |
+
+> **四问裁定**：Q1 立项（随 1.2）；Q2 合并为方法级 `index`，取消 `Indexable`；
+> Q3 阶段一只读、阶段二写入（同属 1.2）；Q4 暂不承诺 vtable 槽 ABI，语言稳定后统一发布。
+> 样例与 D-028 边界（具体类型只认固有 impl，接口值走 trait 的 `index get`）见
+> [RFC 评估 §3.1](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md)。
 
 ## REQ-POINTERFREE-1 — 日常代码的指针退场
 

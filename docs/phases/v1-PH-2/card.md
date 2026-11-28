@@ -152,7 +152,8 @@ version-minor: 2
 | E-V3-9b | 狗粮化：D1–D6 各片用户语料生成 C 逐字节；源码 LOC/自由函数/realloc/snprintf/判别式前后报告入库；生成 C 可读性 REVIEW 签字 |
 | E-V3-9c | 样例与文档：矩阵无 missing；新特性各有 ≥1 样例；非 C 互操作用例指针清零（例外有理由）；**E3 类打印受阻的 26 个文件清零，依赖 LANG-30 在 v1.2 内落地**；README/tutorial/guide/idioms/snippets 同步；`check-ast` / `check-docs` 绿 |
 | E-V3-9d（S8a，**必做**；2026-11-28 撤回 deferred） | 常量键折叠：`p["x"]` → `p.x`；未知字段 / 非字面量键 / 非结构体接收者硬错；折叠后生成 C 无 `get` 调用、无临时量；`check-goldens-ast` 25/25；`check-docs` 绿 | 前置 `D-031` + spec §4.79（施工卡已有）；与 E-V3-9e 共用 D-028 的下标解析表 |
-| E-V3-9e（I2，**必做**；2026-11-28 新立） | 接口值下标：`o[k]` 经 vtable 的 `get` 槽解析；固有 impl 路径（D-028）零回归；读写范围与 ABI 口径按 I2-Q2–Q4 裁定；正负例 + `check-goldens-ast` 25/25 | 实现前先出 ADR（拟 `D-034`）；与 E-V3-9d 共用同一张解析表，但独立交付 |
+| E-V3-9e（I2 阶段一，**必做**；2026-11-28 新立） | 接口值**只读**下标：trait 的 `get(K)` 标 `index` 后，`o[k]` 经 vtable 槽解析；未标 → 硬错；固有 impl 路径（D-028）零回归；`index` 为上下文修饰词；正负例 + `check-goldens-ast` 25/25 | 先出 ADR `D-034`（Q1 立项 / Q2 方法级 `index` / Q4 暂不承诺 ABI）；与 E-V3-9d 共用 D-028 解析表 |
+| E-V3-9f（I2 阶段二，**必做**；同属 1.2） | 接口值**写入**：`set(K, V)` 标 `index` 后 `o[k] = v` 成立；定义只读实现、所有权、失败语义；不新增 vtable 槽 | 阶段一稳定后开工；不与阶段一同提交 |
 | E-V3-10 | 全局默认 strict：默认下 `check-all` 绿；**`selfhost/ct-ast` 与 `lib/core` 各用一处 manifest 显式 allow（`c-boundary = allow`，包根覆盖子树）；仓库其它目录零 allow**（[CR-V3-1](#8-判据变更记录) 改写，2026-11-28）；普通无 include 的 `.ct` 逐字节不变；显式 allow（manifest / CLI / shim）正负例；`ct migrate` 旧包夹具通过 |
 | E-V3-11 | 收口：`CTC_VERSION 1.2.0`、dist 与发布流程同 v1.1；**不自动打 tag / 不自动发 release**——所有者手工验证后才创建 annotated tag；`check-all` 全绿、seed 两轮逐字节 |
 
@@ -209,7 +210,8 @@ version-minor: 2
 | E-V3-9b | **部分** | [dogfooding](../../planning/dogfooding.md) §3.5 + §3.6：D1（Arena/Diag/Pkg/Symbols 方法化）、D2 子集（Sh/Pkg 改 `Vec`；符号表三组并行数组改行块）、D5（Intern `Result`/`?`/`errdefer`）、D6 函子签名、D4（`backend/mem` 三个函数）、D3a–c 命名构建已落；用户语料 25/25 逐字节；源码 LOC 81,194→81,169、`snprintf` 326→308、`realloc` 101→96 前后报告入库 | **未做**：D3 其余 `snprintf`（`Pkg` 53 / `Symbols` 41，需行字段改 pool 文本）、D2 `funcs`/`vars`/`structs` 大表改 `Vec`、D4 仅 `backend/mem`、`parser` 的 NodeKind if 链；**生成 C 可读性 REVIEW 签字未签** |
 | E-V3-9c | 通过 | [feature-examples-matrix](../../planning/feature-examples-matrix.md) 25 行无 `missing`；S2–S6 各有 ≥1 example；LANG-30 `test/ast/lang30_print.sh` 7/7；E3 类 26 个迁 21、保留 5（§2.2 编号登记 E3-1…E3-5）。**B-5/B-7（2026-11-28 补）**：新增 `0.12_adt_tour` / `0.13_c_boundary` 两个可执行片段（snippets 10 个，`check-warnings` 逐片段编译运行），README §0.13 给出 C 边界逐行对照；README/tutorial/guide/idioms 的非互操作段改值类型，C 互操作段逐段标注 | 5 个保留项是「有理由例外」，不是待办；§0.13 的 `char *` 是对照样例，不属遗漏 |
 | E-V3-9d | **待开（2026-11-28 撤回 deferred）** | S8a 未实施；[LANG-31](../../../issues/lang/lang-31-const-key-fold.md) 已转回 `open`；施工卡 [lang31-const-key-fold-construction](../../design/lang31-const-key-fold-construction.md) 已有 | 所有者 2026-11-28 裁定：随 1.2 一起交付，不再后推 |
-| E-V3-9e | **待开（2026-11-28 新立）** | I2 接口值下标尚未实施；四问见 [RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) | 先出 ADR（拟 `D-034`）；Q2–Q4 裁定后开工 |
+| E-V3-9e | **待开（2026-11-28 新立）** | I2 阶段一未实施；四问已裁定（Q1 立项 / Q2 方法级 `index` / Q3 两阶段 / Q4 暂不承诺 ABI），见 [RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) | 前置 ADR `D-034`；阶段一只读 |
+| E-V3-9f | **待开（2026-11-28 新立）** | I2 阶段二未实施：`set` 的 `index` 与写语义 | 阶段一稳定后开工；同属 1.2 |
 | E-V3-10 | 通过（口径后由 CR-V3-1 更新） | S9 提交 `5c0e6781`；默认 strict 下 `check-all` 8 门绿（§7.4）；**当时** `selfhost/`、`lib/core/` 零 allow；普通无 include 的 `.ct` 逐字节不变；`test/c-boundary-allow.tsv` 登记 examples/test 的显式例外；`ct migrate` 旧包夹具在 `check-ast` | `examples`/`test` 的 C 互操作保留 allow 属设计，不是豁免回退；本行是 v1.2.0 历史证据，现行判据见 §8 CR-V3-1 |
 | E-V3-11 | 通过 | `CTC_VERSION 1.2.0`；dist `ct-linux-x64.tar.gz` sha256 `98130730155f88934a2c4b4d0ce82e222bc81fc25e34a6fc0fdcf7736a0e28d3`；`check-all` 8 门、seed 两轮、stable-subset v1.2 冻结（§7） | **tag / release 未创建**：按所有者版本纪律由手工执行，见 §7.5 |
 
@@ -328,5 +330,5 @@ $ gh release create v1.2.0 \
 | ID | 对象 | 原判据 | 新判据 | 理由 | 批准 | 日期 | 关联 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | CR-V3-1 | E-V3-10 | 「`selfhost/` 与 `lib/core/` 零 allow」 | 「**`selfhost/ct-ast` 与 `lib/core` 各用一处 manifest 显式 allow（`c-boundary = allow`，包根覆盖子树）；仓库其它目录零 allow**」；其余不变：默认 strict 下 `check-all` 绿、普通无 include 的 `.ct` 逐字节不变、显式 allow 正负例、`ct migrate` 夹具通过 | strict 的目的是防止**普通消费者**无留痕地直接调 C 库，不是约束编译器自身与内置层；现状为这条判据付出 74 个 shim（selfhost 66 + lib/core 8）。改用两处 manifest 后豁免可审计、可用删文件做负例；消费者默认不变。解析语义由 [D-032](../../decisions/D-032.md) 定为"包根 manifest 覆盖子树、向上止于所属根"，`leaks` 同批对齐 | 所有者 2026-11-28 | 2026-11-28 | [D-032](../../decisions/D-032.md)、[REQ-STD-COVER-1](../../planning/requirements-pool.md) |
-| CR-V3-2 | E-V3-9d / E-V3-9e | E-V3-9d「S8a，**可砍**」，窗口不足即 deferred | E-V3-9d 改「**必做**」；新增 E-V3-9e（I2 接口值下标，**必做**） | 所有者 2026-11-28：I1 与 I2 不再后推，随 1.2 一起交付；1.2.0 已提交但**未打 tag**，tag 推迟到两者落地后。两者共用 D-028 的下标解析表，但独立交付（I1 无 ABI；I2 需 ADR 定义 vtable 槽） | 所有者 2026-11-28 | 2026-11-28 | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
+| CR-V3-2 | E-V3-9d / E-V3-9e / E-V3-9f | E-V3-9d「S8a，**可砍**」，窗口不足即 deferred | E-V3-9d 改「**必做**」；新增 E-V3-9e（I2 阶段一只读）与 E-V3-9f（阶段二写入），均**必做** | 所有者 2026-11-28：I1 与 I2 不再后推，随 1.2 一起交付；1.2.0 已提交但**未打 tag**，tag 推迟到两者落地后。I2 四问已裁定：立项 / 方法级 `index` / 两阶段 / 暂不承诺 vtable ABI | 所有者 2026-11-28 | 2026-11-28 | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
 
