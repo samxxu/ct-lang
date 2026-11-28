@@ -56,6 +56,7 @@ python3 tools/p85_inventory.py --root . corpus-manifest --ct <ct-ast 二进制> 
 | 23 | 后缀 `?` | [46_result_try](../../examples/46_result_try)、[62_try_cleanup](../../examples/62_try_cleanup) | [235_result_try](../../test/ast/235_result_try) | spec §4.62；README §0.6 | 薄 |
 | 24 | 自定义下标（S2，§4.64） | [59_custom_subscript](../../examples/59_custom_subscript) | [index_overload_both](../../test/ast/index_overload_both)、[jsaccess_overload_both](../../test/ast/jsaccess_overload_both) | spec §4.64；README §0.8 | 薄 |
 | 25 | 函子 `(A,B) => R`（S3） | [66_functor](../../examples/66_functor) | [p3_functor_forms](../../test/ast/p3_functor_forms) | spec §4.77；README §0.10 | 薄 |
+| 26 | 常量键折叠（S8a） | [70_const_key_fold](../../examples/70_const_key_fold) | [320_const_key_fold](../../test/ast/320_const_key_fold)、[321_const_key_fold_chain](../../test/ast/321_const_key_fold_chain) | spec §4.79；README — | 薄 |
 
 ## 2 缺口清单（S8c 收口）
 

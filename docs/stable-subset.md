@@ -44,6 +44,7 @@
 | 泛型元数（struct / trait 的类型参数个数）：初始 2、倍增到形式上限 `CAP_LIMIT`=65536，不再有“最多两个”语义上限（S1a-0 C3/C4） | 已冻结 | 同上 | v1.1.0 起 | spec §7、§4.51、§4.55 |
 | `Box<T>` / `new` 的语义与规范拼写 | 已冻结 | REQ + ADR；`box<T>` 别名已于 v1.1.0 删除（硬错） | v1.1.0 起 | [D-016](decisions/D-016.md)；LANG-24 |
 | 用户类型下标协议：`get` / `set` 按方法名 + 参数个数 + 实参静态类型匹配；读写与 `+=` / `++` / `&x[k]` 二值化 | 已冻结 | REQ + ADR；破坏性改动 MINOR + 一个 MINOR 回退 | v1.2.0 起 | spec §4.64；[D-028](decisions/D-028.md) |
+| 常量键折叠：字面量键 + 非指针用户 struct 值 → `p.x`；字段优先，字段与 `get` 并存报歧义；未命中回退 `get` | 已冻结 | REQ + ADR；只认字面量与读形态，不做运行期映射 | v1.2.0 起 | spec §4.79；[D-031](decisions/D-031.md) |
 | 函子签名糖 `(A,B) => R`（与 `R (*)(A,B)` 同型，零运行期成本） | 已冻结 | REQ + ADR；语法糖不得引入独立类型 | v1.2.0 起 | spec §4.77；[D-029](decisions/D-029.md) |
 | `Str.print()` / `Str.println()`（stdout，按字节，零分配；`String` 同名转发） | 已冻结 | REQ + ADR；不新增全局 `ct_print*` | v1.2.0 起 | spec §4.78；[D-030](decisions/D-030.md) |
 | `c-boundary` 默认 `strict`（无 `#include` 的普通 `.ct` 不受影响；C 互操作显式 allow） | 已冻结 | REQ + ADR；默认值不得回退，迁移便利例外走 manifest/CLI/shim | v1.2.0 起 | spec §1.2、§4.66；[S9](phases/v1-PH-2/card.md) |
