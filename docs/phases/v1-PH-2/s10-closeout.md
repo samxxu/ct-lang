@@ -144,6 +144,19 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > DEV 的提交前置**；DEV 可连续 M1 → M2 → M3，也可让 S8B 的 R3–R8 与 D032-C1 并行
 > （文件集不重叠）。任何一项若被写成"等 REQ 复核"或"等 REV 签字才能开工"，即视为排程错误。
 >
+> **DEV 无阻塞确认（2026-11-28，REQ 复核）**：DEV 队列里**没有任何一项以 REQ/REV/EDITOR 的
+> 未完成动作作为开工前置**。逐项核过：
+> - **I2（Q-8）**：`D-034` 已 `accepted`；诊断码口径已定（用 §2 文案、不新增 `E-` 码，需编码时
+>   同提交补 `codes.md`）；`.h.ct` 的标记只涉及源码解析（build 读源码，不需要预编译头）；
+>   `index` 可复用 `Parser.h.ct:4059` 的后置 `mut` 识别位；I2-5 的 spec §4.80 由 REQ 落、不占 DEV。
+> - **I1 附条件探针（C1–C4）**：独立测试任务，不依赖任何签字，可与 I2 并行。
+> - **发版（D1–D3）**：排在 I2 之后，不是 DEV 当前开工前置。
+> - **并行文件集**：I2 只动 `selfhost/frontend/{parse,sym}`、`backend/{lir,emit}`、`test/ast`；
+>   与 REV 的 `docs/reviews`、EDITOR 的 `docs/**` 不重叠。
+> - **工作区提示**：当前有未提交的 `bootstrap/ct-ast/{Parser.c,Symbols.h}` 与 `MANIFEST.sha256`
+>   （非 REQ 改动，未触碰）；若属 DEV 的 seed 重生成中间态，按 DEV 自己的提交节奏处理即可，
+>   不构成 REQ 前置。
+>
 > **REQ 复核记录（2026-11-28）**：R1/R2 审计表 `docs/design/s8b-rem-audit.tsv` 已复核——
 > 53 + 17 处逐条归桶齐全（38 带界拷贝 / 2 a / 1 c / 7 d / 5 vsnprintf / 17 b），
 > 与提交信息一致；小瑕：`Pkg.h.ct:3270` 的 function 列写成 `install_main`，实为
