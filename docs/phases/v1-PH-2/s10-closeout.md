@@ -168,11 +168,11 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | **已完成**（R3 `e23338db`、R4 `75fcb698`、R5 `9a0312a0`、R6 `3026f9bb`、R7 `233727d5`、R8 `bd252782`；realloc 96→87） | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ EDITOR 签收 → REQ 排期 → DEV（签收口径已对齐，见 Q-12 注） | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
-| Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`；排期见下注** | ARCH 起草 `D-034`（输入包已备）→ EDITOR 签收（口径已对齐）→ REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9 已排期；起草输入见 [D-034 输入包](../../design/i2-d034-drafting-input.md) | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
+| Q-8 | I2 接口值下标（两阶段） | **`D-034` 已由 ARCH 起草（2026-11-28）；待 EDITOR 签收；排期见下注** | ARCH 起草 `D-034`（已完成）→ EDITOR 签收（口径已对齐）→ REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9；起草输入见 [D-034 输入包](../../design/i2-d034-drafting-input.md) | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
 | Q-9 | dist 产物冒烟 | **已完成**（`0911029a`；本地方案 B 复跑通过，见下注） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
-| Q-12 | LANG-31（常量键折叠，I1） | **实现已落地，REQ 验收通过（证据见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28)）；ADR 追签 + `verified` 待 ARCH/EDITOR** | DEV 初稿 → ARCH 技术审定 → **EDITOR 签收** → REQ 排期 → DEV（已完成 T1–T5） | spec §4.79（已落）；签收口径已对齐（`f0ce1746` + `b4f3a568`） | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
+| Q-12 | LANG-31（常量键折叠，I1） | **ARCH 技术审定通过（附条件 C1–C4）；实现与 REQ 验收完成；待 EDITOR 签收 + `verified`** | DEV 初稿 → ARCH 技术审定（已完成）→ **EDITOR 签收** → REQ 排期 → DEV（T1–T5 已完成） | spec §4.79（已落）；D-031 §8 附条件待补探针；签收口径已对齐（`f0ce1746` + `b4f3a568`） | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | **已完成**（`9eb519c4`） | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 | Q-14 | T-8 门禁允许 EDITOR 签收 ADR（B1） | **已完成**（`f0ce1746`；待 EDITOR 审核） | REQ（所有者 2026-11-28 授权直接修复）→ EDITOR | 无 | 本节 Q-12 注；`test/docs/check-docs.py` |
 | Q-15 | ADR 规范对齐（B2：`AGENTS §0.7` + 规范矩阵 + sha pin） | **已完成**（`b4f3a568`；待 EDITOR 审核） | REQ（所有者授权直接修复）→ EDITOR | 外部主规范副本需 EDITOR 后续同步（见注） | `AGENTS.md`、`docs/spec/ai-coding-workflow.md` |
@@ -199,6 +199,15 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > 串行点：I1 的 `T1`/`T2` 与 I2-2 共用 D-028 解析表，**I1 先落、I2-2 再改同一函数**；
 > 与 S8B R3–R8 文件集不重叠可并行。`D-034` 未签期间 DEV 继续 S8B、Q-13，不空转；
 > **ARCH 不得缺位**（所有者 2026-11-28 裁定）：不再采用 REQ/DEV 代笔 ADR 的临时口径。
+>
+> **Q-8 ARCH 起草结果（2026-11-28，子 Agent 执行 ARCH 角色）**：`D-034` 已入库，D1–D10 全部定案——
+> ① **D1=(i) 保持分裂**：具体类型只认固有 impl，接口值只认 trait 的 `index`（`JsonStore j` 即使
+> 实现带 `index` 的 trait，`j["x"]` 仍按 D-028 拒绝）；② 标记仅在 trait 方法 `)` 后、`;` 前；
+> ③ 接口值按键静态类型分派；④ 阶段一写形态一律拒；⑤ 阶段二**只有 trait 声明了
+> `void set(K,V) index` 才可写**，否则编译期硬错（不存在运行期“只读实现”分支）；⑥ 所有权按签名；
+> ⑦ `set` 仅 `void`；⑧ 同键重复硬错；⑨ 标记随 `pub trait` 进公开头；⑩ 不新增槽、不承诺 ABI。
+> **技术更正**：字符串字面量静态类型是 `char *`，`s["name"]` 只命中 `get(char *) index`；
+> RFC §3.1.1 已加更正注，I2-C1 §10 的夹具样例与负例已改。**待 EDITOR 签收**；签收前 I2 不动代码。
 >
 > **Q-9 立项口径（所有者 2026-11-28 选 C）**：在 CI 增加一步——用 `selfhost/make-dist.sh`
 > 产出 `ct-linux-x64.tar.gz`，**解包后用包内的 `ct`** 跑 `ct -v` 与 `examples/50_ref_out`
@@ -241,8 +250,14 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > （`93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`，探针重钉 `9e4e87e4`），REQ 只读验收通过：
 > 8 条探针（折叠 / 链式 / get 回退 / 三条负例 / 写形态 / Box 内部）+ `examples/70` 输出 `7 9`
 > 且生成 C 无 `get`/临时；goldens 25/25、seed 两轮、`check-warnings` 622/0、`test/ir` 15 checks。
-> **遗留**：① `D-031` 追签（ARCH 技术审定 → EDITOR 签收，方案 a 前置未变）；② issue 的
-> `verified` 由 EDITOR 落；③ 实现先于 ADR 签收，已在 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) 如实登记。
+> **遗留**：① `D-031` 待 **EDITOR 落签**（ARCH 技术审定已完成 2026-11-28，接受附条件 C1–C4）；
+> ② issue 的 `verified` 由 EDITOR 落；③ 实现先于 ADR 签收，已在 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) 如实登记。
+>
+> **Q-12 ARCH 审定结果（2026-11-28，子 Agent 执行 ARCH 角色）**：**接受、附条件 C1–C4**
+> （临时量负例、`&p["x"]` 正例、前向声明探针、歧义仅“匹配且可见”的 private / 参数类型负例），
+> R2 判定可接受（25 条用户语料 + 83 条 IR 语料零命中），要求把该 breaking 写入迁移项与 release note。
+> 结论见 [D-031 §8](../../decisions/D-031.md)；附条件探针由 DEV 补、登记在
+> [LANG-31 issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28)，不影响本次验收结论。
 >
 > **实施记录（2026-11-28，`0911029a`）**：`ci.yml` 新增 "distribution artefact smoke (Q-9)"
 > 一步——`make-dist.sh --out /tmp/ct-dist` 出包、`tar -xzf` 解包、先跑包内 `ct -v`，
@@ -256,12 +271,13 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
    seed 5 → 3）；**D032-C1 三片已全部落地**，余 REV 只读复核与 EDITOR 落状态；
 2. S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13）：**均已完成**（R3 `e23338db` … R8 `bd252782`、
    §3.8 `9eb519c4`），DEV 侧无剩余动作；余 REVIEW 对 E-V3-9b 签字；
-3. I1（Q-12）：**DEV 实施已完成**（T1–T5），REQ 验收通过（见 issue §7）；**DEV 侧无剩余动作**。
-   余 **ARCH 技术审定 → EDITOR 签收 `D-031` 与 issue `verified`**（方案 a 前置见 Q-12 注）；
-4. I2（Q-8）：`D-034` 由 **ARCH 起草**、**EDITOR 签收**（前置同上），签收后由 REQ 排期；DEV 随后按
-   I2-1 → I2-2（只读，`E-V3-9e`）→ I2-3 → I2-4（写入，`E-V3-9f`）→ I2-5 实施，每片独立提交
-   （见 [I2-C1 §9](../../design/i2-interface-subscript-construction.md)）。`D-034` 未签期间
-   **I2 不动代码**，不阻塞第 1–2 项；I1 的 `T1`/`T2` 先于 I2-2 改同一张解析表；
+3. I1（Q-12）：**DEV 实施已完成**（T1–T5），REQ 验收通过（见 issue §7）；**DEV 侧无剩余动作**
+   （ARCH 附条件 C1–C4 的补探针另列，不阻塞 EDITOR 签收）。
+   余 **EDITOR 签收 `D-031` 与 issue `verified`**（ARCH 技术审定已完成，见 D-031 §8）；
+4. I2（Q-8）：`D-034` 已由 **ARCH 起草**（D1=(i) 分裂、D1–D10 定案），**待 EDITOR 签收**；
+   签收后 I2-1 即可开工，DEV 按 I2-1 → I2-2（只读，`E-V3-9e`）→ I2-3 → I2-4（写入，`E-V3-9f`）
+   → I2-5 实施，每片独立提交（见 [I2-C1 §9](../../design/i2-interface-subscript-construction.md)）。
+   签收前 **I2 不动代码**；I1 的 `T1`/`T2` 已落，I2-2 直接改同一张解析表；
 5. Q-7（拼写表）：**不进 1.2**，`D-033` 由 ARCH 起草、EDITOR 签收（与 `D-034` 同批更省往返）；
    实施排在 S8B R8 之后、`v1.2.0` tag 后的技术债批，见本节 Q-7 注；
 6. REQ 的 spec / c-shim-contract 同步（M3 后）与 REV 的复核都**不进 DEV 前置**。
@@ -274,9 +290,9 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | # | 项 | 状态 | 负责 | 证据 / 命令 |
 | --- | --- | --- | --- | --- |
 | A1 | I1 `LANG-31` 实现 T1–T5 | ✅ | DEV | `93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`；REQ 验收见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) |
-| A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔ | ARCH / EDITOR | 审定包已备：[d031-arch-review-packet](../../reviews/2026-11-28-d031-arch-review-packet.md)；B1/B2 已完成，只余 ARCH 结论 → EDITOR 落签 |
-| A3 | `LANG-31` issue 转 `verified` | 🟡 | EDITOR | 验收证据已齐（issue §7）；状态词由 EDITOR 落 |
-| A4 | `D-034` 起草 + 签收 | ⛔ | ARCH / EDITOR | 起草输入包已备：[i2-d034-drafting-input](../../design/i2-d034-drafting-input.md)（D1–D10 待 ARCH 定）；签收口径已对齐 |
+| A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔（仅剩签收） | EDITOR | ARCH 审定通过、附条件 C1–C4（[D-031 §8](../../decisions/D-031.md)）；等 EDITOR 落签转 `accepted` |
+| A3 | `LANG-31` issue 转 `verified` | 🟡 | EDITOR | 验收证据已齐（issue §7）；ARCH 附条件探针由 DEV 后补，不阻塞签 `verified` |
+| A4 | `D-034` 起草 + 签收 | ⛔（仅剩签收） | EDITOR | ARCH 已起草 [D-034](../../decisions/D-034.md)（D1=(i) 分裂、10 项定案）；待 EDITOR 签收后 I2 开工 |
 | A5 | I2 阶段一（只读，`E-V3-9e`） | ⛔ | DEV | I2-1 → I2-3；验收清单见 [I2-C1 §10](../../design/i2-interface-subscript-construction.md#10-验收清单e-v3-9e--e-v3-9f) |
 | A6 | I2 阶段二（写入，`E-V3-9f`） | ⛔ | DEV | I2-4；同属 1.2 |
 | A7 | I2 文档（spec 新节 / 矩阵 / stable-subset） | ⛔ | REQ | I2-5；随 A5/A6 同步 |
@@ -298,6 +314,6 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | D4 | GitHub Release 与资产（可选） | 🟡 | 所有者 | 卡 §7.5；资产 sha 与 D1 一致 |
 
 **当前缺口结论（2026-11-28）**：硬阻塞集中在 **A2、A4–A7、C2、C4、C5、D1–D3**。
-A2 只剩 ARCH 技术审定与 EDITOR 落签（口径侧 B1/B2 已完成）；A4–A7 是 I2 本体；
-D1–D3 是发版动作。I1 侧 DEV 已无剩余动作；S8B R3–R8 与 §3.8 已完成（余 REVIEW 签字）；
+A2/A4 只剩 **EDITOR 落签**（ARCH 审定与起草均已完成）；A5–A7 是 I2 本体；D1–D3 是发版动作。
+I1 侧 DEV 已无剩余动作（ARCH 附条件探针另列）；S8B R3–R8 与 §3.8 已完成（E-V3-9b 待 REV 补签）；
 Q-7（`D-033`）按裁定在 1.2 之后，不进本清单。

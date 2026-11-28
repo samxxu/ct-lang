@@ -82,10 +82,10 @@ bash tools/check.sh g1 && bash tools/check.sh g6 && bash tools/check.sh g8
 
 | 类 | 负例 | 期望 |
 | --- | --- | --- |
-| 语法 | `impl Store for S { Str get(Str k) index { … } }` / `index` 写在返回类型前 | 硬错，提示标记只属于 trait 声明 |
-| 解析 | trait 有 `get` 但未标 `index`；`o[0]` 而只有 `get(Str) index` | 硬错，列出可用键类型 |
+| 语法 | `impl Store for S { Str get(char *k) index { … } }` / `index` 写在返回类型前 | 硬错，提示标记只属于 trait 声明 |
+| 解析 | trait 有 `get` 但未标 `index`；`o[0]` 而只有 `get(char *) index` | 硬错，列出可用键类型 |
 | 误用 | 对 non-interface 值走 I2 路径；对 struct 用未声明固有 `get` 的键 | 硬错，提示 D-028 规则 |
-| 阶段二 | 只读实现标了 `set index`；写值生命周期越过对象 | 硬错 / 借用检查拒绝 |
+| 阶段二 | trait 未声明 `void set(K, V) index` 却写 `o[k] = v`；写值生命周期越过对象 | 编译期硬错 D034-8 / 借用检查拒绝 |
 | 跨单元 | trait 在 A、impl 在 B、调用在 C，B 改签名后 C 未重编 | build 模式全量重编，无 stale vtable |
 
 ## 6 风险
@@ -147,17 +147,20 @@ REQ 的 spec 同步与 REV 复核都不进 DEV 提交前置。
 
 > REQ 只读验收用；夹具名以 DEV 落地为准（下表给建议名，放在 `test/ast/i2_*`）。
 > 每条都要有「命令 + 末行输出」证据，写入 `E-V3-9e` / `E-V3-9f` 的验收行。
+> **键类型口径以 [D-034](../decisions/D-034.md) §3 为准**：字符串字面量的静态类型是
+> `char *`，因此 `s["name"]` 只命中 `get(char *k) index`；`Str get(Str k) index` 不命中
+> 字面量键（可先把键绑定为 `Str` 变量）。
 
 ### 10.1 阶段一（只读，`E-V3-9e`）
 
 | # | 用例 | 期望 | 建议落点 |
 | --- | --- | --- | --- |
-| A1 | `trait Store { Str get(Str k) index; }`，接口值 `s["name"]` | 调 vtable 的 `get(Str)`；与 `s.get("name")` 生成 C 逐字节一致 | `test/ast/i2_index_read/` |
-| A2 | 同一 trait 两个键类型都标 `index`（`get(Str)` / `get(int)`） | `s["k"]` 与 `s[7]` 分别命中，C 符号各不相同 | `i2_index_read_keys/` |
+| A1 | `trait Store { Str get(char *k) index; }`，接口值 `s["name"]` | 调 vtable 的 `get(char *)`；与 `s.get("name")` 生成 C 逐字节一致 | `test/ast/i2_index_read/` |
+| A2 | 同一 trait 两个键类型都标 `index`（`get(char *)` / `get(int)`） | `s["k"]` 与 `s[7]` 分别命中，C 符号各不相同 | `i2_index_read_keys/` |
 | A3 | trait 在 `.h.ct`、impl 在他单元、调用在第三单元 | `ct build` 全量重编、vtable 一致、运行输出正确 | `test/modules/i2_cross_unit/` |
 | A4 | struct 的 D-028 / I1 路径 | `p52_*`、`320_*`、`321_*` 生成 C 逐字节不变 | 既有夹具 |
 | A5 | 未标 `index` 的 trait 用 `o[k]` | 硬错 `trait 'T' declares no indexed get; 'o[k]' is not available` | `test/ast/errors/i2_no_index.ct` |
-| A6 | `o[0]` 但只有 `get(Str) index` | 硬错并列出可用键类型 | `errors/i2_key_mismatch.ct` |
+| A6 | `o[0]` 但只有 `get(char *) index` | 硬错并列出可用键类型 | `errors/i2_key_mismatch.ct` |
 | A7 | `impl` 侧写 `index` | 硬错，提示标记只属 trait 声明 | `errors/i2_impl_index.ct` |
 | A8 | 阶段一对 `o[k] = v` | 只读诊断（写入属阶段二），不写产物 | `errors/i2_write_phase1.ct` |
 | A9 | 对非接口值误用 I2 路径 | 走 D-028 的既有诊断，不声称接口规则 | `errors/i2_non_iface.ct` |
@@ -167,7 +170,7 @@ REQ 的 spec 同步与 REV 复核都不进 DEV 提交前置。
 | # | 用例 | 期望 |
 | --- | --- | --- |
 | B1 | `void set(K,V) index;` + `o[k] = v` | 调 vtable 的 `set`；与 `o.set(k, v)` 生成 C 逐字节一致 |
-| B2 | 只读实现（无 `set`）被写入 | ADR 定形态（空实现 / 运行期报错 / 拒绝标注），按 `D-034` 判定 |
+| B2 | trait 未声明 `void set(K,V) index` 时写入 `o[k] = v` | **编译期硬错** D034-8（D-034 D5：不存在“只读实现被写入”的运行期分支） |
 | B3 | 键类型与 `set` 不匹配 | 硬错并列出可用键类型 |
 | B4 | 写入值的所有权/生命周期越过对象 | 借用检查或 ASAN 拒绝 |
 | B5 | 阶段二不改变阶段一 | A1–A3 的生成 C 逐字节不变 |

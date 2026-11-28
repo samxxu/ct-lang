@@ -69,6 +69,12 @@
 
 ### 3.1.1 Q2 定稿样例（2026-11-28）
 
+> **2026-11-28 更正（ARCH 审定 D-034 §3）**：字符串字面量的静态类型是 `char *`（见 §4.64 /
+> §4.70），所以 `s["name"]` 只命中 `get(char *k) index`；下文样例里的 `Str get(Str k) index`
+> 对字面量键**不命中**，应读作 `Str get(char *k) index`（或先把键绑定为 `Str` 变量）。
+> 这是 D-028“逐字相等、不做隐式转换”的直接结果，不是新增语义；以 [D-034](../decisions/D-034.md)
+> 与 [I2-C1 §10](../design/i2-interface-subscript-construction.md) 为准。
+
 ```ct
 trait Store {
     Str get(Str k) index;     // 这个 get 就是 []
