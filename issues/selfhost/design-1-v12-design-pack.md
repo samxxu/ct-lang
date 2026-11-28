@@ -7,9 +7,9 @@
 | 严重度 | **P1**（S1b 开工前必须完成，避免代码等人） |
 | 锚点 | `2026-11-26` |
 | 依据 | [`v1-PH-2` 并行轨道](../../docs/phases/v1-PH-2/card.md)、[typed-lowered-ir](../../docs/proposals/typed-lowered-ir.md)、[D-026](../../docs/decisions/D-026.md) |
-| 状态 | open |
+| 状态 | verified |
 | 负责人 | REQ / REVIEW |
-| 处置证据 | 2026-11-26：D1–D3 落 [tir-lir-contract](../../docs/design/tir-lir-contract.md)，D7 落 [tir-lir-fixtures](../../docs/design/tir-lir-fixtures.md)。2026-11-27：D4/D5 由主线以 [D-028](../../docs/decisions/D-028.md) / [D-029](../../docs/decisions/D-029.md) 交付并落地（S2/S3）；D6 落 [adt-patterns](../../docs/design/adt-patterns.md)（S4–S5 已成文，S6 见 §10，含 §10.8 负例清单与 §10.10 开放问题）。**七项交付全部成文，待 REVIEW 复核后转 verified。** |
+| 处置证据 | 2026-11-26：D1–D3 落 [tir-lir-contract](../../docs/design/tir-lir-contract.md)，D7 落 [tir-lir-fixtures](../../docs/design/tir-lir-fixtures.md)。2026-11-27：D4/D5 由主线以 [D-028](../../docs/decisions/D-028.md) / [D-029](../../docs/decisions/D-029.md) 交付并落地（S2/S3）；D6 落 [adt-patterns](../../docs/design/adt-patterns.md)（S4–S5 已成文，S6 见 §10，含 §10.8 负例清单与 §10.10 开放问题）。**七项交付全部成文，待 REVIEW 复核后转 verified。** **EDITOR 签收（2026-11-28，非作者席位）**：依据 [REVIEW 复核报告](../../docs/reviews/2026-11-28-q11-test27-design1.md) §2–§3，D1–D7 逐项覆盖判据（D6 的 §10.8 六类负例与 §10.10 五条开放问题已逐条核对；`E-IR-101..110` 的 registry/源码/负例三元一致，`test/ir/run.sh` 13 checks 绿），`open` → `verified`；报告 §2 的 O1/O2 为非阻断文档精度观察。 |
 
 ## 1 目标
 

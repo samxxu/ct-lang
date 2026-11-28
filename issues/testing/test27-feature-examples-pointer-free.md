@@ -7,9 +7,9 @@
 | 严重度 | **P1**（新特性无样例、旧样例与文档仍以指针为主） |
 | 锚点 | `2026-11-26`（v1.2 规划期） |
 | 依据 | 所有者 2026-11-26 要求；[dogfooding](../../docs/planning/dogfooding.md)；[pointer-free-phase-plan](../../docs/planning/pointer-free-phase-plan.md) |
-| 状态 | open |
+| 状态 | verified |
 | 负责人 | TEST / REVIEW（REQ 跟踪） |
-| 处置证据 | 排入 [`v1-PH-2` S8c](../../docs/phases/v1-PH-2/card.md)；2026-11-26 已交首版矩阵 [feature-examples-matrix](../../docs/planning/feature-examples-matrix.md)（23 行）与逐文件判定 [pointer-free-exemptions](../../docs/planning/pointer-free-exemptions.md)。**2026-11-27 交接给 TEST/REVIEW**，施工范围与分片见 §8。 |
+| 处置证据 | 排入 [`v1-PH-2` S8c](../../docs/phases/v1-PH-2/card.md)；2026-11-26 已交首版矩阵 [feature-examples-matrix](../../docs/planning/feature-examples-matrix.md)（23 行）与逐文件判定 [pointer-free-exemptions](../../docs/planning/pointer-free-exemptions.md)。**2026-11-27 交接给 TEST/REVIEW**，施工范围与分片见 §8。**EDITOR 签收（2026-11-28，非作者席位）**：依据 [REVIEW 复核报告](../../docs/reviews/2026-11-28-q11-test27-design1.md) §1–§3 判据对照——U1 `f841aaf4`、U2 的 8 处引用、U3 的两处计数均已关闭，A/C/D 三轨与 `check-docs`/`g4`/矩阵复核通过，`open` → `verified`；报告 §1.5 的 F2/F3 为非阻断文档口径建议，不改变交付判据。 |
 
 ## 1 现象（2026-11-26 实测）
 
