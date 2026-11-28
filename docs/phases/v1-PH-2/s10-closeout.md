@@ -184,7 +184,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-8 | I2 接口值下标（两阶段） | **`D-034` 已签收（accepted）；DEV 可按 I2-1…I2-5 开工** | ARCH 起草 `D-034`（已完成）→ EDITOR 签收（口径已对齐）→ REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9；起草输入见 [D-034 输入包](../../design/i2-d034-drafting-input.md) | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
 | Q-9 | dist 产物冒烟 | **已完成**（`0911029a`；本地方案 B 复跑通过，见下注） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
-| Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
+| Q-11 | TEST-27 / DESIGN-1 状态 | **REV 已出结论（`0b7ac106`，两 issue `verified` 建议）；待 EDITOR 签状态** | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
 | Q-12 | LANG-31（常量键折叠，I1） | **已完成**（D-031 accepted + issue verified；附条件 C1–C4 作为 DEV 后续补测，不阻塞） | DEV 初稿 → ARCH 技术审定（已完成）→ **EDITOR 签收** → REQ 排期 → DEV（T1–T5 已完成） | spec §4.79（已落）；D-031 §8 附条件待补探针；签收口径已对齐（`f0ce1746` + `b4f3a568`） | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | **已完成**（`9eb519c4`） | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 | Q-14 | T-8 门禁允许 EDITOR 签收 ADR（B1） | **已完成**（`f0ce1746`；待 EDITOR 审核） | REQ（所有者 2026-11-28 授权直接修复）→ EDITOR | 无 | 本节 Q-12 注；`test/docs/check-docs.py` |
