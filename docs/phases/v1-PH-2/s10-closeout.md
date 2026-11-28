@@ -226,6 +226,16 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > 门禁与规范已对齐；`D-031` 头部暂按过渡行处理，**待 ARCH 技术审定后由 EDITOR 落签**。
 > 同一口径适用于 `D-033`（Q-7）与 `D-034`（Q-8）。
 >
+> **Q-15 规范改造口径（2026-11-28）**：工程规范正在拆分为 **AI engineering** 与 **engineering**
+> 两份外链文件，`AGENTS.md` 将只保留项目自身特殊规定。本次落在本仓 `AGENTS §0.7` 与
+> `docs/spec §5.2` 的口径（ADR = ARCH 写、EDITOR 签），在拆分完成后应落到 **engineering**
+> 文档的对应节；旧主规范路径（`~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md`）
+> 在拆分落地后作废。`docs/spec` 副本与 sha pin 的同步由 EDITOR 在拆分时一次完成。
+>
+> **Q-12 审定输入**：`D-031` 的 ARCH 技术审定包已备在
+> [2026-11-28-d031-arch-review-packet](../../reviews/2026-11-28-d031-arch-review-packet.md)
+> （四问 + 证据 + 边界/风险 + 待填结论）；ARCH 出结论后由 EDITOR 落签。
+>
 > **Q-12 REQ 验收（2026-11-28）**：`LANG-31` 的实现 T1–T5 已在 DEV 侧落地
 > （`93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`，探针重钉 `9e4e87e4`），REQ 只读验收通过：
 > 8 条探针（折叠 / 链式 / get 回退 / 三条负例 / 写形态 / Box 内部）+ `examples/70` 输出 `7 9`
@@ -263,7 +273,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | # | 项 | 状态 | 负责 | 证据 / 命令 |
 | --- | --- | --- | --- | --- |
 | A1 | I1 `LANG-31` 实现 T1–T5 | ✅ | DEV | `93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`；REQ 验收见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) |
-| A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔ | ARCH / EDITOR | B1/B2 已完成；**只余 ARCH 技术审定 → EDITOR 落签** |
+| A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔ | ARCH / EDITOR | 审定包已备：[d031-arch-review-packet](../../reviews/2026-11-28-d031-arch-review-packet.md)；B1/B2 已完成，只余 ARCH 结论 → EDITOR 落签 |
 | A3 | `LANG-31` issue 转 `verified` | 🟡 | EDITOR | 验收证据已齐（issue §7）；状态词由 EDITOR 落 |
 | A4 | `D-034` 起草 + 签收 | ⛔ | ARCH / EDITOR | I2 硬前置；见 [I2-C1 §2](../../design/i2-interface-subscript-construction.md#2-前置开工前必须) |
 | A5 | I2 阶段一（只读，`E-V3-9e`） | ⛔ | DEV | I2-1 → I2-3；验收清单见 [I2-C1 §10](../../design/i2-interface-subscript-construction.md#10-验收清单e-v3-9e--e-v3-9f) |
