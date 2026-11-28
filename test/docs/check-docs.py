@@ -1154,10 +1154,10 @@ def check_signoffs(errors):
     """T-8 (AGENTS §0.7): new artifacts carry a non-author signoff.
 
     Phase cards are authored by REQ, so their `签收:` must name EDITOR,
-    REVIEW or USER. ADRs are authored by EDITOR (verdict section), so their
-    signoff must name REQ, REVIEW or USER. Only "实施中" cards and ADRs dated
-    on/after SIGNOFF_FROM are checked, so closed phases and older ADRs are not
-    retroactively red.
+    REVIEW or USER. ADRs are authored by ARCH (technical design), so their
+    signoff may name EDITOR, REVIEW, REQ or USER. Only "实施中" cards and ADRs
+    dated on/after SIGNOFF_FROM are checked, so closed phases and older ADRs
+    are not retroactively red.
     """
     checked = 0
     design = os.path.join(ROOT, "docs", "phases")
@@ -1198,11 +1198,7 @@ def check_signoffs(errors):
         m = re.search(r"(?m)^\s*[-*]?\s*签收\s*[:：]\s*(EDITOR|REVIEW|REQ|USER)\b", head)
         if not m:
             errors.append(
-                f"docs/decisions/{name}: no 签收 line (T-8; expected REQ/REVIEW/USER)"
-            )
-        elif m.group(1) == "EDITOR":
-            errors.append(
-                f"docs/decisions/{name}: EDITOR authors the verdict; 签收 must be REQ/REVIEW/USER (T-8)"
+                f"docs/decisions/{name}: no 签收 line (T-8; expected EDITOR/REVIEW/USER)"
             )
     return checked
 
