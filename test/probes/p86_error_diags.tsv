@@ -272,7 +272,9 @@ test/ast/errors/p51_dot_trait.ct	1	429115fc5de1c701e47d3abcc2c353b26eb0b72caf023
 test/ast/errors/p52_addr.ct	1	f3d5f6e82aaf8c02ff8314cb1eaa7b38c2307e0ee854721b436ddef4a69d2980
 test/ast/errors/p52_compound.ct	1	1e37f025c4a02c391ef3776fa977ff0b442d1ff7beaa258a939d6460a43fb77e
 test/ast/errors/p52_get_arity.ct	1	75f35f65851de10779a4eefbeaf254eb414ad19b192d07e0c6b0d99b8e06b3d9
-test/ast/errors/p52_no_get.ct	1	1a1f69682e8ba57c6439f540a6e06fa752f4455db9ec9f91b104e0bc903449fc
+# D-031 / LANG31-C1: p52_no_get is re-pinned once: a literal key on a
+# get-less struct now reports the field-oriented D031-2 (candidates are fields).
+test/ast/errors/p52_no_get.ct	1	79183e80624ba402aecf5b2e0c1c73c6e1c2a41cf73e4f0e73280741d7c88b84
 test/ast/errors/p52_no_set.ct	1	3c7fc6bb665f4b4fecb06bdc7909b836c7119063543dbbf4e84119296a51d996
 test/ast/errors/p52_own_write.ct	1	32a72b1c4909d0a2236c2e755bee25c5c9615d4b0660e972e5f35cd72d065340
 test/ast/errors/p52_rvalue_write.ct	1	ca17871ef39706caebfa6a9069b02c3bfa5e0cbb8bea672139ffd9047d0e322f
