@@ -191,15 +191,19 @@ a 2 / b 17 / c 1 / d 7 / bounded 38 / vsnprintf 5；c/d 只登记不改）。
 | `selfhost/ct-ast/**/*.ct` 的 `realloc(` | 87 | 与卡 §6 一致 |
 | `Pkg.h.ct` 的 `snprintf(` | 43 | 与卡 §6 一致 |
 | `Symbols.h.ct` 的 `snprintf(` | 24 | 与卡 §6 一致 |
-| `bootstrap/ct-ast/Symbols.c` >120 字符行 | 76 | SH-123 残留（P2） |
-| `bootstrap/ct-ast/EmitExpr.c` >120 字符行 | 171 | SH-123 残留（P2） |
+| `bootstrap/ct-ast/Symbols.c` >120 字符行（代码口径） | 76 | 排除第 1 行 banner；SH-123 残留（P2） |
+| `bootstrap/ct-ast/EmitExpr.c` >120 字符行（代码口径） | 171 | 排除第 1 行 banner；SH-123 残留（P2） |
+
+> **口径**：字面 `awk 'length>120'` 会把生成文件第 1 行 banner 计入（`Symbols.c` 121 字符、
+> `EmitExpr.c` 122 字符），结果多 1，为 **77 / 172**；本表与 REV 报告均以**代码行 76 / 171**
+> 为冻结基线（[REV 报告](../reviews/2026-11-28-ev39b-rev.md) §2）。
 
 复现：
 ```sh
 grep -rho 'snprintf(' selfhost/ct-ast --include='*.ct' | wc -l
 grep -rho 'realloc('  selfhost/ct-ast --include='*.ct' | wc -l
-awk 'length>120' bootstrap/ct-ast/Symbols.c   | wc -l
-awk 'length>120' bootstrap/ct-ast/EmitExpr.c  | wc -l
+awk 'NR>1 && length>120' bootstrap/ct-ast/Symbols.c  | wc -l
+awk 'NR>1 && length>120' bootstrap/ct-ast/EmitExpr.c | wc -l
 ```
 
 结论口径：REQ 2026-11-28 裁定 **方案 A（条件通过，SH-123 保留、不按 clean 签）**。
