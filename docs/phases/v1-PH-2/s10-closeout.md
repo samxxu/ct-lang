@@ -167,14 +167,15 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | **已完成**（`6ba2a627`、`1d93fd77`） | DEV | 无 | [S8B 施工卡](../../design/s8b-remaining-construction.md)、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | **已完成**（R3 `e23338db`、R4 `75fcb698`、R5 `9a0312a0`、R6 `3026f9bb`、R7 `233727d5`、R8 `bd252782`；realloc 96→87） | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
-| Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ EDITOR 签收 → REQ 排期 → DEV（T-8 已扩，见 Q-12 注） | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
-| Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`；排期见下注** | ARCH 起草 `D-034` → EDITOR 签收（T-8 已扩）→ REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9 已排期 | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
+| Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ EDITOR 签收 → REQ 排期 → DEV（签收口径已对齐，见 Q-12 注） | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
+| Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`；排期见下注** | ARCH 起草 `D-034` → EDITOR 签收（口径已对齐）→ REQ 排期 → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) §9 已排期 | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
 | Q-9 | dist 产物冒烟 | **已完成**（`0911029a`；本地方案 B 复跑通过，见下注） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
-| Q-12 | LANG-31（常量键折叠，I1） | **实现已落地，REQ 验收通过（证据见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28)）；ADR 追签 + `verified` 待 ARCH/EDITOR** | DEV 初稿 → ARCH 技术审定 → **EDITOR 签收** → REQ 排期 → DEV（已完成 T1–T5） | spec §4.79（已落）；T-8 已扩（`f0ce1746`），余 AGENTS §0.7 对齐 | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
+| Q-12 | LANG-31（常量键折叠，I1） | **实现已落地，REQ 验收通过（证据见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28)）；ADR 追签 + `verified` 待 ARCH/EDITOR** | DEV 初稿 → ARCH 技术审定 → **EDITOR 签收** → REQ 排期 → DEV（已完成 T1–T5） | spec §4.79（已落）；签收口径已对齐（`f0ce1746` + `b4f3a568`） | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | **已完成**（`9eb519c4`） | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 | Q-14 | T-8 门禁允许 EDITOR 签收 ADR（B1） | **已完成**（`f0ce1746`；待 EDITOR 审核） | REQ（所有者 2026-11-28 授权直接修复）→ EDITOR | 无 | 本节 Q-12 注；`test/docs/check-docs.py` |
+| Q-15 | ADR 规范对齐（B2：`AGENTS §0.7` + 规范矩阵 + sha pin） | **已完成**（`b4f3a568`；待 EDITOR 审核） | REQ（所有者授权直接修复）→ EDITOR | 外部主规范副本需 EDITOR 后续同步（见注） | `AGENTS.md`、`docs/spec/ai-coding-workflow.md` |
 
 > **Q-7 排期口径（2026-11-28）**：本条是架构债、无用户可见收益，**不进 1.2 窗口**
 > （窗口已由 I1/I2 占满）；建议放在 `v1.2.0` tag 之后的技术债批，不单独立版本。三步：
@@ -217,13 +218,12 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 >    原对 ADR 只接受 `REQ/REVIEW/USER`；现删去拒 `EDITOR` 的分支、报错文案改为
 >    `EDITOR/REVIEW/USER`、docstring 同步。所有者 2026-11-28 授权 REQ 直接修复；
 >    临时 ADR 探针（`签收：EDITOR`）跑 `check-docs` 通过后已删除；
-> 2. **规范对齐（EDITOR）**：三处同批改——① [AGENTS.md §0.7](../../../AGENTS.md#07-主编签收项目加严t-8)
->    表格把 ADR 行拆出（ADR：作者 ARCH、签收 EDITOR；battle 判决维持原行）；②
->    [ai-coding-workflow §5.2](../../spec/ai-coding-workflow.md#52-矩阵) 的「决策记录」列按同一口径
->    拆分；③ 该文件的 `docs/spec` sha256 pin（g0 校验）随之更新。REQ 单改 ② 会触发 g0 红，
->    故 ②③ 必须由 EDITOR 同批落。
-> 两项落地前 `D-031` 头部保留 `签收：REVIEW（待签）` 并注明终签归 EDITOR，避免门禁红。
-> 现门禁已扩（B1），但 AGENTS §0.7 未对齐；`D-031` 仍按过渡行处理，待 ARCH 审定后由 EDITOR 落签。
+> 2. **规范对齐（已完成 `b4f3a568`，待 EDITOR 审核）**：① [AGENTS.md §0.7](../../../AGENTS.md#07-主编签收项目加严t-8)
+>    拆出 ADR 行（ARCH → EDITOR；battle 判决维持原行）；② [ai-coding-workflow §5.2](../../spec/ai-coding-workflow.md#52-矩阵)
+>    的「决策记录」列同步拆分并加口径注；③ `docs/spec` 的 sha256 pin 已随副本更新。
+>    **遗留**：外部主规范副本（`~/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md`）不在本仓，
+>    需 EDITOR 在下次 `sync-agents.sh` 前把同一改动带回主规范，否则刷新块会覆盖本仓口径。
+> 门禁与规范已对齐；`D-031` 头部暂按过渡行处理，**待 ARCH 技术审定后由 EDITOR 落签**。
 > 同一口径适用于 `D-033`（Q-7）与 `D-034`（Q-8）。
 >
 > **Q-12 REQ 验收（2026-11-28）**：`LANG-31` 的实现 T1–T5 已在 DEV 侧落地
@@ -263,14 +263,14 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | # | 项 | 状态 | 负责 | 证据 / 命令 |
 | --- | --- | --- | --- | --- |
 | A1 | I1 `LANG-31` 实现 T1–T5 | ✅ | DEV | `93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`；REQ 验收见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) |
-| A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔ | ARCH / EDITOR | B1 已完成（`f0ce1746`），余 B2；见 Q-12 注 |
+| A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔ | ARCH / EDITOR | B1/B2 已完成；**只余 ARCH 技术审定 → EDITOR 落签** |
 | A3 | `LANG-31` issue 转 `verified` | 🟡 | EDITOR | 验收证据已齐（issue §7）；状态词由 EDITOR 落 |
 | A4 | `D-034` 起草 + 签收 | ⛔ | ARCH / EDITOR | I2 硬前置；见 [I2-C1 §2](../../design/i2-interface-subscript-construction.md#2-前置开工前必须) |
 | A5 | I2 阶段一（只读，`E-V3-9e`） | ⛔ | DEV | I2-1 → I2-3；验收清单见 [I2-C1 §10](../../design/i2-interface-subscript-construction.md#10-验收清单e-v3-9e--e-v3-9f) |
 | A6 | I2 阶段二（写入，`E-V3-9f`） | ⛔ | DEV | I2-4；同属 1.2 |
 | A7 | I2 文档（spec 新节 / 矩阵 / stable-subset） | ⛔ | REQ | I2-5；随 A5/A6 同步 |
 | B1 | T-8 门禁允许 EDITOR 签 ADR | ✅（待 EDITOR 审核） | REQ（所有者授权） | `f0ce1746`；临时 ADR 探针验证通过后删除 |
-| B2 | `AGENTS.md` §0.7 + 规范矩阵 + `docs/spec` sha pin | ⛔ | EDITOR | 三处同批；`bash tools/check.sh g0` |
+| B2 | `AGENTS.md` §0.7 + 规范矩阵 + `docs/spec` sha pin | ✅（待 EDITOR 审核） | REQ（所有者授权） | `b4f3a568`；`g0` 绿（`sync-agents.sh` 不在本机，块体等价比对被跳过） |
 | B3 | D-032 REV 只读复核 + EDITOR 落状态 | 🟡 | REV / EDITOR | M1–M3 已落地、REQ 验收全绿（shim 74 → 3） |
 | B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | ✅ | DEV | R3 `e23338db`、R4 `75fcb698`、R5 `9a0312a0`、R6 `3026f9bb`、R7 `233727d5`、R8 `bd252782`、§3.8 `9eb519c4`；现测 `realloc` 87、`snprintf` 292（Pkg 43 / Symbols 24）；**余 REVIEW 对 E-V3-9b 的签字** |
 | B5 | 门禁全绿：8 门 / seed 两轮 / goldens 25/25 / warnings 0 / `test/ir` 15 / `check-docs` | ✅（I1 后） | DEV / REQ | I2 落地后必须重跑一遍再 tag |
@@ -286,7 +286,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | D3 | annotated tag `v1.2.0` + 五项校验 | ⛔ | 所有者 | 卡 §7.5 |
 | D4 | GitHub Release 与资产（可选） | 🟡 | 所有者 | 卡 §7.5；资产 sha 与 D1 一致 |
 
-**当前缺口结论（2026-11-28）**：硬阻塞集中在 **A2、A4–A7、B2、C2、C4、C5、D1–D3**。
-其中 A2/B2 是同一根因（ADR 签收口径切换未落地，B1 门禁侧已完成）；A4–A7 是 I2 本体；
+**当前缺口结论（2026-11-28）**：硬阻塞集中在 **A2、A4–A7、C2、C4、C5、D1–D3**。
+A2 只剩 ARCH 技术审定与 EDITOR 落签（口径侧 B1/B2 已完成）；A4–A7 是 I2 本体；
 D1–D3 是发版动作。I1 侧 DEV 已无剩余动作；S8B R3–R8 与 §3.8 已完成（余 REVIEW 签字）；
 Q-7（`D-033`）按裁定在 1.2 之后，不进本清单。
