@@ -395,7 +395,7 @@ v0-PH-52 的 D52-6 指向本条。
 | `why` | 来稿 RFC-0000 的核心卖点（静态零开销下标），Ct 目前只有运行期 `get`；动态键已经可用，缺的只是“编译期已知的键”。 |
 | `priority` | `P2` |
 | `status` | `planned`（**v1.2 必做，2026-11-28 撤回 deferred**；与 I2 共用 D-028 的下标解析表） |
-| `owner` | DEV（实施）；REVIEW（ADR 签收）；REQ（验收） |
+| `owner` | ARCH（ADR `D-031` 起草，不得缺位）；EDITOR（ADR 签收）；DEV（实施）；REVIEW（复核）；REQ（排期 + 验收） |
 | `last-touched` | 2026-11-28 |
 | `block` | 前置 ADR `D-031` + spec 新节（施工卡已交）；按所有者 2026-11-28 裁定随 1.2 交付，1.2.0 的 tag 推迟到本项与 I2 落地后 |
 
@@ -408,9 +408,9 @@ v0-PH-52 的 D52-6 指向本条。
 | `why` | 让同一段下标代码既能用于静态 struct（I1 / D-028），也能用于多实现的接口值；来稿 RFC-0000 的统一访问动机之一。Ct 目前只认固有 impl，接口值只能显式 `o.get(k)`。 |
 | `priority` | `P2` |
 | `status` | `planned`（四问已裁定 2026-11-28：Q1 立项、Q2 方法级 `index`、Q3 两阶段、Q4 暂不承诺 ABI；等 `D-034`） |
-| `owner` | ARCH（ADR 设计）；DEV（实施）；REVIEW（复核）；REQ（验收） |
+| `owner` | ARCH（ADR 起草，不得缺位）；EDITOR（ADR 签收）；DEV（实施）；REVIEW（复核）；REQ（排期 + 验收） |
 | `last-touched` | 2026-11-28 |
-| `block` | 前置 ADR `D-034`（ARCH 起草）；不得破坏 D-028 的固有 impl 路径；`v1.2.0` 的 tag 推迟到 I1 与 I2 两阶段落地后。排期见 [I2-C1 §9](../design/i2-interface-subscript-construction.md)：`D-034` → I2-1 → I2-2（只读）→ I2-3 → I2-4（写入）→ I2-5；I1 的 `T1`/`T2` 先于 I2-2 改同一张解析表 |
+| `block` | 前置 ADR `D-034`（ARCH 起草、EDITOR 签收）；不得破坏 D-028 的固有 impl 路径；`v1.2.0` 的 tag 推迟到 I1 与 I2 两阶段落地后。排期见 [I2-C1 §9](../design/i2-interface-subscript-construction.md)：`D-034` 签收 → REQ 排期 → I2-1 → I2-2（只读）→ I2-3 → I2-4（写入）→ I2-5；I1 的 `T1`/`T2` 先于 I2-2 改同一张解析表 |
 
 > **四问裁定**：Q1 立项（随 1.2）；Q2 合并为方法级 `index`，取消 `Indexable`；
 > Q3 阶段一只读、阶段二写入（同属 1.2）；Q4 暂不承诺 vtable 槽 ABI，语言稳定后统一发布。
@@ -459,9 +459,9 @@ v0-PH-52 的 D52-6 指向本条。
 | `why` | S8 已把"选择"（哪些导出、哪些 Drop、哪些 map）迁入 plan，"拼写"仍是最后一条 emitter→Symbols 依赖；它挡住 emitter 的独立复用与多后端演进，也让 S8 的"emitter 只消费 LModule"无法真正成立。无用户可见收益，属架构债。 |
 | `priority` | P3 |
 | `status` | `planned`（所有者 2026-11-28 裁定立项；未排入当前窗口） |
-| `owner` | ARCH（ADR 设计）；DEV（实施）；REV（复核） |
+| `owner` | ARCH（ADR `D-033` 起草，不得缺位）；EDITOR（ADR 签收）；DEV（实施）；REV（复核）；REQ（排期 + 验收） |
 | `last-touched` | 2026-11-28 |
-| `block` | 需新 ADR（拟 `D-033`）定义拼写表字段与不变量；排期建议在 S8B-REM-1 R8（同属 `backend/emit`）之后，避免同文件集冲突 |
+| `block` | 需新 ADR（拟 `D-033`）定义拼写表字段与不变量；ADR 由 ARCH 起草、EDITOR 签收，签收后 REQ 排期；实施排在 S8B-REM-1 R8（同属 `backend/emit`）之后，避免同文件集冲突 |
 
 > 现状与边界见 [S8 差异清单](../reviews/2026-11-27-s8-ir2-diff-list.md) §3d 第 1 条、§3f；
 > 立项不等于开工，开工前先出 ADR，不改 E-V3-9 已签的边界。

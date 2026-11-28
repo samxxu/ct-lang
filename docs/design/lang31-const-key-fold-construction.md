@@ -4,7 +4,7 @@
 | --- | --- |
 | 编号 | `LANG-31-C1` |
 | 目标 | `p["x"]` 在编译期折叠为 `p.x`，保留字段改名的编译期检查 |
-| 负责人 | **DEV**（ADR 起草、实现、自测）；**REVIEW** 复核 + ADR 签收；**REQ** 验收 |
+| 负责人 | **ARCH**（ADR `D-031` 起草，不得缺位）→ **EDITOR**（ADR 签收）→ **REQ**（排期）→ **DEV**（实现、自测）；**REV** 复核 + 样例；REQ 验收 |
 | 前置 | ADR（拟 `D-031`，`D-030` 已被 LANG-30 预留）；spec 新节（拟 §4.79，写前核 LANG-30 是否先占 §4.78） |
 | 交付窗口 | **v1.2 的 S8a，可砍**：排在 S8（IR-2）之后；S8 收口后窗口不足即整体 deferred，S10 记录 |
 | 状态 | **待开工（ready for DEV）** |
@@ -27,8 +27,8 @@
 
 | # | 任务 | 落点 | 验收 |
 | --- | --- | --- | --- |
-| P1 | ADR `D-031`：字段优先 + 并存歧义、只读、只认字面量 | `docs/decisions/D-031.md` | T-8 带 REVIEW `签收:`；结论与本卡一致 |
-| P2 | spec 新节：语法、优先级、诊断、C 形态 | `docs/language-spec.md` | 目录新增可解析条目；`check-docs` 绿 |
+| P1 | ADR `D-031`：字段优先 + 并存歧义、只读、只认字面量（ARCH 起草，EDITOR 签收） | `docs/decisions/D-031.md` | 签名行为非作者席位；结论与本卡一致 |
+| P2 | spec 新节：语法、优先级、诊断、C 形态（REQ 落笔） | `docs/language-spec.md` | 目录新增可解析条目；`check-docs` 绿 |
 | T1 | 解析期识别「字面量键 + struct 值接收者」并解析到字段 id | parser / Symbols | 命中与未命中两条路径可区分 |
 | T2 | 折叠为字段访问（AST 与 LIR 各一处，S8 之后 LIR 为主） | parse / lir | 生成 C 是 `recv.field`，无 `get`、无临时 |
 | T3 | 负例：未知字段 / 重命名 / 并存歧义 | `test/ast/errors/` + 正例 | 三条各一，位置指向 `[` |
