@@ -307,7 +307,7 @@ impl EmitDecl for Emitter {
                 const char *tname = backend::lir::lmod_plan_row_text(r);
                 if (node < 0 || node >= self->sym->nstructs) continue;
                 fprintf(self->out, "extern const struct %s_vtbl %s_%s_vtable;\n",
-                        tname, self->sym->structs[node].name, tname);
+                        tname, self->sym->struct_at(node)->name, tname);
             }
             any = 1;
         }
@@ -323,7 +323,7 @@ impl EmitDecl for Emitter {
         if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0) return 0;
         t = self->sym->find_trait(tname);
         if (t < 0 || !self->sym->traits[t].is_pub) return 0;
-        return self->decl_is_pub(N_STRUCT, self->sym->structs[si].name);
+        return self->decl_is_pub(N_STRUCT, self->sym->struct_at(si)->name);
     }
 
     int map_vtable_exported(int i)
@@ -358,12 +358,12 @@ impl EmitDecl for Emitter {
 
         if (self->cur_unit < 0) return 1;
         if (si < 0 || si >= self->sym->nstructs) return 1;
-        if (!self->sym->structs[si].uses_drop) return 1;
-        if (self->sym->structs[si].is_inst) return 1;
-        owner = self->sym->structs[si].owner;
+        if (!self->sym->struct_at(si)->uses_drop) return 1;
+        if (self->sym->struct_at(si)->is_inst) return 1;
+        owner = self->sym->struct_at(si)->owner;
         if (owner < 0) return 1;
         if (owner == self->cur_unit) return 1;
-        if (!self->sym->structs[si].has_drop_impl) return 1;
+        if (!self->sym->struct_at(si)->has_drop_impl) return 1;
         return self->unit_has_drop_impl(owner, si);
     }
 
@@ -588,7 +588,7 @@ impl EmitDecl for Emitter {
                 /* the parser keys an impl closure by `<Struct>_<Trait>_<method>`,
                    the same spelling the definition below takes */
                 owner = runtime::text::ct_internf("%s_%s_%s",
-                         self->sym->structs[si].name, tname,
+                         self->sym->struct_at(si)->name, tname,
                          self->arena->nodes[m].text2);
                 if (!owner) return self->fail("out of memory");
                 if (emit_closures(self, owner, self->arena->nodes[m].line) != 0) return -1;
@@ -613,7 +613,7 @@ impl EmitDecl for Emitter {
                         fputs("__attribute__((unused)) ", self->out);
                 }
                 fprintf(self->out, "%s_%s_%s(void *self",
-                        self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
+                        self->sym->struct_at(si)->name, tname, self->arena->nodes[m].text2);
                 k = self->arena->nodes[m].a;
                 while (k > 0) {
                     fputs(", ", self->out);
@@ -659,7 +659,7 @@ impl EmitDecl for Emitter {
                     int printed = 0;
                     if (body_hook) {
                         const char *key = tool::sh::ct_scratch_fmt("%s_%s%s%s",
-                                self->sym->structs[si].name, tname,
+                                self->sym->struct_at(si)->name, tname,
                                 (tname && tname[0]) ? "_" : "",
                                 self->arena->nodes[m].text2);
                         int new_ntmp = self->ntmp;
@@ -696,15 +696,15 @@ impl EmitDecl for Emitter {
                    exported one is reachable from the consumer unit instead */
                 if (self->vtable_exported(si, tname))
                     fprintf(self->out, "const struct %s_vtbl %s_%s_vtable = {\n",
-                            tname, self->sym->structs[si].name, tname);
+                            tname, self->sym->struct_at(si)->name, tname);
                 else
                     fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
-                            tname, self->sym->structs[si].name, tname);
+                            tname, self->sym->struct_at(si)->name, tname);
                 u = 0;
                 for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
                     if (u > 0) fputs(",\n", self->out);
                     fprintf(self->out, "    .%s = %s_%s_%s", self->arena->nodes[m].text2,
-                            self->sym->structs[si].name, tname, self->arena->nodes[m].text2);
+                            self->sym->struct_at(si)->name, tname, self->arena->nodes[m].text2);
                     u++;
                 }
                 /* inherited defaults fill the remaining slots */
@@ -714,7 +714,7 @@ impl EmitDecl for Emitter {
                         if (impl_writes(self->arena, n, self->sym->traits[ti].m[dm].name)) continue;
                         if (u > 0) fputs(",\n", self->out);
                         fprintf(self->out, "    .%s = %s_%s_%s", self->sym->traits[ti].m[dm].name,
-                                self->sym->structs[si].name, tname, self->sym->traits[ti].m[dm].name);
+                                self->sym->struct_at(si)->name, tname, self->sym->traits[ti].m[dm].name);
                         u++;
                     }
                 fputs("\n};\n\n", self->out);
@@ -750,7 +750,7 @@ impl EmitDecl for Emitter {
                 tag = adts[type_adt].full;
                 type_pub = adts[type_adt].is_pub;
             } else {
-                tag = self->sym->structs[si].name;
+                tag = self->sym->struct_at(si)->name;
                 type_pub = self->decl_is_pub(N_STRUCT, tag);
             }
             for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
@@ -859,8 +859,8 @@ impl EmitDecl for Emitter {
             n = backend::lir::lmod_plan_row_node(r);
             si = self->sym->find_struct(self->arena->nodes[n].text2);
             if (si < 0) continue;
-            for (ui = 0; ui < self->sym->structs[si].nuse; ui++) {
-                tname = self->sym->structs[si].use[ui];
+            for (ui = 0; ui < self->sym->struct_at(si)->nuse; ui++) {
+                tname = self->sym->struct_at(si)->use[ui];
                 ti = self->sym->find_trait(tname);
                 if (ti < 0) continue;
                 if (impl_exists_anywhere(self->arena, si, tname)) continue;
@@ -873,26 +873,26 @@ impl EmitDecl for Emitter {
                         const char *emsg;
                         emsg = tool::sh::ct_scratch_fmt(
                                  "trait method '%s' is not implemented for struct '%s'",
-                                 self->sym->traits[ti].m[dm].name, self->sym->structs[si].name);
+                                 self->sym->traits[ti].m[dm].name, self->sym->struct_at(si)->name);
                         return self->fail_from(n, emsg);
                     }
-                type_index = self->sym->find_type(self->sym->structs[si].name);
+                type_index = self->sym->find_type(self->sym->struct_at(si)->name);
                 if (type_index >= 0 && self->sym->types[type_index].kind == 1)
-                    stype = tool::sh::ct_scratch_fmt("struct %s", self->sym->structs[si].name);
+                    stype = tool::sh::ct_scratch_fmt("struct %s", self->sym->struct_at(si)->name);
                 else
-                    stype = tool::sh::ct_scratch_dup(self->sym->structs[si].name);
+                    stype = tool::sh::ct_scratch_dup(self->sym->struct_at(si)->name);
                 for (dm = 0; dm < self->sym->traits[ti].nm; dm++)
                     if (emit_default_method(self, si, stype, ti, dm, n) != 0) return -1;
                 if (self->vtable_exported(si, tname))
                     fprintf(self->out, "const struct %s_vtbl %s_%s_vtable = {\n",
-                            tname, self->sym->structs[si].name, tname);
+                            tname, self->sym->struct_at(si)->name, tname);
                 else
                     fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n",
-                            tname, self->sym->structs[si].name, tname);
+                            tname, self->sym->struct_at(si)->name, tname);
                 for (dm = 0; dm < self->sym->traits[ti].nm; dm++) {
                     if (dm > 0) fputs(",\n", self->out);
                     fprintf(self->out, "    .%s = %s_%s_%s", self->sym->traits[ti].m[dm].name,
-                            self->sym->structs[si].name, tname, self->sym->traits[ti].m[dm].name);
+                            self->sym->struct_at(si)->name, tname, self->sym->traits[ti].m[dm].name);
                 }
                 fputs("\n};\n\n", self->out);
             }
@@ -912,19 +912,19 @@ impl EmitDecl for Emitter {
         for (si = 0; si < self->sym->nstructs; si++) {
             int has = 0, fi, used = 0, legacy, host_hidden = 0;
             const char *sname;
-            if (!self->sym->structs[si].uses_drop) continue;
+            if (!self->sym->struct_at(si)->uses_drop) continue;
             /* P36 S2a2: a template row (`struct Box<T>`) has no concrete C type,
                so no glue is emitted for it; instances carry the flag instead. */
-            if (self->sym->structs[si].is_template) continue;
-            legacy = (self->cur_unit < 0 || self->sym->structs[si].owner < 0
-                      || self->sym->structs[si].is_inst);
+            if (self->sym->struct_at(si)->is_template) continue;
+            legacy = (self->cur_unit < 0 || self->sym->struct_at(si)->owner < 0
+                      || self->sym->struct_at(si)->is_inst);
             if (!legacy) {
-                if (self->sym->structs[si].owner != self->cur_unit) continue;
+                if (self->sym->struct_at(si)->owner != self->cur_unit) continue;
                 /* an explicit impl owns the body; an impl elsewhere is L48-2
                    and the module layer already refused the build */
-                if (self->sym->structs[si].has_drop_impl) continue;
+                if (self->sym->struct_at(si)->has_drop_impl) continue;
             } else {
-                has = self->sym->structs[si].has_drop_impl;
+                has = self->sym->struct_at(si)->has_drop_impl;
                 if (!has)
                     for (n = self->arena->nodes[prog].a; n >= 0; n = self->arena->nodes[n].next)
                         if (self->arena->nodes[n].kind == N_IMPL
@@ -938,11 +938,11 @@ impl EmitDecl for Emitter {
                elsewhere the host struct is incomplete, so the copy stays an
                empty `(void)_self;` body. Plain structs keep the owner filter
                above and are always visible where their body is written. */
-            if (self->sym->structs[si].is_inst && self->cur_unit >= 0) {
-                int hi = frontend::sym::ct_inst_find(self->sym->structs[si].name);
+            if (self->sym->struct_at(si)->is_inst && self->cur_unit >= 0) {
+                int hi = frontend::sym::ct_inst_find(self->sym->struct_at(si)->name);
                 if (hi < 0 || !inst_visible_in_unit(self, hi)) host_hidden = 1;
             }
-            sname = self->sym->structs[si].name;
+            sname = self->sym->struct_at(si)->name;
             if (legacy)
                 fprintf(self->out,
                         "static void __attribute__((unused)) %s_Drop_drop(void *self) {\n",
@@ -954,9 +954,9 @@ impl EmitDecl for Emitter {
                 fputs("    (void)_self;\n}\n\n", self->out);
                 continue;
             }
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+            for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
                 const char *base;
-                const char *ft = self->sym->structs[si].fields[fi].type;
+                const char *ft = self->sym->struct_field_at(si, fi)->type;
                 int stars = 0;
                 const char *q;
                 size_t bl;
@@ -972,7 +972,7 @@ impl EmitDecl for Emitter {
                     if (*q == '*') stars++;
                 /* a pointer array has no single child object; leave it to the
                    explicit Drop body */
-                if (stars > 0 && self->sym->structs[si].fields[fi].dims[0]) continue;
+                if (stars > 0 && self->sym->struct_field_at(si, fi)->dims[0]) continue;
                 /* LANG-27: a by-value built-in container releases its elements
                    through its own `release()` (the per-instance helper keeps
                    the `h == 0` guard for zero handles). A container row does
@@ -981,7 +981,7 @@ impl EmitDecl for Emitter {
                    An explicit `impl Drop` already skipped this whole body, so
                    the author still owns it. An array of containers has no
                    single handle and stays with the explicit Drop body. */
-                if (stars == 0 && !self->sym->structs[si].fields[fi].dims[0]
+                if (stars == 0 && !self->sym->struct_field_at(si, fi)->dims[0]
                     && frontend::sym::ct_is_container_type(ft)) {
                     const char *cn = strncmp(ft, "struct ", 7) == 0 ? ft + 7 : ft;
                     bl = strlen(cn);
@@ -994,8 +994,8 @@ impl EmitDecl for Emitter {
                     if (ci < 0 || !inst_visible_in_unit(self, ci)) continue;
                     fprintf(self->out,
                             "    if (_self->%s.h != 0) (void)%s_release(&_self->%s);\n",
-                            self->sym->structs[si].fields[fi].name, base,
-                            self->sym->structs[si].fields[fi].name);
+                            self->sym->struct_field_at(si, fi)->name, base,
+                            self->sym->struct_field_at(si, fi)->name);
                     used = 1;
                     continue;
                 }
@@ -1005,16 +1005,16 @@ impl EmitDecl for Emitter {
                 base = runtime::text::ct_intern_len(ft, (int)bl);
                 if (!base) return self->fail("out of memory");
                 ci = self->sym->find_struct(base);
-                if (ci < 0 || !self->sym->structs[ci].uses_drop) continue;
+                if (ci < 0 || !self->sym->struct_at(ci)->uses_drop) continue;
                 if (stars == 1) {
                     fprintf(self->out, "    if (_self->%s) %s_Drop_drop(_self->%s);\n",
-                            self->sym->structs[si].fields[fi].name,
-                            self->sym->structs[ci].name,
-                            self->sym->structs[si].fields[fi].name);
+                            self->sym->struct_field_at(si, fi)->name,
+                            self->sym->struct_at(ci)->name,
+                            self->sym->struct_field_at(si, fi)->name);
                     used = 1;
                 } else if (stars == 0) {
                     fprintf(self->out, "    %s_Drop_drop(&_self->%s);\n",
-                            self->sym->structs[ci].name, self->sym->structs[si].fields[fi].name);
+                            self->sym->struct_at(ci)->name, self->sym->struct_field_at(si, fi)->name);
                     used = 1;
                 }
             }
@@ -1108,7 +1108,7 @@ pub int elem_plain_owner(struct Emitter *self, const char *ctype)
     if (frontend::sym::ct_inst_find(base) >= 0) return -1;
     si = self->sym->find_struct(base);
     if (si < 0) return -1;
-    return self->sym->structs[si].owner;
+    return self->sym->struct_at(si)->owner;
 }
 
 /* PH-88: one node kind; the dispatcher read `kind` once. */
@@ -1221,7 +1221,7 @@ pub int em_decl_struct(struct Emitter *self, int n, int ind, int with_semi, int 
     /* Phase 29: a template emits nothing; its instances have their own
        rows and their own writer (`emit_struct_insts`). */
     si = self->sym->find_struct(self->arena->nodes[n].text2);
-    if (si >= 0 && self->sym->structs[si].is_template) return 0;
+    if (si >= 0 && self->sym->struct_at(si)->is_template) return 0;
     /* Phase 29: a field of an instance type needs that instance's
        definition first (`struct Bag { Vec<int> items; }`). */
     for (u = self->arena->nodes[n].a; u >= 0; u = self->arena->nodes[u].next) {
@@ -1244,10 +1244,10 @@ pub int em_decl_struct(struct Emitter *self, int n, int ind, int with_semi, int 
         int si_p = self->sym->find_struct(self->arena->nodes[n].text2);
         int privp = 0;
         int m2;
-        if (si_p >= 0 && self->sym->structs[si_p].nuse == 0) {
+        if (si_p >= 0 && self->sym->struct_at(si_p)->nuse == 0) {
             int has_pub = 0, has_priv = 0;
-            for (m2 = 0; m2 < self->sym->structs[si_p].nfields; m2++) {
-                if (self->sym->structs[si_p].fields[m2].is_pub) has_pub = 1;
+            for (m2 = 0; m2 < self->sym->struct_at(si_p)->nfields; m2++) {
+                if (self->sym->struct_field_at(si_p, m2)->is_pub) has_pub = 1;
                 else has_priv = 1;
             }
             privp = has_pub && has_priv;
@@ -1272,8 +1272,8 @@ pub int em_decl_struct(struct Emitter *self, int n, int ind, int with_semi, int 
     }
     si = self->sym->find_struct(self->arena->nodes[n].text2);
     if (si >= 0) {
-        for (u = 0; u < self->sym->structs[si].nuse; u++) {
-            const char *use = self->sym->structs[si].use[u];
+        for (u = 0; u < self->sym->struct_at(si)->nuse; u++) {
+            const char *use = self->sym->struct_at(si)->use[u];
             size_t ul = strlen(use);
             char *low = tool::sh::ct_scratch_alloc((int)ul + 1);
             int i;
@@ -1554,12 +1554,12 @@ pub int emit_default_method(struct Emitter *e, int si, const char *stype, int ti
         msg = tool::sh::ct_scratch_fmt(
                  "trait %s::%s (declared at %s:%d) cannot be expanded for struct %s: no field '%s'",
                  e->sym->traits[ti].name, sig->name, e->sym->traits[ti].path,
-                 sig->line, e->sym->structs[si].name, fld);
+                 sig->line, e->sym->struct_at(si)->name, fld);
         return e->fail_from(at, msg);
     }
     fprintf(e->out, "static %s ", sig->ret);
     fprintf(e->out, "%s_%s_%s(void *self",
-            e->sym->structs[si].name, e->sym->traits[ti].name, sig->name);
+            e->sym->struct_at(si)->name, e->sym->traits[ti].name, sig->name);
     ai = 0;
     for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
         fputs(", ", e->out);
@@ -1745,11 +1745,11 @@ pub int inst_emit_one(struct Emitter *self, int ii)
     ti = self->sym->find_struct(insts[ii].name);
     if (ti < 0) return 0;
     insts[ii].emitted = 1;
-    fprintf(self->out, "struct %s {\n", self->sym->structs[ti].name);
-    for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+    fprintf(self->out, "struct %s {\n", self->sym->struct_at(ti)->name);
+    for (j = 0; j < self->sym->struct_at(ti)->nfields; j++) {
         fputs("    ", self->out);
         {
-            const char *ft = self->sym->structs[ti].fields[j].type;
+            const char *ft = self->sym->struct_field_at(ti, j)->type;
             if (strchr(ft, '<')) {
                 char *res = (char *)malloc(TEXT_LIMIT);
                 if (res && frontend::sym::ct_inst_resolve(ft, res, TEXT_LIMIT) == 0) {
@@ -1759,12 +1759,12 @@ pub int inst_emit_one(struct Emitter *self, int ii)
                 free(res);
             }
             fprintf(self->out, "%s %s%s;\n", ft,
-                    self->sym->structs[ti].fields[j].name,
-                    self->sym->structs[ti].fields[j].dims);
+                    self->sym->struct_field_at(ti, j)->name,
+                    self->sym->struct_field_at(ti, j)->dims);
         }
     }
-    for (v = 0; v < self->sym->structs[ti].nuse; v++) {
-        const char *use = self->sym->structs[ti].use[v];
+    for (v = 0; v < self->sym->struct_at(ti)->nuse; v++) {
+        const char *use = self->sym->struct_at(ti)->use[v];
         size_t ul = strlen(use);
         char *low = tool::sh::ct_scratch_alloc((int)ul + 1);
         int k;
@@ -1799,8 +1799,8 @@ pub int inst_layout_closure(struct Emitter *self, int ii, int depth)
     g_inst_layout_state[ii] = 1;
     ti = self->sym->find_struct(ins[ii].name);
     if (ti >= 0) {
-        for (j = 0; j < self->sym->structs[ti].nfields; j++)
-            if (type_layout_closure(self, self->sym->structs[ti].fields[j].type,
+        for (j = 0; j < self->sym->struct_at(ti)->nfields; j++)
+            if (type_layout_closure(self, self->sym->struct_field_at(ti, j)->type,
                                     depth + 1) != 0)
                 return -1;
     }
@@ -1960,8 +1960,8 @@ pub int shell_preemit(struct Emitter *self, int ii, int depth)
     self->shell_emit_state[ii] = 1;
     ti = self->sym->find_struct(ins[ii].name);
     if (ti >= 0) {
-        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
-            int dep = type_inst_index(self->sym->structs[ti].fields[j].type);
+        for (j = 0; j < self->sym->struct_at(ti)->nfields; j++) {
+            int dep = type_inst_index(self->sym->struct_field_at(ti, j)->type);
             if (dep >= 0 && shell_preemit(self, dep, depth + 1) != 0) return -1;
         }
     }
@@ -2007,7 +2007,7 @@ static int emit_inherent_proto_one(struct Emitter *self, int n)
         tagp = adts[adi].full;
     } else {
         if (si < 0 || si >= self->sym->nstructs) return 0;
-        tagp = self->sym->structs[si].name;
+        tagp = self->sym->struct_at(si)->name;
     }
     for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
         const char *suf;

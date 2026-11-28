@@ -112,7 +112,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -2375,32 +2379,32 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_register_field(void *se
         if (si < 0) {
             return 0;
         }
-        for (i = 0; i < _self->sym->structs[si].nfields; i++) {
-            if (strcmp(_self->sym->structs[si].fields[i].name, nm) == 0) {
+        for (i = 0; i < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; i++) {
+            if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, i)->name, nm) == 0) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail_at(_self->sup, _self->arena->nodes[m].line, tool_sh_ct_scratch_fmt("duplicate member '%s'", nm));
             }
         }
-        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, si, (_self->sym->structs[si].nfields + 1)) != 0) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, si, (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields + 1)) != 0) {
             return (-1);
         }
 {
-            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].name = runtime_text_ct_intern(nm);
-            if ((!_self->sym->structs[si].fields[_self->sym->structs[si].nfields].name)) {
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->name = runtime_text_ct_intern(nm);
+            if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->name)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].type = runtime_text_ct_intern(_self->arena->nodes[m].text);
-            if ((!_self->sym->structs[si].fields[_self->sym->structs[si].nfields].type)) {
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->type = runtime_text_ct_intern(_self->arena->nodes[m].text);
+            if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->type)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].dims = runtime_text_ct_intern(_self->arena->nodes[m].text3);
-            if ((!_self->sym->structs[si].fields[_self->sym->structs[si].nfields].dims)) {
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->dims = runtime_text_ct_intern(_self->arena->nodes[m].text3);
+            if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->dims)) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
-            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].line = _self->arena->nodes[m].line;
-            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].is_pub = _self->arena->nodes[m].d;
-            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].col = (int)(_self->arena->nodes[m].num);
-            _self->sym->structs[si].fields[_self->sym->structs[si].nfields].is_bitfield = (_self->arena->nodes[m].aux == 1);
-            _self->sym->structs[si].nfields++;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->line = _self->arena->nodes[m].line;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->is_pub = _self->arena->nodes[m].d;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->col = (int)(_self->arena->nodes[m].num);
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)->is_bitfield = (_self->arena->nodes[m].aux == 1);
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields++;
         }
         return 0;
     }
@@ -2814,7 +2818,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
     }
     if (qname[0]) {
         int ex = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, qname);
-        if (((ex >= 0) && _self->sym->structs[ex].defined)) {
+        if (((ex >= 0) && _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ex)->defined)) {
             return tool_diag_ct_sem_error(_self->lex->tokline, ((_self->lex->tokstart - _self->lex->lstart) + 1), tool_sh_ct_scratch_fmt("duplicate %s '%s'", (is_union ? "union" : "struct"), name), _self->mem->path);
         }
     }
@@ -2854,9 +2858,9 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
             int ui3;
             si3 = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, qname);
             if (si3 >= 0) {
-                for (ui3 = 0; ui3 < _self->sym->structs[si3].nuse; ui3++) {
-                    if (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, _self->sym->structs[si3].use[ui3]) < 0) {
-                        return tool_diag_ct_sem_error(brace_line, brace_col, tool_sh_ct_scratch_fmt("struct '%s' uses undefined trait '%s'", name, _self->sym->structs[si3].use[ui3]), _self->mem->path);
+                for (ui3 = 0; ui3 < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si3)->nuse; ui3++) {
+                    if (_self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si3)->use[ui3]) < 0) {
+                        return tool_diag_ct_sem_error(brace_line, brace_col, tool_sh_ct_scratch_fmt("struct '%s' uses undefined trait '%s'", name, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si3)->use[ui3]), _self->mem->path);
                     }
                 }
             }
@@ -2865,14 +2869,14 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
     if (qname[0]) {
         int di = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, qname);
         if (di >= 0) {
-            _self->sym->structs[di].defined = 1;
-            _self->sym->structs[di].is_pub = _self->decl_pub;
-            _self->sym->structs[di].line = struct_line;
-            _self->sym->structs[di].col = struct_col;
-            _self->sym->structs[di].allow_cycle = allow_cycle;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->defined = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->is_pub = _self->decl_pub;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->line = struct_line;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->col = struct_col;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->allow_cycle = allow_cycle;
         }
         if (di >= 0) {
-            _self->sym->structs[di].owner = _self->cur_unit;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->owner = _self->cur_unit;
         }
     }
     if ((templ && qname[0])) {
@@ -2889,32 +2893,32 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_record_def(void *
         }
         tps = frontend_sym_ct_tmpls((&tn4));
         if (((di >= 0) && tps)) {
-            if (_self->sym->__frontend_sym_symbolops_vptr->ensure_tmpl_field_capacity(_self->sym, ti4, _self->sym->structs[di].nfields) != 0) {
+            if (_self->sym->__frontend_sym_symbolops_vptr->ensure_tmpl_field_capacity(_self->sym, ti4, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->nfields) != 0) {
                 return (-1);
             }
             tps = frontend_sym_ct_tmpls((&tn4));
-            tps[ti4].nfields = _self->sym->structs[di].nfields;
+            tps[ti4].nfields = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->nfields;
             for (fi4 = 0; fi4 < tps[ti4].nfields; fi4++) {
-                tps[ti4].fields[fi4].name = _self->sym->structs[di].fields[fi4].name;
-                tps[ti4].fields[fi4].type = _self->sym->structs[di].fields[fi4].type;
-                tps[ti4].fields[fi4].dims = _self->sym->structs[di].fields[fi4].dims;
+                frontend_sym_StructTmpl_field_at(&tps[ti4], fi4)->name = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, di, fi4)->name;
+                frontend_sym_StructTmpl_field_at(&tps[ti4], fi4)->type = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, di, fi4)->type;
+                frontend_sym_StructTmpl_field_at(&tps[ti4], fi4)->dims = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, di, fi4)->dims;
             }
-            tps[ti4].nuse = _self->sym->structs[di].nuse;
+            tps[ti4].nuse = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->nuse;
             for (ui4 = 0; ui4 < tps[ti4].nuse; ui4++) {
-                tps[ti4].use[ui4] = _self->sym->structs[di].use[ui4];
+                tps[ti4].use[ui4] = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->use[ui4];
             }
-            _self->sym->structs[di].is_template = 1;
-            _self->sym->structs[di].ntparams = nt;
-            _self->sym->structs[di].tparam = frontend_sym_ct_rows_reserve(_self->sym->structs[di].tparam, _self->sym->structs[di].tcap, nt, (&_self->sym->structs[di].tcap));
-            if (((nt > 0) && ((!_self->sym->structs[di].tparam) || (_self->sym->structs[di].tcap < nt)))) {
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->is_template = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->ntparams = nt;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->tparam = frontend_sym_ct_rows_reserve(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->tparam, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->tcap, nt, (&_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->tcap));
+            if (((nt > 0) && ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->tparam) || (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->tcap < nt)))) {
                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
             }
             for (fi4 = 0; fi4 < nt; fi4++) {
-                snprintf(_self->sym->structs[di].tparam[fi4], MAX_TEXT, "%s", tparam[fi4]);
+                snprintf(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->tparam[fi4], MAX_TEXT, "%s", tparam[fi4]);
             }
-            _self->sym->structs[di].is_pub = _self->decl_pub;
-            tps[ti4].uses_drop = _self->sym->structs[di].uses_drop;
-            tps[ti4].uses_handback = _self->sym->structs[di].uses_handback;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->is_pub = _self->decl_pub;
+            tps[ti4].uses_drop = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->uses_drop;
+            tps[ti4].uses_handback = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, di)->uses_handback;
         }
     }
     ao = (-1);
@@ -3534,25 +3538,25 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
             }
             ai = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, qname);
             if ((((tagi >= 0) && (ai >= 0)) && (tagi != ai))) {
-                _self->sym->structs[ai].nuse = _self->sym->structs[tagi].nuse;
-                _self->sym->structs[ai].uses_drop = _self->sym->structs[tagi].uses_drop;
-                _self->sym->structs[ai].uses_handback = _self->sym->structs[tagi].uses_handback;
-                _self->sym->structs[ai].has_handback_impl = _self->sym->structs[tagi].has_handback_impl;
-                for (ui = 0; ui < _self->sym->structs[tagi].nuse; ui++) {
-                    _self->sym->structs[ai].use[ui] = _self->sym->structs[tagi].use[ui];
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ai)->nuse = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->nuse;
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ai)->uses_drop = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->uses_drop;
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ai)->uses_handback = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->uses_handback;
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ai)->has_handback_impl = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->has_handback_impl;
+                for (ui = 0; ui < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->nuse; ui++) {
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ai)->use[ui] = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->use[ui];
                 }
-                if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, ai, _self->sym->structs[tagi].nfields) != 0) {
+                if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, ai, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->nfields) != 0) {
                     return (-1);
                 }
-                _self->sym->structs[ai].nfields = _self->sym->structs[tagi].nfields;
-                for (ui = 0; ui < _self->sym->structs[tagi].nfields; ui++) {
-                    _self->sym->structs[ai].fields[ui].name = _self->sym->structs[tagi].fields[ui].name;
-                    _self->sym->structs[ai].fields[ui].type = _self->sym->structs[tagi].fields[ui].type;
-                    _self->sym->structs[ai].fields[ui].dims = _self->sym->structs[tagi].fields[ui].dims;
-                    _self->sym->structs[ai].fields[ui].line = _self->sym->structs[tagi].fields[ui].line;
-                    _self->sym->structs[ai].fields[ui].col = _self->sym->structs[tagi].fields[ui].col;
-                    _self->sym->structs[ai].fields[ui].is_pub = _self->sym->structs[tagi].fields[ui].is_pub;
-                    _self->sym->structs[ai].fields[ui].is_bitfield = _self->sym->structs[tagi].fields[ui].is_bitfield;
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ai)->nfields = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->nfields;
+                for (ui = 0; ui < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tagi)->nfields; ui++) {
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->name = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, tagi, ui)->name;
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->type = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, tagi, ui)->type;
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->dims = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, tagi, ui)->dims;
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->line = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, tagi, ui)->line;
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->col = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, tagi, ui)->col;
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->is_pub = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, tagi, ui)->is_pub;
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->is_bitfield = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, tagi, ui)->is_bitfield;
                 }
             }
             else {
@@ -3560,15 +3564,15 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_typedef(void *sel
                     if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, ai, _self->npend) != 0) {
                         return (-1);
                     }
-                    _self->sym->structs[ai].nfields = _self->npend;
+                    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ai)->nfields = _self->npend;
                     for (ui = 0; ui < _self->npend; ui++) {
-                        _self->sym->structs[ai].fields[ui].name = _self->pend_fields[ui].name;
-                        _self->sym->structs[ai].fields[ui].type = _self->pend_fields[ui].type;
-                        _self->sym->structs[ai].fields[ui].dims = _self->pend_fields[ui].dims;
-                        _self->sym->structs[ai].fields[ui].line = _self->pend_fields[ui].line;
-                        _self->sym->structs[ai].fields[ui].col = _self->pend_fields[ui].col;
-                        _self->sym->structs[ai].fields[ui].is_pub = _self->pend_fields[ui].is_pub;
-                        _self->sym->structs[ai].fields[ui].is_bitfield = _self->pend_fields[ui].is_bitfield;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->name = _self->pend_fields[ui].name;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->type = _self->pend_fields[ui].type;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->dims = _self->pend_fields[ui].dims;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->line = _self->pend_fields[ui].line;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->col = _self->pend_fields[ui].col;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->is_pub = _self->pend_fields[ui].is_pub;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, ai, ui)->is_bitfield = _self->pend_fields[ui].is_bitfield;
                     }
                 }
             }
@@ -3668,21 +3672,21 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_use_list(void *se
             }
         }
         if (strcmp(tname, "Drop") == 0) {
-            _self->sym->structs[sindex].uses_drop = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->uses_drop = 1;
         }
         else {
             if (strcmp(tname, "Handback") == 0) {
-                _self->sym->structs[sindex].uses_handback = 1;
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->uses_handback = 1;
             }
             else {
-                if (_self->sym->structs[sindex].nuse >= MAX_TRAITS) {
+                if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->nuse >= MAX_TRAITS) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "too many used traits");
                 }
-                _self->sym->structs[sindex].use[_self->sym->structs[sindex].nuse] = runtime_text_ct_intern(tname);
-                if ((!_self->sym->structs[sindex].use[_self->sym->structs[sindex].nuse])) {
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->use[_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->nuse] = runtime_text_ct_intern(tname);
+                if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->use[_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->nuse])) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
-                _self->sym->structs[sindex].nuse++;
+                _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, sindex)->nuse++;
             }
         }
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ","))) {
@@ -4281,10 +4285,10 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
         }
     }
     if (strcmp(rtrait, "Handback") == 0) {
-        _self->sym->structs[si].has_handback_impl = 1;
+        _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->has_handback_impl = 1;
     }
     if (strcmp(rtrait, "Drop") == 0) {
-        _self->sym->structs[si].has_drop_impl = 1;
+        _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->has_drop_impl = 1;
     }
     brace_line = _self->lex->tokline;
     brace_col = ((_self->lex->tokstart - _self->lex->lstart) + 1);
@@ -4411,7 +4415,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl(void *self, 
             }
         }
         _self->sym->ret_type = ret;
-        _self->cur_func = runtime_text_ct_internf("%s_%s_%s", _self->sym->structs[si].name, rtrait, mname);
+        _self->cur_func = runtime_text_ct_internf("%s_%s_%s", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, rtrait, mname);
         if ((!_self->cur_func)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
@@ -4543,7 +4547,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inherent(voi
         else {
             stype = rname;
         }
-        type_is_pub = _self->sym->structs[si].is_pub;
+        type_is_pub = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_pub;
     }
     if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "{") != 0) {
         return (-1);
@@ -4984,7 +4988,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
                     if (strcmp(use, "Drop") == 0) {
                         int si_d = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, ins2[ii2].name);
                         if (si_d >= 0) {
-                            _self->sym->structs[si_d].has_drop_impl = 1;
+                            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si_d)->has_drop_impl = 1;
                         }
                     }
                 }
@@ -5076,7 +5080,7 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_impl_inst(void *s
             int tpub = 0;
             int is_adt_t = 0;
             if (tsi >= 0) {
-                tpub = _self->sym->structs[tsi].is_pub;
+                tpub = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, tsi)->is_pub;
             }
             else {
                 int tbi3 = frontend_sym_ct_tmpl_find(tmpl, _self->cur_unit);
@@ -5613,13 +5617,13 @@ static int check_generic_bounds(struct frontend_parse_Parser * self) {
             continue;
         }
         ok = impl_declares(self, si, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound);
-        for (k = 0; ((!ok) && (k < self->sym->structs[si].nuse)); k++) {
-            if (strcmp(self->sym->structs[si].use[k], self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound) == 0) {
+        for (k = 0; ((!ok) && (k < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse)); k++) {
+            if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->use[k], self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound) == 0) {
                 ok = 1;
             }
         }
         if ((!ok)) {
-            snprintf(msg, sizeof(msg), "type argument '%s' does not implement trait '%s'", self->sym->structs[si].name, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound);
+            snprintf(msg, sizeof(msg), "type argument '%s' does not implement trait '%s'", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound);
             tool_diag_ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col, msg, self->mem->path);
         }
     }
@@ -5671,8 +5675,8 @@ static int check_struct_bounds(struct frontend_parse_Parser * self) {
             ok = 0;
             if (si >= 0) {
                 ok = impl_declares(self, si, tp[ti].bound[k]);
-                for (k2 = 0; ((!ok) && (k2 < self->sym->structs[si].nuse)); k2++) {
-                    if (strcmp(self->sym->structs[si].use[k2], tp[ti].bound[k]) == 0) {
+                for (k2 = 0; ((!ok) && (k2 < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse)); k2++) {
+                    if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->use[k2], tp[ti].bound[k]) == 0) {
                         ok = 1;
                     }
                 }
@@ -5730,8 +5734,8 @@ static int check_trait_bounds(struct frontend_parse_Parser * self) {
             ok = 0;
             if (si >= 0) {
                 ok = impl_declares(self, si, self->sym->traits[ti].bound[k]);
-                for (k2 = 0; ((!ok) && (k2 < self->sym->structs[si].nuse)); k2++) {
-                    if (strcmp(self->sym->structs[si].use[k2], self->sym->traits[ti].bound[k]) == 0) {
+                for (k2 = 0; ((!ok) && (k2 < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse)); k2++) {
+                    if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->use[k2], self->sym->traits[ti].bound[k]) == 0) {
                         ok = 1;
                     }
                 }

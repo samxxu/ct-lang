@@ -158,7 +158,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -479,7 +483,7 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
     if ((((len < 2) || (t[0] != '{')) || (t[(len - 1)] != '}'))) {
         return 0;
     }
-    if ((((si < 0) || (self->sym->structs[si].nfields <= 0)) || (self->sym->structs[si].nfields > 64))) {
+    if ((((si < 0) || (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields <= 0)) || (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields > 64))) {
         return 0;
     }
     nitem = 0;
@@ -542,7 +546,7 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
     starts[nitem] = q;
     ends[nitem] = (len - 1);
     nitem++;
-    if (self->sym->structs[si].nfields < nitem) {
+    if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields < nitem) {
         return 0;
     }
     changed = 0;
@@ -579,12 +583,12 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
             if (((ne >= e0) || (t[ne] != '='))) {
                 return 0;
             }
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-                if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0) {
+            for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+                if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, fname) == 0) {
                     break;
                 }
             }
-            if (fi >= self->sym->structs[si].nfields) {
+            if (fi >= self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields) {
                 return 0;
             }
             ne++;
@@ -601,17 +605,17 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
             else {
                 fi = count;
                 count++;
-                if (fi >= self->sym->structs[si].nfields) {
+                if (fi >= self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields) {
                     return 0;
                 }
             }
         }
         fields[i] = fi;
         epos[i] = fs;
-        if (self->sym->structs[si].fields[fi].dims[0]) {
+        if (self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims[0]) {
             continue;
         }
-        kind = frontend_sym_ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
+        kind = frontend_sym_ct_is_string_value_type(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type);
         if ((!kind)) {
             continue;
         }
@@ -652,7 +656,7 @@ int backend_emit_sb_rewrite_init(struct backend_emit_Emitter * self, const char 
         if (fs > s0) {
             fwrite((t + s0), 1, (size_t)((fs - s0)), self->out);
         }
-        kind = (self->sym->structs[si].fields[fi].dims[0] ? 0 : frontend_sym_ct_is_string_value_type(self->sym->structs[si].fields[fi].type));
+        kind = (self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims[0] ? 0 : frontend_sym_ct_is_string_value_type(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type));
         if (litmode[i]) {
             fputs("str_dup_len(", self->out);
             fwrite((t + fs), 1, (size_t)((e0 - fs)), self->out);

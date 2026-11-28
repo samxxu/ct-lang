@@ -130,7 +130,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -476,12 +480,12 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
             }
             if ((((fn > 0) && (k < e0)) && (raw[k] == '='))) {
                 k++;
-                for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-                    if (strcmp(_self->sym->structs[si].fields[fi].name, fname) == 0) {
+                for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
+                    if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name, fname) == 0) {
                         break;
                     }
                 }
-                if (fi >= _self->sym->structs[si].nfields) {
+                if (fi >= _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields) {
                     fi = (-1);
                 }
                 vstart = k;
@@ -494,10 +498,10 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
             }
         }
         pos++;
-        if (((fi < 0) || (fi >= _self->sym->structs[si].nfields))) {
+        if (((fi < 0) || (fi >= _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields))) {
             continue;
         }
-        if (_self->sym->structs[si].fields[fi].dims[0]) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0]) {
             continue;
         }
         while (((vstart < e0) && frontend_parse_bplus_space(raw[vstart]))) {
@@ -528,7 +532,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
         _self->chk_col = acol;
         _self->chk_arg = 0;
 {
-            const char * fp = _self->sym->structs[si].fields[fi].type;
+            const char * fp = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
             size_t fl;
             if (is_zero) {
                 continue;
@@ -547,7 +551,7 @@ static int frontend_parse_Expr_frontend_parse_ExprTypes_chk_brace_init(void *sel
                 continue;
             }
         }
-        if (_self->__frontend_parse_exprtypes_vptr->chk_assignable(_self, _self->sym->structs[si].fields[fi].type, actual, is_zero, 1) != 0) {
+        if (_self->__frontend_parse_exprtypes_vptr->chk_assignable(_self, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type, actual, is_zero, 1) != 0) {
             return (-1);
         }
     }

@@ -80,7 +80,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -414,7 +418,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_link_externs(void *se
             if (((node < 0) || (node >= _self->sym->nstructs))) {
                 continue;
             }
-            fprintf(_self->out, "extern const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[node].name, tname);
+            fprintf(_self->out, "extern const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, node)->name, tname);
         }
         any = 1;
     }
@@ -435,7 +439,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_vtable_exported(void *self
     if (((t < 0) || (!_self->sym->traits[t].is_pub))) {
         return 0;
     }
-    return _self->__backend_emit_emitdecl_vptr->decl_is_pub(_self, N_STRUCT, _self->sym->structs[si].name);
+    return _self->__backend_emit_emitdecl_vptr->decl_is_pub(_self, N_STRUCT, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
 }
 
 static int backend_emit_Emitter_backend_emit_EmitDecl_map_vtable_exported(void *self, int i) {
@@ -475,20 +479,20 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_drop_visible(void *self, i
     if (((si < 0) || (si >= _self->sym->nstructs))) {
         return 1;
     }
-    if ((!_self->sym->structs[si].uses_drop)) {
+    if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->uses_drop)) {
         return 1;
     }
-    if (_self->sym->structs[si].is_inst) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_inst) {
         return 1;
     }
-    owner = _self->sym->structs[si].owner;
+    owner = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->owner;
     if (owner < 0) {
         return 1;
     }
     if (owner == _self->cur_unit) {
         return 1;
     }
-    if ((!_self->sym->structs[si].has_drop_impl)) {
+    if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->has_drop_impl)) {
         return 1;
     }
     return _self->__backend_emit_emitdecl_vptr->unit_has_drop_impl(_self, owner, si);
@@ -907,7 +911,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
         for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
             const char * owner;
             mret = (_self->arena->nodes[m].text3[0] ? _self->arena->nodes[m].text3 : _self->arena->nodes[m].text);
-            owner = runtime_text_ct_internf("%s_%s_%s", _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
+            owner = runtime_text_ct_internf("%s_%s_%s", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->arena->nodes[m].text2);
             if ((!owner)) {
                 return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
             }
@@ -925,7 +929,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                     fputs("__attribute__((unused)) ", _self->out);
                 }
             }
-            fprintf(_self->out, "%s_%s_%s(void *self", _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
+            fprintf(_self->out, "%s_%s_%s(void *self", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->arena->nodes[m].text2);
             k = _self->arena->nodes[m].a;
             while (k > 0) {
                 fputs(", ", _self->out);
@@ -970,7 +974,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                 int (*body_hook)(const char *, void *, int, int, int *, int) = backend_emit_g_body_hook;
                 int printed = 0;
                 if (body_hook) {
-                    const char * key = tool_sh_ct_scratch_fmt("%s_%s%s%s", _self->sym->structs[si].name, tname, ((tname && tname[0]) ? "_" : ""), _self->arena->nodes[m].text2);
+                    const char * key = tool_sh_ct_scratch_fmt("%s_%s%s%s", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, ((tname && tname[0]) ? "_" : ""), _self->arena->nodes[m].text2);
                     int new_ntmp = _self->ntmp;
                     int hr = (*body_hook)(key, _self->out, 1, _self->ntmp, (&new_ntmp), 1);
                     if (hr < 0) {
@@ -1012,17 +1016,17 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
         }
         if (((strcmp(tname, "Drop") != 0) && (strcmp(tname, "Handback") != 0))) {
             if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
-                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable = {\n", tname, _self->sym->structs[si].name, tname);
+                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable = {\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname);
             }
             else {
-                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", tname, _self->sym->structs[si].name, tname);
+                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname);
             }
             u = 0;
             for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
                 if (u > 0) {
                     fputs(",\n", _self->out);
                 }
-                fprintf(_self->out, "    .%s = %s_%s_%s", _self->arena->nodes[m].text2, _self->sym->structs[si].name, tname, _self->arena->nodes[m].text2);
+                fprintf(_self->out, "    .%s = %s_%s_%s", _self->arena->nodes[m].text2, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->arena->nodes[m].text2);
                 u++;
             }
             if (ti >= 0) {
@@ -1036,7 +1040,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                     if (u > 0) {
                         fputs(",\n", _self->out);
                     }
-                    fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->structs[si].name, tname, _self->sym->traits[ti].m[dm].name);
+                    fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->sym->traits[ti].m[dm].name);
                     u++;
                 }
             }
@@ -1073,7 +1077,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
             type_pub = adts[type_adt].is_pub;
         }
         else {
-            tag = _self->sym->structs[si].name;
+            tag = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name;
             type_pub = _self->__backend_emit_emitdecl_vptr->decl_is_pub(_self, N_STRUCT, tag);
         }
         for (m = _self->arena->nodes[n].a; m >= 0; m = _self->arena->nodes[m].next) {
@@ -1199,8 +1203,8 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
         if (si < 0) {
             continue;
         }
-        for (ui = 0; ui < _self->sym->structs[si].nuse; ui++) {
-            tname = _self->sym->structs[si].use[ui];
+        for (ui = 0; ui < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse; ui++) {
+            tname = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[ui];
             ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, tname);
             if (ti < 0) {
                 continue;
@@ -1214,16 +1218,16 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
             for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
                 if (_self->sym->traits[ti].m[dm].body < 0) {
                     const char * emsg;
-                    emsg = tool_sh_ct_scratch_fmt("trait method '%s' is not implemented for struct '%s'", _self->sym->traits[ti].m[dm].name, _self->sym->structs[si].name);
+                    emsg = tool_sh_ct_scratch_fmt("trait method '%s' is not implemented for struct '%s'", _self->sym->traits[ti].m[dm].name, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
                     return _self->__backend_emit_emitops_vptr->fail_from(_self, n, emsg);
                 }
             }
-            type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->structs[si].name);
+            type_index = _self->sym->__frontend_sym_symbolops_vptr->find_type(_self->sym, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
             if (((type_index >= 0) && (_self->sym->types[type_index].kind == 1))) {
-                stype = tool_sh_ct_scratch_fmt("struct %s", _self->sym->structs[si].name);
+                stype = tool_sh_ct_scratch_fmt("struct %s", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
             }
             else {
-                stype = tool_sh_ct_scratch_dup(_self->sym->structs[si].name);
+                stype = tool_sh_ct_scratch_dup(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
             }
             for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
                 if (backend_emit_emit_default_method(_self, si, stype, ti, dm, n) != 0) {
@@ -1231,16 +1235,16 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                 }
             }
             if (_self->__backend_emit_emitdecl_vptr->vtable_exported(_self, si, tname)) {
-                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable = {\n", tname, _self->sym->structs[si].name, tname);
+                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable = {\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname);
             }
             else {
-                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", tname, _self->sym->structs[si].name, tname);
+                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused)) = {\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname);
             }
             for (dm = 0; dm < _self->sym->traits[ti].nm; dm++) {
                 if (dm > 0) {
                     fputs(",\n", _self->out);
                 }
-                fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->structs[si].name, tname, _self->sym->traits[ti].m[dm].name);
+                fprintf(_self->out, "    .%s = %s_%s_%s", _self->sym->traits[ti].m[dm].name, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname, _self->sym->traits[ti].m[dm].name);
             }
             fputs("\n};\n\n", _self->out);
         }
@@ -1254,23 +1258,23 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
             int legacy;
             int host_hidden = 0;
             const char * sname;
-            if ((!_self->sym->structs[si].uses_drop)) {
+            if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->uses_drop)) {
                 continue;
             }
-            if (_self->sym->structs[si].is_template) {
+            if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_template) {
                 continue;
             }
-            legacy = (((_self->cur_unit < 0) || (_self->sym->structs[si].owner < 0)) || _self->sym->structs[si].is_inst);
+            legacy = (((_self->cur_unit < 0) || (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->owner < 0)) || _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_inst);
             if ((!legacy)) {
-                if (_self->sym->structs[si].owner != _self->cur_unit) {
+                if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->owner != _self->cur_unit) {
                     continue;
                 }
-                if (_self->sym->structs[si].has_drop_impl) {
+                if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->has_drop_impl) {
                     continue;
                 }
             }
             else {
-                has = _self->sym->structs[si].has_drop_impl;
+                has = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->has_drop_impl;
                 if ((!has)) {
                     for (n = _self->arena->nodes[prog].a; n >= 0; n = _self->arena->nodes[n].next) {
                         if ((((_self->arena->nodes[n].kind == N_IMPL) && (_self->arena->nodes[n].aux == si)) && (strcmp(_self->arena->nodes[n].text2, "Drop") == 0))) {
@@ -1282,13 +1286,13 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                     continue;
                 }
             }
-            if ((_self->sym->structs[si].is_inst && (_self->cur_unit >= 0))) {
-                int hi = frontend_sym_ct_inst_find(_self->sym->structs[si].name);
+            if ((_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_inst && (_self->cur_unit >= 0))) {
+                int hi = frontend_sym_ct_inst_find(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
                 if (((hi < 0) || (!backend_emit_inst_visible_in_unit(_self, hi)))) {
                     host_hidden = 1;
                 }
             }
-            sname = _self->sym->structs[si].name;
+            sname = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name;
             if (legacy) {
                 fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self) {\n", sname);
             }
@@ -1300,9 +1304,9 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                 fputs("    (void)_self;\n}\n\n", _self->out);
                 continue;
             }
-            for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
+            for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
                 const char * base;
-                const char * ft = _self->sym->structs[si].fields[fi].type;
+                const char * ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
                 int stars = 0;
                 const char * q;
                 size_t bl;
@@ -1318,10 +1322,10 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                         stars++;
                     }
                 }
-                if (((stars > 0) && _self->sym->structs[si].fields[fi].dims[0])) {
+                if (((stars > 0) && _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0])) {
                     continue;
                 }
-                if ((((stars == 0) && (!_self->sym->structs[si].fields[fi].dims[0])) && frontend_sym_ct_is_container_type(ft))) {
+                if ((((stars == 0) && (!_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0])) && frontend_sym_ct_is_container_type(ft))) {
                     const char * cn = ((strncmp(ft, "struct ", 7) == 0) ? (ft + 7) : ft);
                     bl = strlen(cn);
                     while (((bl > 0) && ((cn[(bl - 1)] == ' ') || (cn[(bl - 1)] == '\t')))) {
@@ -1335,7 +1339,7 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                     if (((ci < 0) || (!backend_emit_inst_visible_in_unit(_self, ci)))) {
                         continue;
                     }
-                    fprintf(_self->out, "    if (_self->%s.h != 0) (void)%s_release(&_self->%s);\n", _self->sym->structs[si].fields[fi].name, base, _self->sym->structs[si].fields[fi].name);
+                    fprintf(_self->out, "    if (_self->%s.h != 0) (void)%s_release(&_self->%s);\n", _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name, base, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name);
                     used = 1;
                     continue;
                 }
@@ -1351,16 +1355,16 @@ static int backend_emit_Emitter_backend_emit_EmitDecl_emit_impls(void *self, int
                     return _self->__backend_emit_emitops_vptr->fail(_self, "out of memory");
                 }
                 ci = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
-                if (((ci < 0) || (!_self->sym->structs[ci].uses_drop))) {
+                if (((ci < 0) || (!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ci)->uses_drop))) {
                     continue;
                 }
                 if (stars == 1) {
-                    fprintf(_self->out, "    if (_self->%s) %s_Drop_drop(_self->%s);\n", _self->sym->structs[si].fields[fi].name, _self->sym->structs[ci].name, _self->sym->structs[si].fields[fi].name);
+                    fprintf(_self->out, "    if (_self->%s) %s_Drop_drop(_self->%s);\n", _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ci)->name, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name);
                     used = 1;
                 }
                 else {
                     if (stars == 0) {
-                        fprintf(_self->out, "    %s_Drop_drop(&_self->%s);\n", _self->sym->structs[ci].name, _self->sym->structs[si].fields[fi].name);
+                        fprintf(_self->out, "    %s_Drop_drop(&_self->%s);\n", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, ci)->name, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name);
                         used = 1;
                     }
                 }
@@ -1526,7 +1530,7 @@ int backend_emit_elem_plain_owner(struct backend_emit_Emitter * self, const char
     if (si < 0) {
         return (-1);
     }
-    return self->sym->structs[si].owner;
+    return self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->owner;
 }
 int backend_emit_em_decl_enum(struct backend_emit_Emitter * self, int n, int ind, int with_semi, int nk) {
     (void)(with_semi);
@@ -1634,7 +1638,7 @@ int backend_emit_em_decl_struct(struct backend_emit_Emitter * self, int n, int i
     int si;
     int u;
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
-    if (((si >= 0) && self->sym->structs[si].is_template)) {
+    if (((si >= 0) && self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_template)) {
         return 0;
     }
     for (u = self->arena->nodes[n].a; u >= 0; u = self->arena->nodes[u].next) {
@@ -1659,11 +1663,11 @@ int backend_emit_em_decl_struct(struct backend_emit_Emitter * self, int n, int i
         int si_p = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
         int privp = 0;
         int m2;
-        if (((si_p >= 0) && (self->sym->structs[si_p].nuse == 0))) {
+        if (((si_p >= 0) && (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si_p)->nuse == 0))) {
             int has_pub = 0;
             int has_priv = 0;
-            for (m2 = 0; m2 < self->sym->structs[si_p].nfields; m2++) {
-                if (self->sym->structs[si_p].fields[m2].is_pub) {
+            for (m2 = 0; m2 < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si_p)->nfields; m2++) {
+                if (self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si_p, m2)->is_pub) {
                     has_pub = 1;
                 }
                 else {
@@ -1701,8 +1705,8 @@ int backend_emit_em_decl_struct(struct backend_emit_Emitter * self, int n, int i
     }
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
     if (si >= 0) {
-        for (u = 0; u < self->sym->structs[si].nuse; u++) {
-            const char * use = self->sym->structs[si].use[u];
+        for (u = 0; u < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse; u++) {
+            const char * use = self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->use[u];
             size_t ul = strlen(use);
             char * low = tool_sh_ct_scratch_alloc(((int)(ul) + 1));
             int i;
@@ -1989,11 +1993,11 @@ int backend_emit_emit_default_method(struct backend_emit_Emitter * e, int si, co
     sig = (&e->sym->traits[ti].m[mi]);
     fld = backend_emit_default_missing_field_text(e->arena, sig->body, e->sym, si);
     if (fld) {
-        msg = tool_sh_ct_scratch_fmt("trait %s::%s (declared at %s:%d) cannot be expanded for struct %s: no field '%s'", e->sym->traits[ti].name, sig->name, e->sym->traits[ti].path, sig->line, e->sym->structs[si].name, fld);
+        msg = tool_sh_ct_scratch_fmt("trait %s::%s (declared at %s:%d) cannot be expanded for struct %s: no field '%s'", e->sym->traits[ti].name, sig->name, e->sym->traits[ti].path, sig->line, e->sym->__frontend_sym_symbolops_vptr->struct_at(e->sym, si)->name, fld);
         return e->__backend_emit_emitops_vptr->fail_from(e, at, msg);
     }
     fprintf(e->out, "static %s ", sig->ret);
-    fprintf(e->out, "%s_%s_%s(void *self", e->sym->structs[si].name, e->sym->traits[ti].name, sig->name);
+    fprintf(e->out, "%s_%s_%s(void *self", e->sym->__frontend_sym_symbolops_vptr->struct_at(e->sym, si)->name, e->sym->traits[ti].name, sig->name);
     ai = 0;
     for (p = sig->pnode; p >= 0; p = e->arena->nodes[p].next) {
         fputs(", ", e->out);
@@ -2215,11 +2219,11 @@ int backend_emit_inst_emit_one(struct backend_emit_Emitter * self, int ii) {
         return 0;
     }
     insts[ii].emitted = 1;
-    fprintf(self->out, "struct %s {\n", self->sym->structs[ti].name);
-    for (j = 0; j < self->sym->structs[ti].nfields; j++) {
+    fprintf(self->out, "struct %s {\n", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, ti)->name);
+    for (j = 0; j < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, ti)->nfields; j++) {
         fputs("    ", self->out);
 {
-            const char * ft = self->sym->structs[ti].fields[j].type;
+            const char * ft = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, ti, j)->type;
             if (strchr(ft, '<')) {
                 char * res = (char *)(malloc(TEXT_LIMIT));
                 if ((res && (frontend_sym_ct_inst_resolve(ft, res, TEXT_LIMIT) == 0))) {
@@ -2230,11 +2234,11 @@ int backend_emit_inst_emit_one(struct backend_emit_Emitter * self, int ii) {
                 }
                 free(res);
             }
-            fprintf(self->out, "%s %s%s;\n", ft, self->sym->structs[ti].fields[j].name, self->sym->structs[ti].fields[j].dims);
+            fprintf(self->out, "%s %s%s;\n", ft, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, ti, j)->name, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, ti, j)->dims);
         }
     }
-    for (v = 0; v < self->sym->structs[ti].nuse; v++) {
-        const char * use = self->sym->structs[ti].use[v];
+    for (v = 0; v < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, ti)->nuse; v++) {
+        const char * use = self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, ti)->use[v];
         size_t ul = strlen(use);
         char * low = tool_sh_ct_scratch_alloc(((int)(ul) + 1));
         int k;
@@ -2272,8 +2276,8 @@ int backend_emit_inst_layout_closure(struct backend_emit_Emitter * self, int ii,
     backend_emit_g_inst_layout_state[ii] = 1;
     ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ins[ii].name);
     if (ti >= 0) {
-        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
-            if (backend_emit_type_layout_closure(self, self->sym->structs[ti].fields[j].type, (depth + 1)) != 0) {
+        for (j = 0; j < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, ti)->nfields; j++) {
+            if (backend_emit_type_layout_closure(self, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, ti, j)->type, (depth + 1)) != 0) {
                 return (-1);
             }
         }
@@ -2465,8 +2469,8 @@ int backend_emit_shell_preemit(struct backend_emit_Emitter * self, int ii, int d
     self->shell_emit_state[ii] = 1;
     ti = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, ins[ii].name);
     if (ti >= 0) {
-        for (j = 0; j < self->sym->structs[ti].nfields; j++) {
-            int dep = backend_emit_type_inst_index(self->sym->structs[ti].fields[j].type);
+        for (j = 0; j < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, ti)->nfields; j++) {
+            int dep = backend_emit_type_inst_index(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, ti, j)->type);
             if (((dep >= 0) && (backend_emit_shell_preemit(self, dep, (depth + 1)) != 0))) {
                 return (-1);
             }
@@ -2527,7 +2531,7 @@ static int emit_inherent_proto_one(struct backend_emit_Emitter * self, int n) {
         if (((si < 0) || (si >= self->sym->nstructs))) {
             return 0;
         }
-        tagp = self->sym->structs[si].name;
+        tagp = self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name;
     }
     for (m = self->arena->nodes[n].a; m >= 0; m = self->arena->nodes[m].next) {
         const char * suf;

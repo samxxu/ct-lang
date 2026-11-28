@@ -44,7 +44,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -215,6 +219,8 @@ struct frontend_sym_SymbolOps_vtbl {
     int (*add_bare_type)(void *, const char *, const char *);
     int (*find_struct)(void *, const char *);
     int (*add_struct)(void *, const char *);
+    struct frontend_sym_StructDef * (*struct_at)(void *, int);
+    struct frontend_sym_Field * (*struct_field_at)(void *, int, int);
     int (*ensure_struct_capacity)(void *, int);
     int (*ensure_struct_field_capacity)(void *, int, int);
     int (*ensure_tmpl_field_capacity)(void *, int, int);
@@ -381,9 +387,8 @@ struct frontend_sym_StructDef {
     const char * name;
     const char * use[64];
     int nuse;
-    struct frontend_sym_Field * fields;
+    struct frontend_sym_FieldSet * fset;
     int nfields;
-    int fcap;
     int defined;
     int line;
     int col;
@@ -419,9 +424,8 @@ struct frontend_sym_StructTmpl {
     char * * bound;
     int tcap;
     int bcap;
-    struct frontend_sym_Field * fields;
+    struct frontend_sym_FieldSet * fset;
     int nfields;
-    int fcap;
     const char * use[64];
     int nuse;
     int uses_drop;
@@ -527,10 +531,9 @@ struct frontend_sym_Symbols {
     struct frontend_sym_Trait * traits;
     int ntraits;
     int traitscap;
-    struct frontend_sym_StructDef * structs;
+    struct frontend_sym_StructTable * stab;
     int nstructs;
     int nstruct_inst;
-    int structcap;
     struct frontend_sym_Closure * closures;
     int nclosure;
     int closurecap;
@@ -585,5 +588,7 @@ int frontend_sym_ct_adt_set_template(int, int);
 int frontend_sym_ct_adt_add_tparam(int, const char *);
 int frontend_sym_ct_adt_inst_add(int, const char *, int, char * *);
 struct frontend_sym_Symbols * frontend_sym_symbols_get(void);
+struct frontend_sym_Field * frontend_sym_StructDef_field_at(struct frontend_sym_StructDef *, int i);
+struct frontend_sym_Field * frontend_sym_StructTmpl_field_at(struct frontend_sym_StructTmpl *, int i);
 
 #endif

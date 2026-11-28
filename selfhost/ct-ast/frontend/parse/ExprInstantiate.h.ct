@@ -239,10 +239,10 @@ impl ExprInstantiate for Expr {
         if (strchr(base, '*') != 0) return 0;
         si = self->sym->find_struct(base);
         if (si < 0) return 0;
-        if (self->sym->structs[si].is_template) return 0;
-        if (self->sym->structs[si].nuse > 0) return 1;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-            if (self->container_vptr_type(self->sym->structs[si].fields[fi].type,
+        if (self->sym->struct_at(si)->is_template) return 0;
+        if (self->sym->struct_at(si)->nuse > 0) return 1;
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+            if (self->container_vptr_type(self->sym->struct_field_at(si, fi)->type,
                                           depth + 1))
                 return 1;
         return 0;
@@ -405,7 +405,7 @@ impl ExprInstantiate for Expr {
            collide and only cc notices, after the layouts have been merged. */
         {
             int cx = self->sym->find_struct(enc);
-            if (cx >= 0 && !self->sym->structs[cx].is_inst) {
+            if (cx >= 0 && !self->sym->struct_at(cx)->is_inst) {
                 return self->sup->fail(runtime::text::ct_internf(
                          "the instance name '%s' collides with a declared struct", enc));
             }
@@ -455,11 +455,11 @@ impl ExprInstantiate for Expr {
         }
         si2 = self->sym->add_struct_inst(enc);
         if (si2 < 0) return self->sup->fail(self->sym->last_error());
-        if (self->sym->structs[si2].nfields == 0) {
+        if (self->sym->struct_at(si2)->nfields == 0) {
             if (self->sym->ensure_struct_field_capacity(si2, tp[ti2].nfields) != 0)
                 return -1;
             for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
-                const char *sub2 = tp[ti2].fields[fi2].type;
+                const char *sub2 = tp[ti2].field_at(fi2)->type;
                 /* S1a-0 C2p-3: substitution is a pool operation, so a field
                    whose parameter binds a 2000-byte type is kept whole. */
                 for (pi2 = 0; pi2 < nt2; pi2++) {
@@ -467,29 +467,29 @@ impl ExprInstantiate for Expr {
                                sub2, tp[ti2].tparam[pi2], cargs[pi2]);
                     if (!sub2) return self->sup->fail("out of memory");
                 }
-                self->sym->structs[si2].fields[fi2].name =
-                    tp[ti2].fields[fi2].name;
-                self->sym->structs[si2].fields[fi2].type = sub2;
-                self->sym->structs[si2].fields[fi2].dims =
-                    tp[ti2].fields[fi2].dims;
-                self->sym->structs[si2].fields[fi2].is_bitfield =
-                    tp[ti2].fields[fi2].is_bitfield;
-                self->sym->structs[si2].fields[fi2].is_pub =
-                    tp[ti2].fields[fi2].is_pub;
+                self->sym->struct_field_at(si2, fi2)->name =
+                    tp[ti2].field_at(fi2)->name;
+                self->sym->struct_field_at(si2, fi2)->type = sub2;
+                self->sym->struct_field_at(si2, fi2)->dims =
+                    tp[ti2].field_at(fi2)->dims;
+                self->sym->struct_field_at(si2, fi2)->is_bitfield =
+                    tp[ti2].field_at(fi2)->is_bitfield;
+                self->sym->struct_field_at(si2, fi2)->is_pub =
+                    tp[ti2].field_at(fi2)->is_pub;
                 if (self->inst_register_nested(sub2, depth + 1) != 0) return -1;
             }
-            self->sym->structs[si2].nfields = tp[ti2].nfields;
+            self->sym->struct_at(si2)->nfields = tp[ti2].nfields;
             for (fi2 = 0; fi2 < tp[ti2].nuse; fi2++)
-                self->sym->structs[si2].use[fi2] = tp[ti2].use[fi2];
-            self->sym->structs[si2].nuse = tp[ti2].nuse;
+                self->sym->struct_at(si2)->use[fi2] = tp[ti2].use[fi2];
+            self->sym->struct_at(si2)->nuse = tp[ti2].nuse;
         }
-        self->sym->structs[si2].defined = 1;
-        self->sym->structs[si2].is_pub = tp[ti2].is_pub;
-        self->sym->structs[si2].declared_here = carried2;
+        self->sym->struct_at(si2)->defined = 1;
+        self->sym->struct_at(si2)->is_pub = tp[ti2].is_pub;
+        self->sym->struct_at(si2)->declared_here = carried2;
         /* P36 S2a2: the built-in `Drop`/`Handback` flags copy with the template;
            the glue loop skips templates and reads these flags on instances. */
-        self->sym->structs[si2].uses_drop = tp[ti2].uses_drop;
-        self->sym->structs[si2].uses_handback = tp[ti2].uses_handback;
+        self->sym->struct_at(si2)->uses_drop = tp[ti2].uses_drop;
+        self->sym->struct_at(si2)->uses_handback = tp[ti2].uses_handback;
         /* a `use` clause on a template impl adopts the trait for every matching
            instance, whichever was written first */
         {
@@ -506,7 +506,7 @@ impl ExprInstantiate for Expr {
                     if (!cuse) return self->sup->fail("out of memory");
                     if (is_builtin) {
                         if (strcmp(im3[ii3].use, "Drop") == 0)
-                            self->sym->structs[si2].has_drop_impl = 1;
+                            self->sym->struct_at(si2)->has_drop_impl = 1;
                         /* Handback has no vptr either; the flag is read by the
                            prototype emission like for non-generic impls. */
                     } else if (self->sym->impl_use_concrete(im3[ii3].use,

@@ -136,7 +136,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -378,14 +382,14 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_container_vptr_typ
     if (si < 0) {
         return 0;
     }
-    if (_self->sym->structs[si].is_template) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_template) {
         return 0;
     }
-    if (_self->sym->structs[si].nuse > 0) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse > 0) {
         return 1;
     }
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        if (_self->__frontend_parse_exprinstantiate_vptr->container_vptr_type(_self, _self->sym->structs[si].fields[fi].type, (depth + 1))) {
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
+        if (_self->__frontend_parse_exprinstantiate_vptr->container_vptr_type(_self, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type, (depth + 1))) {
             return 1;
         }
     }
@@ -570,7 +574,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     }
 {
         int cx = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, enc);
-        if (((cx >= 0) && (!_self->sym->structs[cx].is_inst))) {
+        if (((cx >= 0) && (!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, cx)->is_inst))) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("the instance name '%s' collides with a declared struct", enc));
         }
     }
@@ -623,38 +627,38 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
     if (si2 < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
     }
-    if (_self->sym->structs[si2].nfields == 0) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->nfields == 0) {
         if (_self->sym->__frontend_sym_symbolops_vptr->ensure_struct_field_capacity(_self->sym, si2, tp[ti2].nfields) != 0) {
             return (-1);
         }
         for (fi2 = 0; fi2 < tp[ti2].nfields; fi2++) {
-            const char * sub2 = tp[ti2].fields[fi2].type;
+            const char * sub2 = frontend_sym_StructTmpl_field_at(&tp[ti2], fi2)->type;
             for (pi2 = 0; pi2 < nt2; pi2++) {
                 sub2 = frontend_sym_ct_generic_subst_text(sub2, tp[ti2].tparam[pi2], cargs[pi2]);
                 if ((!sub2)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
             }
-            _self->sym->structs[si2].fields[fi2].name = tp[ti2].fields[fi2].name;
-            _self->sym->structs[si2].fields[fi2].type = sub2;
-            _self->sym->structs[si2].fields[fi2].dims = tp[ti2].fields[fi2].dims;
-            _self->sym->structs[si2].fields[fi2].is_bitfield = tp[ti2].fields[fi2].is_bitfield;
-            _self->sym->structs[si2].fields[fi2].is_pub = tp[ti2].fields[fi2].is_pub;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si2, fi2)->name = frontend_sym_StructTmpl_field_at(&tp[ti2], fi2)->name;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si2, fi2)->type = sub2;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si2, fi2)->dims = frontend_sym_StructTmpl_field_at(&tp[ti2], fi2)->dims;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si2, fi2)->is_bitfield = frontend_sym_StructTmpl_field_at(&tp[ti2], fi2)->is_bitfield;
+            _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si2, fi2)->is_pub = frontend_sym_StructTmpl_field_at(&tp[ti2], fi2)->is_pub;
             if (_self->__frontend_parse_exprinstantiate_vptr->inst_register_nested(_self, sub2, (depth + 1)) != 0) {
                 return (-1);
             }
         }
-        _self->sym->structs[si2].nfields = tp[ti2].nfields;
+        _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->nfields = tp[ti2].nfields;
         for (fi2 = 0; fi2 < tp[ti2].nuse; fi2++) {
-            _self->sym->structs[si2].use[fi2] = tp[ti2].use[fi2];
+            _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->use[fi2] = tp[ti2].use[fi2];
         }
-        _self->sym->structs[si2].nuse = tp[ti2].nuse;
+        _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->nuse = tp[ti2].nuse;
     }
-    _self->sym->structs[si2].defined = 1;
-    _self->sym->structs[si2].is_pub = tp[ti2].is_pub;
-    _self->sym->structs[si2].declared_here = carried2;
-    _self->sym->structs[si2].uses_drop = tp[ti2].uses_drop;
-    _self->sym->structs[si2].uses_handback = tp[ti2].uses_handback;
+    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->defined = 1;
+    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->is_pub = tp[ti2].is_pub;
+    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->declared_here = carried2;
+    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->uses_drop = tp[ti2].uses_drop;
+    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->uses_handback = tp[ti2].uses_handback;
 {
         int ii3;
         int nimpls3;
@@ -668,7 +672,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_inst_make(void *se
                 }
                 if (is_builtin) {
                     if (strcmp(im3[ii3].use, "Drop") == 0) {
-                        _self->sym->structs[si2].has_drop_impl = 1;
+                        _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si2)->has_drop_impl = 1;
                     }
                 }
                 else {

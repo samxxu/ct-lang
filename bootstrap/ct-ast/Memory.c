@@ -46,7 +46,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -211,7 +215,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_mark_owned(void *self, int n
             }
             return tool_diag_ct_sem_error(line, 1, msg, _self->path);
         }
-        if (((si < 0) || (!_self->sym->structs[si].uses_drop))) {
+        if (((si < 0) || (!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->uses_drop))) {
             msg = runtime_text_ct_internf("struct '%s' does not use trait 'Drop'", base);
             if ((!msg)) {
                 return _self->__backend_mem_memoryops_vptr->fail(_self, "out of memory");
@@ -319,7 +323,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_own_factory_ok(void *self, i
     if (strncmp(rt, "struct ", 7) != 0) {
         return 0;
     }
-    return (strcmp((rt + 7), _self->sym->structs[si].name) == 0);
+    return (strcmp((rt + 7), _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name) == 0);
 }
 
 static int backend_mem_Memory_backend_mem_MemoryOps_expr_mentions(void *self, int e, const char * name) {
@@ -430,9 +434,9 @@ static int backend_mem_Memory_backend_mem_MemoryOps_ret_same_struct(void *self, 
         return 0;
     }
     if (strncmp(rt, "struct ", 7) == 0) {
-        return (strcmp((rt + 7), _self->sym->structs[si].name) == 0);
+        return (strcmp((rt + 7), _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name) == 0);
     }
-    return (strcmp(rt, _self->sym->structs[si].name) == 0);
+    return (strcmp(rt, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name) == 0);
 }
 
 static int backend_mem_Memory_backend_mem_MemoryOps_leak_decl(void *self, int n) {
@@ -633,7 +637,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_warn_leak(void *self, int vi
     (void)(_self);
     kind = ((path_line > 0) ? 2 : 0);
     if (_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->st >= 0) {
-        tname = _self->sym->structs[_self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->st].name;
+        tname = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, _self->sym->__frontend_sym_symbolops_vptr->var_at(_self->sym, vi)->st)->name;
     }
     else {
         tname = "";

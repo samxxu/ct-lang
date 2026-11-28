@@ -44,7 +44,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -293,14 +297,14 @@ static int backend_emit_Emitter_backend_emit_EmitterTryOps_try_release_payload(v
             if (((_self->arena->nodes[m].a > 0) || _self->arena->nodes[m].c)) {
                 continue;
             }
-            if ((!(((_self->arena->nodes[m].d == 1) || (_self->cur_unit == (-1))) || (_self->sym->structs[si].owner == _self->cur_unit)))) {
+            if ((!(((_self->arena->nodes[m].d == 1) || (_self->cur_unit == (-1))) || (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->owner == _self->cur_unit)))) {
                 continue;
             }
             fprintf(_self->out, "%s_release(&%s.%s); ", base, tmp, field);
             return 0;
         }
     }
-    if (_self->sym->structs[si].uses_drop) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->uses_drop) {
         fprintf(_self->out, "%s_Drop_drop(&%s.%s); ", base, tmp, field);
     }
     return 0;

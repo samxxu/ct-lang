@@ -1850,7 +1850,7 @@ pub int em_expr_mcall(struct Emitter *self, int n, int nk)
                 "type argument '%s' cannot satisfy trait '%s' (not a struct)",
                 self->gtarg[0], self->arena->nodes[n].text));
         }
-        fprintf(self->out, "%s_%s_vtable.%s(", self->sym->structs[si].name,
+        fprintf(self->out, "%s_%s_vtable.%s(", self->sym->struct_at(si)->name,
                 self->arena->nodes[n].text, self->arena->nodes[n].text2);
         /* SH-98: inside an impl body `self` is already the receiver
            pointer (`_self`), so a method call on it must not take the
@@ -1927,7 +1927,7 @@ pub int em_expr_mcall(struct Emitter *self, int n, int nk)
                     self->arena->nodes[n].text2,
                     self->arena->nodes[n].suffix ? self->arena->nodes[n].suffix : "");
         } else {
-            fprintf(self->out, "%s_%s%s(", self->sym->structs[si].name,
+            fprintf(self->out, "%s_%s%s(", self->sym->struct_at(si)->name,
                     self->arena->nodes[n].text2,
                     self->arena->nodes[n].suffix ? self->arena->nodes[n].suffix : "");
         }
@@ -1990,7 +1990,7 @@ pub int em_expr_mcall(struct Emitter *self, int n, int nk)
             fprintf(self->out, "%s_%s(", adts[adi].full,
                     self->arena->nodes[n].text2);
         } else {
-            fprintf(self->out, "%s_%s(", self->sym->structs[si].name,
+            fprintf(self->out, "%s_%s(", self->sym->struct_at(si)->name,
                     self->arena->nodes[n].text2);
         }
         {
@@ -2537,11 +2537,11 @@ pub int em_expr_try(struct Emitter *self, int n, int nk)
     vty = "";
     ety = "";
     si = self->sym->find_struct(otag);
-    for (fi = 0; si >= 0 && fi < self->sym->structs[si].nfields; fi++) {
-        if (strcmp(self->sym->structs[si].fields[fi].name, "value") == 0)
-            vty = self->sym->structs[si].fields[fi].type;
-        else if (strcmp(self->sym->structs[si].fields[fi].name, "err") == 0)
-            ety = self->sym->structs[si].fields[fi].type;
+    for (fi = 0; si >= 0 && fi < self->sym->struct_at(si)->nfields; fi++) {
+        if (strcmp(self->sym->struct_field_at(si, fi)->name, "value") == 0)
+            vty = self->sym->struct_field_at(si, fi)->type;
+        else if (strcmp(self->sym->struct_field_at(si, fi)->name, "err") == 0)
+            ety = self->sym->struct_field_at(si, fi)->type;
     }
     if (strcmp(self->cur_ret, "void") != 0) {
         rtag = self->try_result_tag(self->cur_ret);
@@ -3226,7 +3226,7 @@ pub int em_node_delete(struct Emitter *self, int n, int ind, int nk)
         self->emit_indent(ind);
         fputs("if (", self->out);
         if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-        fprintf(self->out, ") { %s_Handback_handback(", self->sym->structs[si].name);
+        fprintf(self->out, ") { %s_Handback_handback(", self->sym->struct_at(si)->name);
         if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
         fputs("); ", self->out);
         if (asg) {
@@ -3237,7 +3237,7 @@ pub int em_node_delete(struct Emitter *self, int n, int ind, int nk)
         return 0;
     }
     self->emit_indent(ind);
-    if (si >= 0 && self->sym->structs[si].uses_drop) {
+    if (si >= 0 && self->sym->struct_at(si)->uses_drop) {
         /* PH-48 D48-2 (L48-2): never turn an unreachable body into a
            local stub. The module layer rejects the exported case before
            emission; this guard covers a row reached some other way. */
@@ -3246,13 +3246,13 @@ pub int em_node_delete(struct Emitter *self, int n, int ind, int nk)
             vmsg = tool::sh::ct_scratch_fmt(
                      "Drop body for 'struct %s' is not visible in this unit;"
                      " move 'impl Drop for %s' into the unit that declares the struct",
-                     self->sym->structs[si].name, self->sym->structs[si].name);
+                     self->sym->struct_at(si)->name, self->sym->struct_at(si)->name);
             return self->fail_from(n, vmsg);
         }
         /* a Drop struct runs its drop before the memory goes away */
         fputs("if (", self->out);
         if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
-        fprintf(self->out, ") { %s_Drop_drop(", self->sym->structs[si].name);
+        fprintf(self->out, ") { %s_Drop_drop(", self->sym->struct_at(si)->name);
         if (self->emit_expr(self->arena->nodes[n].a) != 0) return -1;
         if (self->freestanding && *self->freestanding
             && strcmp(self->alloc_f, "free") == 0)
@@ -5309,31 +5309,31 @@ pub const char *sb_expr_type_text(struct Emitter *self, int n)
         if (!self->ty->concrete_struct_text(t, &sname, &is_ptr)) return (const char *)0;
         si = self->sym->find_struct(sname);
         if (si < 0) return (const char *)0;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-            if (strcmp(self->sym->structs[si].fields[fi].name,
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+            if (strcmp(self->sym->struct_field_at(si, fi)->name,
                        self->arena->nodes[n].text2) == 0) {
-                if (self->sym->structs[si].fields[fi].dims[0]) return (const char *)0;
+                if (self->sym->struct_field_at(si, fi)->dims[0]) return (const char *)0;
                 /* an instance row carries substituted field types; the
                    template row keeps `T` / `V`, which is how a container
                    element assignment is recognised */
-                if (self->sym->structs[si].is_inst) {
+                if (self->sym->struct_at(si)->is_inst) {
                     int i2, nt;
                     struct StructInst *ins2 = frontend::sym::ct_insts(&nt);
-                    int k2 = ins2 ? frontend::sym::ct_inst_find(self->sym->structs[si].name) : -1;
+                    int k2 = ins2 ? frontend::sym::ct_inst_find(self->sym->struct_at(si)->name) : -1;
                     if (k2 >= 0) {
                         int tm = ins2[k2].tmpl_row;
                         int ntm, tf;
                         struct StructTmpl *tps2 = frontend::sym::ct_tmpls(&ntm);
                         if (tm >= 0 && tps2) {
                             for (tf = 0; tf < tps2[tm].nfields; tf++)
-                                if (strcmp(tps2[tm].fields[tf].name, self->arena->nodes[n].text2) == 0)
-                                    if (sb_is_tparam(self, tps2[tm].fields[tf].type))
+                                if (strcmp(tps2[tm].field_at(tf)->name, self->arena->nodes[n].text2) == 0)
+                                    if (sb_is_tparam(self, tps2[tm].field_at(tf)->type))
                                         g_sb.hitparam = 1;
                         }
                         (void)i2;
                     }
                 }
-                return sb_norm_text(self, self->sym->structs[si].fields[fi].type);
+                return sb_norm_text(self, self->sym->struct_field_at(si, fi)->type);
             }
         return (const char *)0;
     }
@@ -5649,11 +5649,11 @@ pub void sb_mark_aggregate(struct Emitter *self, int decl)
     if (si < 0) return;
     owner = g_sb.ln - 1;
     if (owner < 0) return;
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        if (self->sym->structs[si].fields[fi].dims[0]) continue;
-        if (!frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type))
+    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
+        if (self->sym->struct_field_at(si, fi)->dims[0]) continue;
+        if (!frontend::sym::ct_is_string_value_type(self->sym->struct_field_at(si, fi)->type))
             continue;
-        sb_field_mark(self, g_sb.lname[owner], self->sym->structs[si].fields[fi].name, owner);
+        sb_field_mark(self, g_sb.lname[owner], self->sym->struct_field_at(si, fi)->name, owner);
     }
 }
 
@@ -5702,9 +5702,9 @@ pub int sb_owning_struct_type(struct Emitter *self, const char *type)
     if (is_ptr) return 0;
     si = self->sym->find_struct(sname);
     if (si < 0) return 0;
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-        if (!self->sym->structs[si].fields[fi].dims[0]
-            && frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type))
+    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+        if (!self->sym->struct_field_at(si, fi)->dims[0]
+            && frontend::sym::ct_is_string_value_type(self->sym->struct_field_at(si, fi)->type))
             return 1;
     return 0;
 }

@@ -82,7 +82,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -256,10 +260,10 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *se
             }
             tname = backend_lir_lmod_plan_row_text(r);
             if (backend_lir_lmod_plan_row_aux(r)) {
-                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->structs[si].name, tname);
+                fprintf(_self->out, "const struct %s_vtbl %s_%s_vtable;\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname);
             }
             else {
-                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n", tname, _self->sym->structs[si].name, tname);
+                fprintf(_self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n", tname, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name, tname);
             }
         }
         else {
@@ -268,14 +272,14 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *se
                     continue;
                 }
                 if (backend_lir_lmod_plan_row_aux(r) == 2) {
-                    fprintf(_self->out, "void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
+                    fprintf(_self->out, "void %s_Drop_drop(void *self);\n", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
                 }
                 else {
                     if (backend_lir_lmod_plan_row_aux(r) == 3) {
-                        fprintf(_self->out, "extern void %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
+                        fprintf(_self->out, "extern void %s_Drop_drop(void *self);\n", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
                     }
                     else {
-                        fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n", _self->sym->structs[si].name);
+                        fprintf(_self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
                     }
                 }
             }
@@ -284,7 +288,7 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_vtable_fwd(void *se
                     if (((si < 0) || (si >= _self->sym->nstructs))) {
                         continue;
                     }
-                    fprintf(_self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n", _self->sym->structs[si].name);
+                    fprintf(_self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
                 }
             }
         }
@@ -314,10 +318,10 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_struct_fwd(void *se
             continue;
         }
         if (backend_lir_lmod_plan_row_aux(r)) {
-            fprintf(_self->out, "union %s;\n", _self->sym->structs[si].name);
+            fprintf(_self->out, "union %s;\n", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
         }
         else {
-            fprintf(_self->out, "struct %s;\n", _self->sym->structs[si].name);
+            fprintf(_self->out, "struct %s;\n", _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name);
         }
     }
     return 0;

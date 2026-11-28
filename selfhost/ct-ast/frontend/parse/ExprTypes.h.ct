@@ -401,10 +401,10 @@ impl ExprTypes for Expr {
                 while (k < e0 && bplus_space(raw[k])) k++;
                 if (fn > 0 && k < e0 && raw[k] == '=') {
                     k++;
-                    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                        if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0)
+                    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+                        if (strcmp(self->sym->struct_field_at(si, fi)->name, fname) == 0)
                             break;
-                    if (fi >= self->sym->structs[si].nfields) fi = -1;
+                    if (fi >= self->sym->struct_at(si)->nfields) fi = -1;
                     vstart = k;
                 }
             } else if (!designated && s0 < e0) {
@@ -412,8 +412,8 @@ impl ExprTypes for Expr {
                 vstart = s0;
             }
             pos++;
-            if (fi < 0 || fi >= self->sym->structs[si].nfields) continue;
-            if (self->sym->structs[si].fields[fi].dims[0]) continue;
+            if (fi < 0 || fi >= self->sym->struct_at(si)->nfields) continue;
+            if (self->sym->struct_field_at(si, fi)->dims[0]) continue;
             while (vstart < e0 && bplus_space(raw[vstart])) vstart++;
             while (e0 > vstart && bplus_space(raw[e0 - 1])) e0--;
             if (vstart >= e0) continue;
@@ -438,7 +438,7 @@ impl ExprTypes for Expr {
                performs (PH-80 / `lit_coerce`); SH-115's brace walk missed
                both and reported the legal p80_retain / p81_box fixtures. */
             {
-                const char *fp = self->sym->structs[si].fields[fi].type;
+                const char *fp = self->sym->struct_field_at(si, fi)->type;
                 size_t fl;
                 if (is_zero) continue;
                 while (*fp == ' ' || *fp == '\t') fp++;
@@ -450,7 +450,7 @@ impl ExprTypes for Expr {
                         || (fl == 3 && strncmp(fp, "Str", 3) == 0)))
                     continue;
             }
-            if (self->chk_assignable(self->sym->structs[si].fields[fi].type,
+            if (self->chk_assignable(self->sym->struct_field_at(si, fi)->type,
                                      actual, is_zero, 1) != 0)
                 return -1;
         }

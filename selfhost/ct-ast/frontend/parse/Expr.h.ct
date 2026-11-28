@@ -356,11 +356,11 @@ static int ref_member_flags(struct Expr *self, int n, int *is_bit, int *is_const
     if (!base) return 0;
     si = self->sym->find_struct(base);
     if (si < 0) return 0;
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-        if (strcmp(self->sym->structs[si].fields[fi].name,
+    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+        if (strcmp(self->sym->struct_field_at(si, fi)->name,
                    self->arena->nodes[n].text2) == 0) {
-            *is_bit = self->sym->structs[si].fields[fi].is_bitfield;
-            *is_const = ref_type_is_const_value(self->sym->structs[si].fields[fi].type);
+            *is_bit = self->sym->struct_field_at(si, fi)->is_bitfield;
+            *is_const = ref_type_is_const_value(self->sym->struct_field_at(si, fi)->type);
             return 1;
         }
     return 0;
@@ -447,7 +447,7 @@ static int type_is_owning(struct Expr *self, const char *type)
     if (strncmp(base, "struct ", 7) == 0) base += 7;
     else if (strncmp(base, "union ", 6) == 0) base += 6;
     si = self->sym->find_struct(base);
-    return si >= 0 && self->sym->structs[si].uses_drop;
+    return si >= 0 && self->sym->struct_at(si)->uses_drop;
 }
 
 /* P-3.5 (SH-117): a by-value `String` / `Str` / `U16String` / `U16Str` handle
@@ -1427,9 +1427,9 @@ impl ExprOps for Expr {
         if (!st) return 0;
         if (strncmp(st, "struct ", 7) == 0) st += 7;
         si = self->sym->find_struct(st);
-        if (si < 0 || !self->sym->structs[si].defined) return 0;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-            if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0)
+        if (si < 0 || !self->sym->struct_at(si)->defined) return 0;
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+            if (strcmp(self->sym->struct_field_at(si, fi)->name, fname) == 0)
                 return 0;
         tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
             "no member '%s' on the 'into' receiver", fname), self->sup->mem->path);
@@ -3438,9 +3438,9 @@ impl ExprOps for Expr {
             si = self->sym->find_struct(bp);
             if (si < 0) return self->sup->fail("offsetof needs a struct type");
             /* a forward declaration has no field list yet: leave it to C */
-            known = !self->sym->structs[si].defined;
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0) known = 1;
+            known = !self->sym->struct_at(si)->defined;
+            for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+                if (strcmp(self->sym->struct_field_at(si, fi)->name, fname) == 0) known = 1;
             if (!known) {
                 return self->sup->fail(runtime::text::ct_internf(
                     "%s '%s' has no field '%s'", kw, bp, fname));

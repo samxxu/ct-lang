@@ -241,10 +241,10 @@ pub int Box_emit_copy_at(struct Emitter *self, const char *ctype, const char *ds
         tool::sh::ct_text_free(&nd, &ndcap);
         return -1;
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char *ft = self->sym->structs[si].fields[fi].type;
-        const char *dims = self->sym->structs[si].fields[fi].dims;
-        const char *fn = self->sym->structs[si].fields[fi].name;
+    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
+        const char *ft = self->sym->struct_field_at(si, fi)->type;
+        const char *dims = self->sym->struct_field_at(si, fi)->dims;
+        const char *fn = self->sym->struct_field_at(si, fi)->name;
         int rc;
         if (dims[0]) continue;          /* arrays are the explicit Drop body's */
         if (!Box_type_owns(self, ft, depth + 1)) continue;
@@ -295,17 +295,17 @@ pub int Box_emit_release_at(struct Emitter *self, const char *ctype, const char 
     }
     si = self->sym->find_struct(base);
     if (si < 0) return 0;
-    if (!self->sym->structs[si].is_inst && self->sym->structs[si].has_drop_impl) {
+    if (!self->sym->struct_at(si)->is_inst && self->sym->struct_at(si)->has_drop_impl) {
         fprintf(self->out, "    %s_Drop_drop(%s);\n", base, expr);
         return 0;
     }
     /* S1a-0 C2p-8: the nested field expression is generated text whose depth
        is the payload's, so it is built in a growable block, not a row. */
     if (tool::sh::ct_text_init(&at, &acap, 64) != 0) return -1;
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char *ft = self->sym->structs[si].fields[fi].type;
-        const char *dims = self->sym->structs[si].fields[fi].dims;
-        const char *fn = self->sym->structs[si].fields[fi].name;
+    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
+        const char *ft = self->sym->struct_field_at(si, fi)->type;
+        const char *dims = self->sym->struct_field_at(si, fi)->dims;
+        const char *fn = self->sym->struct_field_at(si, fi)->name;
         if (dims[0]) {
             /* one dimension of owning elements; a multi-dimensional array is
                left to the explicit Drop body (the same rule the Drop glue
@@ -366,14 +366,14 @@ pub int Box_type_owns(struct Emitter *self, const char *ctype, int depth)
     if (inst_is_builtin_Box(base)) return 1;
     si = self->sym->find_struct(base);
     if (si < 0) return 0;
-    if (self->sym->structs[si].is_inst) {
+    if (self->sym->struct_at(si)->is_inst) {
         /* a user generic instance: judge its concrete fields */
-    } else if (self->sym->structs[si].has_drop_impl) {
+    } else if (self->sym->struct_at(si)->has_drop_impl) {
         return 1;
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char *ft = self->sym->structs[si].fields[fi].type;
-        const char *dims = self->sym->structs[si].fields[fi].dims;
+    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
+        const char *ft = self->sym->struct_field_at(si, fi)->type;
+        const char *dims = self->sym->struct_field_at(si, fi)->dims;
         if (dims[0]) {
             if (Box_type_owns(self, ft, depth + 1)) return 1;
         } else if (Box_type_owns(self, ft, depth + 1)) {
@@ -1538,7 +1538,7 @@ pub int write_unit_header_body(struct Emitter *self, int u, const char *guard)
         for (r = 0; r < nr; r++) {
             if (backend::lir::lmod_plan_row_kind(r) != LPS_DROP || backend::lir::lmod_plan_row_unit(r) != u) continue;
             fprintf(self->out, "void %s_Drop_drop(void *);\n",
-                    self->sym->structs[backend::lir::lmod_plan_row_node(r)].name);
+                    self->sym->struct_at(backend::lir::lmod_plan_row_node(r))->name);
         }
     }
 

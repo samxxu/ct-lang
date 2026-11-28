@@ -130,7 +130,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -1032,7 +1036,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtOps_parse_stmt(void *self) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
                 si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, _self->arena->nodes[s].text);
-                if (((si < 0) || (!_self->sym->structs[si].uses_drop))) {
+                if (((si < 0) || (!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->uses_drop))) {
                     _self->arena->nodes[s].text = runtime_text_ct_intern("");
                     if ((!_self->arena->nodes[s].text)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -2924,10 +2928,10 @@ static int mark_borrow(struct frontend_parse_Stmt * self, int n, int line, int c
                 return tool_diag_ct_sem_error(line, col, "'borrow' requires an initialiser of struct pointer type", self->mem->path);
             }
         }
-        if ((!self->sym->structs[si].uses_handback)) {
+        if ((!self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->uses_handback)) {
             return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("struct '%s' does not use trait 'Handback'", base), self->mem->path);
         }
-        if ((!self->sym->structs[si].has_handback_impl)) {
+        if ((!self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->has_handback_impl)) {
             return tool_diag_ct_sem_error(line, col, tool_sh_ct_scratch_fmt("struct '%s' uses trait 'Handback' but this unit has no impl", base), self->mem->path);
         }
         vi = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[d].text2);
@@ -3482,8 +3486,8 @@ static int stmt_owning_struct(struct frontend_parse_Stmt * self, const char * ty
     if (si < 0) {
         return 0;
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        if (((!self->sym->structs[si].fields[fi].dims[0]) && frontend_sym_ct_is_string_value_type(self->sym->structs[si].fields[fi].type))) {
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        if (((!self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims[0]) && frontend_sym_ct_is_string_value_type(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type))) {
             return 1;
         }
     }

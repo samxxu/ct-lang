@@ -197,7 +197,7 @@ impl ExprNew for Expr {
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new' only accepts a named struct type declared in this program",
                 self->sup->mem->path);
-        if (self->sym->structs[si].is_template || self->sym->structs[si].is_inst)
+        if (self->sym->struct_at(si)->is_template || self->sym->struct_at(si)->is_inst)
             return tool::diag::ct_sem_error(nline, ncol,
                 "'new' only accepts a named non-generic struct type; instantiate the generic first and box the value",
                 self->sup->mem->path);

@@ -367,10 +367,10 @@ static int ct_unit_mixed_private(struct Module *self, int u)
 
     for (si = 0; si < self->sym->nstructs; si++) {
         int hp = 0, hv = 0;
-        if (self->sym->structs[si].owner != u) continue;
-        if (self->sym->structs[si].nuse > 0) continue;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            if (self->sym->structs[si].fields[fi].is_pub) hp = 1;
+        if (self->sym->struct_at(si)->owner != u) continue;
+        if (self->sym->struct_at(si)->nuse > 0) continue;
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
+            if (self->sym->struct_field_at(si, fi)->is_pub) hp = 1;
             else hv = 1;
         }
         if (hp && hv) return 1;
@@ -570,7 +570,7 @@ static int ct_elem_plain_owner(struct Module *self, const char *ctype)
     if (frontend::sym::ct_inst_find(base) >= 0) return -1;
     si = self->sym->find_struct(base);
     if (si < 0) return -1;
-    return self->sym->structs[si].owner;
+    return self->sym->struct_at(si)->owner;
 }
 
 /* 1 when instance `ii`'s element (or Map value) belongs to another unit, so
@@ -771,7 +771,7 @@ static int ct_shell_plan_add_inprots(struct Module *self, int prog, int unit)
             if (!adts[adi].is_pub) continue;
         } else {
             if (si < 0 || si >= self->sym->nstructs) continue;
-            if (!ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name))
+            if (!ct_decl_is_pub(self, N_STRUCT, self->sym->struct_at(si)->name))
                 continue;
         }
         if (backend::lir::lmod_plan_shell_add_stage(LPS_INPROTO, unit, n,
@@ -821,7 +821,7 @@ static int ct_vtable_exported(struct Module *self, int si, const char *tname)
     if (strcmp(tname, "Drop") == 0 || strcmp(tname, "Handback") == 0) return 0;
     t = self->sym->find_trait(tname);
     if (t < 0 || !self->sym->traits[t].is_pub) return 0;
-    return ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name);
+    return ct_decl_is_pub(self, N_STRUCT, self->sym->struct_at(si)->name);
 }
 
 static int ct_map_vtable_exported(struct Module *self, int i)
@@ -899,8 +899,8 @@ static int ct_shell_plan_add_surface(struct Module *self, int prog, int unit,
        product prints them, so the row is per unit) */
     for (i = 0; i < self->sym->nstructs; i++) {
         int ti;
-        if (self->sym->structs[i].is_template) continue;
-        ti = self->sym->find_type(self->sym->structs[i].name);
+        if (self->sym->struct_at(i)->is_template) continue;
+        ti = self->sym->find_type(self->sym->struct_at(i)->name);
         if (ti < 0) continue;
         if (self->sym->types[ti].kind != 1 && self->sym->types[ti].kind != 6)
             continue;
@@ -956,8 +956,8 @@ static int ct_shell_plan_add_surface(struct Module *self, int prog, int unit,
             || !self->arena->nodes[n].text2[0]) continue;
         si = self->sym->find_struct(self->arena->nodes[n].text2);
         if (si < 0) continue;
-        for (i = 0; i < self->sym->structs[si].nuse; i++) {
-            tname = self->sym->structs[si].use[i];
+        for (i = 0; i < self->sym->struct_at(si)->nuse; i++) {
+            tname = self->sym->struct_at(si)->use[i];
             if (!ct_adoption_default_only(self, si, tname)) continue;
             if (backend::lir::lmod_plan_shell_add_stage(
                     LPS_VTBLFWD, unit, si, ct_vtable_exported(self, si, tname),
@@ -969,17 +969,17 @@ static int ct_shell_plan_add_surface(struct Module *self, int prog, int unit,
        decision (PH-48 D48-2) */
     for (si = 0; si < self->sym->nstructs; si++) {
         int owner, legacy, kind;
-        if (!self->sym->structs[si].uses_drop
-            || self->sym->structs[si].is_template) continue;
-        owner = self->sym->structs[si].owner;
+        if (!self->sym->struct_at(si)->uses_drop
+            || self->sym->struct_at(si)->is_template) continue;
+        owner = self->sym->struct_at(si)->owner;
         legacy = (unit < 0 || owner < 0);
         if (unit < 0) {
             kind = 0;
         } else if (legacy) {
-            if (self->sym->structs[si].is_inst) continue;
+            if (self->sym->struct_at(si)->is_inst) continue;
             kind = 1;
         } else if (owner == unit) {
-            if (self->sym->structs[si].has_drop_impl
+            if (self->sym->struct_at(si)->has_drop_impl
                 && !ct_unit_has_drop_impl(self, unit, si)) continue;
             kind = 2;
         } else {
@@ -990,7 +990,7 @@ static int ct_shell_plan_add_surface(struct Module *self, int prog, int unit,
             return 1;
     }
     for (si = 0; si < self->sym->nstructs; si++)
-        if (self->sym->structs[si].has_handback_impl)
+        if (self->sym->struct_at(si)->has_handback_impl)
             if (backend::lir::lmod_plan_shell_add_stage(LPS_HANDBAK, unit, si,
                                                         0, 0, 0) != 0)
                 return 1;
@@ -1014,8 +1014,8 @@ static int ct_shell_plan_add_surface(struct Module *self, int prog, int unit,
                 || !self->arena->nodes[n].text2[0]) continue;
             si = self->sym->find_struct(self->arena->nodes[n].text2);
             if (si < 0) continue;
-            for (i = 0; i < self->sym->structs[si].nuse; i++) {
-                tname = self->sym->structs[si].use[i];
+            for (i = 0; i < self->sym->struct_at(si)->nuse; i++) {
+                tname = self->sym->struct_at(si)->use[i];
                 if (!ct_adoption_default_only(self, si, tname)) continue;
                 if (!ct_vtable_exported(self, si, tname)) continue;
                 if (backend::lir::lmod_plan_shell_add_stage(
@@ -1193,12 +1193,12 @@ static int ct_shell_plan_add_program(struct Module *self, int prog, int unit,
         int si;
         for (si = 0; si < self->sym->nstructs; si++) {
             int has_body = 0;
-            if (!self->sym->structs[si].uses_drop) continue;
-            if (self->sym->structs[si].is_template) continue;
-            if (self->sym->structs[si].is_inst) continue;
-            if (!self->sym->structs[si].is_pub) continue;
-            if (self->sym->structs[si].owner != unit) continue;
-            if (self->sym->structs[si].has_drop_impl) {
+            if (!self->sym->struct_at(si)->uses_drop) continue;
+            if (self->sym->struct_at(si)->is_template) continue;
+            if (self->sym->struct_at(si)->is_inst) continue;
+            if (!self->sym->struct_at(si)->is_pub) continue;
+            if (self->sym->struct_at(si)->owner != unit) continue;
+            if (self->sym->struct_at(si)->has_drop_impl) {
                 for (n = ar->nodes[self->units[unit].prog].a; n >= 0;
                      n = ar->nodes[n].next)
                     if (ar->nodes[n].kind == N_IMPL && ar->nodes[n].aux == si
@@ -1281,9 +1281,9 @@ static int ct_map_plan_build(struct Module *self, int prog, int u)
             return 1;
         si = self->sym->find_struct(self->arena->nodes[n].text2);
         if (si >= 0)
-            for (i = 0; i < self->sym->structs[si].nuse; i++)
+            for (i = 0; i < self->sym->struct_at(si)->nuse; i++)
                 if (ct_map_plan_add(LMP_STRUCT_USE, u, parent, 0, 0, 0,
-                                    self->sym->structs[si].use[i],
+                                    self->sym->struct_at(si)->use[i],
                                     0, 0, 0, 0) != 0)
                     return 1;
     }
@@ -1310,7 +1310,7 @@ static int ct_map_plan_build(struct Module *self, int prog, int u)
                  i = self->arena->nodes[i].next) count++;
             if (ct_map_plan_add(LMP_IMPL, u, -1,
                                 self->arena->nodes[n].line, count, 0,
-                                self->sym->structs[si].name, tname,
+                                self->sym->struct_at(si)->name, tname,
                                 self->arena->nodes[m].text2,
                                 self->arena->nodes[m].text, 0) != 0)
                 return 1;
@@ -1399,12 +1399,12 @@ static int ct_model_plan_build(struct Module *self, int prog)
             return 1;
         si = self->sym->find_struct(self->arena->nodes[n].text2);
         if (si >= 0)
-            for (i = 0; i < self->sym->structs[si].nfields; i++)
+            for (i = 0; i < self->sym->struct_at(si)->nfields; i++)
                 if (ct_map_plan_add(LMP_MSTRUCT_FIELD, -1, parent, 0,
-                                    self->sym->structs[si].fields[i].line,
-                                    self->sym->structs[si].fields[i].col,
-                                    self->sym->structs[si].fields[i].name,
-                                    self->sym->structs[si].fields[i].type,
+                                    self->sym->struct_field_at(si, i)->line,
+                                    self->sym->struct_field_at(si, i)->col,
+                                    self->sym->struct_field_at(si, i)->name,
+                                    self->sym->struct_field_at(si, i)->type,
                                     0, 0, 0) != 0)
                     return 1;
     }
@@ -1459,10 +1459,11 @@ static int ct_model_plan_build(struct Module *self, int prog)
     return 0;
 }
 
-/* PH-82: the Box-field graph the direct-cycle warning walks. The symbol
-   table's own caps bound it (`Symbols` lists MAX_STRUCTS 128 +
-   MAX_STRUCT_INSTS 128 rows and MAX_FIELDS 64), so the adjacency lives in
-   fixed arrays instead of a per-run allocation. */
+/* PH-82: the Box-field graph the direct-cycle warning walks. The graph covers
+   the first `CYCLE_ROWS` struct rows (`Symbols` grows its table on demand, so
+   this window is the warning's fixed budget, not a table cap), and each row
+   records at most `CYCLE_DEGREE` outgoing edges; the adjacency lives in fixed
+   arrays instead of a per-run allocation. */
 #define CYCLE_ROWS 256
 #define CYCLE_DEGREE 64
 static int g_cycle_adj[CYCLE_ROWS][CYCLE_DEGREE];
@@ -1473,7 +1474,7 @@ static int g_cycle_nout[CYCLE_ROWS];
    compile-mode row whose owner index is not in `units[]`. */
 static const char *cycle_file(struct Module *m, int si)
 {
-    int o = m->sym->structs[si].owner;
+    int o = m->sym->struct_at(si)->owner;
 
     if (o >= 0 && o < m->nunits && m->units[o].path && m->units[o].path[0])
         return m->units[o].path;
@@ -1515,18 +1516,18 @@ static int cycle_Box_target(struct Module *m, int si, int fi)
     const char *ptype;
     int bx, pi, n, ti;
 
-    t = m->sym->structs[si].fields[fi].type;
+    t = m->sym->struct_field_at(si, fi)->type;
     if (strncmp(t, "struct Box_", 11) == 0) t += 7;
     else if (strncmp(t, "Box_", 4) != 0) return -1;
     if (!cycle_is_builtin_Box(m, t)) return -1;
     bx = m->sym->find_struct(t);
-    if (bx < 0 || !m->sym->structs[bx].is_inst) return -1;
-    for (pi = 0; pi < m->sym->structs[bx].nfields; pi++)
-        if (strcmp(m->sym->structs[bx].fields[pi].name, "ptr") == 0) break;
-    if (pi >= m->sym->structs[bx].nfields) return -1;
+    if (bx < 0 || !m->sym->struct_at(bx)->is_inst) return -1;
+    for (pi = 0; pi < m->sym->struct_at(bx)->nfields; pi++)
+        if (strcmp(m->sym->struct_field_at(bx, pi)->name, "ptr") == 0) break;
+    if (pi >= m->sym->struct_at(bx)->nfields) return -1;
     /* S1a-0 C2p-11: the payload type is already a pool text; trim it as a
        view instead of cutting it into a 160-byte row. */
-    t = m->sym->structs[bx].fields[pi].type;
+    t = m->sym->struct_field_at(bx, pi)->type;
     n = (int)strlen(t);
     while (n > 0 && (t[n - 1] == ' ' || t[n - 1] == '\t')) n--;
     if (n == 0 || t[n - 1] != '*') return -1;
@@ -1539,8 +1540,8 @@ static int cycle_Box_target(struct Module *m, int si, int fi)
     else if (strncmp(t, "union ", 6) == 0) t += 6;
     ti = m->sym->find_struct(t);
     if (ti < 0) return -1;
-    if (!m->sym->structs[ti].defined) return -1;
-    if (m->sym->structs[ti].is_template || m->sym->structs[ti].is_inst) return -1;
+    if (!m->sym->struct_at(ti)->defined) return -1;
+    if (m->sym->struct_at(ti)->is_template || m->sym->struct_at(ti)->is_inst) return -1;
     return ti;
 }
 
@@ -1563,26 +1564,26 @@ static int cycle_emit(struct Module *m, int a, int b, int c)
     chain = "";
     for (i = 0; i < n; i++)
         chain = tool::sh::ct_scratch_fmt("%s%s%s", chain, i ? " -> " : "",
-                                          m->sym->structs[nodes[i]].name);
+                                          m->sym->struct_at(nodes[i])->name);
     chain = tool::sh::ct_scratch_fmt("%s -> %s", chain,
-                                     m->sym->structs[a].name);
+                                     m->sym->struct_at(a)->name);
     mark = -1;
     for (i = 0; i < n; i++)
-        if (m->sym->structs[nodes[i]].allow_cycle) { mark = nodes[i]; break; }
+        if (m->sym->struct_at(nodes[i])->allow_cycle) { mark = nodes[i]; break; }
     if (mark >= 0) {
         if (!m->check_mode) return 0;
         msg = tool::sh::ct_scratch_fmt(
             "reference cycle suppressed by 'ct: allow-cycle': %s", chain);
-        return tool::diag::ct_sem_note(m->sym->structs[mark].line,
-                                       m->sym->structs[mark].col, msg,
+        return tool::diag::ct_sem_note(m->sym->struct_at(mark)->line,
+                                       m->sym->struct_at(mark)->col, msg,
                                        cycle_file(m, mark));
     }
     msg = tool::sh::ct_scratch_fmt(
         "potential reference cycle: %s; instances may leak unless the cycle is broken by hand",
         chain);
     file = cycle_file(m, a);
-    return tool::diag::ct_cycle_warn(m->sym->structs[a].line,
-                                     m->sym->structs[a].col, msg, file);
+    return tool::diag::ct_cycle_warn(m->sym->struct_at(a)->line,
+                                     m->sym->struct_at(a)->col, msg, file);
 }
 
 /* DOC-87 Stage 1: the built-in layer directory and its environment key were
@@ -2676,13 +2677,13 @@ impl ModuleOps for Module {
         const char *name;
 
         for (si = 0; si < self->sym->nstructs; si++) {
-            if (!self->sym->structs[si].uses_drop) continue;
-            if (self->sym->structs[si].is_template || self->sym->structs[si].is_inst) continue;
-            if (!self->sym->structs[si].is_pub) continue;
-            u = self->sym->structs[si].owner;
+            if (!self->sym->struct_at(si)->uses_drop) continue;
+            if (self->sym->struct_at(si)->is_template || self->sym->struct_at(si)->is_inst) continue;
+            if (!self->sym->struct_at(si)->is_pub) continue;
+            u = self->sym->struct_at(si)->owner;
             if (u < 0 || u >= self->nunits) continue;
             if (!self->units[u].is_hdr) continue;
-            if (!self->sym->structs[si].has_drop_impl) continue;
+            if (!self->sym->struct_at(si)->has_drop_impl) continue;
             found = 0;
             for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
                  n = self->arena->nodes[n].next)
@@ -2693,7 +2694,7 @@ impl ModuleOps for Module {
                     break;
                 }
             if (found) continue;
-            name = self->sym->structs[si].name;
+            name = self->sym->struct_at(si)->name;
             line = 1;
             for (n = self->arena->nodes[self->units[u].prog].a; n >= 0;
                  n = self->arena->nodes[n].next)
@@ -4358,10 +4359,10 @@ cmd_too_long:
         if (nrows > CYCLE_ROWS) nrows = CYCLE_ROWS;
         for (i = 0; i < nrows; i++) g_cycle_nout[i] = 0;
         for (i = 0; i < nrows; i++) {
-            if (!self->sym->structs[i].defined) continue;
-            if (self->sym->structs[i].is_template) continue;
-            if (self->sym->structs[i].is_inst) continue;
-            for (fi = 0; fi < self->sym->structs[i].nfields; fi++) {
+            if (!self->sym->struct_at(i)->defined) continue;
+            if (self->sym->struct_at(i)->is_template) continue;
+            if (self->sym->struct_at(i)->is_inst) continue;
+            for (fi = 0; fi < self->sym->struct_at(i)->nfields; fi++) {
                 k = cycle_Box_target(self, i, fi);
                 if (k < 0) continue;
                 for (j = 0; j < g_cycle_nout[i]; j++)
@@ -4372,9 +4373,9 @@ cmd_too_long:
             }
         }
         for (a = 0; a < nrows; a++) {
-            if (!self->sym->structs[a].defined) continue;
-            if (self->sym->structs[a].is_template) continue;
-            if (self->sym->structs[a].is_inst) continue;
+            if (!self->sym->struct_at(a)->defined) continue;
+            if (self->sym->struct_at(a)->is_template) continue;
+            if (self->sym->struct_at(a)->is_inst) continue;
             for (j = 0; j < g_cycle_nout[a]; j++) {
                 b = g_cycle_adj[a][j];
                 if (b == a) {

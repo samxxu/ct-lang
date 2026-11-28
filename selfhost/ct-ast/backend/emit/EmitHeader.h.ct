@@ -150,25 +150,25 @@ impl EmitHeader for Emitter {
                 tname = backend::lir::lmod_plan_row_text(r);
                 if (backend::lir::lmod_plan_row_aux(r))
                     fprintf(self->out, "const struct %s_vtbl %s_%s_vtable;\n",
-                            tname, self->sym->structs[si].name, tname);
+                            tname, self->sym->struct_at(si)->name, tname);
                 else
                     fprintf(self->out, "static const struct %s_vtbl %s_%s_vtable __attribute__((unused));\n",
-                            tname, self->sym->structs[si].name, tname);
+                            tname, self->sym->struct_at(si)->name, tname);
             } else if (kind == LPS_DROPPROTO) {
                 if (si < 0 || si >= self->sym->nstructs) continue;
                 if (backend::lir::lmod_plan_row_aux(r) == 2)
                     fprintf(self->out, "void %s_Drop_drop(void *self);\n",
-                            self->sym->structs[si].name);
+                            self->sym->struct_at(si)->name);
                 else if (backend::lir::lmod_plan_row_aux(r) == 3)
                     fprintf(self->out, "extern void %s_Drop_drop(void *self);\n",
-                            self->sym->structs[si].name);
+                            self->sym->struct_at(si)->name);
                 else
                     fprintf(self->out, "static void __attribute__((unused)) %s_Drop_drop(void *self);\n",
-                            self->sym->structs[si].name);
+                            self->sym->struct_at(si)->name);
             } else if (kind == LPS_HANDBAK) {
                 if (si < 0 || si >= self->sym->nstructs) continue;
                 fprintf(self->out, "static void __attribute__((unused)) %s_Handback_handback(void *self);\n",
-                        self->sym->structs[si].name);
+                        self->sym->struct_at(si)->name);
             }
         }
         if (self->sym->nstructs) fputs("\n", self->out);
@@ -189,9 +189,9 @@ impl EmitHeader for Emitter {
             si = backend::lir::lmod_plan_row_node(r);
             if (si < 0 || si >= self->sym->nstructs) continue;
             if (backend::lir::lmod_plan_row_aux(r))
-                fprintf(self->out, "union %s;\n", self->sym->structs[si].name);
+                fprintf(self->out, "union %s;\n", self->sym->struct_at(si)->name);
             else
-                fprintf(self->out, "struct %s;\n", self->sym->structs[si].name);
+                fprintf(self->out, "struct %s;\n", self->sym->struct_at(si)->name);
         }
         return 0;
     }

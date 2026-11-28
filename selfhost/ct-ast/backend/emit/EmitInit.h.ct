@@ -160,8 +160,8 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
     const char *et;
 
     if (len < 2 || t[0] != '{' || t[len - 1] != '}') return 0;
-    if (si < 0 || self->sym->structs[si].nfields <= 0
-        || self->sym->structs[si].nfields > 64) return 0;
+    if (si < 0 || self->sym->struct_at(si)->nfields <= 0
+        || self->sym->struct_at(si)->nfields > 64) return 0;
     nitem = 0;
     depth = 0;
     p = 1;
@@ -204,7 +204,7 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
     starts[nitem] = q;
     ends[nitem] = len - 1;
     nitem++;
-    if (self->sym->structs[si].nfields < nitem) return 0;
+    if (self->sym->struct_at(si)->nfields < nitem) return 0;
 
     changed = 0;
     for (i = 0; i < nitem; i++) {
@@ -228,9 +228,9 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
             if (!fname) return -1;
             while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;
             if (ne >= e0 || t[ne] != '=') return 0;   /* unexpected designator */
-            for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-                if (strcmp(self->sym->structs[si].fields[fi].name, fname) == 0) break;
-            if (fi >= self->sym->structs[si].nfields) return 0;
+            for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+                if (strcmp(self->sym->struct_field_at(si, fi)->name, fname) == 0) break;
+            if (fi >= self->sym->struct_at(si)->nfields) return 0;
             ne++;
             while (ne < e0 && (t[ne] == ' ' || t[ne] == '\t')) ne++;
             fs = ne;
@@ -240,12 +240,12 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
         } else {
             fi = count;
             count++;
-            if (fi >= self->sym->structs[si].nfields) return 0;
+            if (fi >= self->sym->struct_at(si)->nfields) return 0;
         }
         fields[i] = fi;
         epos[i] = fs;
-        if (self->sym->structs[si].fields[fi].dims[0]) continue;
-        kind = frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
+        if (self->sym->struct_field_at(si, fi)->dims[0]) continue;
+        kind = frontend::sym::ct_is_string_value_type(self->sym->struct_field_at(si, fi)->type);
         if (!kind) continue;
         /* S1a-0 C2n-3: an item used to be skipped once it passed the 160-byte
            row (`if (e0 - fs >= MAX_TEXT) continue;`), which left a long literal
@@ -284,8 +284,8 @@ pub int sb_rewrite_init(struct Emitter *self, const char *t, int len, int si)
         int kind, fi = fields[i];
         if (i > 0) fputs(", ", self->out);
         if (fs > s0) fwrite(t + s0, 1, (size_t)(fs - s0), self->out);   /* designator */
-        kind = self->sym->structs[si].fields[fi].dims[0] ? 0
-               : frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type);
+        kind = self->sym->struct_field_at(si, fi)->dims[0] ? 0
+               : frontend::sym::ct_is_string_value_type(self->sym->struct_field_at(si, fi)->type);
         if (litmode[i]) {
             fputs("str_dup_len(", self->out);
             fwrite(t + fs, 1, (size_t)(e0 - fs), self->out);

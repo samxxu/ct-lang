@@ -98,7 +98,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -357,10 +361,10 @@ int backend_emit_Box_emit_copy_at(struct backend_emit_Emitter * self, const char
         tool_sh_ct_text_free((&nd), (&ndcap));
         return (-1);
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char * ft = self->sym->structs[si].fields[fi].type;
-        const char * dims = self->sym->structs[si].fields[fi].dims;
-        const char * fn = self->sym->structs[si].fields[fi].name;
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        const char * ft = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type;
+        const char * dims = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims;
+        const char * fn = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name;
         int rc;
         if (dims[0]) {
             continue;
@@ -414,17 +418,17 @@ int backend_emit_Box_emit_release_at(struct backend_emit_Emitter * self, const c
     if (si < 0) {
         return 0;
     }
-    if (((!self->sym->structs[si].is_inst) && self->sym->structs[si].has_drop_impl)) {
+    if (((!self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_inst) && self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->has_drop_impl)) {
         fprintf(self->out, "    %s_Drop_drop(%s);\n", base, expr);
         return 0;
     }
     if (tool_sh_ct_text_init((&at), (&acap), 64) != 0) {
         return (-1);
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char * ft = self->sym->structs[si].fields[fi].type;
-        const char * dims = self->sym->structs[si].fields[fi].dims;
-        const char * fn = self->sym->structs[si].fields[fi].name;
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        const char * ft = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type;
+        const char * dims = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims;
+        const char * fn = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name;
         if (dims[0]) {
             if (strchr((dims + 1), '[')) {
                 continue;
@@ -501,16 +505,16 @@ int backend_emit_Box_type_owns(struct backend_emit_Emitter * self, const char * 
     if (si < 0) {
         return 0;
     }
-    if (self->sym->structs[si].is_inst) {
+    if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_inst) {
     }
     else {
-        if (self->sym->structs[si].has_drop_impl) {
+        if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->has_drop_impl) {
             return 1;
         }
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        const char * ft = self->sym->structs[si].fields[fi].type;
-        const char * dims = self->sym->structs[si].fields[fi].dims;
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        const char * ft = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type;
+        const char * dims = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims;
         if (dims[0]) {
             if (backend_emit_Box_type_owns(self, ft, (depth + 1))) {
                 return 1;
@@ -1794,7 +1798,7 @@ int backend_emit_write_unit_header_body(struct backend_emit_Emitter * self, int 
             if (((backend_lir_lmod_plan_row_kind(r) != LPS_DROP) || (backend_lir_lmod_plan_row_unit(r) != u))) {
                 continue;
             }
-            fprintf(self->out, "void %s_Drop_drop(void *);\n", self->sym->structs[backend_lir_lmod_plan_row_node(r)].name);
+            fprintf(self->out, "void %s_Drop_drop(void *);\n", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, backend_lir_lmod_plan_row_node(r))->name);
         }
     }
     if (backend_emit_emit_struct_insts(self, u, 1) != 0) {

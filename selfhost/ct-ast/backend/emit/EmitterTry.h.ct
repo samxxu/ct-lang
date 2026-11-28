@@ -146,13 +146,13 @@ impl EmitterTryOps for Emitter {
                 /* an exported method is callable from another unit; a private
                    one only when its struct lives in this unit */
                 if (!(self->arena->nodes[m].d == 1 || self->cur_unit == -1
-                      || self->sym->structs[si].owner == self->cur_unit))
+                      || self->sym->struct_at(si)->owner == self->cur_unit))
                     continue;
                 fprintf(self->out, "%s_release(&%s.%s); ", base, tmp, field);
                 return 0;
             }
         }
-        if (self->sym->structs[si].uses_drop)
+        if (self->sym->struct_at(si)->uses_drop)
             fprintf(self->out, "%s_Drop_drop(&%s.%s); ", base, tmp, field);
         return 0;
     }

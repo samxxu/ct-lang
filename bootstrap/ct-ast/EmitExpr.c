@@ -145,7 +145,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -2642,7 +2646,7 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
         if (si < 0) {
             return self->__backend_emit_emitops_vptr->fail_from(self, n, tool_sh_ct_scratch_fmt("type argument '%s' cannot satisfy trait '%s' (not a struct)", self->gtarg[0], self->arena->nodes[n].text));
         }
-        fprintf(self->out, "%s_%s_vtable.%s(", self->sym->structs[si].name, self->arena->nodes[n].text, self->arena->nodes[n].text2);
+        fprintf(self->out, "%s_%s_vtable.%s(", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name, self->arena->nodes[n].text, self->arena->nodes[n].text2);
         if (((self->arena->nodes[n].aux == 7) && (!((self->sym->self_mode && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0))))) {
             fputs("&", self->out);
         }
@@ -2715,7 +2719,7 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
             fprintf(self->out, "%s_%s%s(", adts[adi].full, self->arena->nodes[n].text2, (self->arena->nodes[n].suffix ? self->arena->nodes[n].suffix : ""));
         }
         else {
-            fprintf(self->out, "%s_%s%s(", self->sym->structs[si].name, self->arena->nodes[n].text2, (self->arena->nodes[n].suffix ? self->arena->nodes[n].suffix : ""));
+            fprintf(self->out, "%s_%s%s(", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name, self->arena->nodes[n].text2, (self->arena->nodes[n].suffix ? self->arena->nodes[n].suffix : ""));
         }
         if (((self->arena->nodes[n].aux == 9) && (!((self->sym->self_mode && (self->arena->nodes[self->arena->nodes[n].a].kind == N_VAR)) && (strcmp(self->arena->nodes[self->arena->nodes[n].a].text2, "self") == 0))))) {
             fputs("&", self->out);
@@ -2781,7 +2785,7 @@ int backend_emit_em_expr_mcall(struct backend_emit_Emitter * self, int n, int nk
             fprintf(self->out, "%s_%s(", adts[adi].full, self->arena->nodes[n].text2);
         }
         else {
-            fprintf(self->out, "%s_%s(", self->sym->structs[si].name, self->arena->nodes[n].text2);
+            fprintf(self->out, "%s_%s(", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name, self->arena->nodes[n].text2);
         }
 {
             int * pann = 0;
@@ -3362,13 +3366,13 @@ int backend_emit_em_expr_try(struct backend_emit_Emitter * self, int n, int nk) 
     vty = "";
     ety = "";
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, otag);
-    for (fi = 0; ((si >= 0) && (fi < self->sym->structs[si].nfields)); fi++) {
-        if (strcmp(self->sym->structs[si].fields[fi].name, "value") == 0) {
-            vty = self->sym->structs[si].fields[fi].type;
+    for (fi = 0; ((si >= 0) && (fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields)); fi++) {
+        if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, "value") == 0) {
+            vty = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type;
         }
         else {
-            if (strcmp(self->sym->structs[si].fields[fi].name, "err") == 0) {
-                ety = self->sym->structs[si].fields[fi].type;
+            if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, "err") == 0) {
+                ety = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type;
             }
         }
     }
@@ -4101,7 +4105,7 @@ int backend_emit_em_node_delete(struct backend_emit_Emitter * self, int n, int i
         if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
-        fprintf(self->out, ") { %s_Handback_handback(", self->sym->structs[si].name);
+        fprintf(self->out, ") { %s_Handback_handback(", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name);
         if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
@@ -4116,17 +4120,17 @@ int backend_emit_em_node_delete(struct backend_emit_Emitter * self, int n, int i
         return 0;
     }
     self->__backend_emit_emitexpr_vptr->emit_indent(self, ind);
-    if (((si >= 0) && self->sym->structs[si].uses_drop)) {
+    if (((si >= 0) && self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->uses_drop)) {
         if ((!self->__backend_emit_emitdecl_vptr->drop_visible(self, si))) {
             const char * vmsg;
-            vmsg = tool_sh_ct_scratch_fmt("Drop body for 'struct %s' is not visible in this unit;"" move 'impl Drop for %s' into the unit that declares the struct", self->sym->structs[si].name, self->sym->structs[si].name);
+            vmsg = tool_sh_ct_scratch_fmt("Drop body for 'struct %s' is not visible in this unit;"" move 'impl Drop for %s' into the unit that declares the struct", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name, self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name);
             return self->__backend_emit_emitops_vptr->fail_from(self, n, vmsg);
         }
         fputs("if (", self->out);
         if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
-        fprintf(self->out, ") { %s_Drop_drop(", self->sym->structs[si].name);
+        fprintf(self->out, ") { %s_Drop_drop(", self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name);
         if (self->__backend_emit_emitexpr_vptr->emit_expr(self, self->arena->nodes[n].a) != 0) {
             return (-1);
         }
@@ -6374,16 +6378,16 @@ const char * backend_emit_sb_expr_type_text(struct backend_emit_Emitter * self, 
         if (si < 0) {
             return (const char *)(0);
         }
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
-                if (self->sym->structs[si].fields[fi].dims[0]) {
+        for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+            if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, self->arena->nodes[n].text2) == 0) {
+                if (self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims[0]) {
                     return (const char *)(0);
                 }
-                if (self->sym->structs[si].is_inst) {
+                if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_inst) {
                     int i2;
                     int nt;
                     struct frontend_sym_StructInst * ins2 = frontend_sym_ct_insts((&nt));
-                    int k2 = (ins2 ? frontend_sym_ct_inst_find(self->sym->structs[si].name) : (-1));
+                    int k2 = (ins2 ? frontend_sym_ct_inst_find(self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name) : (-1));
                     if (k2 >= 0) {
                         int tm = ins2[k2].tmpl_row;
                         int ntm;
@@ -6391,8 +6395,8 @@ const char * backend_emit_sb_expr_type_text(struct backend_emit_Emitter * self, 
                         struct frontend_sym_StructTmpl * tps2 = frontend_sym_ct_tmpls((&ntm));
                         if (((tm >= 0) && tps2)) {
                             for (tf = 0; tf < tps2[tm].nfields; tf++) {
-                                if (strcmp(tps2[tm].fields[tf].name, self->arena->nodes[n].text2) == 0) {
-                                    if (backend_emit_sb_is_tparam(self, tps2[tm].fields[tf].type)) {
+                                if (strcmp(frontend_sym_StructTmpl_field_at(&tps2[tm], tf)->name, self->arena->nodes[n].text2) == 0) {
+                                    if (backend_emit_sb_is_tparam(self, frontend_sym_StructTmpl_field_at(&tps2[tm], tf)->type)) {
                                         backend_emit_g_sb.hitparam = 1;
                                     }
                                 }
@@ -6401,7 +6405,7 @@ const char * backend_emit_sb_expr_type_text(struct backend_emit_Emitter * self, 
                         (void)(i2);
                     }
                 }
-                return backend_emit_sb_norm_text(self, self->sym->structs[si].fields[fi].type);
+                return backend_emit_sb_norm_text(self, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type);
             }
         }
         return (const char *)(0);
@@ -6771,14 +6775,14 @@ void backend_emit_sb_mark_aggregate(struct backend_emit_Emitter * self, int decl
     if (owner < 0) {
         return;
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        if (self->sym->structs[si].fields[fi].dims[0]) {
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        if (self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims[0]) {
             continue;
         }
-        if ((!frontend_sym_ct_is_string_value_type(self->sym->structs[si].fields[fi].type))) {
+        if ((!frontend_sym_ct_is_string_value_type(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type))) {
             continue;
         }
-        backend_emit_sb_field_mark(self, backend_emit_g_sb.lname[owner], self->sym->structs[si].fields[fi].name, owner);
+        backend_emit_sb_field_mark(self, backend_emit_g_sb.lname[owner], self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, owner);
     }
 }
 const char * backend_emit_sb_norm_own_type_text(struct backend_emit_Emitter * self, const char * t) {
@@ -6846,8 +6850,8 @@ int backend_emit_sb_owning_struct_type(struct backend_emit_Emitter * self, const
     if (si < 0) {
         return 0;
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        if (((!self->sym->structs[si].fields[fi].dims[0]) && frontend_sym_ct_is_string_value_type(self->sym->structs[si].fields[fi].type))) {
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        if (((!self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims[0]) && frontend_sym_ct_is_string_value_type(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type))) {
             return 1;
         }
     }

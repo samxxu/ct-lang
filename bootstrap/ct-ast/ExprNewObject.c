@@ -51,7 +51,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -358,7 +362,7 @@ static int frontend_parse_Expr_frontend_parse_ExprNew_parse_new_expr(void *self)
     if (si < 0) {
         return tool_diag_ct_sem_error(nline, ncol, "'new' only accepts a named struct type declared in this program", _self->sup->mem->path);
     }
-    if ((_self->sym->structs[si].is_template || _self->sym->structs[si].is_inst)) {
+    if ((_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_template || _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_inst)) {
         return tool_diag_ct_sem_error(nline, ncol, "'new' only accepts a named non-generic struct type; instantiate the generic first and box the value", _self->sup->mem->path);
     }
     if ((((((((strncmp(base, "Vec_", 4) == 0) || (strncmp(base, "Map_", 4) == 0)) || (strncmp(base, "MapEntry_", 9) == 0)) || (strncmp(base, "Option_", 7) == 0)) || (strncmp(base, "Result_", 7) == 0)) || (strncmp(base, "U16String", 9) == 0)) || (strncmp(base, "U16Str", 6) == 0))) {

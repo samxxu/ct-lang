@@ -231,10 +231,11 @@ pub struct Parser {
     /* The line of each import, recorded by `skip_import` so a `.m.ct` unit that
        imports a non-map unit is reported at the import line. */
     int *rel_line;
-    /* The record whose body is being read. Its fields land in
-       `structs[].fields[]`; when the body has no tag (`typedef struct { … }`),
-       this stays empty and the fields land in `pend_fields` instead. An
-       anonymous member promotes its own fields into this same table. */
+    /* The record whose body is being read. Its fields land in the struct
+       row's field block (`StructDef::field_at`); when the body has no tag
+       (`typedef struct { … }`), this stays empty and the fields land in
+       `pend_fields` instead. An anonymous member promotes its own fields into
+       this same table. */
     const char *cur_record;
     int  field_pub;
     int  field_col;
@@ -1262,13 +1263,13 @@ static int check_generic_bounds(struct Parser *self)
             continue;
         }
         ok = impl_declares(self, si, self->sym->fn_at(f)->bound);
-        for (k = 0; !ok && k < self->sym->structs[si].nuse; k++)
-            if (strcmp(self->sym->structs[si].use[k], self->sym->fn_at(f)->bound) == 0)
+        for (k = 0; !ok && k < self->sym->struct_at(si)->nuse; k++)
+            if (strcmp(self->sym->struct_at(si)->use[k], self->sym->fn_at(f)->bound) == 0)
                 ok = 1;
         if (!ok) {
             snprintf(msg, sizeof msg,
                      "type argument '%s' does not implement trait '%s'",
-                     self->sym->structs[si].name, self->sym->fn_at(f)->bound);
+                     self->sym->struct_at(si)->name, self->sym->fn_at(f)->bound);
             tool::diag::ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col,
                                      msg, self->mem->path);
         }
@@ -1312,8 +1313,8 @@ static int check_struct_bounds(struct Parser *self)
             ok = 0;
             if (si >= 0) {
                 ok = impl_declares(self, si, tp[ti].bound[k]);
-                for (k2 = 0; !ok && k2 < self->sym->structs[si].nuse; k2++)
-                    if (strcmp(self->sym->structs[si].use[k2], tp[ti].bound[k]) == 0)
+                for (k2 = 0; !ok && k2 < self->sym->struct_at(si)->nuse; k2++)
+                    if (strcmp(self->sym->struct_at(si)->use[k2], tp[ti].bound[k]) == 0)
                         ok = 1;
                 /* An `impl Trait for Box` written against the template tag
                    covers every `Box<…>` instance for the type system; the
@@ -1367,8 +1368,8 @@ static int check_trait_bounds(struct Parser *self)
             ok = 0;
             if (si >= 0) {
                 ok = impl_declares(self, si, self->sym->traits[ti].bound[k]);
-                for (k2 = 0; !ok && k2 < self->sym->structs[si].nuse; k2++)
-                    if (strcmp(self->sym->structs[si].use[k2],
+                for (k2 = 0; !ok && k2 < self->sym->struct_at(si)->nuse; k2++)
+                    if (strcmp(self->sym->struct_at(si)->use[k2],
                                self->sym->traits[ti].bound[k]) == 0)
                         ok = 1;
             }
@@ -2687,34 +2688,34 @@ impl ParseOps for Parser {
         if (self->cur_record && self->cur_record[0]) {
             si = self->sym->find_struct(self->cur_record);
             if (si < 0) return 0;
-            for (i = 0; i < self->sym->structs[si].nfields; i++)
-                if (strcmp(self->sym->structs[si].fields[i].name, nm) == 0)
+            for (i = 0; i < self->sym->struct_at(si)->nfields; i++)
+                if (strcmp(self->sym->struct_field_at(si, i)->name, nm) == 0)
                     return self->sup->fail_at(self->arena->nodes[m].line,
                         tool::sh::ct_scratch_fmt("duplicate member '%s'", nm));
             if (self->sym->ensure_struct_field_capacity(si,
-                    self->sym->structs[si].nfields + 1) != 0) return -1;
+                    self->sym->struct_at(si)->nfields + 1) != 0) return -1;
             {
-                self->sym->structs[si].fields[self->sym->structs[si].nfields].name =
+                self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->name =
                     runtime::text::ct_intern(nm);
-                if (!self->sym->structs[si].fields[self->sym->structs[si].nfields].name)
+                if (!self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->name)
                     return self->sup->fail("out of memory");
-                self->sym->structs[si].fields[self->sym->structs[si].nfields].type =
+                self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->type =
                     runtime::text::ct_intern(self->arena->nodes[m].text);
-                if (!self->sym->structs[si].fields[self->sym->structs[si].nfields].type)
+                if (!self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->type)
                     return self->sup->fail("out of memory");
-                self->sym->structs[si].fields[self->sym->structs[si].nfields].dims =
+                self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->dims =
                     runtime::text::ct_intern(self->arena->nodes[m].text3);
-                if (!self->sym->structs[si].fields[self->sym->structs[si].nfields].dims)
+                if (!self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->dims)
                     return self->sup->fail("out of memory");
-                self->sym->structs[si].fields[self->sym->structs[si].nfields].line =
+                self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->line =
                     self->arena->nodes[m].line;
-                self->sym->structs[si].fields[self->sym->structs[si].nfields].is_pub =
+                self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->is_pub =
                     self->arena->nodes[m].d;
-                self->sym->structs[si].fields[self->sym->structs[si].nfields].col =
+                self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->col =
                     (int)self->arena->nodes[m].num;
-                self->sym->structs[si].fields[self->sym->structs[si].nfields].is_bitfield =
+                self->sym->struct_field_at(si, self->sym->struct_at(si)->nfields)->is_bitfield =
                     self->arena->nodes[m].aux == 1;
-                self->sym->structs[si].nfields++;
+                self->sym->struct_at(si)->nfields++;
             }
             return 0;
         }
@@ -3086,7 +3087,7 @@ impl ParseOps for Parser {
            declaration above it is fine. L2 reports it at the '{'. */
         if (qname[0]) {
             int ex = self->sym->find_struct(qname);
-            if (ex >= 0 && self->sym->structs[ex].defined)
+            if (ex >= 0 && self->sym->struct_at(ex)->defined)
                 return tool::diag::ct_sem_error(self->lex->tokline,
                     self->lex->tokstart - self->lex->lstart + 1,
                     tool::sh::ct_scratch_fmt("duplicate %s '%s'",
@@ -3131,12 +3132,12 @@ impl ParseOps for Parser {
                 int si3, ui3;
                 si3 = self->sym->find_struct(qname);
                 if (si3 >= 0) {
-                    for (ui3 = 0; ui3 < self->sym->structs[si3].nuse; ui3++) {
-                        if (self->sym->find_trait(self->sym->structs[si3].use[ui3]) < 0)
+                    for (ui3 = 0; ui3 < self->sym->struct_at(si3)->nuse; ui3++) {
+                        if (self->sym->find_trait(self->sym->struct_at(si3)->use[ui3]) < 0)
                             return tool::diag::ct_sem_error(brace_line, brace_col,
                                 tool::sh::ct_scratch_fmt(
                                     "struct '%s' uses undefined trait '%s'",
-                                    name, self->sym->structs[si3].use[ui3]),
+                                    name, self->sym->struct_at(si3)->use[ui3]),
                                 self->mem->path);
                     }
                 }
@@ -3145,16 +3146,16 @@ impl ParseOps for Parser {
         if (qname[0]) {
             int di = self->sym->find_struct(qname);
             if (di >= 0) {
-                self->sym->structs[di].defined = 1;
-                self->sym->structs[di].is_pub = self->decl_pub;
-                self->sym->structs[di].line = struct_line;
-                self->sym->structs[di].col = struct_col;
-                self->sym->structs[di].allow_cycle = allow_cycle;
+                self->sym->struct_at(di)->defined = 1;
+                self->sym->struct_at(di)->is_pub = self->decl_pub;
+                self->sym->struct_at(di)->line = struct_line;
+                self->sym->struct_at(di)->col = struct_col;
+                self->sym->struct_at(di)->allow_cycle = allow_cycle;
             }
             /* Phase 33 O3: remember the declaring unit, so a container named by
                another unit can tell whether the element's definition is visible
                in the container template's own unit. */
-            if (di >= 0) self->sym->structs[di].owner = self->cur_unit;
+            if (di >= 0) self->sym->struct_at(di)->owner = self->cur_unit;
         }
         /* Phase 29: publish the template build-wide, so a consumer unit that
            names `Stack<int>` can substitute the field spellings without ever
@@ -3171,34 +3172,34 @@ impl ParseOps for Parser {
             tps = frontend::sym::ct_tmpls(&tn4);
             if (di >= 0 && tps) {
                 if (self->sym->ensure_tmpl_field_capacity(ti4,
-                        self->sym->structs[di].nfields) != 0) return -1;
+                        self->sym->struct_at(di)->nfields) != 0) return -1;
                 tps = frontend::sym::ct_tmpls(&tn4);
-                tps[ti4].nfields = self->sym->structs[di].nfields;
+                tps[ti4].nfields = self->sym->struct_at(di)->nfields;
                 for (fi4 = 0; fi4 < tps[ti4].nfields; fi4++) {
-                    tps[ti4].fields[fi4].name = self->sym->structs[di].fields[fi4].name;
-                    tps[ti4].fields[fi4].type = self->sym->structs[di].fields[fi4].type;
-                    tps[ti4].fields[fi4].dims = self->sym->structs[di].fields[fi4].dims;
+                    tps[ti4].field_at(fi4)->name = self->sym->struct_field_at(di, fi4)->name;
+                    tps[ti4].field_at(fi4)->type = self->sym->struct_field_at(di, fi4)->type;
+                    tps[ti4].field_at(fi4)->dims = self->sym->struct_field_at(di, fi4)->dims;
                 }
-                tps[ti4].nuse = self->sym->structs[di].nuse;
+                tps[ti4].nuse = self->sym->struct_at(di)->nuse;
                 for (ui4 = 0; ui4 < tps[ti4].nuse; ui4++)
-                    tps[ti4].use[ui4] = self->sym->structs[di].use[ui4];
-                self->sym->structs[di].is_template = 1;
-                self->sym->structs[di].ntparams = nt;
-                self->sym->structs[di].tparam =
-                    frontend::sym::ct_rows_reserve(self->sym->structs[di].tparam,
-                        self->sym->structs[di].tcap, nt,
-                        &self->sym->structs[di].tcap);
-                if (nt > 0 && (!self->sym->structs[di].tparam
-                               || self->sym->structs[di].tcap < nt))
+                    tps[ti4].use[ui4] = self->sym->struct_at(di)->use[ui4];
+                self->sym->struct_at(di)->is_template = 1;
+                self->sym->struct_at(di)->ntparams = nt;
+                self->sym->struct_at(di)->tparam =
+                    frontend::sym::ct_rows_reserve(self->sym->struct_at(di)->tparam,
+                        self->sym->struct_at(di)->tcap, nt,
+                        &self->sym->struct_at(di)->tcap);
+                if (nt > 0 && (!self->sym->struct_at(di)->tparam
+                               || self->sym->struct_at(di)->tcap < nt))
                     return self->sup->fail("out of memory");
                 for (fi4 = 0; fi4 < nt; fi4++)
-                    snprintf(self->sym->structs[di].tparam[fi4], MAX_TEXT, "%s",
+                    snprintf(self->sym->struct_at(di)->tparam[fi4], MAX_TEXT, "%s",
                              tparam[fi4]);
-                self->sym->structs[di].is_pub = self->decl_pub;
+                self->sym->struct_at(di)->is_pub = self->decl_pub;
                 /* P36 S2a2: the built-in Drop/Handback flags travel with the
                    template so consumer units can copy them onto instances. */
-                tps[ti4].uses_drop = self->sym->structs[di].uses_drop;
-                tps[ti4].uses_handback = self->sym->structs[di].uses_handback;
+                tps[ti4].uses_drop = self->sym->struct_at(di)->uses_drop;
+                tps[ti4].uses_handback = self->sym->struct_at(di)->uses_handback;
             }
         }
         /* `struct S { … } __attribute__((packed));`: either after the body or,
@@ -3755,51 +3756,51 @@ impl ParseOps for Parser {
                 if (self->arena->nodes[t].text[0]) tagi = self->sym->find_struct(self->arena->nodes[t].text);
                 ai = self->sym->find_struct(qname);
                 if (tagi >= 0 && ai >= 0 && tagi != ai) {
-                    self->sym->structs[ai].nuse = self->sym->structs[tagi].nuse;
-                    self->sym->structs[ai].uses_drop = self->sym->structs[tagi].uses_drop;
-                    self->sym->structs[ai].uses_handback = self->sym->structs[tagi].uses_handback;
-                    self->sym->structs[ai].has_handback_impl = self->sym->structs[tagi].has_handback_impl;
-                    for (ui = 0; ui < self->sym->structs[tagi].nuse; ui++)
-                        self->sym->structs[ai].use[ui] = self->sym->structs[tagi].use[ui];
+                    self->sym->struct_at(ai)->nuse = self->sym->struct_at(tagi)->nuse;
+                    self->sym->struct_at(ai)->uses_drop = self->sym->struct_at(tagi)->uses_drop;
+                    self->sym->struct_at(ai)->uses_handback = self->sym->struct_at(tagi)->uses_handback;
+                    self->sym->struct_at(ai)->has_handback_impl = self->sym->struct_at(tagi)->has_handback_impl;
+                    for (ui = 0; ui < self->sym->struct_at(tagi)->nuse; ui++)
+                        self->sym->struct_at(ai)->use[ui] = self->sym->struct_at(tagi)->use[ui];
                     if (self->sym->ensure_struct_field_capacity(ai,
-                            self->sym->structs[tagi].nfields) != 0) return -1;
-                    self->sym->structs[ai].nfields = self->sym->structs[tagi].nfields;
-                    for (ui = 0; ui < self->sym->structs[tagi].nfields; ui++) {
-                        self->sym->structs[ai].fields[ui].name =
-                            self->sym->structs[tagi].fields[ui].name;
-                        self->sym->structs[ai].fields[ui].type =
-                            self->sym->structs[tagi].fields[ui].type;
+                            self->sym->struct_at(tagi)->nfields) != 0) return -1;
+                    self->sym->struct_at(ai)->nfields = self->sym->struct_at(tagi)->nfields;
+                    for (ui = 0; ui < self->sym->struct_at(tagi)->nfields; ui++) {
+                        self->sym->struct_field_at(ai, ui)->name =
+                            self->sym->struct_field_at(tagi, ui)->name;
+                        self->sym->struct_field_at(ai, ui)->type =
+                            self->sym->struct_field_at(tagi, ui)->type;
                         /* `dims` makes an array field an array; without it the
                            alias emits a scalar and the vptr initialiser targets
                            `.items.__t_vptr` on a struct array, which no C
                            compiler accepts */
-                        self->sym->structs[ai].fields[ui].dims =
-                            self->sym->structs[tagi].fields[ui].dims;
-                        self->sym->structs[ai].fields[ui].line =
-                            self->sym->structs[tagi].fields[ui].line;
-                        self->sym->structs[ai].fields[ui].col =
-                            self->sym->structs[tagi].fields[ui].col;
-                        self->sym->structs[ai].fields[ui].is_pub =
-                            self->sym->structs[tagi].fields[ui].is_pub;
-                        self->sym->structs[ai].fields[ui].is_bitfield =
-                            self->sym->structs[tagi].fields[ui].is_bitfield;
+                        self->sym->struct_field_at(ai, ui)->dims =
+                            self->sym->struct_field_at(tagi, ui)->dims;
+                        self->sym->struct_field_at(ai, ui)->line =
+                            self->sym->struct_field_at(tagi, ui)->line;
+                        self->sym->struct_field_at(ai, ui)->col =
+                            self->sym->struct_field_at(tagi, ui)->col;
+                        self->sym->struct_field_at(ai, ui)->is_pub =
+                            self->sym->struct_field_at(tagi, ui)->is_pub;
+                        self->sym->struct_field_at(ai, ui)->is_bitfield =
+                            self->sym->struct_field_at(tagi, ui)->is_bitfield;
                     }
                 } else if (ai >= 0 && !self->arena->nodes[t].text[0]) {
                     /* an untagged body: the pending list belongs to this alias */
                     if (self->sym->ensure_struct_field_capacity(ai, self->npend) != 0)
                         return -1;
-                    self->sym->structs[ai].nfields = self->npend;
+                    self->sym->struct_at(ai)->nfields = self->npend;
                     for (ui = 0; ui < self->npend; ui++) {
-                        self->sym->structs[ai].fields[ui].name =
+                        self->sym->struct_field_at(ai, ui)->name =
                             self->pend_fields[ui].name;
-                        self->sym->structs[ai].fields[ui].type =
+                        self->sym->struct_field_at(ai, ui)->type =
                             self->pend_fields[ui].type;
-                        self->sym->structs[ai].fields[ui].dims =
+                        self->sym->struct_field_at(ai, ui)->dims =
                             self->pend_fields[ui].dims;
-                        self->sym->structs[ai].fields[ui].line = self->pend_fields[ui].line;
-                        self->sym->structs[ai].fields[ui].col = self->pend_fields[ui].col;
-                        self->sym->structs[ai].fields[ui].is_pub = self->pend_fields[ui].is_pub;
-                        self->sym->structs[ai].fields[ui].is_bitfield =
+                        self->sym->struct_field_at(ai, ui)->line = self->pend_fields[ui].line;
+                        self->sym->struct_field_at(ai, ui)->col = self->pend_fields[ui].col;
+                        self->sym->struct_field_at(ai, ui)->is_pub = self->pend_fields[ui].is_pub;
+                        self->sym->struct_field_at(ai, ui)->is_bitfield =
                             self->pend_fields[ui].is_bitfield;
                     }
                 }
@@ -3875,20 +3876,20 @@ impl ParseOps for Parser {
             /* `Drop` is built in (Phase 5): it carries no vptr or vtable, so it
                never joins the `use` list -- only the flag matters */
             if (strcmp(tname, "Drop") == 0) {
-                self->sym->structs[sindex].uses_drop = 1;
+                self->sym->struct_at(sindex)->uses_drop = 1;
             /* `Handback` is built in as well: a borrowed object is handed back
                to its pool, so it carries no vptr or vtable and never joins the
                `use` list -- only the flag matters */
             } else if (strcmp(tname, "Handback") == 0) {
-                self->sym->structs[sindex].uses_handback = 1;
+                self->sym->struct_at(sindex)->uses_handback = 1;
             } else {
-                if (self->sym->structs[sindex].nuse >= MAX_TRAITS)
+                if (self->sym->struct_at(sindex)->nuse >= MAX_TRAITS)
                     return self->sup->fail("too many used traits");
-                self->sym->structs[sindex].use[self->sym->structs[sindex].nuse] =
+                self->sym->struct_at(sindex)->use[self->sym->struct_at(sindex)->nuse] =
                     runtime::text::ct_intern(tname);
-                if (!self->sym->structs[sindex].use[self->sym->structs[sindex].nuse])
+                if (!self->sym->struct_at(sindex)->use[self->sym->struct_at(sindex)->nuse])
                     return self->sup->fail("out of memory");
-                self->sym->structs[sindex].nuse++;
+                self->sym->struct_at(sindex)->nuse++;
             }
             if (self->lex->tok == T_PUNCT && self->lex->tok_is(",")) {
                 self->sup->lex_next();
@@ -4443,13 +4444,13 @@ impl ParseOps for Parser {
             }
         /* the borrow declaration needs to know that this unit wrote the handback
            body: `use Handback` alone would hand back to nothing */
-        if (strcmp(rtrait, "Handback") == 0) self->sym->structs[si].has_handback_impl = 1;
+        if (strcmp(rtrait, "Handback") == 0) self->sym->struct_at(si)->has_handback_impl = 1;
         /* PH-48 D48-2: the concrete impl Drop marks the struct row too. The
            generic template path already does this when an instance is created;
            without it a consumer unit could not distinguish no impl at all (the
            owner emits the recursive glue) from an impl in a different unit
            (L48-2). */
-        if (strcmp(rtrait, "Drop") == 0) self->sym->structs[si].has_drop_impl = 1;
+        if (strcmp(rtrait, "Drop") == 0) self->sym->struct_at(si)->has_drop_impl = 1;
         brace_line = self->lex->tokline;
         brace_col = self->lex->tokstart - self->lex->lstart + 1;
         if (self->sup->expect("{") != 0) return -1;
@@ -4585,7 +4586,7 @@ impl ParseOps for Parser {
             }
             self->sym->ret_type = ret;
             self->cur_func = runtime::text::ct_internf("%s_%s_%s",
-                     self->sym->structs[si].name, rtrait, mname);
+                     self->sym->struct_at(si)->name, rtrait, mname);
             if (!self->cur_func) return self->sup->fail("out of memory");
             /* the method body tracks leaks too; a method symbol is not in the
                function table, so nothing feeds `ret_owned` back to callers */
@@ -4714,7 +4715,7 @@ impl ParseOps for Parser {
             } else {
                 stype = rname;
             }
-            type_is_pub = self->sym->structs[si].is_pub;
+            type_is_pub = self->sym->struct_at(si)->is_pub;
         }
         if (self->sup->expect("{") != 0) return -1;
         node = self->sup->new_node(N_IMPL);
@@ -5100,7 +5101,7 @@ impl ParseOps for Parser {
                         if (strcmp(use, "Drop") == 0) {
                             int si_d = self->sym->find_struct(ins2[ii2].name);
                             if (si_d >= 0)
-                                self->sym->structs[si_d].has_drop_impl = 1;
+                                self->sym->struct_at(si_d)->has_drop_impl = 1;
                         }
                     } else {
                         self->sup->adopt_use(ins2[ii2].name, use);
@@ -5197,7 +5198,7 @@ impl ParseOps for Parser {
                 int tpub = 0;
                 int is_adt_t = 0;
                 if (tsi >= 0) {
-                    tpub = self->sym->structs[tsi].is_pub;
+                    tpub = self->sym->struct_at(tsi)->is_pub;
                 } else {
                     /* v1-PH-2 S6: a generic ADT template has no struct row;
                        its ADT row carries the `pub` flag. */

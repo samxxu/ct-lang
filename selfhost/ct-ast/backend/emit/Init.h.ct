@@ -88,7 +88,7 @@ impl InitOps for Init {
         if (strncmp(base, "struct ", 7) == 0) base += 7;
         while (*base == ' ') base++;
         si = self->sym->find_struct(base);
-        return (si >= 0 && self->sym->structs[si].nuse > 0) ? 1 : 0;
+        return (si >= 0 && self->sym->struct_at(si)->nuse > 0) ? 1 : 0;
     }
 
     /* Does this *value* type need a vptr written somewhere -- itself or through a
@@ -105,9 +105,9 @@ impl InitOps for Init {
         if (strchr(tb, '*') != 0) return 0;
         si = self->sym->find_struct(tb);
         if (si < 0) return 0;
-        if (self->sym->structs[si].nuse > 0) return 1;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            const char *ft = self->sym->structs[si].fields[fi].type;
+        if (self->sym->struct_at(si)->nuse > 0) return 1;
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
+            const char *ft = self->sym->struct_field_at(si, fi)->type;
             if (strchr(ft, '*') != 0) continue;
             if (self->type_needs_init(ft)) return 1;
         }
@@ -126,17 +126,17 @@ impl InitOps for Init {
         while (*base == ' ') base++;
         si = self->sym->find_struct(base);
         if (si < 0) return 0;
-        for (u = 0; u < self->sym->structs[si].nuse; u++) {
+        for (u = 0; u < self->sym->struct_at(si)->nuse; u++) {
             char *low = tool::sh::ct_scratch_alloc(
-                (int)strlen(self->sym->structs[si].use[u]) + 1);
-            for (i = 0; self->sym->structs[si].use[u][i]; i++) {
-                char c = self->sym->structs[si].use[u][i];
+                (int)strlen(self->sym->struct_at(si)->use[u]) + 1);
+            for (i = 0; self->sym->struct_at(si)->use[u][i]; i++) {
+                char c = self->sym->struct_at(si)->use[u][i];
                 if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                 low[i] = c;
             }
             low[i] = 0;
             if (u > 0) fputs(", ", f);
-            fprintf(f, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, self->sym->structs[si].use[u]);
+            fprintf(f, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, self->sym->struct_at(si)->use[u]);
         }
         return 0;
     }
@@ -155,24 +155,24 @@ impl InitOps for Init {
         if (!tb) return 0;
         si = self->sym->find_struct(tb);
         if (si < 0) return 0;
-        for (u = 0; u < self->sym->structs[si].nuse; u++) {
+        for (u = 0; u < self->sym->struct_at(si)->nuse; u++) {
             char *low = tool::sh::ct_scratch_alloc(
-                (int)strlen(self->sym->structs[si].use[u]) + 1);
-            for (i = 0; self->sym->structs[si].use[u][i]; i++) {
-                char c = self->sym->structs[si].use[u][i];
+                (int)strlen(self->sym->struct_at(si)->use[u]) + 1);
+            for (i = 0; self->sym->struct_at(si)->use[u][i]; i++) {
+                char c = self->sym->struct_at(si)->use[u][i];
                 if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
                 low[i] = c;
             }
             low[i] = 0;
             put_indent(f, ind);
-            fprintf(f, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, self->sym->structs[si].use[u]);
+            fprintf(f, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, self->sym->struct_at(si)->use[u]);
         }
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
             const char *ft;
             const char *sub;
-            ft = self->sym->structs[si].fields[fi].type;
+            ft = self->sym->struct_field_at(si, fi)->type;
             if (strchr(ft, '*') != 0) continue;
-            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* handled by the loop form */
+            if (self->sym->struct_field_at(si, fi)->dims[0]) continue;  /* handled by the loop form */
             if (!self->type_needs_init(ft)) continue;
             /* S1a-0 C2n-3: `recv + "." + field` is a generated member path, not
                a source identifier. Both halves may be 159 bytes, so a 160-byte
@@ -180,7 +180,7 @@ impl InitOps for Init {
                exist. Build it run-scoped instead; the pool lives until the
                command returns, and the recursion only reads it. */
             sub = tool::sh::ct_scratch_fmt("%s.%s", recv,
-                                           self->sym->structs[si].fields[fi].name);
+                                           self->sym->struct_field_at(si, fi)->name);
             if (self->emit_vptr_stmts(sub, ft, ind) != 0) return -1;
         }
         return self->emit_array_field_vptrs(si, recv, ind);
@@ -200,12 +200,12 @@ impl InitOps for Init {
         FILE *f = (FILE *)(*self->out);
         int fi, i, j, n, depth, skip;
         (void)self;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
             const char *ft;
             const char *prefix;
-            ft = self->sym->structs[si].fields[fi].type;
+            ft = self->sym->struct_field_at(si, fi)->type;
             if (strchr(ft, '*') != 0) continue;          /* a borrowed pointer, not a value */
-            if (self->sym->structs[si].fields[fi].dims[0]) continue;  /* an array: no designator reaches it */
+            if (self->sym->struct_field_at(si, fi)->dims[0]) continue;  /* an array: no designator reaches it */
             if (!self->type_needs_init(ft)) continue;
             skip = 0;
             depth = 0;
@@ -234,7 +234,7 @@ impl InitOps for Init {
                    plus the dot would not fit the old row. */
                 i = j - 1;
                 {
-                    const char *fname = self->sym->structs[si].fields[fi].name;
+                    const char *fname = self->sym->struct_field_at(si, fi)->name;
                     size_t nl = (size_t)(j - n);
                     if (nl == 0 || nl != strlen(fname)
                         || memcmp(raw + n, fname, nl) != 0) continue;
@@ -248,7 +248,7 @@ impl InitOps for Init {
             }
             if (skip) continue;
             /* `.field` is generated text (`1 + 159` exceeds the old row). */
-            prefix = tool::sh::ct_scratch_fmt(".%s", self->sym->structs[si].fields[fi].name);
+            prefix = tool::sh::ct_scratch_fmt(".%s", self->sym->struct_field_at(si, fi)->name);
             if (started) fputs(", ", f);
             if (self->emit_vptr_items(prefix, ft) != 0) return -1;
             started = 1;
@@ -264,14 +264,14 @@ impl InitOps for Init {
         FILE *f = (FILE *)(*self->out);
         int fi;
         (void)self;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
             const char *ft;
             const char *sub;
             const char *next;
             const char *d;
             int depth, started;
-            if (!self->sym->structs[si].fields[fi].dims[0]) continue;
-            ft = self->sym->structs[si].fields[fi].type;
+            if (!self->sym->struct_field_at(si, fi)->dims[0]) continue;
+            ft = self->sym->struct_field_at(si, fi)->type;
             if (strchr(ft, '*') != 0) continue;
             if (!self->type_needs_init(ft)) continue;
             /* S1a-0 C2n-3: the member path is generated text. Keep it in the
@@ -279,8 +279,8 @@ impl InitOps for Init {
                length stays one exact name; the old 160-byte row cut it and the
                emitted statement named a member that does not exist. */
             sub = tool::sh::ct_scratch_fmt("%s.%s", recv,
-                                           self->sym->structs[si].fields[fi].name);
-            d = self->sym->structs[si].fields[fi].dims;
+                                           self->sym->struct_field_at(si, fi)->name);
+            d = self->sym->struct_field_at(si, fi)->dims;
             depth = 0;
             started = 0;
             while (*d == '[') {
@@ -326,10 +326,10 @@ impl InitOps for Init {
         if (strchr(tb, '*') != 0) return 0;
         si = self->sym->find_struct(tb);
         if (si < 0) return 0;
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
+        for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++) {
             const char *ft;
-            if (self->sym->structs[si].fields[fi].dims[0]) continue;
-            ft = self->sym->structs[si].fields[fi].type;
+            if (self->sym->struct_field_at(si, fi)->dims[0]) continue;
+            ft = self->sym->struct_field_at(si, fi)->type;
             if (strchr(ft, '*') != 0) continue;
             if (self->type_needs_init(ft)) return 1;
         }

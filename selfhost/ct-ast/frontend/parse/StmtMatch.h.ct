@@ -1238,7 +1238,7 @@ impl StmtMatch for Stmt {
                              bname, type);
                 return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
             }
-            sd = &self->sym->structs[si];
+            sd = self->sym->struct_at(si);
             if (strcmp(bname, sd->name) != 0 && strcmp(bname, g_pat.cbase) != 0) {
                 /* an alias spelling (`typedef struct Point P`) is legal too */
                 const char *rr;
@@ -1289,7 +1289,7 @@ impl StmtMatch for Stmt {
                 {
                     int q;
                     for (q = 0; q < sd->nfields; q++)
-                        if (strcmp(sd->fields[q].name, fname) == 0) { fi = q; break; }
+                        if (strcmp(sd->field_at(q)->name, fname) == 0) { fi = q; break; }
                 }
                 if (fi < 0) {
                     snprintf(msgbuf, sizeof msgbuf,
@@ -1318,15 +1318,15 @@ impl StmtMatch for Stmt {
                     const char *sep;
                     self->sup->lex_next();
                     sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
-                    fp = tool::sh::ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
-                    child = self->pat_parse_one(sd->fields[fi].type, fp);
+                    fp = tool::sh::ct_scratch_fmt("%s%s%s", path, sep, sd->field_at(fi)->name);
+                    child = self->pat_parse_one(sd->field_at(fi)->type, fp);
                 } else {
                     const char *fp;
                     const char *sep;
                     sep = (path[0] == 0) ? (g_pat.is_ptr ? "->" : ".") : ".";
-                    fp = tool::sh::ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
-                    child = self->pat_desc(PAT_BINDER, fname, sd->fields[fi].type, 0);
-                    if (child >= 0 && pat_group_bind_add(fname, sd->fields[fi].type,
+                    fp = tool::sh::ct_scratch_fmt("%s%s%s", path, sep, sd->field_at(fi)->name);
+                    child = self->pat_desc(PAT_BINDER, fname, sd->field_at(fi)->type, 0);
+                    if (child >= 0 && pat_group_bind_add(fname, sd->field_at(fi)->type,
                                                    runtime::text::ct_intern(fp)) == -2) {
                         free(seen);
                         snprintf(msgbuf, sizeof msgbuf,
@@ -1341,7 +1341,7 @@ impl StmtMatch for Stmt {
                     }
                 }
                 if (child < 0) { free(seen); return -1; }
-                wrap = self->pat_desc(PAT_FIELD, fname, sd->fields[fi].type, fi);
+                wrap = self->pat_desc(PAT_FIELD, fname, sd->field_at(fi)->type, fi);
                 if (wrap < 0) { free(seen); return -1; }
                 self->arena->nodes[wrap].a = child;
                 self->arena->nodes[wrap].b = self->arena->nodes[child].b;
@@ -1364,7 +1364,7 @@ impl StmtMatch for Stmt {
                     if (!seen[q]) break;
                 snprintf(msgbuf, sizeof msgbuf,
                          "struct pattern for '%s' is missing field '%s' (name it or write '..')",
-                         sd->name, sd->fields[q].name);
+                         sd->name, sd->field_at(q)->name);
                 free(seen);
                 return tool::diag::ct_sem_error(line, col, msgbuf, self->mem->path);
             }

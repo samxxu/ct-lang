@@ -142,7 +142,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -1342,23 +1346,23 @@ static int frontend_module_Module_frontend_module_ModuleOps_check_drop_visibilit
     int line;
     const char * name;
     for (si = 0; si < _self->sym->nstructs; si++) {
-        if ((!_self->sym->structs[si].uses_drop)) {
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->uses_drop)) {
             continue;
         }
-        if ((_self->sym->structs[si].is_template || _self->sym->structs[si].is_inst)) {
+        if ((_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_template || _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_inst)) {
             continue;
         }
-        if ((!_self->sym->structs[si].is_pub)) {
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->is_pub)) {
             continue;
         }
-        u = _self->sym->structs[si].owner;
+        u = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->owner;
         if (((u < 0) || (u >= _self->nunits))) {
             continue;
         }
         if ((!_self->units[u].is_hdr)) {
             continue;
         }
-        if ((!_self->sym->structs[si].has_drop_impl)) {
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->has_drop_impl)) {
             continue;
         }
         found = 0;
@@ -1371,7 +1375,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_check_drop_visibilit
         if (found) {
             continue;
         }
-        name = _self->sym->structs[si].name;
+        name = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->name;
         line = 1;
         for (n = _self->arena->nodes[_self->units[u].prog].a; n >= 0; n = _self->arena->nodes[n].next) {
             if (((_self->arena->nodes[n].kind == N_STRUCT) && (strcmp(_self->arena->nodes[n].text2, name) == 0))) {
@@ -3014,16 +3018,16 @@ static int frontend_module_Module_frontend_module_ModuleOps_cycle_check(void *se
         frontend_module_g_cycle_nout[i] = 0;
     }
     for (i = 0; i < nrows; i++) {
-        if ((!_self->sym->structs[i].defined)) {
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, i)->defined)) {
             continue;
         }
-        if (_self->sym->structs[i].is_template) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, i)->is_template) {
             continue;
         }
-        if (_self->sym->structs[i].is_inst) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, i)->is_inst) {
             continue;
         }
-        for (fi = 0; fi < _self->sym->structs[i].nfields; fi++) {
+        for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, i)->nfields; fi++) {
             k = cycle_Box_target(_self, i, fi);
             if (k < 0) {
                 continue;
@@ -3043,13 +3047,13 @@ static int frontend_module_Module_frontend_module_ModuleOps_cycle_check(void *se
         }
     }
     for (a = 0; a < nrows; a++) {
-        if ((!_self->sym->structs[a].defined)) {
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, a)->defined)) {
             continue;
         }
-        if (_self->sym->structs[a].is_template) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, a)->is_template) {
             continue;
         }
-        if (_self->sym->structs[a].is_inst) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, a)->is_inst) {
             continue;
         }
         for (j = 0; j < frontend_module_g_cycle_nout[a]; j++) {
@@ -3379,14 +3383,14 @@ static int ct_unit_mixed_private(struct frontend_module_Module * self, int u) {
     for (si = 0; si < self->sym->nstructs; si++) {
         int hp = 0;
         int hv = 0;
-        if (self->sym->structs[si].owner != u) {
+        if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->owner != u) {
             continue;
         }
-        if (self->sym->structs[si].nuse > 0) {
+        if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse > 0) {
             continue;
         }
-        for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-            if (self->sym->structs[si].fields[fi].is_pub) {
+        for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+            if (self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->is_pub) {
                 hp = 1;
             }
             else {
@@ -3633,7 +3637,7 @@ static int ct_elem_plain_owner(struct frontend_module_Module * self, const char 
     if (si < 0) {
         return (-1);
     }
-    return self->sym->structs[si].owner;
+    return self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->owner;
 }
 static int ct_inst_elem_foreign(struct frontend_module_Module * self, int ii) {
     int n;
@@ -3895,7 +3899,7 @@ static int ct_shell_plan_add_inprots(struct frontend_module_Module * self, int p
             if (((si < 0) || (si >= self->sym->nstructs))) {
                 continue;
             }
-            if ((!ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name))) {
+            if ((!ct_decl_is_pub(self, N_STRUCT, self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name))) {
                 continue;
             }
         }
@@ -3938,7 +3942,7 @@ static int ct_vtable_exported(struct frontend_module_Module * self, int si, cons
     if (((t < 0) || (!self->sym->traits[t].is_pub))) {
         return 0;
     }
-    return ct_decl_is_pub(self, N_STRUCT, self->sym->structs[si].name);
+    return ct_decl_is_pub(self, N_STRUCT, self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name);
 }
 static int ct_map_vtable_exported(struct frontend_module_Module * self, int i) {
     int t;
@@ -4015,10 +4019,10 @@ static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int p
     const char * tname;
     for (i = 0; i < self->sym->nstructs; i++) {
         int ti;
-        if (self->sym->structs[i].is_template) {
+        if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, i)->is_template) {
             continue;
         }
-        ti = self->sym->__frontend_sym_symbolops_vptr->find_type(self->sym, self->sym->structs[i].name);
+        ti = self->sym->__frontend_sym_symbolops_vptr->find_type(self->sym, self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, i)->name);
         if (ti < 0) {
             continue;
         }
@@ -4085,8 +4089,8 @@ static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int p
         if (si < 0) {
             continue;
         }
-        for (i = 0; i < self->sym->structs[si].nuse; i++) {
-            tname = self->sym->structs[si].use[i];
+        for (i = 0; i < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse; i++) {
+            tname = self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->use[i];
             if ((!ct_adoption_default_only(self, si, tname))) {
                 continue;
             }
@@ -4099,24 +4103,24 @@ static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int p
         int owner;
         int legacy;
         int kind;
-        if (((!self->sym->structs[si].uses_drop) || self->sym->structs[si].is_template)) {
+        if (((!self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->uses_drop) || self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_template)) {
             continue;
         }
-        owner = self->sym->structs[si].owner;
+        owner = self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->owner;
         legacy = ((unit < 0) || (owner < 0));
         if (unit < 0) {
             kind = 0;
         }
         else {
             if (legacy) {
-                if (self->sym->structs[si].is_inst) {
+                if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_inst) {
                     continue;
                 }
                 kind = 1;
             }
             else {
                 if (owner == unit) {
-                    if ((self->sym->structs[si].has_drop_impl && (!ct_unit_has_drop_impl(self, unit, si)))) {
+                    if ((self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->has_drop_impl && (!ct_unit_has_drop_impl(self, unit, si)))) {
                         continue;
                     }
                     kind = 2;
@@ -4131,7 +4135,7 @@ static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int p
         }
     }
     for (si = 0; si < self->sym->nstructs; si++) {
-        if (self->sym->structs[si].has_handback_impl) {
+        if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->has_handback_impl) {
             if (backend_lir_lmod_plan_shell_add_stage(LPS_HANDBAK, unit, si, 0, 0, 0) != 0) {
                 return 1;
             }
@@ -4165,8 +4169,8 @@ static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int p
             if (si < 0) {
                 continue;
             }
-            for (i = 0; i < self->sym->structs[si].nuse; i++) {
-                tname = self->sym->structs[si].use[i];
+            for (i = 0; i < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse; i++) {
+                tname = self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->use[i];
                 if ((!ct_adoption_default_only(self, si, tname))) {
                     continue;
                 }
@@ -4352,22 +4356,22 @@ static int ct_shell_plan_add_program(struct frontend_module_Module * self, int p
         int si;
         for (si = 0; si < self->sym->nstructs; si++) {
             int has_body = 0;
-            if ((!self->sym->structs[si].uses_drop)) {
+            if ((!self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->uses_drop)) {
                 continue;
             }
-            if (self->sym->structs[si].is_template) {
+            if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_template) {
                 continue;
             }
-            if (self->sym->structs[si].is_inst) {
+            if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_inst) {
                 continue;
             }
-            if ((!self->sym->structs[si].is_pub)) {
+            if ((!self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->is_pub)) {
                 continue;
             }
-            if (self->sym->structs[si].owner != unit) {
+            if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->owner != unit) {
                 continue;
             }
-            if (self->sym->structs[si].has_drop_impl) {
+            if (self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->has_drop_impl) {
                 for (n = ar->nodes[self->units[unit].prog].a; n >= 0; n = ar->nodes[n].next) {
                     if ((((ar->nodes[n].kind == N_IMPL) && (ar->nodes[n].aux == si)) && (strcmp(ar->nodes[n].text2, "Drop") == 0))) {
                         has_body = 1;
@@ -4445,8 +4449,8 @@ static int ct_map_plan_build(struct frontend_module_Module * self, int prog, int
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
         if (si >= 0) {
-            for (i = 0; i < self->sym->structs[si].nuse; i++) {
-                if (ct_map_plan_add(LMP_STRUCT_USE, u, parent, 0, 0, 0, self->sym->structs[si].use[i], 0, 0, 0, 0) != 0) {
+            for (i = 0; i < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nuse; i++) {
+                if (ct_map_plan_add(LMP_STRUCT_USE, u, parent, 0, 0, 0, self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->use[i], 0, 0, 0, 0) != 0) {
                     return 1;
                 }
             }
@@ -4475,7 +4479,7 @@ static int ct_map_plan_build(struct frontend_module_Module * self, int prog, int
             for (i = self->arena->nodes[m].a; i > 0; i = self->arena->nodes[i].next) {
                 count++;
             }
-            if (ct_map_plan_add(LMP_IMPL, u, (-1), self->arena->nodes[n].line, count, 0, self->sym->structs[si].name, tname, self->arena->nodes[m].text2, self->arena->nodes[m].text, 0) != 0) {
+            if (ct_map_plan_add(LMP_IMPL, u, (-1), self->arena->nodes[n].line, count, 0, self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->name, tname, self->arena->nodes[m].text2, self->arena->nodes[m].text, 0) != 0) {
                 return 1;
             }
         }
@@ -4572,8 +4576,8 @@ static int ct_model_plan_build(struct frontend_module_Module * self, int prog) {
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, self->arena->nodes[n].text2);
         if (si >= 0) {
-            for (i = 0; i < self->sym->structs[si].nfields; i++) {
-                if (ct_map_plan_add(LMP_MSTRUCT_FIELD, (-1), parent, 0, self->sym->structs[si].fields[i].line, self->sym->structs[si].fields[i].col, self->sym->structs[si].fields[i].name, self->sym->structs[si].fields[i].type, 0, 0, 0) != 0) {
+            for (i = 0; i < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; i++) {
+                if (ct_map_plan_add(LMP_MSTRUCT_FIELD, (-1), parent, 0, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, i)->line, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, i)->col, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, i)->name, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, i)->type, 0, 0, 0) != 0) {
                     return 1;
                 }
             }
@@ -4634,7 +4638,7 @@ static int ct_model_plan_build(struct frontend_module_Module * self, int prog) {
     return 0;
 }
 static const char * cycle_file(struct frontend_module_Module * m, int si) {
-    int o = m->sym->structs[si].owner;
+    int o = m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, si)->owner;
     if (((((o >= 0) && (o < m->nunits)) && m->units[o].path) && m->units[o].path[0])) {
         return m->units[o].path;
     }
@@ -4676,7 +4680,7 @@ static int cycle_Box_target(struct frontend_module_Module * m, int si, int fi) {
     int pi;
     int n;
     int ti;
-    t = m->sym->structs[si].fields[fi].type;
+    t = m->sym->__frontend_sym_symbolops_vptr->struct_field_at(m->sym, si, fi)->type;
     if (strncmp(t, "struct Box_", 11) == 0) {
         t += 7;
     }
@@ -4689,18 +4693,18 @@ static int cycle_Box_target(struct frontend_module_Module * m, int si, int fi) {
         return (-1);
     }
     bx = m->sym->__frontend_sym_symbolops_vptr->find_struct(m->sym, t);
-    if (((bx < 0) || (!m->sym->structs[bx].is_inst))) {
+    if (((bx < 0) || (!m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, bx)->is_inst))) {
         return (-1);
     }
-    for (pi = 0; pi < m->sym->structs[bx].nfields; pi++) {
-        if (strcmp(m->sym->structs[bx].fields[pi].name, "ptr") == 0) {
+    for (pi = 0; pi < m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, bx)->nfields; pi++) {
+        if (strcmp(m->sym->__frontend_sym_symbolops_vptr->struct_field_at(m->sym, bx, pi)->name, "ptr") == 0) {
             break;
         }
     }
-    if (pi >= m->sym->structs[bx].nfields) {
+    if (pi >= m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, bx)->nfields) {
         return (-1);
     }
-    t = m->sym->structs[bx].fields[pi].type;
+    t = m->sym->__frontend_sym_symbolops_vptr->struct_field_at(m->sym, bx, pi)->type;
     n = (int)(strlen(t));
     while (((n > 0) && ((t[(n - 1)] == ' ') || (t[(n - 1)] == '\t')))) {
         n--;
@@ -4729,10 +4733,10 @@ static int cycle_Box_target(struct frontend_module_Module * m, int si, int fi) {
     if (ti < 0) {
         return (-1);
     }
-    if ((!m->sym->structs[ti].defined)) {
+    if ((!m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, ti)->defined)) {
         return (-1);
     }
-    if ((m->sym->structs[ti].is_template || m->sym->structs[ti].is_inst)) {
+    if ((m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, ti)->is_template || m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, ti)->is_inst)) {
         return (-1);
     }
     return ti;
@@ -4755,12 +4759,12 @@ static int cycle_emit(struct frontend_module_Module * m, int a, int b, int c) {
     }
     chain = "";
     for (i = 0; i < n; i++) {
-        chain = tool_sh_ct_scratch_fmt("%s%s%s", chain, (i ? " -> " : ""), m->sym->structs[nodes[i]].name);
+        chain = tool_sh_ct_scratch_fmt("%s%s%s", chain, (i ? " -> " : ""), m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, nodes[i])->name);
     }
-    chain = tool_sh_ct_scratch_fmt("%s -> %s", chain, m->sym->structs[a].name);
+    chain = tool_sh_ct_scratch_fmt("%s -> %s", chain, m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, a)->name);
     mark = (-1);
     for (i = 0; i < n; i++) {
-        if (m->sym->structs[nodes[i]].allow_cycle) {
+        if (m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, nodes[i])->allow_cycle) {
             mark = nodes[i];
             break;
         }
@@ -4770,11 +4774,11 @@ static int cycle_emit(struct frontend_module_Module * m, int a, int b, int c) {
             return 0;
         }
         msg = tool_sh_ct_scratch_fmt("reference cycle suppressed by 'ct: allow-cycle': %s", chain);
-        return tool_diag_ct_sem_note(m->sym->structs[mark].line, m->sym->structs[mark].col, msg, cycle_file(m, mark));
+        return tool_diag_ct_sem_note(m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, mark)->line, m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, mark)->col, msg, cycle_file(m, mark));
     }
     msg = tool_sh_ct_scratch_fmt("potential reference cycle: %s; instances may leak unless the cycle is broken by hand", chain);
     file = cycle_file(m, a);
-    return tool_diag_ct_cycle_warn(m->sym->structs[a].line, m->sym->structs[a].col, msg, file);
+    return tool_diag_ct_cycle_warn(m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, a)->line, m->sym->__frontend_sym_symbolops_vptr->struct_at(m->sym, a)->col, msg, file);
 }
 static int module_src_declares_Box(const char * path) {
     FILE * f;

@@ -474,10 +474,10 @@ static int mark_borrow(struct Stmt *self, int n, int line, int col)
                                        self->mem->path);
             }
         }
-        if (!self->sym->structs[si].uses_handback)
+        if (!self->sym->struct_at(si)->uses_handback)
             return tool::diag::ct_sem_error(line, col, tool::sh::ct_scratch_fmt(
                 "struct '%s' does not use trait 'Handback'", base), self->mem->path);
-        if (!self->sym->structs[si].has_handback_impl) {
+        if (!self->sym->struct_at(si)->has_handback_impl) {
             /* the impl table is per unit (design E-B), so a cross-unit impl is
                not visible here; the message says "in this unit" rather than
                claiming the impl does not exist (SH-38 / SH-39) */
@@ -995,9 +995,9 @@ static int stmt_owning_struct(struct Stmt *self, const char *typebuf)
     while (*b == ' ') b++;
     si = self->sym->find_struct(b);
     if (si < 0) return 0;
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++)
-        if (!self->sym->structs[si].fields[fi].dims[0]
-            && frontend::sym::ct_is_string_value_type(self->sym->structs[si].fields[fi].type))
+    for (fi = 0; fi < self->sym->struct_at(si)->nfields; fi++)
+        if (!self->sym->struct_field_at(si, fi)->dims[0]
+            && frontend::sym::ct_is_string_value_type(self->sym->struct_field_at(si, fi)->type))
             return 1;
     return 0;
 }
@@ -1792,7 +1792,7 @@ impl StmtOps for Stmt {
                     self->arena->nodes[s].text = runtime::text::ct_intern_len(dp, (int)dl);
                     if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
                     si = self->sym->find_struct(self->arena->nodes[s].text);
-                    if (si < 0 || !self->sym->structs[si].uses_drop) {
+                    if (si < 0 || !self->sym->struct_at(si)->uses_drop) {
                         self->arena->nodes[s].text = runtime::text::ct_intern("");
                         if (!self->arena->nodes[s].text) return self->sup->fail("out of memory");
                     }

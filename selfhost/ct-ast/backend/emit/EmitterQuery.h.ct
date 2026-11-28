@@ -75,8 +75,8 @@ const char *default_missing_field_text(struct Arena *arena, int n,
             int r = arena->nodes[n].a;
             if (arena->nodes[r].kind == N_VAR && strcmp(arena->nodes[r].text2, "self") == 0) {
                 int fi, found = 0;
-                for (fi = 0; fi < sym->structs[si].nfields; fi++)
-                    if (strcmp(sym->structs[si].fields[fi].name, arena->nodes[n].text2) == 0) found = 1;
+                for (fi = 0; fi < sym->struct_at(si)->nfields; fi++)
+                    if (strcmp(sym->struct_field_at(si, fi)->name, arena->nodes[n].text2) == 0) found = 1;
                 if (!found) return arena->nodes[n].text2;
             }
         }

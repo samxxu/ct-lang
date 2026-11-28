@@ -63,7 +63,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -955,19 +959,19 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_adopt_use(void 
     if (si < 0) {
         return 0;
     }
-    for (k = 0; k < _self->sym->structs[si].nuse; k++) {
-        if (strcmp(_self->sym->structs[si].use[k], trait) == 0) {
+    for (k = 0; k < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse; k++) {
+        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[k], trait) == 0) {
             return 0;
         }
     }
-    if (_self->sym->structs[si].nuse >= 64) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse >= 64) {
         return 0;
     }
-    _self->sym->structs[si].use[_self->sym->structs[si].nuse] = runtime_text_ct_intern(trait);
-    if ((!_self->sym->structs[si].use[_self->sym->structs[si].nuse])) {
+    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse] = runtime_text_ct_intern(trait);
+    if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse])) {
         return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
     }
-    _self->sym->structs[si].nuse++;
+    _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse++;
     return 0;
 }
 

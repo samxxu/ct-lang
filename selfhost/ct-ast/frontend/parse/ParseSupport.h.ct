@@ -882,14 +882,14 @@ impl SupportOps for ParseSupport {
         if (!self->sym || !trait[0]) return 0;
         si = self->sym->find_struct(name);
         if (si < 0) return 0;
-        for (k = 0; k < self->sym->structs[si].nuse; k++)
-            if (strcmp(self->sym->structs[si].use[k], trait) == 0) return 0;
-        if (self->sym->structs[si].nuse >= 64) return 0;
-        self->sym->structs[si].use[self->sym->structs[si].nuse] =
+        for (k = 0; k < self->sym->struct_at(si)->nuse; k++)
+            if (strcmp(self->sym->struct_at(si)->use[k], trait) == 0) return 0;
+        if (self->sym->struct_at(si)->nuse >= 64) return 0;
+        self->sym->struct_at(si)->use[self->sym->struct_at(si)->nuse] =
             runtime::text::ct_intern(trait);
-        if (!self->sym->structs[si].use[self->sym->structs[si].nuse])
+        if (!self->sym->struct_at(si)->use[self->sym->struct_at(si)->nuse])
             return self->fail("out of memory");
-        self->sym->structs[si].nuse++;
+        self->sym->struct_at(si)->nuse++;
         return 0;
     }
 

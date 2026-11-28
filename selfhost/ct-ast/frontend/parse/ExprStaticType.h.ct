@@ -268,12 +268,12 @@ pub const char *ctype_member_or_arrow(struct Expr *self, int n, int *array_depth
     if (strncmp(ty, "struct ", 7) == 0) ty += 7;
     si = self->sym->find_struct(ty);
     if (si < 0) return (const char *)0;
-    for (i = 0; i < self->sym->structs[si].nfields; i++) {
-        if (strcmp(self->sym->structs[si].fields[i].name,
+    for (i = 0; i < self->sym->struct_at(si)->nfields; i++) {
+        if (strcmp(self->sym->struct_field_at(si, i)->name,
                    self->arena->nodes[n].text2) != 0) continue;
-        f = self->ctype_expand_text(self->sym->structs[si].fields[i].type, 0);
+        f = self->ctype_expand_text(self->sym->struct_field_at(si, i)->type, 0);
         if (!f) return (const char *)0;
-        for (ty = self->sym->structs[si].fields[i].dims; *ty; ty++)
+        for (ty = self->sym->struct_field_at(si, i)->dims; *ty; ty++)
             if (*ty == '[') (*array_depth)++;
         return f;
     }
@@ -836,10 +836,10 @@ impl ExprStaticType for Expr {
         if (!base) return 0;
         s = self->sym->find_struct(base);
         if (s < 0) return 0;
-        for (fi = 0; fi < self->sym->structs[s].nfields; fi++) {
-            if (strcmp(self->sym->structs[s].fields[fi].name, field) != 0) continue;
-            if (strstr(self->sym->structs[s].fields[fi].type, "(*")) return 1;
-            ti = self->sym->find_type(self->sym->structs[s].fields[fi].type);
+        for (fi = 0; fi < self->sym->struct_at(s)->nfields; fi++) {
+            if (strcmp(self->sym->struct_field_at(s, fi)->name, field) != 0) continue;
+            if (strstr(self->sym->struct_field_at(s, fi)->type, "(*")) return 1;
+            ti = self->sym->find_type(self->sym->struct_field_at(s, fi)->type);
             return (ti >= 0 && self->sym->types[ti].kind == 4);
         }
         return 0;

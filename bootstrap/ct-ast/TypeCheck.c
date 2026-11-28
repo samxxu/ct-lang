@@ -71,7 +71,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -1304,8 +1308,8 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_maybe_box(void *self, i
         return _self->__frontend_type_typeops_vptr->fail(_self, "cannot box an unknown struct");
     }
     found = 0;
-    for (u = 0; u < _self->sym->structs[si].nuse; u++) {
-        if (strcmp(_self->sym->structs[si].use[u], trait) == 0) {
+    for (u = 0; u < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse; u++) {
+        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u], trait) == 0) {
             found = 1;
         }
     }
@@ -1593,9 +1597,9 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_type_has_array_init(voi
         base++;
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
-    for (fi = 0; ((si >= 0) && (fi < _self->sym->structs[si].nfields)); fi++) {
-        const char * ft = _self->sym->structs[si].fields[fi].type;
-        if ((!_self->sym->structs[si].fields[fi].dims[0])) {
+    for (fi = 0; ((si >= 0) && (fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)); fi++) {
+        const char * ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0])) {
             continue;
         }
         if (strchr(ft, '*') != 0) {
@@ -1638,11 +1642,11 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_needs_init(void *self, 
     if (si < 0) {
         return 0;
     }
-    if (_self->sym->structs[si].nuse > 0) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse > 0) {
         return 1;
     }
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        const char * ft = _self->sym->structs[si].fields[fi].type;
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
+        const char * ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -1723,17 +1727,17 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
         ok = 0;
     }
     fi = (-1);
-    for (u = 0; (ok && (u < _self->sym->structs[si].nfields)); u++) {
-        if (strcmp(_self->sym->structs[si].fields[u].name, fname) == 0) {
+    for (u = 0; (ok && (u < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields)); u++) {
+        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, u)->name, fname) == 0) {
             fi = u;
         }
     }
-    if ((ok && ((fi < 0) || _self->sym->structs[si].fields[fi].dims[0]))) {
+    if ((ok && ((fi < 0) || _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0]))) {
         ok = 0;
     }
     is_ptr = 0;
     if (ok) {
-        ftype = _self->sym->structs[si].fields[fi].type;
+        ftype = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
         if ((!_self->__frontend_type_typeops_vptr->iface_ref_type_text(_self, ftype, (&tname), (&is_ptr)))) {
             ok = 0;
         }
@@ -1786,8 +1790,8 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_init_item_text(void *se
     }
     found = 0;
     si = (ok ? _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sname) : (-1));
-    for (u = 0; ((ok && (si >= 0)) && (u < _self->sym->structs[si].nuse)); u++) {
-        if (strcmp(_self->sym->structs[si].use[u], tname) == 0) {
+    for (u = 0; ((ok && (si >= 0)) && (u < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse)); u++) {
+        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u], tname) == 0) {
             found = 1;
         }
     }
@@ -2437,9 +2441,9 @@ static int tc_expr_member_or_arrow(struct frontend_type_TypeCheck * self, int n,
     if (si < 0) {
         return (-1);
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
-            const char * dims = self->sym->structs[si].fields[fi].dims;
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, self->arena->nodes[n].text2) == 0) {
+            const char * dims = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims;
             int nb = 0;
             const char * dp;
             for (dp = dims; (*dp); dp++) {
@@ -2450,7 +2454,7 @@ static int tc_expr_member_or_arrow(struct frontend_type_TypeCheck * self, int n,
             if (nb > 1) {
                 return (-1);
             }
-            if (snprintf(out, (size_t)(cap), "%s%s", self->sym->structs[si].fields[fi].type, ((nb == 1) ? " *" : "")) >= cap) {
+            if (snprintf(out, (size_t)(cap), "%s%s", self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type, ((nb == 1) ? " *" : "")) >= cap) {
                 return (-1);
             }
             return 0;
@@ -2574,9 +2578,9 @@ static int ctype_member(struct frontend_type_TypeCheck * self, int n, char * out
     if (si < 0) {
         return (-1);
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
-            w = snprintf(out, (size_t)(cap), "%s%s", self->sym->structs[si].fields[fi].type, self->sym->structs[si].fields[fi].dims);
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, self->arena->nodes[n].text2) == 0) {
+            w = snprintf(out, (size_t)(cap), "%s%s", self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type, self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->dims);
             if (((w < 0) || (w >= cap))) {
                 return (-1);
             }

@@ -135,7 +135,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -893,7 +897,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
             }
             return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
         }
-        sd = (&_self->sym->structs[si]);
+        sd = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si);
         if (((strcmp(bname, sd->name) != 0) && (strcmp(bname, frontend_parse_g_pat.cbase) != 0))) {
             const char * rr;
             rr = _self->sym->__frontend_sym_symbolops_vptr->resolve_type_text(_self->sym, bname);
@@ -952,7 +956,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
 {
                 int q;
                 for (q = 0; q < sd->nfields; q++) {
-                    if (strcmp(sd->fields[q].name, fname) == 0) {
+                    if (strcmp(frontend_sym_StructDef_field_at(sd, q)->name, fname) == 0) {
                         fi = q;
                         break;
                     }
@@ -976,16 +980,16 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
                 const char * sep;
                 _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
                 sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
-                fp = tool_sh_ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
-                child = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, sd->fields[fi].type, fp);
+                fp = tool_sh_ct_scratch_fmt("%s%s%s", path, sep, frontend_sym_StructDef_field_at(sd, fi)->name);
+                child = _self->__frontend_parse_stmtmatch_vptr->pat_parse_one(_self, frontend_sym_StructDef_field_at(sd, fi)->type, fp);
             }
             else {
                 const char * fp;
                 const char * sep;
                 sep = ((path[0] == 0) ? (frontend_parse_g_pat.is_ptr ? "->" : ".") : ".");
-                fp = tool_sh_ct_scratch_fmt("%s%s%s", path, sep, sd->fields[fi].name);
-                child = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_BINDER, fname, sd->fields[fi].type, 0);
-                if (((child >= 0) && (pat_group_bind_add(fname, sd->fields[fi].type, runtime_text_ct_intern(fp)) == (-2)))) {
+                fp = tool_sh_ct_scratch_fmt("%s%s%s", path, sep, frontend_sym_StructDef_field_at(sd, fi)->name);
+                child = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_BINDER, fname, frontend_sym_StructDef_field_at(sd, fi)->type, 0);
+                if (((child >= 0) && (pat_group_bind_add(fname, frontend_sym_StructDef_field_at(sd, fi)->type, runtime_text_ct_intern(fp)) == (-2)))) {
                     free(seen);
                     snprintf(msgbuf, sizeof(msgbuf), "duplicate binding '%s' in a match arm", fname);
                     return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
@@ -1002,7 +1006,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
                 free(seen);
                 return (-1);
             }
-            wrap = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_FIELD, fname, sd->fields[fi].type, fi);
+            wrap = _self->__frontend_parse_stmtmatch_vptr->pat_desc(_self, PAT_FIELD, fname, frontend_sym_StructDef_field_at(sd, fi)->type, fi);
             if (wrap < 0) {
                 free(seen);
                 return (-1);
@@ -1040,7 +1044,7 @@ static int frontend_parse_Stmt_frontend_parse_StmtMatch_pat_parse_atom(void *sel
                     break;
                 }
             }
-            snprintf(msgbuf, sizeof(msgbuf), "struct pattern for '%s' is missing field '%s' (name it or write '..')", sd->name, sd->fields[q].name);
+            snprintf(msgbuf, sizeof(msgbuf), "struct pattern for '%s' is missing field '%s' (name it or write '..')", sd->name, frontend_sym_StructDef_field_at(sd, q)->name);
             free(seen);
             return tool_diag_ct_sem_error(line, col, msgbuf, _self->mem->path);
         }

@@ -40,7 +40,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -179,7 +183,7 @@ static int backend_emit_Init_backend_emit_InitOps_type_has_vptr(void *self, cons
         base++;
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, base);
-    return (((si >= 0) && (_self->sym->structs[si].nuse > 0)) ? 1 : 0);
+    return (((si >= 0) && (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse > 0)) ? 1 : 0);
 }
 
 static int backend_emit_Init_backend_emit_InitOps_type_needs_init(void *self, const char * type) {
@@ -199,11 +203,11 @@ static int backend_emit_Init_backend_emit_InitOps_type_needs_init(void *self, co
     if (si < 0) {
         return 0;
     }
-    if (_self->sym->structs[si].nuse > 0) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse > 0) {
         return 1;
     }
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        const char * ft = _self->sym->structs[si].fields[fi].type;
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
+        const char * ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
@@ -233,10 +237,10 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_items(void *self, co
     if (si < 0) {
         return 0;
     }
-    for (u = 0; u < _self->sym->structs[si].nuse; u++) {
-        char * low = tool_sh_ct_scratch_alloc(((int)(strlen(_self->sym->structs[si].use[u])) + 1));
-        for (i = 0; _self->sym->structs[si].use[u][i]; i++) {
-            char c = _self->sym->structs[si].use[u][i];
+    for (u = 0; u < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse; u++) {
+        char * low = tool_sh_ct_scratch_alloc(((int)(strlen(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u])) + 1));
+        for (i = 0; _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u][i]; i++) {
+            char c = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u][i];
             if (((c >= 'A') && (c <= 'Z'))) {
                 c = (char)(((c - 'A') + 'a'));
             }
@@ -246,7 +250,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_items(void *self, co
         if (u > 0) {
             fputs(", ", f);
         }
-        fprintf(f, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, _self->sym->structs[si].use[u]);
+        fprintf(f, "%s.__%s_vptr = &%s_%s_vtable", prefix, low, base, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u]);
     }
     return 0;
 }
@@ -268,10 +272,10 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_stmts(void *self, co
     if (si < 0) {
         return 0;
     }
-    for (u = 0; u < _self->sym->structs[si].nuse; u++) {
-        char * low = tool_sh_ct_scratch_alloc(((int)(strlen(_self->sym->structs[si].use[u])) + 1));
-        for (i = 0; _self->sym->structs[si].use[u][i]; i++) {
-            char c = _self->sym->structs[si].use[u][i];
+    for (u = 0; u < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nuse; u++) {
+        char * low = tool_sh_ct_scratch_alloc(((int)(strlen(_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u])) + 1));
+        for (i = 0; _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u][i]; i++) {
+            char c = _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u][i];
             if (((c >= 'A') && (c <= 'Z'))) {
                 c = (char)(((c - 'A') + 'a'));
             }
@@ -279,22 +283,22 @@ static int backend_emit_Init_backend_emit_InitOps_emit_vptr_stmts(void *self, co
         }
         low[i] = 0;
         put_indent(f, ind);
-        fprintf(f, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, _self->sym->structs[si].use[u]);
+        fprintf(f, "%s.__%s_vptr = &%s_%s_vtable;\n", recv, low, tb, _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->use[u]);
     }
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
         const char * ft;
         const char * sub;
-        ft = _self->sym->structs[si].fields[fi].type;
+        ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
-        if (_self->sym->structs[si].fields[fi].dims[0]) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0]) {
             continue;
         }
         if ((!_self->__backend_emit_initops_vptr->type_needs_init(_self, ft))) {
             continue;
         }
-        sub = tool_sh_ct_scratch_fmt("%s.%s", recv, _self->sym->structs[si].fields[fi].name);
+        sub = tool_sh_ct_scratch_fmt("%s.%s", recv, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name);
         if (_self->__backend_emit_initops_vptr->emit_vptr_stmts(_self, sub, ft, ind) != 0) {
             return (-1);
         }
@@ -312,14 +316,14 @@ static int backend_emit_Init_backend_emit_InitOps_emit_field_vptrs(void *self, i
     int depth;
     int skip;
     (void)(_self);
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
         const char * ft;
         const char * prefix;
-        ft = _self->sym->structs[si].fields[fi].type;
+        ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
-        if (_self->sym->structs[si].fields[fi].dims[0]) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0]) {
             continue;
         }
         if ((!_self->__backend_emit_initops_vptr->type_needs_init(_self, ft))) {
@@ -360,7 +364,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_field_vptrs(void *self, i
             }
             i = (j - 1);
 {
-                const char * fname = _self->sym->structs[si].fields[fi].name;
+                const char * fname = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name;
                 size_t nl = (size_t)((j - n));
                 if ((((nl == 0) || (nl != strlen(fname))) || (memcmp((raw + n), fname, nl) != 0))) {
                     continue;
@@ -382,7 +386,7 @@ static int backend_emit_Init_backend_emit_InitOps_emit_field_vptrs(void *self, i
         if (skip) {
             continue;
         }
-        prefix = tool_sh_ct_scratch_fmt(".%s", _self->sym->structs[si].fields[fi].name);
+        prefix = tool_sh_ct_scratch_fmt(".%s", _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name);
         if (started) {
             fputs(", ", f);
         }
@@ -399,25 +403,25 @@ static int backend_emit_Init_backend_emit_InitOps_emit_array_field_vptrs(void *s
     FILE * f = (FILE *)((*_self->out));
     int fi;
     (void)(_self);
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
         const char * ft;
         const char * sub;
         const char * next;
         const char * d;
         int depth;
         int started;
-        if ((!_self->sym->structs[si].fields[fi].dims[0])) {
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0])) {
             continue;
         }
-        ft = _self->sym->structs[si].fields[fi].type;
+        ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
         if (strchr(ft, '*') != 0) {
             continue;
         }
         if ((!_self->__backend_emit_initops_vptr->type_needs_init(_self, ft))) {
             continue;
         }
-        sub = tool_sh_ct_scratch_fmt("%s.%s", recv, _self->sym->structs[si].fields[fi].name);
-        d = _self->sym->structs[si].fields[fi].dims;
+        sub = tool_sh_ct_scratch_fmt("%s.%s", recv, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name);
+        d = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims;
         depth = 0;
         started = 0;
         while ((*d) == '[') {
@@ -470,12 +474,12 @@ static int backend_emit_Init_backend_emit_InitOps_type_needs_nested_init(void *s
     if (si < 0) {
         return 0;
     }
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
         const char * ft;
-        if (_self->sym->structs[si].fields[fi].dims[0]) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->dims[0]) {
             continue;
         }
-        ft = _self->sym->structs[si].fields[fi].type;
+        ft = _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type;
         if (strchr(ft, '*') != 0) {
             continue;
         }

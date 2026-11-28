@@ -126,7 +126,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -380,8 +384,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "the '?.' receiver is not a struct pointer");
     }
     fi = (-1);
-    for (i = 0; i < _self->sym->structs[si].nfields; i++) {
-        if (strcmp(_self->sym->structs[si].fields[i].name, fname) == 0) {
+    for (i = 0; i < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; i++) {
+        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, i)->name, fname) == 0) {
             fi = i;
             break;
         }
@@ -389,7 +393,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOptional_opt_field(void *self,
     if (fi < 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("type '%s' has no field '%s'", base, fname));
     }
-    fty = _self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(_self, _self->sym->structs[si].fields[fi].type, 0);
+    fty = _self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(_self, _self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->type, 0);
     if ((!fty)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "cannot resolve the optional field type");
     }

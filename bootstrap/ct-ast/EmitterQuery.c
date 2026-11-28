@@ -43,7 +43,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -205,8 +209,8 @@ const char * backend_emit_default_missing_field_text(struct runtime_arena_Arena 
             if (((arena->nodes[r].kind == N_VAR) && (strcmp(arena->nodes[r].text2, "self") == 0))) {
                 int fi;
                 int found = 0;
-                for (fi = 0; fi < sym->structs[si].nfields; fi++) {
-                    if (strcmp(sym->structs[si].fields[fi].name, arena->nodes[n].text2) == 0) {
+                for (fi = 0; fi < sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->nfields; fi++) {
+                    if (strcmp(sym->__frontend_sym_symbolops_vptr->struct_field_at(sym, si, fi)->name, arena->nodes[n].text2) == 0) {
                         found = 1;
                     }
                 }

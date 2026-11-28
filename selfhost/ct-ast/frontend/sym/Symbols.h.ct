@@ -380,17 +380,25 @@ pub struct Field {
     int  is_bitfield;
 }
 
+/* S8b R7: the field rows of one struct or template, kept behind an opaque
+   pointer (only `StructDef` / `StructTmpl` sees it). The rows grow through
+   `Vec`, whose buffer is owned by this handle, so a moved struct row moves the
+   handle alone and a reused row keeps its buffer. */
+struct FieldSet {
+    Vec<struct Field> rows;
+}
+
 pub struct StructDef {
     const char *name;
     const char *use[64];
     int  nuse;
     /* field types: a receiver chain (`s.owner.greet()`) needs them, and so does
-       the nested vptr initialiser of a struct-typed field. S1a-0 C1: the rows
-       are a heap block owned by this struct row (`fcap`); a realloc of the
-       struct table does not move it. */
-    struct Field *fields;
+       the nested vptr initialiser of a struct-typed field. S8b R7: the rows
+       are one `Vec` behind this opaque handle (`struct FieldSet`), so a moved
+       struct row copies the handle and the rows stay put; `nfields` is the
+       live count and `field_at` is the reader. */
+    struct FieldSet *fset;
     int  nfields;
-    int  fcap;
     int  defined;               /* a body was parsed; a forward declaration is not */
     /* PH-82: the definition's `struct` keyword position and whether the same
        source line carries the `ct: allow-cycle` marker -- the direct-cycle
@@ -420,6 +428,27 @@ pub struct StructDef {
        template owner's unit to decide whether the element's definition reaches
        the unit that would otherwise write the instance methods. */
     int  owner;
+}
+
+impl StructDef {
+    /* S8b R7: the field row named by index. 0 for an index with no row, the
+       value the old out-of-range pointer read could not promise; every caller
+       stays inside `nfields`. */
+    pub struct Field *field_at(int i)
+    {
+        if (!self->fset || i < 0) return (struct Field *)0;
+        return self->fset->rows.at(i);
+    }
+}
+
+/* S8b R7: the backing store of the per-unit struct table. `struct Symbols` is
+   published in the generated header, so its field is a pointer to this record
+   and the `Vec` stays in this unit's `.c`. Declaration rows and instance rows
+   share one table, in the order they were added (`nstruct_inst` counts the
+   instance half, not an index), so the row order every existing reader sees
+   is unchanged. */
+struct StructTable {
+    Vec<struct StructDef> rows;
 }
 
 pub trait SymbolOps {
@@ -500,8 +529,22 @@ pub trait SymbolOps {
     int  add_bare_type(const char *name, const char *full);
     int  find_struct(const char *name);
     int  add_struct(const char *name);
+    /* S8b R7: the struct row named by index. 0 for an index with no row, and
+       the only way to reach a row now that the table is a `Vec` behind
+       `stab`; every direct `structs[i]` read goes through it. */
+    struct StructDef *struct_at(int i);
+    /* S8b R7: the field row of struct `si`. This is the reader when the
+       struct row itself is a temporary (`struct_at(si)` returns a pointer, and
+       a method call on that temporary is not allowed mid-expression); a caller
+       that already holds the row in a local uses `StructDef::field_at`. 0 for
+       an index with no row. */
+    struct Field *struct_field_at(int si, int fi);
+    /* S8b R7: grow the struct table to `need` row slots. A new slot is a
+       zeroed row; a reused slot keeps its field handle and template rows, so
+       the per-unit reset costs no reallocation. */
     int  ensure_struct_capacity(int need);
-    /* S1a-0 C1: one struct's field block, and one template's field block. */
+    /* S1a-0 C1: one struct's field block, and one template's field block.
+       S8b R7: each is a `Vec` behind the row's `fset`, grown to `need` rows. */
     int  ensure_struct_field_capacity(int si, int need);
     int  ensure_tmpl_field_capacity(int ti, int need);
     /* Phase 29: a monomorphised generic struct. Its own cap does not eat the
@@ -611,9 +654,10 @@ pub struct StructTmpl {
     char **bound;
     int  tcap;
     int  bcap;
-    struct Field *fields;
+    /* S8b R7: the template's field rows are one `Vec` behind this opaque
+       handle, like `StructDef`'s; a moved template row copies the handle. */
+    struct FieldSet *fset;
     int  nfields;
-    int  fcap;
     const char *use[64];
     int  nuse;
     int  uses_drop;              /* P36 S2a2: built-in Drop flag, copied to instances */
@@ -634,6 +678,17 @@ pub struct StructTmpl {
     const char *cbase;
     char path[1024];
     int  line;
+}
+
+impl StructTmpl {
+    /* S8b R7: the field row named by index, the same reader `StructDef`
+       carries. 0 for an index with no row; every caller stays inside
+       `nfields`. */
+    pub struct Field *field_at(int i)
+    {
+        if (!self->fset || i < 0) return (struct Field *)0;
+        return self->fset->rows.at(i);
+    }
 }
 
 pub struct StructInst {
@@ -845,7 +900,8 @@ pub struct Symbols {
        backing record is opaque to the header); `nfunc` is the live count of
        the unit being parsed and the rows are reused across units, so the
        table is reset by index only and never freed. S8b R6 does the same for
-       `vars` (`vtab`) and the scope stack (`sstack`). */
+       `vars` (`vtab`) and the scope stack (`sstack`), S8b R7 for the struct
+       table (`stab`). */
     struct FnTable *ftab;
     int  nfunc;
     /* Phase 41: any ct_atomic_* builtin was lowered in this program, so the
@@ -884,10 +940,14 @@ pub struct Symbols {
     struct Trait *traits;
     int  ntraits;
     int  traitscap;
-    struct StructDef *structs;      /* grown from MAX_STRUCTS + MAX_STRUCT_INSTS rows */
+    /* S8b R7: the per-unit struct table is a `Vec<struct StructDef>` behind
+       `stab` (the backing record is opaque to the header). Declaration rows
+       and instance rows share it in insertion order; `nstruct_inst` still
+       counts the instance half and the per-unit reset only brings `nstructs`
+       and `nstruct_inst` back to 0, so no row is reallocated. */
+    struct StructTable *stab;
     int  nstructs;
-    int  nstruct_inst;              /* the instance half of `structs` */
-    int  structcap;
+    int  nstruct_inst;              /* the instance half of `stab` */
     struct Closure *closures;
     int  nclosure;
     int  closurecap;
@@ -996,10 +1056,9 @@ impl SymbolOps for Symbols {
             if (!self->traits) return -1;
             self->traitscap = MAX_TRAITS;
         }
-        if (!self->structs) {
-            self->structs = calloc(MAX_STRUCTS + MAX_STRUCT_INSTS, sizeof(*self->structs));
-            if (!self->structs) return -1;
-            self->structcap = MAX_STRUCTS + MAX_STRUCT_INSTS;
+        if (!self->stab) {
+            self->stab = (struct StructTable *)calloc(1, sizeof(struct StructTable));
+            if (!self->stab) return -1;
         }
         if (!self->closures) {
             self->closures = calloc(MAX_CLOSURES, sizeof(*self->closures));
@@ -1774,107 +1833,130 @@ impl SymbolOps for Symbols {
         return self->types[i].target;
     }
 
-    /* S1a-0 C1: the per-unit struct block is one array for plain rows and
-       instance rows; capacity is a single total. A realloc moves rows, and no
-       caller keeps a `StructDef *` across a call that can add one (audited:
-       all readers re-index through `self`). */
+    /* S8b R7: the per-unit struct table is one `Vec` row block behind `stab`,
+       holding plain declaration rows and instance rows in insertion order. A
+       slot that already exists is left alone (a reused row keeps its field
+       handle and its template rows); only slots past the current length are
+       appended as zeroed rows. No caller keeps a `StructDef *` across a call
+       that can add one (audited: all readers re-index through `self`). */
     int ensure_struct_capacity(int need)
     {
-        int cap;
-        struct StructDef *grown;
-        (void)self;
-        if (need <= self->structcap) return 0;
-        cap = self->structcap > 0 ? self->structcap : MAX_STRUCTS + MAX_STRUCT_INSTS;
-        while (cap < need && cap < CAP_LIMIT + CAP_LIMIT) cap *= 2;
-        if (cap > CAP_LIMIT + CAP_LIMIT)
-            cap = CAP_LIMIT + CAP_LIMIT;
-        if (need > cap) return self->fail("out of memory");
-        grown = (struct StructDef *)realloc(self->structs, (size_t)cap * sizeof(*grown));
-        if (!grown) return self->fail("out of memory");
-        memset(grown + self->structcap, 0,
-               (size_t)(cap - self->structcap) * sizeof(*grown));
-        self->structs = grown;
-        self->structcap = cap;
+        struct StructDef z;
+        if (need <= 0) return 0;
+        if (need > CAP_LIMIT + CAP_LIMIT) return self->fail("out of memory");
+        if (!self->stab) {
+            self->stab = (struct StructTable *)calloc(1, sizeof(struct StructTable));
+            if (!self->stab) return self->fail("out of memory");
+        }
+        while (self->stab->rows.len() < need) {
+            memset(&z, 0, sizeof(z));
+            if (self->stab->rows.push(z) == 0) return self->fail("out of memory");
+        }
         return 0;
     }
 
+    /* S8b R7: the struct row named by index. 0 for an index with no row. */
+    struct StructDef *struct_at(int i)
+    {
+        if (!self->stab || i < 0) return (struct StructDef *)0;
+        return self->stab->rows.at(i);
+    }
+
+    /* S8b R7: the field row of struct `si`, the reader for a call site that
+       has an index but no `StructDef *` local. 0 for an index with no row. */
+    struct Field *struct_field_at(int si, int fi)
+    {
+        struct StructDef *r;
+        if (si < 0 || si >= self->nstructs) return (struct Field *)0;
+        r = self->struct_at(si);
+        if (!r || !r->fset) return (struct Field *)0;
+        return r->fset->rows.at(fi);
+    }
+
+    /* S8b R7: one struct's field rows are a `Vec` behind the row's `fset`.
+       The block is owned by the row and moves as a handle, so a moved struct
+       table does not invalidate it and a reused row keeps its capacity. */
     int ensure_struct_field_capacity(int si, int need)
     {
-        int cap;
-        struct Field *grown;
-        (void)self;
+        struct StructDef *r;
+        struct Field z;
         if (si < 0 || si >= self->nstructs) return self->fail("struct table out of range");
-        if (need <= self->structs[si].fcap) return 0;
-        cap = self->structs[si].fcap > 0 ? self->structs[si].fcap : MAX_FIELDS;
-        while (cap < need && cap < CAP_LIMIT) cap *= 2;
-        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
-        if (need > cap) return self->fail("out of memory");
-        grown = (struct Field *)realloc(self->structs[si].fields,
-                                        (size_t)cap * sizeof(*grown));
-        if (!grown) return self->fail("out of memory");
-        memset(grown + self->structs[si].fcap, 0,
-               (size_t)(cap - self->structs[si].fcap) * sizeof(*grown));
-        self->structs[si].fields = grown;
-        self->structs[si].fcap = cap;
+        if (need <= 0) return 0;
+        if (need > CAP_LIMIT) return self->fail("out of memory");
+        r = self->struct_at(si);
+        if (!r) return self->fail("struct table out of range");
+        if (!r->fset) {
+            r->fset = (struct FieldSet *)calloc(1, sizeof(struct FieldSet));
+            if (!r->fset) return self->fail("out of memory");
+        }
+        while (r->fset->rows.len() < need) {
+            memset(&z, 0, sizeof(z));
+            if (r->fset->rows.push(z) == 0) return self->fail("out of memory");
+        }
         return 0;
     }
 
+    /* S8b R7: a template's field rows, the same shape as a struct's. */
     int ensure_tmpl_field_capacity(int ti, int need)
     {
-        int cap, n;
+        int n;
         struct StructTmpl *t;
-        struct Field *grown;
+        struct Field z;
         (void)self;
         t = ct_tmpls(&n);
         if (!t || ti < 0 || ti >= n) return self->fail("template table out of range");
-        if (need <= t[ti].fcap) return 0;
-        cap = t[ti].fcap > 0 ? t[ti].fcap : MAX_FIELDS;
-        while (cap < need && cap < CAP_LIMIT) cap *= 2;
-        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
-        if (need > cap) return self->fail("out of memory");
-        grown = (struct Field *)realloc(t[ti].fields, (size_t)cap * sizeof(*grown));
-        if (!grown) return self->fail("out of memory");
-        memset(grown + t[ti].fcap, 0, (size_t)(cap - t[ti].fcap) * sizeof(*grown));
-        t[ti].fields = grown;
-        t[ti].fcap = cap;
+        if (need <= 0) return 0;
+        if (need > CAP_LIMIT) return self->fail("out of memory");
+        if (!t[ti].fset) {
+            t[ti].fset = (struct FieldSet *)calloc(1, sizeof(struct FieldSet));
+            if (!t[ti].fset) return self->fail("out of memory");
+        }
+        while (t[ti].fset->rows.len() < need) {
+            memset(&z, 0, sizeof(z));
+            if (t[ti].fset->rows.push(z) == 0) return self->fail("out of memory");
+        }
         return 0;
     }
 
     int find_struct(const char *name)
     {
         int i;
-        (void)self;
-        for (i = 0; i < self->nstructs; i++)
-            if (strcmp(self->structs[i].name, name) == 0) return i;
+        struct StructDef *r;
+        for (i = 0; i < self->nstructs; i++) {
+            r = self->struct_at(i);
+            if (r && strcmp(r->name, name) == 0) return i;
+        }
         return -1;
     }
 
     int add_struct(const char *name)
     {
         int i;
-        (void)self;
+        struct StructDef *r;
         if (!name[0]) return -1;
         i = self->find_struct(name);
         if (i >= 0) return i;
         if (self->ensure_struct_capacity(self->nstructs + 1) != 0) return -1;
-        self->structs[self->nstructs].name = runtime::text::ct_intern(name);
-        if (!self->structs[self->nstructs].name) return self->fail("out of memory");
-        self->structs[self->nstructs].nuse = 0;
-        self->structs[self->nstructs].nfields = 0;
-        self->structs[self->nstructs].defined = 0;
-        self->structs[self->nstructs].line = 0;
-        self->structs[self->nstructs].col = 0;
-        self->structs[self->nstructs].allow_cycle = 0;
-        self->structs[self->nstructs].uses_drop = 0;
-        self->structs[self->nstructs].uses_handback = 0;
-        self->structs[self->nstructs].has_handback_impl = 0;
-        self->structs[self->nstructs].has_drop_impl = 0;
-        self->structs[self->nstructs].ntparams = 0;
-        self->structs[self->nstructs].is_template = 0;
-        self->structs[self->nstructs].is_inst = 0;
-        self->structs[self->nstructs].is_pub = 0;
-        self->structs[self->nstructs].declared_here = 0;
-        self->structs[self->nstructs].owner = -1;
+        r = self->struct_at(self->nstructs);
+        if (!r) return self->fail("out of memory");
+        r->name = runtime::text::ct_intern(name);
+        if (!r->name) return self->fail("out of memory");
+        r->nuse = 0;
+        r->nfields = 0;
+        r->defined = 0;
+        r->line = 0;
+        r->col = 0;
+        r->allow_cycle = 0;
+        r->uses_drop = 0;
+        r->uses_handback = 0;
+        r->has_handback_impl = 0;
+        r->has_drop_impl = 0;
+        r->ntparams = 0;
+        r->is_template = 0;
+        r->is_inst = 0;
+        r->is_pub = 0;
+        r->declared_here = 0;
+        r->owner = -1;
         self->nstructs++;
         return self->nstructs - 1;
     }
@@ -1882,13 +1964,15 @@ impl SymbolOps for Symbols {
     int add_struct_inst(const char *name)
     {
         int i;
-        (void)self;
+        struct StructDef *r;
         i = self->find_struct(name);
         if (i >= 0) return i;
         if (self->nstruct_inst >= CAP_LIMIT) return self->fail("out of memory");
         i = self->add_struct(name);
         if (i < 0) return -1;
-        self->structs[i].is_inst = 1;
+        r = self->struct_at(i);
+        if (!r) return self->fail("out of memory");
+        r->is_inst = 1;
         self->nstruct_inst++;
         return i;
     }
@@ -2218,8 +2302,8 @@ impl SymbolOps for Symbols {
         if (!key) return self->fail("out of memory");
         s = self->find_struct(key);
         if (s < 0) return -1;
-        for (ti = 0; ti < self->structs[s].nuse; ti++) {
-            int t = self->find_trait(self->structs[s].use[ti]);
+        for (ti = 0; ti < self->struct_at(s)->nuse; ti++) {
+            int t = self->find_trait(self->struct_at(s)->use[ti]);
             if (t < 0) continue;
             for (mi = 0; mi < self->traits[t].nm; mi++) {
                 if (strcmp(self->traits[t].m[mi].name, method) == 0) {
@@ -2249,8 +2333,8 @@ impl SymbolOps for Symbols {
         if (!key) return (const char *)0;
         s = self->find_struct(key);
         if (s < 0) return (const char *)0;
-        for (ti = 0; ti < self->structs[s].nuse; ti++) {
-            int t = self->find_trait(self->structs[s].use[ti]);
+        for (ti = 0; ti < self->struct_at(s)->nuse; ti++) {
+            int t = self->find_trait(self->struct_at(s)->use[ti]);
             if (t < 0) continue;
             for (mi = 0; mi < self->traits[t].nm; mi++)
                 if (strcmp(self->traits[t].m[mi].name, method) == 0)
@@ -2283,8 +2367,8 @@ impl SymbolOps for Symbols {
         if (!key) return (const char *)0;
         s = self->find_struct(key);
         if (s < 0) return (const char *)0;
-        for (ti = 0; ti < self->structs[s].nuse; ti++) {
-            int t = self->find_trait(self->structs[s].use[ti]);
+        for (ti = 0; ti < self->struct_at(s)->nuse; ti++) {
+            int t = self->find_trait(self->struct_at(s)->use[ti]);
             if (t < 0) continue;
             if (strcmp(self->traits[t].name, first) == 0) continue;
             for (mi = 0; mi < self->traits[t].nm; mi++)

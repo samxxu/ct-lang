@@ -65,7 +65,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -209,12 +213,30 @@ struct frontend_sym_VarTable {
 struct frontend_sym_ScopeStack {
     struct Vec_int rows;
 };
+struct Vec_frontend__sym__Field {
+    struct ct_buf * h;
+};
+
+struct frontend_sym_FieldSet {
+    struct Vec_frontend__sym__Field rows;
+};
+struct Vec_frontend__sym__StructDef {
+    struct ct_buf * h;
+};
+
+struct frontend_sym_StructTable {
+    struct Vec_frontend__sym__StructDef rows;
+};
 static void Vec_frontend__sym__FnParam__elem_retain(struct frontend_sym_FnParam *e);
 static void Vec_frontend__sym__FnParam__elem_release(struct frontend_sym_FnParam *e);
 static void Vec_frontend__sym__Fn__elem_retain(struct frontend_sym_Fn *e);
 static void Vec_frontend__sym__Fn__elem_release(struct frontend_sym_Fn *e);
 static void Vec_frontend__sym__Var__elem_retain(struct frontend_sym_Var *e);
 static void Vec_frontend__sym__Var__elem_release(struct frontend_sym_Var *e);
+static void Vec_frontend__sym__Field__elem_retain(struct frontend_sym_Field *e);
+static void Vec_frontend__sym__Field__elem_release(struct frontend_sym_Field *e);
+static void Vec_frontend__sym__StructDef__elem_retain(struct frontend_sym_StructDef *e);
+static void Vec_frontend__sym__StructDef__elem_release(struct frontend_sym_StructDef *e);
 static __attribute__((unused)) struct Vec_frontend__sym__FnParam Vec_frontend__sym__FnParam_from(struct frontend_sym_FnParam * items, int n) {
     struct Vec_frontend__sym__FnParam v;
     void * raw;
@@ -833,6 +855,418 @@ static __attribute__((unused)) int Vec_frontend__sym__Var_release(void *self) {
     return ((left < 0) ? 0 : left);
 }
 
+static __attribute__((unused)) struct Vec_frontend__sym__Field Vec_frontend__sym__Field_from(struct frontend_sym_Field * items, int n) {
+    struct Vec_frontend__sym__Field v;
+    void * raw;
+    struct frontend_sym_Field * nd;
+    int i;
+    v.h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+    if (v.h == 0) {
+        abort();
+    }
+    v.h->refs = 1;
+    v.h->len = 0;
+    v.h->cap = 0;
+    v.h->data = 0;
+    if (((items == 0) || (n <= 0))) {
+        return v;
+    }
+    raw = malloc((size_t)((n * (int)(sizeof(items[0])))));
+    if (raw == 0) {
+        abort();
+    }
+    nd = raw;
+    v.h->data = nd;
+    memcpy(v.h->data, items, (size_t)((n * (int)(sizeof(items[0])))));
+    for (i = 0; i < n; i++) {
+        Vec_frontend__sym__Field__elem_retain((&nd[i]));
+    }
+    v.h->len = n;
+    v.h->cap = n;
+    return v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Field_len(void *self) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return _self->h->len;
+}
+
+static __attribute__((unused)) struct frontend_sym_Field Vec_frontend__sym__Field_get(void *self, int i) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    struct frontend_sym_Field z;
+    struct frontend_sym_Field * d;
+    memset((&z), 0, sizeof(z));
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return z;
+    }
+    d = _self->h->data;
+    return d[i];
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Field_has(void *self, int i) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return ((i >= 0) && (i < _self->h->len));
+}
+
+static __attribute__((unused)) struct frontend_sym_Field * Vec_frontend__sym__Field_at(void *self, int i) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    struct frontend_sym_Field * d;
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return 0;
+    }
+    d = _self->h->data;
+    return (&d[i]);
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__Field_set(void *self, int i, struct frontend_sym_Field v) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    struct frontend_sym_Field * d;
+    void * raw;
+    int nc;
+    if (i < 0) {
+        abort();
+    }
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (((i >= _self->h->len) && ((i - _self->h->len) > 1024))) {
+        fprintf(stderr, "ctc: warning: Vec growth span %d exceeds CT_VEC_GROW_WARN_SPAN (1024)\n", (i - _self->h->len));
+    }
+    if (i >= _self->h->cap) {
+        nc = ((_self->h->cap == 0) ? 4 : _self->h->cap);
+        while (nc <= i) {
+            nc = (nc * 2);
+        }
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            abort();
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    if (i >= _self->h->len) {
+        memset((&d[_self->h->len]), 0, (size_t)((((i + 1) - _self->h->len) * (int)(sizeof(v)))));
+        _self->h->len = (i + 1);
+    }
+    Vec_frontend__sym__Field__elem_retain((&v));
+    Vec_frontend__sym__Field__elem_release((&d[i]));
+    d[i] = v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Field_push(void *self, struct frontend_sym_Field v) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    struct frontend_sym_Field * d;
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (_self->h->len == _self->h->cap) {
+        int nc;
+        void * raw;
+        nc = ((_self->h->cap == 0) ? 4 : (_self->h->cap * 2));
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            return 0;
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    Vec_frontend__sym__Field__elem_retain((&v));
+    d[_self->h->len] = v;
+    _self->h->len = (_self->h->len + 1);
+    return 1;
+}
+
+static __attribute__((unused)) struct frontend_sym_Field Vec_frontend__sym__Field_pop(void *self) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    struct frontend_sym_Field z;
+    struct frontend_sym_Field * d;
+    memset((&z), 0, sizeof(z));
+    if (((_self->h == 0) || (_self->h->len == 0))) {
+        return z;
+    }
+    _self->h->len = (_self->h->len - 1);
+    d = _self->h->data;
+    z = d[_self->h->len];
+    Vec_frontend__sym__Field__elem_retain((&z));
+    Vec_frontend__sym__Field__elem_release((&d[_self->h->len]));
+    return z;
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__Field_clear(void *self) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    int i;
+    struct frontend_sym_Field * d;
+    if (_self->h == 0) {
+        return;
+    }
+    d = _self->h->data;
+    for (i = 0; i < _self->h->len; i++) {
+        Vec_frontend__sym__Field__elem_release((&d[i]));
+    }
+    _self->h->len = 0;
+}
+
+static __attribute__((unused)) struct Vec_frontend__sym__Field Vec_frontend__sym__Field_retain(void *self) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    struct Vec_frontend__sym__Field r;
+    r.h = _self->h;
+    if (r.h != 0) {
+        r.h->refs = (r.h->refs + 1);
+    }
+    return r;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Field_release(void *self) {
+    struct Vec_frontend__sym__Field *_self = (struct Vec_frontend__sym__Field *)self;
+    int left;
+    int i;
+    struct frontend_sym_Field * d;
+    if (_self->h == 0) {
+        fprintf(stderr, "Vec: release on a released handle\n");
+        abort();
+    }
+    _self->h->refs = (_self->h->refs - 1);
+    left = _self->h->refs;
+    if (left <= 0) {
+        d = _self->h->data;
+        for (i = 0; i < _self->h->len; i++) {
+            Vec_frontend__sym__Field__elem_release((&d[i]));
+        }
+        free(_self->h->data);
+        free(_self->h);
+    }
+    _self->h = 0;
+    return ((left < 0) ? 0 : left);
+}
+
+static __attribute__((unused)) struct Vec_frontend__sym__StructDef Vec_frontend__sym__StructDef_from(struct frontend_sym_StructDef * items, int n) {
+    struct Vec_frontend__sym__StructDef v;
+    void * raw;
+    struct frontend_sym_StructDef * nd;
+    int i;
+    v.h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+    if (v.h == 0) {
+        abort();
+    }
+    v.h->refs = 1;
+    v.h->len = 0;
+    v.h->cap = 0;
+    v.h->data = 0;
+    if (((items == 0) || (n <= 0))) {
+        return v;
+    }
+    raw = malloc((size_t)((n * (int)(sizeof(items[0])))));
+    if (raw == 0) {
+        abort();
+    }
+    nd = raw;
+    v.h->data = nd;
+    memcpy(v.h->data, items, (size_t)((n * (int)(sizeof(items[0])))));
+    for (i = 0; i < n; i++) {
+        Vec_frontend__sym__StructDef__elem_retain((&nd[i]));
+    }
+    v.h->len = n;
+    v.h->cap = n;
+    return v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__StructDef_len(void *self) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return _self->h->len;
+}
+
+static __attribute__((unused)) struct frontend_sym_StructDef Vec_frontend__sym__StructDef_get(void *self, int i) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    struct frontend_sym_StructDef z;
+    struct frontend_sym_StructDef * d;
+    memset((&z), 0, sizeof(z));
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return z;
+    }
+    d = _self->h->data;
+    return d[i];
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__StructDef_has(void *self, int i) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return ((i >= 0) && (i < _self->h->len));
+}
+
+static __attribute__((unused)) struct frontend_sym_StructDef * Vec_frontend__sym__StructDef_at(void *self, int i) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    struct frontend_sym_StructDef * d;
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return 0;
+    }
+    d = _self->h->data;
+    return (&d[i]);
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__StructDef_set(void *self, int i, struct frontend_sym_StructDef v) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    struct frontend_sym_StructDef * d;
+    void * raw;
+    int nc;
+    if (i < 0) {
+        abort();
+    }
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (((i >= _self->h->len) && ((i - _self->h->len) > 1024))) {
+        fprintf(stderr, "ctc: warning: Vec growth span %d exceeds CT_VEC_GROW_WARN_SPAN (1024)\n", (i - _self->h->len));
+    }
+    if (i >= _self->h->cap) {
+        nc = ((_self->h->cap == 0) ? 4 : _self->h->cap);
+        while (nc <= i) {
+            nc = (nc * 2);
+        }
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            abort();
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    if (i >= _self->h->len) {
+        memset((&d[_self->h->len]), 0, (size_t)((((i + 1) - _self->h->len) * (int)(sizeof(v)))));
+        _self->h->len = (i + 1);
+    }
+    Vec_frontend__sym__StructDef__elem_retain((&v));
+    Vec_frontend__sym__StructDef__elem_release((&d[i]));
+    d[i] = v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__StructDef_push(void *self, struct frontend_sym_StructDef v) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    struct frontend_sym_StructDef * d;
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (_self->h->len == _self->h->cap) {
+        int nc;
+        void * raw;
+        nc = ((_self->h->cap == 0) ? 4 : (_self->h->cap * 2));
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            return 0;
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    Vec_frontend__sym__StructDef__elem_retain((&v));
+    d[_self->h->len] = v;
+    _self->h->len = (_self->h->len + 1);
+    return 1;
+}
+
+static __attribute__((unused)) struct frontend_sym_StructDef Vec_frontend__sym__StructDef_pop(void *self) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    struct frontend_sym_StructDef z;
+    struct frontend_sym_StructDef * d;
+    memset((&z), 0, sizeof(z));
+    if (((_self->h == 0) || (_self->h->len == 0))) {
+        return z;
+    }
+    _self->h->len = (_self->h->len - 1);
+    d = _self->h->data;
+    z = d[_self->h->len];
+    Vec_frontend__sym__StructDef__elem_retain((&z));
+    Vec_frontend__sym__StructDef__elem_release((&d[_self->h->len]));
+    return z;
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__StructDef_clear(void *self) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    int i;
+    struct frontend_sym_StructDef * d;
+    if (_self->h == 0) {
+        return;
+    }
+    d = _self->h->data;
+    for (i = 0; i < _self->h->len; i++) {
+        Vec_frontend__sym__StructDef__elem_release((&d[i]));
+    }
+    _self->h->len = 0;
+}
+
+static __attribute__((unused)) struct Vec_frontend__sym__StructDef Vec_frontend__sym__StructDef_retain(void *self) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    struct Vec_frontend__sym__StructDef r;
+    r.h = _self->h;
+    if (r.h != 0) {
+        r.h->refs = (r.h->refs + 1);
+    }
+    return r;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__StructDef_release(void *self) {
+    struct Vec_frontend__sym__StructDef *_self = (struct Vec_frontend__sym__StructDef *)self;
+    int left;
+    int i;
+    struct frontend_sym_StructDef * d;
+    if (_self->h == 0) {
+        fprintf(stderr, "Vec: release on a released handle\n");
+        abort();
+    }
+    _self->h->refs = (_self->h->refs - 1);
+    left = _self->h->refs;
+    if (left <= 0) {
+        d = _self->h->data;
+        for (i = 0; i < _self->h->len; i++) {
+            Vec_frontend__sym__StructDef__elem_release((&d[i]));
+        }
+        free(_self->h->data);
+        free(_self->h);
+    }
+    _self->h = 0;
+    return ((left < 0) ? 0 : left);
+}
+
 static void __attribute__((unused)) Vec_frontend__sym__FnParam__elem_retain(struct frontend_sym_FnParam *e)
 {
     (void)e;
@@ -859,6 +1293,26 @@ static void __attribute__((unused)) Vec_frontend__sym__Var__elem_retain(struct f
 }
 
 static void __attribute__((unused)) Vec_frontend__sym__Var__elem_release(struct frontend_sym_Var *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__Field__elem_retain(struct frontend_sym_Field *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__Field__elem_release(struct frontend_sym_Field *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__StructDef__elem_retain(struct frontend_sym_StructDef *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__StructDef__elem_release(struct frontend_sym_StructDef *e)
 {
     (void)e;
 }
@@ -895,6 +1349,8 @@ static int impl_match(int, const char *, const char *, const char *, char * *, i
 static int adt_ensure(int);
 static int adt_ensure_variants(int, int);
 static int adt_ensure_fields(int, int, int);
+struct frontend_sym_Field * frontend_sym_StructDef_field_at(struct frontend_sym_StructDef *, int i);
+struct frontend_sym_Field * frontend_sym_StructTmpl_field_at(struct frontend_sym_StructTmpl *, int i);
 static struct frontend_sym_Symbols frontend_sym_g_symbols = { .__frontend_sym_symbolops_vptr = &frontend_sym_Symbols_frontend_sym_SymbolOps_vtable, .__frontend_sym_typealiasops_vptr = &frontend_sym_Symbols_frontend_sym_TypeAliasOps_vtable };
 static struct frontend_sym_StructTmpl * frontend_sym_g_tmpls;
 static int frontend_sym_g_ntmpls;
@@ -942,12 +1398,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_grow(void *self) {
         }
         _self->traitscap = MAX_TRAITS;
     }
-    if ((!_self->structs)) {
-        _self->structs = calloc((MAX_STRUCTS + MAX_STRUCT_INSTS), sizeof((*_self->structs)));
-        if ((!_self->structs)) {
+    if ((!_self->stab)) {
+        _self->stab = (struct frontend_sym_StructTable *)(calloc(1, sizeof(struct frontend_sym_StructTable)));
+        if ((!_self->stab)) {
             return (-1);
         }
-        _self->structcap = (MAX_STRUCTS + MAX_STRUCT_INSTS);
     }
     if ((!_self->closures)) {
         _self->closures = calloc(MAX_CLOSURES, sizeof((*_self->closures)));
@@ -1855,103 +2310,119 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_text
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity(void *self, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
-    int cap;
-    struct frontend_sym_StructDef * grown;
-    (void)(_self);
-    if (need <= _self->structcap) {
+    struct frontend_sym_StructDef z;
+    if (need <= 0) {
         return 0;
     }
-    cap = ((_self->structcap > 0) ? _self->structcap : (MAX_STRUCTS + MAX_STRUCT_INSTS));
-    while (((cap < need) && (cap < (CAP_LIMIT + CAP_LIMIT)))) {
-        cap *= 2;
-    }
-    if (cap > (CAP_LIMIT + CAP_LIMIT)) {
-        cap = (CAP_LIMIT + CAP_LIMIT);
-    }
-    if (need > cap) {
+    if (need > (CAP_LIMIT + CAP_LIMIT)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    grown = (struct frontend_sym_StructDef *)(realloc(_self->structs, ((size_t)(cap) * sizeof((*grown)))));
-    if ((!grown)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    if ((!_self->stab)) {
+        _self->stab = (struct frontend_sym_StructTable *)(calloc(1, sizeof(struct frontend_sym_StructTable)));
+        if ((!_self->stab)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
     }
-    memset((grown + _self->structcap), 0, ((size_t)((cap - _self->structcap)) * sizeof((*grown))));
-    _self->structs = grown;
-    _self->structcap = cap;
+    while (Vec_frontend__sym__StructDef_len(&_self->stab->rows) < need) {
+        memset((&z), 0, sizeof(z));
+        if (Vec_frontend__sym__StructDef_push(&_self->stab->rows, z) == 0) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
+    }
     return 0;
+}
+
+static struct frontend_sym_StructDef * frontend_sym_Symbols_frontend_sym_SymbolOps_struct_at(void *self, int i) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    if (((!_self->stab) || (i < 0))) {
+        return (struct frontend_sym_StructDef *)(0);
+    }
+    return Vec_frontend__sym__StructDef_at(&_self->stab->rows, i);
+}
+
+static struct frontend_sym_Field * frontend_sym_Symbols_frontend_sym_SymbolOps_struct_field_at(void *self, int si, int fi) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    struct frontend_sym_StructDef * r;
+    if (((si < 0) || (si >= _self->nstructs))) {
+        return (struct frontend_sym_Field *)(0);
+    }
+    r = _self->__frontend_sym_symbolops_vptr->struct_at(_self, si);
+    if (((!r) || (!r->fset))) {
+        return (struct frontend_sym_Field *)(0);
+    }
+    return Vec_frontend__sym__Field_at(&r->fset->rows, fi);
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_field_capacity(void *self, int si, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
-    int cap;
-    struct frontend_sym_Field * grown;
-    (void)(_self);
+    struct frontend_sym_StructDef * r;
+    struct frontend_sym_Field z;
     if (((si < 0) || (si >= _self->nstructs))) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "struct table out of range");
     }
-    if (need <= _self->structs[si].fcap) {
+    if (need <= 0) {
         return 0;
     }
-    cap = ((_self->structs[si].fcap > 0) ? _self->structs[si].fcap : MAX_FIELDS);
-    while (((cap < need) && (cap < CAP_LIMIT))) {
-        cap *= 2;
-    }
-    if (cap > CAP_LIMIT) {
-        cap = CAP_LIMIT;
-    }
-    if (need > cap) {
+    if (need > CAP_LIMIT) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    grown = (struct frontend_sym_Field *)(realloc(_self->structs[si].fields, ((size_t)(cap) * sizeof((*grown)))));
-    if ((!grown)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    r = _self->__frontend_sym_symbolops_vptr->struct_at(_self, si);
+    if ((!r)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "struct table out of range");
     }
-    memset((grown + _self->structs[si].fcap), 0, ((size_t)((cap - _self->structs[si].fcap)) * sizeof((*grown))));
-    _self->structs[si].fields = grown;
-    _self->structs[si].fcap = cap;
+    if ((!r->fset)) {
+        r->fset = (struct frontend_sym_FieldSet *)(calloc(1, sizeof(struct frontend_sym_FieldSet)));
+        if ((!r->fset)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
+    }
+    while (Vec_frontend__sym__Field_len(&r->fset->rows) < need) {
+        memset((&z), 0, sizeof(z));
+        if (Vec_frontend__sym__Field_push(&r->fset->rows, z) == 0) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
+    }
     return 0;
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_tmpl_field_capacity(void *self, int ti, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
-    int cap;
     int n;
     struct frontend_sym_StructTmpl * t;
-    struct frontend_sym_Field * grown;
+    struct frontend_sym_Field z;
     (void)(_self);
     t = frontend_sym_ct_tmpls((&n));
     if ((((!t) || (ti < 0)) || (ti >= n))) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "template table out of range");
     }
-    if (need <= t[ti].fcap) {
+    if (need <= 0) {
         return 0;
     }
-    cap = ((t[ti].fcap > 0) ? t[ti].fcap : MAX_FIELDS);
-    while (((cap < need) && (cap < CAP_LIMIT))) {
-        cap *= 2;
-    }
-    if (cap > CAP_LIMIT) {
-        cap = CAP_LIMIT;
-    }
-    if (need > cap) {
+    if (need > CAP_LIMIT) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    grown = (struct frontend_sym_Field *)(realloc(t[ti].fields, ((size_t)(cap) * sizeof((*grown)))));
-    if ((!grown)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    if ((!t[ti].fset)) {
+        t[ti].fset = (struct frontend_sym_FieldSet *)(calloc(1, sizeof(struct frontend_sym_FieldSet)));
+        if ((!t[ti].fset)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
     }
-    memset((grown + t[ti].fcap), 0, ((size_t)((cap - t[ti].fcap)) * sizeof((*grown))));
-    t[ti].fields = grown;
-    t[ti].fcap = cap;
+    while (Vec_frontend__sym__Field_len(&t[ti].fset->rows) < need) {
+        memset((&z), 0, sizeof(z));
+        if (Vec_frontend__sym__Field_push(&t[ti].fset->rows, z) == 0) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
+    }
     return 0;
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_struct(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
-    (void)(_self);
+    struct frontend_sym_StructDef * r;
     for (i = 0; i < _self->nstructs; i++) {
-        if (strcmp(_self->structs[i].name, name) == 0) {
+        r = _self->__frontend_sym_symbolops_vptr->struct_at(_self, i);
+        if ((r && (strcmp(r->name, name) == 0))) {
             return i;
         }
     }
@@ -1961,7 +2432,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_struct(void *self, c
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
-    (void)(_self);
+    struct frontend_sym_StructDef * r;
     if ((!name[0])) {
         return (-1);
     }
@@ -1972,26 +2443,30 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct(void *self, co
     if (_self->__frontend_sym_symbolops_vptr->ensure_struct_capacity(_self, (_self->nstructs + 1)) != 0) {
         return (-1);
     }
-    _self->structs[_self->nstructs].name = runtime_text_ct_intern(name);
-    if ((!_self->structs[_self->nstructs].name)) {
+    r = _self->__frontend_sym_symbolops_vptr->struct_at(_self, _self->nstructs);
+    if ((!r)) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    _self->structs[_self->nstructs].nuse = 0;
-    _self->structs[_self->nstructs].nfields = 0;
-    _self->structs[_self->nstructs].defined = 0;
-    _self->structs[_self->nstructs].line = 0;
-    _self->structs[_self->nstructs].col = 0;
-    _self->structs[_self->nstructs].allow_cycle = 0;
-    _self->structs[_self->nstructs].uses_drop = 0;
-    _self->structs[_self->nstructs].uses_handback = 0;
-    _self->structs[_self->nstructs].has_handback_impl = 0;
-    _self->structs[_self->nstructs].has_drop_impl = 0;
-    _self->structs[_self->nstructs].ntparams = 0;
-    _self->structs[_self->nstructs].is_template = 0;
-    _self->structs[_self->nstructs].is_inst = 0;
-    _self->structs[_self->nstructs].is_pub = 0;
-    _self->structs[_self->nstructs].declared_here = 0;
-    _self->structs[_self->nstructs].owner = (-1);
+    r->name = runtime_text_ct_intern(name);
+    if ((!r->name)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    r->nuse = 0;
+    r->nfields = 0;
+    r->defined = 0;
+    r->line = 0;
+    r->col = 0;
+    r->allow_cycle = 0;
+    r->uses_drop = 0;
+    r->uses_handback = 0;
+    r->has_handback_impl = 0;
+    r->has_drop_impl = 0;
+    r->ntparams = 0;
+    r->is_template = 0;
+    r->is_inst = 0;
+    r->is_pub = 0;
+    r->declared_here = 0;
+    r->owner = (-1);
     _self->nstructs++;
     return (_self->nstructs - 1);
 }
@@ -1999,7 +2474,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct(void *self, co
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct_inst(void *self, const char * name) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
     int i;
-    (void)(_self);
+    struct frontend_sym_StructDef * r;
     i = _self->__frontend_sym_symbolops_vptr->find_struct(_self, name);
     if (i >= 0) {
         return i;
@@ -2011,7 +2486,11 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_add_struct_inst(void *sel
     if (i < 0) {
         return (-1);
     }
-    _self->structs[i].is_inst = 1;
+    r = _self->__frontend_sym_symbolops_vptr->struct_at(_self, i);
+    if ((!r)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    r->is_inst = 1;
     _self->nstruct_inst++;
     return i;
 }
@@ -2394,8 +2873,8 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait(void *self, 
     if (s < 0) {
         return (-1);
     }
-    for (ti = 0; ti < _self->structs[s].nuse; ti++) {
-        int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->structs[s].use[ti]);
+    for (ti = 0; ti < _self->__frontend_sym_symbolops_vptr->struct_at(_self, s)->nuse; ti++) {
+        int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->__frontend_sym_symbolops_vptr->struct_at(_self, s)->use[ti]);
         if (t < 0) {
             continue;
         }
@@ -2440,8 +2919,8 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_tex
     if (s < 0) {
         return (const char *)(0);
     }
-    for (ti = 0; ti < _self->structs[s].nuse; ti++) {
-        int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->structs[s].use[ti]);
+    for (ti = 0; ti < _self->__frontend_sym_symbolops_vptr->struct_at(_self, s)->nuse; ti++) {
+        int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->__frontend_sym_symbolops_vptr->struct_at(_self, s)->use[ti]);
         if (t < 0) {
             continue;
         }
@@ -2482,8 +2961,8 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_method_trait_amb
     if (s < 0) {
         return (const char *)(0);
     }
-    for (ti = 0; ti < _self->structs[s].nuse; ti++) {
-        int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->structs[s].use[ti]);
+    for (ti = 0; ti < _self->__frontend_sym_symbolops_vptr->struct_at(_self, s)->nuse; ti++) {
+        int t = _self->__frontend_sym_symbolops_vptr->find_trait(_self, _self->__frontend_sym_symbolops_vptr->struct_at(_self, s)->use[ti]);
         if (t < 0) {
             continue;
         }
@@ -2778,6 +3257,8 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .type_target_of = frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_of,
     .type_target_text = frontend_sym_Symbols_frontend_sym_SymbolOps_type_target_text,
     .ensure_struct_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_capacity,
+    .struct_at = frontend_sym_Symbols_frontend_sym_SymbolOps_struct_at,
+    .struct_field_at = frontend_sym_Symbols_frontend_sym_SymbolOps_struct_field_at,
     .ensure_struct_field_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_struct_field_capacity,
     .ensure_tmpl_field_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_tmpl_field_capacity,
     .find_struct = frontend_sym_Symbols_frontend_sym_SymbolOps_find_struct,
@@ -3227,6 +3708,22 @@ const struct frontend_sym_TypeAliasOps_vtbl frontend_sym_Symbols_frontend_sym_Ty
     .expand_type_text_text = frontend_sym_Symbols_frontend_sym_TypeAliasOps_expand_type_text_text,
     .resolve_exported_type_aliases = frontend_sym_Symbols_frontend_sym_TypeAliasOps_resolve_exported_type_aliases
 };
+
+struct frontend_sym_Field * frontend_sym_StructDef_field_at(struct frontend_sym_StructDef *self, int i) {
+    struct frontend_sym_StructDef *_self = (struct frontend_sym_StructDef *)self;
+    if (((!_self->fset) || (i < 0))) {
+        return (struct frontend_sym_Field *)(0);
+    }
+    return Vec_frontend__sym__Field_at(&_self->fset->rows, i);
+}
+
+struct frontend_sym_Field * frontend_sym_StructTmpl_field_at(struct frontend_sym_StructTmpl *self, int i) {
+    struct frontend_sym_StructTmpl *_self = (struct frontend_sym_StructTmpl *)self;
+    if (((!_self->fset) || (i < 0))) {
+        return (struct frontend_sym_Field *)(0);
+    }
+    return Vec_frontend__sym__Field_at(&_self->fset->rows, i);
+}
 
 static void __attribute__((unused)) Result_int_int_Drop_drop(void *self) {
     struct Result_int_int *_self = (struct Result_int_int *)self;

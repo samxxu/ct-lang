@@ -138,7 +138,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -647,11 +651,11 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_into_member_check(void *se
         st += 7;
     }
     si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, st);
-    if (((si < 0) || (!_self->sym->structs[si].defined))) {
+    if (((si < 0) || (!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->defined))) {
         return 0;
     }
-    for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-        if (strcmp(_self->sym->structs[si].fields[fi].name, fname) == 0) {
+    for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
+        if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name, fname) == 0) {
             return 0;
         }
     }
@@ -2652,9 +2656,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         if (si < 0) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "offsetof needs a struct type");
         }
-        known = (!_self->sym->structs[si].defined);
-        for (fi = 0; fi < _self->sym->structs[si].nfields; fi++) {
-            if (strcmp(_self->sym->structs[si].fields[fi].name, fname) == 0) {
+        known = (!_self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->defined);
+        for (fi = 0; fi < _self->sym->__frontend_sym_symbolops_vptr->struct_at(_self->sym, si)->nfields; fi++) {
+            if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->struct_field_at(_self->sym, si, fi)->name, fname) == 0) {
                 known = 1;
             }
         }
@@ -4485,10 +4489,10 @@ static int ref_member_flags(struct frontend_parse_Expr * self, int n, int * is_b
     if (si < 0) {
         return 0;
     }
-    for (fi = 0; fi < self->sym->structs[si].nfields; fi++) {
-        if (strcmp(self->sym->structs[si].fields[fi].name, self->arena->nodes[n].text2) == 0) {
-            (*is_bit) = self->sym->structs[si].fields[fi].is_bitfield;
-            (*is_const) = frontend_parse_ref_type_is_const_value(self->sym->structs[si].fields[fi].type);
+    for (fi = 0; fi < self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->nfields; fi++) {
+        if (strcmp(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->name, self->arena->nodes[n].text2) == 0) {
+            (*is_bit) = self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->is_bitfield;
+            (*is_const) = frontend_parse_ref_type_is_const_value(self->sym->__frontend_sym_symbolops_vptr->struct_field_at(self->sym, si, fi)->type);
             return 1;
         }
     }
@@ -4600,7 +4604,7 @@ static int type_is_owning(struct frontend_parse_Expr * self, const char * type) 
         }
     }
     si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, base);
-    return ((si >= 0) && self->sym->structs[si].uses_drop);
+    return ((si >= 0) && self->sym->__frontend_sym_symbolops_vptr->struct_at(self->sym, si)->uses_drop);
 }
 static int check_refout_arg(struct frontend_parse_Expr * self, int a, int ann, const char * ptype) {
     int vi;

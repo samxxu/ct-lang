@@ -284,7 +284,11 @@ struct frontend_sym_MethAnn;
 struct frontend_sym_MethodSig;
 struct frontend_sym_Trait;
 struct frontend_sym_Field;
+struct frontend_sym_FieldSet;
+struct Vec_frontend__sym__Field;
 struct frontend_sym_StructDef;
+struct frontend_sym_StructTable;
+struct Vec_frontend__sym__StructDef;
 struct frontend_sym_GenericInst;
 struct frontend_sym_StructTmpl;
 struct frontend_sym_StructInst;
@@ -673,11 +677,11 @@ static const char * tb_member_type(const char * base, const char * field, int ar
     if (si < 0) {
         return (const char *)(0);
     }
-    for (fi = 0; fi < sym->structs[si].nfields; fi++) {
-        if (strcmp(sym->structs[si].fields[fi].name, field) != 0) {
+    for (fi = 0; fi < sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->nfields; fi++) {
+        if (strcmp(sym->__frontend_sym_symbolops_vptr->struct_field_at(sym, si, fi)->name, field) != 0) {
             continue;
         }
-        return sym->structs[si].fields[fi].type;
+        return sym->__frontend_sym_symbolops_vptr->struct_field_at(sym, si, fi)->type;
     }
     return (const char *)(0);
 }
@@ -2464,7 +2468,7 @@ static int tb_struct(struct backend_tir_TBuilder * tb, int n, int kind) {
         return (-1);
     }
     si = sym->__frontend_sym_symbolops_vptr->find_struct(sym, name);
-    tmpl = (((si >= 0) && sym->structs[si].is_template) ? 1 : 0);
+    tmpl = (((si >= 0) && sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->is_template) ? 1 : 0);
     for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next) {
         if (((ar->nodes[c].kind == N_FIELD) && backend_tir_tmod_spelling_free(ar->nodes[c].text))) {
             tmpl = 1;
@@ -2488,9 +2492,9 @@ static int tb_struct(struct backend_tir_TBuilder * tb, int n, int kind) {
         }
     }
     if (si >= 0) {
-        for (u = 0; u < sym->structs[si].nuse; u++) {
+        for (u = 0; u < sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->nuse; u++) {
             int td;
-            td = tb_ensure_trait(tb, sym->structs[si].use[u]);
+            td = tb_ensure_trait(tb, sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->use[u]);
             if (td > 0) {
                 backend_tir_tmod_decl_add_trait(m, decl, td);
             }
@@ -2691,7 +2695,7 @@ static int tb_impl(struct backend_tir_TBuilder * tb, int n) {
     trait = ar->nodes[n].text2;
     recv = ar->nodes[n].text;
     if (((((!recv) || (!recv[0])) && (si >= 0)) && (si < sym->nstructs))) {
-        recv = runtime_text_ct_internf("struct %s", sym->structs[si].name);
+        recv = runtime_text_ct_internf("struct %s", sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->name);
     }
     if ((!recv)) {
         recv = "";
@@ -2739,7 +2743,7 @@ static int tb_impl(struct backend_tir_TBuilder * tb, int n) {
         if (((si >= 0) && (si < sym->nstructs))) {
             const char * msuf = ((trait && trait[0]) ? "" : tb_overload_suffix(tb, n, c));
             m->decls[(mdecl - 1)].is_method = 1;
-            m->decls[(mdecl - 1)].cname = runtime_text_ct_internf("%s_%s%s%s%s", sym->structs[si].name, ((trait && trait[0]) ? trait : ""), ((trait && trait[0]) ? "_" : ""), (ar->nodes[c].text2 ? ar->nodes[c].text2 : ""), (msuf ? msuf : ""));
+            m->decls[(mdecl - 1)].cname = runtime_text_ct_internf("%s_%s%s%s%s", sym->__frontend_sym_symbolops_vptr->struct_at(sym, si)->name, ((trait && trait[0]) ? trait : ""), ((trait && trait[0]) ? "_" : ""), (ar->nodes[c].text2 ? ar->nodes[c].text2 : ""), (msuf ? msuf : ""));
             if ((!m->decls[(mdecl - 1)].cname)) {
                 return (-1);
             }
@@ -2944,7 +2948,7 @@ static int tb_record_structs(struct backend_tir_TBuilder * tb) {
     int srow;
     sym = tb_sym();
     for (i = 0; i < sym->nstructs; i++) {
-        sd = (&sym->structs[i]);
+        sd = sym->__frontend_sym_symbolops_vptr->struct_at(sym, i);
         if (((!sd->name) || (!sd->name[0]))) {
             continue;
         }
@@ -2964,7 +2968,7 @@ static int tb_record_structs(struct backend_tir_TBuilder * tb) {
             }
         }
         for (j = 0; j < sd->nfields; j++) {
-            if (backend_tir_tmod_struct_add_field(tb->m, srow, sd->fields[j].name, sd->fields[j].type, sd->fields[j].dims) != 0) {
+            if (backend_tir_tmod_struct_add_field(tb->m, srow, frontend_sym_StructDef_field_at(sd, j)->name, frontend_sym_StructDef_field_at(sd, j)->type, frontend_sym_StructDef_field_at(sd, j)->dims) != 0) {
                 return (-1);
             }
         }

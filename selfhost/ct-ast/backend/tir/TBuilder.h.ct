@@ -565,9 +565,9 @@ static const char *tb_member_type(const char *base, const char *field, int arrow
     tag = tb_tag_of(base);
     si = sym->find_struct(tag);
     if (si < 0) return (const char *)0;
-    for (fi = 0; fi < sym->structs[si].nfields; fi++) {
-        if (strcmp(sym->structs[si].fields[fi].name, field) != 0) continue;
-        return sym->structs[si].fields[fi].type;
+    for (fi = 0; fi < sym->struct_at(si)->nfields; fi++) {
+        if (strcmp(sym->struct_field_at(si, fi)->name, field) != 0) continue;
+        return sym->struct_field_at(si, fi)->type;
     }
     return (const char *)0;
 }
@@ -2229,7 +2229,7 @@ static int tb_struct(struct TBuilder *tb, int n, int kind)
     decl = tmod_new_decl(m, kind, name, tb->file, tb_line(n), tb_col(n), tb->unit);
     if (decl < 0) return -1;
     si = sym->find_struct(name);
-    tmpl = (si >= 0 && sym->structs[si].is_template) ? 1 : 0;
+    tmpl = (si >= 0 && sym->struct_at(si)->is_template) ? 1 : 0;
     for (c = ar->nodes[n].a; c >= 0; c = ar->nodes[c].next)
         if (ar->nodes[c].kind == N_FIELD && tmod_spelling_free(ar->nodes[c].text))
             tmpl = 1;
@@ -2246,9 +2246,9 @@ static int tb_struct(struct TBuilder *tb, int n, int kind)
                             ar->nodes[c].line) < 0) return -1;
     }
     if (si >= 0) {
-        for (u = 0; u < sym->structs[si].nuse; u++) {
+        for (u = 0; u < sym->struct_at(si)->nuse; u++) {
             int td;
-            td = tb_ensure_trait(tb, sym->structs[si].use[u]);
+            td = tb_ensure_trait(tb, sym->struct_at(si)->use[u]);
             if (td > 0) tmod_decl_add_trait(m, decl, td);
         }
     }
@@ -2422,7 +2422,7 @@ static int tb_impl(struct TBuilder *tb, int n)
     trait = ar->nodes[n].text2;
     recv = ar->nodes[n].text;
     if ((!recv || !recv[0]) && si >= 0 && si < sym->nstructs)
-        recv = runtime::text::ct_internf("struct %s", sym->structs[si].name);
+        recv = runtime::text::ct_internf("struct %s", sym->struct_at(si)->name);
     if (!recv) recv = "";
     decl = tmod_new_decl(m, TD_IMPL, runtime::text::ct_internf("impl %s for %s",
                          trait ? trait : "", recv), tb->file, tb_line(n),
@@ -2460,7 +2460,7 @@ static int tb_impl(struct TBuilder *tb, int n)
                                : tb_overload_suffix(tb, n, c);
             m->decls[mdecl - 1].is_method = 1;
             m->decls[mdecl - 1].cname = runtime::text::ct_internf("%s_%s%s%s%s",
-                sym->structs[si].name,
+                sym->struct_at(si)->name,
                 (trait && trait[0]) ? trait : "",
                 (trait && trait[0]) ? "_" : "",
                 ar->nodes[c].text2 ? ar->nodes[c].text2 : "",
@@ -2618,13 +2618,13 @@ static int tb_fault(struct TBuilder *tb)
 /* Build one unit's slice: declarations in source order, then instances, then
    the test seam, then verification of exactly the rows this slice appended.
    A failure is reported by the verifier and the caller writes no C. */
-/* The emitter's vptr rules read `Symbols.structs` (the `use` list and the
-   field types of a template *and* of every instance). Copy those facts into
-   TIR once per module so a lowering never has to reach back into Symbols and
-   an instance spelling such as `Pair_int` has recoverable vptr data. Rows are
-   appended in symbol order and one name is recorded once; the table is
-   process-scoped with the rest of TModule, so a later unit does not repeat
-   it. */
+/* The emitter's vptr rules read the `Symbols` struct table (`stab`; the `use`
+   list and the field types of a template *and* of every instance). Copy those
+   facts into TIR once per module so a lowering never has to reach back into
+   Symbols and an instance spelling such as `Pair_int` has recoverable vptr
+   data. Rows are appended in symbol order and one name is recorded once; the
+   table is process-scoped with the rest of TModule, so a later unit does not
+   repeat it. */
 static int tb_record_structs(struct TBuilder *tb)
 {
     struct Symbols *sym;
@@ -2633,7 +2633,7 @@ static int tb_record_structs(struct TBuilder *tb)
 
     sym = tb_sym();
     for (i = 0; i < sym->nstructs; i++) {
-        sd = &sym->structs[i];
+        sd = sym->struct_at(i);
         if (!sd->name || !sd->name[0]) continue;
         if (tmod_find_struct(tb->m, sd->name) > 0) continue;
         srow = tmod_new_struct(tb->m, sd->name, sd->is_inst);
@@ -2644,9 +2644,9 @@ static int tb_record_structs(struct TBuilder *tb)
         for (j = 0; j < sd->nuse && j < 64; j++)
             if (tmod_struct_add_use(tb->m, srow, sd->use[j]) != 0) return -1;
         for (j = 0; j < sd->nfields; j++)
-            if (tmod_struct_add_field(tb->m, srow, sd->fields[j].name,
-                                      sd->fields[j].type,
-                                      sd->fields[j].dims) != 0) return -1;
+            if (tmod_struct_add_field(tb->m, srow, sd->field_at(j)->name,
+                                      sd->field_at(j)->type,
+                                      sd->field_at(j)->dims) != 0) return -1;
     }
     return 0;
 }
