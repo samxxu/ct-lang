@@ -5394,6 +5394,15 @@ if bash test/ast/p52_index.sh "$work/ct-ast" "$CC"; then
 else
     bad "p52/index" "index protocol (D-028) failed"
 fi
+# LANG-31 / D-031: a single string-literal key naming a struct field folds to
+# the ordinary field access. Positives run under 320/321 in the generic loop;
+# this probe pins the LIR/AST byte identity, the get fallback and the exact
+# unknown-field / renamed / ambiguity diagnostics.
+if bash test/ast/lang31_const_key.sh "$work/ct-ast" "$CC"; then
+    ok "lang31/const-key (D-031 fold: LIR+AST, no get/temp, 5 negatives)"
+else
+    bad "lang31/const-key" "constant-key fold (D-031) failed"
+fi
 # v1-PH-2 S3 / D-029: `(A, B) => R` is the function-pointer type in another
 # spelling. The forms fixture (`test/ast/p3_functor_forms`) and the pub-header
 # fixture (`test/ast/p3_functor_header`) run in the generic loops above; this

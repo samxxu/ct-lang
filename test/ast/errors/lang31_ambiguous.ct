@@ -1,0 +1,20 @@
+/* LANG-31 / D-031: the field and get(char *) both answer the same literal
+   key; the compiler refuses to choose silently. */
+struct Pair {
+    int x;
+}
+
+impl Pair {
+    int get(char *k)
+    {
+        (void)k;
+        return 0;
+    }
+}
+
+int main(void)
+{
+    Pair p;
+    p.x = 1;
+    return p["x"];
+}

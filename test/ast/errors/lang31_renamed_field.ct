@@ -1,0 +1,13 @@
+/* LANG-31 / D-031: renaming a field breaks the old constant key. The
+   candidate list names the field that now exists. */
+struct Record {
+    int kept;
+    int new_name;
+}
+
+int main(void)
+{
+    Record r;
+    r.kept = 1;
+    return r["old_name"];
+}

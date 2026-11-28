@@ -1,0 +1,17 @@
+/* LANG-31 / D-031: a single string-literal key naming a struct field folds
+   to `p.x` in the parser. Both the default LIR path and --ir=off emit the
+   field access: no `get` call, no `__ct_*` temporary. */
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main(void)
+{
+    Point p;
+    p.x = 7;
+    p.y = 9;
+    printf("x=%d y=%d\n", p["x"], p["y"]);
+    return 0;
+}

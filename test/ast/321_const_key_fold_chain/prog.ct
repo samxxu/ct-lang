@@ -1,0 +1,18 @@
+/* LANG-31 / D-031: the receiver may be a field chain, an array element or a
+   user generic instance; each folds to the ordinary field access. */
+
+struct Point { int x; int y; }
+struct Holder { Point p; }
+struct Box2<T> { T v; }
+
+int main(void)
+{
+    Holder h;
+    Point ps[2];
+    Box2<int> g;
+    h.p.x = 5;
+    ps[0].x = 6;
+    g.v = 8;
+    printf("%d %d %d\n", h.p["x"], ps[0]["x"], g["v"]);
+    return 0;
+}

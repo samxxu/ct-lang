@@ -1,0 +1,13 @@
+/* LANG-31 / D-031: the fold is read-only, so a constant-key write keeps the
+   D-028 write path and is still refused (no set here). */
+struct Point {
+    int x;
+}
+
+int main(void)
+{
+    Point p;
+    p.x = 1;
+    p["x"] = 2;
+    return p.x;
+}

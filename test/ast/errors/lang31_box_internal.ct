@@ -1,0 +1,11 @@
+/* LANG-31 / D-031: a built-in handle's raw fields stay outside the fold, so
+   the Box implementation field cannot be named through a constant key. */
+struct Point { int x; int y; }
+
+int main(void)
+{
+    Box<Point> b = new Point { 3, 4 };
+    int r = b["ptr"];
+    b.release();
+    return r;
+}

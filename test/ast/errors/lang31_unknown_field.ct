@@ -1,0 +1,13 @@
+/* LANG-31 / D-031: a constant key that names no field is a compile-time
+   error and lists the real fields, so a typo cannot become a silent get. */
+struct Point {
+    int x;
+    int y;
+}
+
+int main(void)
+{
+    Point p;
+    p.x = 1;
+    return p["nope"];
+}
