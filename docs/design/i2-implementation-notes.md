@@ -2,8 +2,12 @@
 
 > 中文。本文件是 I2（`D-034` / `I2-C1`）实现的**唯一契约**：实现形状、诊断落点、
 > 夹具命名与偏差。语义权威仍是 [D-034](../decisions/D-034.md)；本文件只记录“代码
-> 在哪、怎么改写、报在哪”。四片提交：`I2-1` `9b3e2034`+`cf7e0c5d`、`I2-2`
-> `43bf79a0`+`e9ab4bbe`、`I2-3` `8e164c4b`+`deff490b`、`I2-4` `3f59ad63`+`f792da01`。
+> 在哪、怎么改写、报在哪”。四片提交（本树 `issue/i2err`，HEAD `a93e6701`）：
+> `I2-1` `335967e0`+`38827fd1`、`I2-2` `3c97e841`+`53a36b38`、`I2-3`
+> `0edda589`+`83f94ab7`、`I2-4` `80ebe52f`+`e0ca032f`、`I2-5` `c78b5e86`。
+> 原 `issue/i2` 分支的 `9b3e2034`/`cf7e0c5d`/`43bf79a0`/`e9ab4bbe`/`8e164c4b`/
+> `deff490b`/`3f59ad63`/`f792da01` 是 replay 前提交，不是本 HEAD 祖先；代码 / 测试
+> 内容与本树逐对相同，差异只在无关 docs。本表以本树提交为准（REV F6 已登记）。
 
 ## 1 `index` 存哪
 
@@ -43,11 +47,16 @@
 5. 同键命中 >1 → D034-5（声明期检查正常已拦，兜底用同一文案）。
 
 声明期（`Parser.h.ct`）：D034-7 指 `index` 记号；D034-3 指 impl 的 `index` 记号；
-D034-6 指 `set` 记号；D034-5 指**第二个**标记。D034-4（阶段一只读）由 I2-4 撤除，
-v1.2 最终产物不再出现；阶段一探针的两条 `=`/`++` 断言随 I2-4 改口径（见 §5）。
+D034-6 指 `set` 记号；D034-5 指**第二个**标记。另查**同名 + 同 `type_key`**（参数个数
+相同、每个参数 `type_key` 逐字相等）：两条都标 `index` 已由 D034-5 拦；indexed + 未标、
+未标 + 未标报 `trait 'T' declares duplicate method 'm' with the same parameter types`
+（F1，`a93e6701`；`test/ast/errors/i2_dup_method.ct`），不占 D034-1…8 编号。D034-4
+（阶段一只读）由 I2-4 撤除，v1.2 最终产物不再出现；阶段一探针的两条 `=`/`++` 断言随
+I2-4 改口径（见 §5）。
 
 **同键重复的展示**：重复判定用 `type_key`，D034-5 文案引用**声明拼写**（`'char *'`），
-与 D-034 §2 的冻结样例一致（该节小字“按 type_key 展示”按“判定用 type_key”读）。
+与 D-034 §2 的冻结样例一致（该节小字“按 type_key 展示”按“判定用 type_key、展示用声明
+拼写”读，见 D-034 §8 E5）。
 
 ## 4 多键分派与槽名（I2-3）
 
@@ -66,14 +75,17 @@ v1.2 最终产物不再出现；阶段一探针的两条 `=`/`++` 断言随 I2-4
 | 类别 | 名称 |
 | --- | --- |
 | 正例 | `test/ast/i2_index_ident`（`index` 标识符）、`i2_index_read` / `i2_index_explicit`（A1 逐字节对）、`i2_index_read_keys`（A2 双键）、`i2_cross_unit`（`store.h.ct` + `mem.h.ct` + `prog.ct`，A3）、`i2_index_write` / `i2_index_write_explicit`（B1） |
-| 负例 | `test/ast/errors/i2_index_{prefix,twice,after_semi,dup,set_nonvoid}`、`i2_impl_index`、`i2_no_index`、`i2_key_mismatch`、`i2_non_iface`、`i2_struct_key_mismatch`、`i2_no_index_set`、`i2_set_key_mismatch`、`i2_write_own`、`i2_write_compound`、`i2_write_incr` |
+| 负例 | `test/ast/errors/i2_index_{prefix,twice,after_semi,dup,set_nonvoid}`、`i2_impl_index`、`i2_no_index`、`i2_key_mismatch`、`i2_non_iface`、`i2_struct_key_mismatch`、`i2_no_index_set`、`i2_set_key_mismatch`、`i2_write_own`、`i2_write_compound`、`i2_write_incr`、`i2_dup_method`（F1 同名同键混合标记） |
 | 探针 | `test/ast/i2_index_syntax.sh`（I2-1）、`i2_index.sh`（I2-2/3，A1–A9）、`i2_index_write.sh`（I2-4，B1–B4）；三者挂在 `selfhost/check-ast.sh` 的 `i2/syntax`、`i2/index`、`i2/write` |
 
 ## 6 已知偏差与边界
 
 - **重复名槽位改写**：D-034 §1 只写“不新增槽、槽数/序/偏移不变”，未规定同名槽的
-  拼写。实现按“同名 ≥2 才加 `$…`”，因此既有唯一名 trait 的生成 C 逐字节不变；
-  不加后缀的旧行为对同名 trait 会产出重复 C 成员（不可编译），故不构成回归。
+  拼写。实现按“同名 ≥2 才加 `$…`”，因此既有唯一名 trait 的生成 C 逐字节不变。
+  同键同名已由声明期判重拒绝（F1）：两条都标 `index` 是 D034-5，混合 / 全未标是
+  duplicate-method 文案；因此 `$<enc>` 只在 `type_key` 不同的同名方法之间使用。
+  多键 trait 下 `[]` 按键选槽，而显式 `o.get(k)` 仍取第一个同名方法，二者不承诺
+  同槽 / 逐字节一致（D-034 §8 E2）。
 - **B4 的“借用检查 / ASAN”**：以 L52-9（`own` / `borrow` 右值拒绝）与 L52-6（复合写）
   两条负例覆盖；未单列 ASAN 用例（无新增分配路径，写形态与显式调用同字节）。
 - **阶段一产物稳定（B5）**：以 I2-3 编译器与 I2-4 编译器对 A1–A3 夹具的生成 C 逐字节

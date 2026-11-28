@@ -48,7 +48,9 @@
 
 ### I2-3 发射与跨单元
 
-- 生成 C：`o[k]` → vtable 的 `get` 槽调用，形态与显式 `o.get(k)` 逐字节一致（同一次构建）；
+- 生成 C：`o[k]` → vtable 的 `get` 槽调用，形态与显式 `o.get(k)` 逐字节一致（同一次构建；
+  **唯一名 / 单键 trait**；多键下 `[]` 按键选槽、显式调用取第一个同名方法，不承诺同槽，
+  见 D-034 §8 E2）；
 - 跨单元：trait 在 `.h.ct` 声明、实现在他单元、调用在第三单元，三者一致；
 - 固有 impl 路径（D-028）生成物零变化；
 - 判据：用户语料 25/25 逐字节；自举 2 轮；seed 两轮；`check-all` 8 门。
@@ -152,6 +154,10 @@ REQ 的 spec 同步与 REV 复核都不进 DEV 提交前置。
 > **键类型口径以 [D-034](../decisions/D-034.md) §3 为准**：字符串字面量的静态类型是
 > `char *`，因此 `s["name"]` 只命中 `get(char *k) index`；`Str get(Str k) index` 不命中
 > 字面量键（可先把键绑定为 `Str` 变量）。
+> **逐字节范围**：A1 / B1 的“生成 C 与显式调用逐字节一致”只对**唯一名（单键）trait** 成立；
+> A2 只要求各键命中正确槽、符号不同，多键下与显式 `o.get(k)` 不承诺同槽（D-034 §8 E2）。
+> **A8 是 I2-3 历史判据**：钉 `83f94ab7`；HEAD 上写入由 D034-8 接管（`errors/i2_no_index_set.ct`），
+> `errors/i2_write_phase1.ct` 已随 I2-4 移除（D-034 §8 E4）。
 
 ### 10.1 阶段一（只读，`E-V3-9e`）
 
@@ -164,7 +170,7 @@ REQ 的 spec 同步与 REV 复核都不进 DEV 提交前置。
 | A5 | 未标 `index` 的 trait 用 `o[k]` | 硬错 `trait 'T' declares no indexed get; 'o[k]' is not available` | `test/ast/errors/i2_no_index.ct` |
 | A6 | `o[0]` 但只有 `get(char *) index` | 硬错并列出可用键类型 | `errors/i2_key_mismatch.ct` |
 | A7 | `impl` 侧写 `index` | 硬错，提示标记只属 trait 声明 | `errors/i2_impl_index.ct` |
-| A8 | 阶段一对 `o[k] = v` | 只读诊断（写入属阶段二），不写产物 | `errors/i2_write_phase1.ct` |
+| A8 | 阶段一对 `o[k] = v`（I2-3 历史判据，钉 `83f94ab7`） | 只读诊断（写入属阶段二），不写产物；HEAD 由 D034-8 接管 | 历史夹具 `errors/i2_write_phase1.ct`（I2-4 已移除）；现见 `errors/i2_no_index_set.ct` |
 | A9 | 对非接口值误用 I2 路径 | 走 D-028 的既有诊断，不声称接口规则 | `errors/i2_non_iface.ct` |
 
 ### 10.2 阶段二（写入，`E-V3-9f`）
