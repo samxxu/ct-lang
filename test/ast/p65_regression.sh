@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# PH-65 R6 probe, flipped by v1-PH-2 S9: the global default is strict.
-#   1. an in-repo unit with no allow row (selfhost / lib/core / test / examples)
-#      resolves to strict, and selfhost + lib/core carry no direct `#include`;
-#      the registered C-interop fixtures are the only in-repo allow rows;
+# PH-65 R6 probe, flipped by v1-PH-2 S9 and extended by D-032 (Q-2): the
+# global default is strict.
+#   1. the two internal layers (selfhost/ct-ast, lib/core incl. utf16/) resolve
+#      allow through their own manifest, every other in-repo tree (test /
+#      examples) resolves to strict, and selfhost + lib/core carry no direct
+#      `#include`; the registered C-interop fixtures stay the only per-file
+#      allow rows;
 #   2. an external project sees strict by default and `--c-boundary=allow` on
 #      request, end to end through `ct build`;
 #   3. a plain `.ct` with no include is unaffected (it builds under the default).
@@ -19,11 +22,19 @@ trap 'rm -rf "$tmp"' EXIT
 fail=0
 mkdir -p "$tmp/proj"
 
-# 1) A plain unit in every tree resolves to strict from the repo root. 01 had
-#    a corpus-pinned include and is now an explicit allow row, so sample a
+# 1) The two internal layers resolve allow through their own manifest
+#    (D-032 / Q-2); every other tree is still strict from the repo root. 01
+#    had a corpus-pinned include and is an explicit allow row, so sample a
 #    plain case instead of it.
-for f in selfhost/ct-ast/main.ct lib/core/String.h.ct test/cases/02_multi_trait.ct \
-         examples/37_nested_pattern/nested_pattern.ct; do
+for f in selfhost/ct-ast/main.ct lib/core/String.h.ct \
+         lib/core/utf16/U16Str.h.ct; do
+    got=$( cd "$root" && env -u CT_C_BOUNDARY "$CT" --show-c-boundary "$f" 2>"$tmp/e" )
+    if [ "$got" != "allow" ]; then
+        echo "FAIL p65/regression: $f resolved to '$got' (want allow)" >&2
+        fail=1
+    fi
+done
+for f in test/cases/02_multi_trait.ct examples/37_nested_pattern/nested_pattern.ct; do
     got=$( cd "$root" && env -u CT_C_BOUNDARY "$CT" --show-c-boundary "$f" 2>"$tmp/e" )
     if [ "$got" != "strict" ]; then
         echo "FAIL p65/regression: $f resolved to '$got' (want strict)" >&2

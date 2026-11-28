@@ -1659,6 +1659,179 @@ static int module_src_declares_Box(const char *path)
     return 0;
 }
 
+/* v1-PH-2 / D-032 (Q-2): the package-root lookup `c_boundary_for` and
+   `leaks_for` share. A `ct.pkg` covers the whole subtree under it, so both
+   keys resolve from the unit's own directory upward to the **nearest**
+   manifest; the walk is bounded by the unit's owning root and never goes
+   past it (D-032 §2.2 / §2.3, risk 1). A child manifest wins over a parent
+   one, and a manifest without the key is the default -- the parent key does
+   not overflow (risk 2). Roots, most specific first: an `-I` root, the
+   built-in layer root, then the working directory for a directly-named
+   input, then the unit's own directory. `-I` / built-in candidates are
+   compared by normalized path, so `-I ./x` and an absolute input agree. */
+static char *g_pkgroot_cwd;
+static char *g_pkgroot_core;
+static char *g_pkgroot_builtin;
+
+/* The built-in layer's root, recorded by `find_builtin` from the file it
+   resolved (`<core>/utf16/U16Str.h.ct` -> `<core>`). The five-step lookup
+   lives there, so the layer's package root is known without guessing. */
+static void pkgroot_note_builtin(const char *cand, const char *base)
+{
+    size_t cl, bl;
+
+    if (cand == 0 || base == 0) return;
+    cl = strlen(cand);
+    bl = strlen(base);
+    if (cl <= bl + 1) return;
+    if (cand[cl - bl - 1] != '/') return;
+    g_pkgroot_builtin = tool::sh::ct_scratch_fmt("%.*s",
+                                                 (int)(cl - bl - 1), cand);
+}
+
+/* `path` is `root` or inside it; `len` receives root's length. */
+static int pkgroot_under(const char *path, const char *root, size_t *len)
+{
+    size_t l;
+
+    if (path == 0 || root == 0) return 0;
+    l = strlen(root);
+    if (l == 0) return 0;
+    if (strncmp(path, root, l) != 0) return 0;
+    if (path[l] == 0 || path[l] == '/') {
+        *len = l;
+        return 1;
+    }
+    if (root[l - 1] == '/') {
+        *len = l;
+        return 1;
+    }
+    return 0;
+}
+
+static int pkgroot_manifest_at(const char *dir)
+{
+    char *p;
+    FILE *f;
+
+    if (dir == 0 || dir[0] == 0) return 0;
+    p = tool::sh::ct_scratch_fmt("%s/ct.pkg", dir);
+    f = fopen(p, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+static char *pkgroot_parent(const char *dir)
+{
+    const char *slash;
+
+    if (dir == 0 || strcmp(dir, "/") == 0) return (char *)0;
+    slash = strrchr(dir, '/');
+    if (slash == 0) return (char *)0;
+    if (slash == dir) return tool::sh::ct_scratch_dup("/");
+    return tool::sh::ct_scratch_fmt("%.*s", (int)(slash - dir), dir);
+}
+
+static const char *pkgroot_cwd(void)
+{
+    char buf[4096];
+
+    if (g_pkgroot_cwd == 0) {
+        if (getcwd(buf, sizeof buf) == 0) return (const char *)0;
+        g_pkgroot_cwd = tool::sh::ct_scratch_dup(buf);
+    }
+    return g_pkgroot_cwd;
+}
+
+/* The built-in layer root `find_builtin` may not have run yet in
+   `--show-c-boundary` (it prints before any unit loads), so the same
+   environment / `./lib/core` default is a candidate too (D-032 §4). */
+static const char *pkgroot_core(void)
+{
+    const char *env;
+    char *n;
+
+    if (g_pkgroot_core != 0) return g_pkgroot_core;
+    env = getenv("CT_CORE_DIR");
+    if (env == 0 || env[0] == 0) env = getenv("CT_STD_DIR");
+    if (env == 0 || env[0] == 0) env = "lib/core";
+    ct_norm_path(env, &n);
+    g_pkgroot_core = n;
+    return g_pkgroot_core;
+}
+
+/* Nearest `ct.pkg` from the unit's directory up to its owning root, as an
+   owned run-scoped path. 1 = found (`*out` is the package root), 0 = none. */
+static int pkgroot_for(const char **incdirs, int ninc, const char *path,
+                       char **out)
+{
+    char *dir, *ndir, *cand, *ncand, *root, *cur;
+    const char *slash;
+    size_t rl, best;
+    int i;
+
+    *out = (char *)0;
+    if (path == 0 || path[0] == 0) return 0;
+    slash = strrchr(path, '/');
+    if (slash == 0) dir = ".";
+    else if (slash == path) dir = "/";
+    else dir = tool::sh::ct_scratch_fmt("%.*s", (int)(slash - path), path);
+    ct_norm_path(dir, &ndir);
+    root = 0;
+    best = 0;
+    for (i = 0; i < ninc; i++) {
+        if (incdirs == 0 || incdirs[i] == 0 || incdirs[i][0] == 0) continue;
+        ct_norm_path(incdirs[i], &ncand);
+        if (!pkgroot_under(ndir, ncand, &rl)) continue;
+        if (root == 0 || rl > best) {
+            root = ncand;
+            best = rl;
+        }
+    }
+    /* The built-in layer / `./lib/core` are roots even without `-I`: the
+       layer is not in the import roots, so without this its manifest would
+       be a dead file (D-032 card §5). */
+    if (g_pkgroot_builtin != 0) {
+        ct_norm_path(g_pkgroot_builtin, &ncand);
+        if (pkgroot_under(ndir, ncand, &rl) && (root == 0 || rl > best)) {
+            root = ncand;
+            best = rl;
+        }
+    }
+    cand = (char *)pkgroot_core();
+    if (cand != 0 && pkgroot_under(ndir, cand, &rl)
+        && (root == 0 || rl > best)) {
+        root = cand;
+        best = rl;
+    }
+    /* A directly-named input has no `-I` root. The working directory is its
+       project boundary, so `cd proj && ct check src/x.ct` sees proj/ct.pkg;
+       an external absolute path falls back to its own directory and stays
+       strict (SH-93: the working directory is not an input). */
+    if (root == 0) {
+        cand = (char *)pkgroot_cwd();
+        if (cand != 0 && pkgroot_under(ndir, cand, &rl)) {
+            root = cand;
+            best = rl;
+        }
+    }
+    if (root == 0) root = ndir;
+    cur = ndir;
+    for (;;) {
+        if (pkgroot_manifest_at(cur)) {
+            *out = cur;
+            return 1;
+        }
+        if (strcmp(cur, root) == 0) break;
+        if (strlen(cur) <= strlen(root)) break;
+        cand = pkgroot_parent(cur);
+        if (cand == 0) break;
+        cur = cand;
+    }
+    return 0;
+}
+
 impl ModuleOps for Module {
     /* Module failures are about the build itself -- an unreadable input, an
        import that does not resolve, a path that does not fit, a limit. None of
@@ -2033,6 +2206,7 @@ impl ModuleOps for Module {
             probe = fopen(cand, "r");
             if (!probe) return -1;
             fclose(probe);
+            pkgroot_note_builtin(cand, base);
             *out = cand;
             return 0;
         }
@@ -2048,6 +2222,7 @@ impl ModuleOps for Module {
                     probe = fopen(cand, "r");
                     if (probe) {
                         fclose(probe);
+                        pkgroot_note_builtin(cand, base);
                         *out = cand;
                         return 0;
                     }
@@ -2062,6 +2237,7 @@ impl ModuleOps for Module {
                 probe = fopen(cand, "r");
                 if (probe) {
                     fclose(probe);
+                    pkgroot_note_builtin(cand, base);
                     *out = cand;
                     return 0;
                 }
@@ -2075,6 +2251,7 @@ impl ModuleOps for Module {
                 probe = fopen(cand, "r");
                 if (probe) {
                     fclose(probe);
+                    pkgroot_note_builtin(cand, base);
                     *out = cand;
                     return 0;
                 }
@@ -2090,6 +2267,7 @@ impl ModuleOps for Module {
                         g_module_legacy_path_warned = 1;
                         fprintf(stderr, "ctc: warning: lib/std is deprecated; use lib/core (DOC-87)\n"); /* DOC-87 迁移回退 */
                     }
+                    pkgroot_note_builtin(cand, base);
                     *out = cand;
                     return 0;
                 }
@@ -2105,6 +2283,7 @@ impl ModuleOps for Module {
                         g_module_legacy_path_warned = 1;
                         fprintf(stderr, "ctc: warning: lib/std is deprecated; use lib/core (DOC-87)\n"); /* DOC-87 迁移回退 */
                     }
+                    pkgroot_note_builtin(cand, base);
                     *out = cand;
                     return 0;
                 }
@@ -4287,16 +4466,23 @@ cmd_too_long:
         return self->tgraph_live[slot];
     }
 
-    /* v1-PH-2 S9 (REQ-STRICT-1): the policy for one unit path. The CLI wins;
-       then the environment; then the package manifest (its units follow the
-       package's key); anything else is strict. The pre-1.0 allowance for
-       `selfhost/`, `lib/core/`, `lib/std/`, `test/` and `examples/` is gone,
-       and a manifest without a `c-boundary` key is strict too -- `ct migrate`
-       writes `c-boundary = allow` into an old package that needs the bridge.
-       SH-93: the working directory is not an input. */
+    /* v1-PH-2 S9 (REQ-STRICT-1) + D-032 (Q-2): the policy for one unit path.
+       The CLI wins; then the environment; then the unit's package manifest
+       (its units follow the package's key); anything else is strict. The
+       manifest is the nearest `ct.pkg` from the unit's own directory up to
+       its owning root, so one manifest covers the whole subtree and a child
+       package's key does not inherit from its parent (`pkgroot_for`). The
+       pre-1.0 allowance for `selfhost/`, `lib/core/`, `lib/std/`, `test/`
+       and `examples/` is gone, and a manifest without a `c-boundary` key is
+       strict too -- `ct migrate` writes `c-boundary = allow` into an old
+       package that needs the bridge. The internal layers' allow is an
+       ordinary manifest key now (`selfhost/ct-ast/ct.pkg`,
+       `lib/core/ct.pkg`), not a path special case. SH-93: the working
+       directory is not an input. */
     int c_boundary_for(const char *path)
     {
-        int i, r;
+        int r;
+        char *root;
 
         if (self->c_boundary >= 0) return self->c_boundary;
         {
@@ -4308,41 +4494,32 @@ cmd_too_long:
            lives inside that package: its `c-boundary` key wins over the
            default. A manifest without the key is strict (S9 flipped the old
            allow window; `ct migrate` writes the key for an old package). */
-        for (i = 0; i < self->ninc; i++) {
-            if (strncmp(path, self->incdirs[i], strlen(self->incdirs[i])) != 0)
-                continue;
-            r = c_manifest_boundary(self->incdirs[i]);
-            if (r >= 0) return r;
+        if (pkgroot_for(self->incdirs, self->ninc, path, &root)) {
+            r = c_manifest_boundary(root);
+            return r >= 0 ? r : 1;
         }
         return 1;
     }
 
-    /* PH-82 (D-012): the package's leak policy. `leaks = error` escalates the
-       existing leak diagnostics and the direct-cycle warning, nothing else;
-       `c-boundary` and `--debug-leaks` keep their own contracts. An `-I` root
-       with a manifest is the package statement; without one the unit's own
-       directory is read, so `ct compile`/`ct check` (which ignore `-I`) still
-       see the package they live in. A missing key or any other value keeps the
-       pre-PH-82 `warn` behaviour, so old packages do not change. */
+    /* PH-82 (D-012) + D-032 (Q-2): the package's leak policy. `leaks = error`
+       escalates the existing leak diagnostics and the direct-cycle warning,
+       nothing else; `c-boundary` and `--debug-leaks` keep their own contracts.
+       It resolves from the same package root as `c-boundary` (`pkgroot_for`),
+       so the two keys never disagree about which manifest is the package's
+       (D-032 §2.3): nearest manifest from the unit's directory up to its
+       owning root, child over parent, no parent overflow. A missing key or
+       any other value keeps the pre-PH-82 `warn` behaviour, so old packages
+       do not change. */
     int leaks_for(const char *path)
     {
         const char *v;
-        char *dir;
-        int i, n;
-        size_t l;
+        char *root;
 
-        if (path != 0)
-            for (i = 0; i < self->ninc; i++) {
-                l = strlen(self->incdirs[i]);
-                if (l == 0 || strncmp(path, self->incdirs[i], l) != 0) continue;
-                if (ct_pkg_key(self->incdirs[i], "leaks", &v))
-                    return strcmp(v, "error") == 0 ? 1 : 0;
-                return 0;
-            }
         if (path == 0 || path[0] == 0) return 0;
-        n = self->path_dir(path, &dir);
-        if (n != 0) return 0;
-        if (ct_pkg_key(dir, "leaks", &v) && strcmp(v, "error") == 0) return 1;
+        if (pkgroot_for(self->incdirs, self->ninc, path, &root)) {
+            if (ct_pkg_key(root, "leaks", &v))
+                return strcmp(v, "error") == 0 ? 1 : 0;
+        }
         return 0;
     }
 

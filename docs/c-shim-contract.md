@@ -33,6 +33,12 @@
 **strict 是护栏，不是沙箱。** shim 的内容、`--ldflags` 外链的 `.c` 仍可绕过文件边界
 （D65-8）。因此 N-5…N-7 是**作者义务**，不是编译器保证。
 
+**内部层 manifest 例外（D-032）。** `selfhost/ct-ast/ct.pkg` 与 `lib/core/ct.pkg` 各写
+`c-boundary = allow`，按“包根覆盖子树”解析：一个 manifest 的作用域是其目录到单元所属根之间的
+整棵子树，`lib/core` 因此覆盖含 `utf16/` 的子树，子目录不另放 manifest；子目录自带 manifest 时
+以最近者为准。消费者（无 manifest 的普通目录）与 `leaks` 的作用域同源，默认仍是 strict / warn；
+两处内部 manifest 之外没有 allow 窗口。[§4.66](language-spec.md#466-c-边界c-boundary-与-shimphase-65仅-ct-ast)
+
 ## 2. 所有权
 
 每个跨边界的指针/长度/句柄都必须在 shim 头里用注释标出下列三种之一，缺注释即视为未定义：

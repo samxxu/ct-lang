@@ -1,0 +1,12 @@
+# lib/core/ct.pkg - D-032 / Q-2 internal-layer C-boundary exemption.
+#
+# The built-in layer is an internal layer of the compiler, not a consumer:
+# strict is meant to keep user code from calling libc directly, not to force
+# the layer to go through one shim per libc call (D-032 §1). This manifest is
+# the package root of the built-in layer and covers its whole subtree,
+# including utf16/ -- the two utf16 units must not declare their own ct.pkg
+# (D-032 §2.2, §3 B2).
+#
+# This is not a new syntax: the key and its values are the existing §4.66
+# ones. Consumers stay strict by default; only this tree resolves to allow.
+c-boundary = allow

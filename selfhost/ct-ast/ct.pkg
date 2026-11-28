@@ -1,0 +1,12 @@
+# selfhost/ct-ast/ct.pkg - D-032 / Q-2 internal-layer C-boundary exemption.
+#
+# The compiler's own units are an internal layer, not a consumer: strict is
+# meant to keep user code from calling libc directly, not to force the
+# compiler to go through one shim per libc call (D-032 §1). This manifest is
+# the package root of selfhost/ct-ast and covers its whole subtree; the
+# resolver (frontend/module/Module.h.ct) reads the nearest ct.pkg from the
+# unit's directory up to its owning root, so no child manifest is needed.
+#
+# This is not a new syntax: the key and its values are the existing §4.66
+# ones. Consumers stay strict by default; only this tree resolves to allow.
+c-boundary = allow

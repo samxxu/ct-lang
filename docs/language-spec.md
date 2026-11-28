@@ -2991,10 +2991,20 @@ Result<long, char *> twice(int n)
 
 ### 4.66 C 边界：`c-boundary` 与 shim（Phase 65，仅 ct-ast）
 
-**全局默认 strict**（v1.2 / REQ-STRICT-1）：所有 `.ct` / `.h.ct` 都不能直接和 C 打交道，
-包括 Ct 仓自己的 `selfhost/**`、`lib/core/**`、`test/**`、`examples/**`；v0-PH-65 的 pre-1.0
-四目录豁免已收回。`--c-boundary=allow`、包清单的 `c-boundary = allow`、`.m.ct` 边界单元与
-`<base>.shim.h` 仍是显式出口。
+**全局默认 strict**（v1.2 / REQ-STRICT-1）：所有 `.ct` / `.h.ct` 都不能直接和 C 打交道；
+v0-PH-65 的 pre-1.0 四目录豁免已收回，`test/**`、`examples/**` 与普通消费方（无 manifest 的
+目录）仍是 strict。**内部层例外**（D-032，v1.2 窗口）：`selfhost/ct-ast/ct.pkg` 与
+`lib/core/ct.pkg` 各写 `c-boundary = allow`，按下面“包根覆盖子树”的口径生效——这不是路径
+特判，两处 manifest 之外没有 allow 窗口。`--c-boundary=allow`、包清单的
+`c-boundary = allow`、`.m.ct` 边界单元与 `<base>.shim.h` 仍是显式出口。
+
+**包根解析（D-032）**：`c-boundary` 与 `leaks` 共用一套作用域——从单元所在目录**向上**找最近的
+`ct.pkg`，该 manifest 即单元所属包的包根，其键作用于整棵子树；向上查找止于单元的**所属根**
+（`-I` 根 / 内置层根；`--show-c-boundary` 这类直接输入以工作目录为项目边界，仓库外输入退回
+单元目录），不越过、不走到文件系统根。子目录自带 `ct.pkg` 时**以最近者为准**，父包的键不外溢到
+子包；找不到 manifest 或键时 `c-boundary` 为 strict、`leaks` 为 warn。内置层
+（`CT_CORE_DIR` / `./lib/core` 的解析结果）即其包根，所以 `lib/core/ct.pkg` 覆盖含 `utf16/` 的
+整棵子树，`utf16/` 不再另放 manifest。
 
 | 形态 | strict 下 | 出口 |
 | --- | --- | --- |

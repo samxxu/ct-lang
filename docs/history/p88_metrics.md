@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=97535 io_cap=2048
+     emitted_before=48223 emitted_after=97707 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -282,6 +282,11 @@
       该表 realloc 3 处归零，`calloc` +3（三个 backing 记录）。发射 C
       96750 -> 97535 行（+785：三个 `Vec` 实例、行访问器与 `StructDef` /
       `StructTmpl` 的 `field_at`；用户语料生成物逐字节不变），切片清单仍为 76)
+     (D-032 / Q-2 后复测：`c_boundary_for` / `leaks_for` 共用包根解析
+      `pkgroot_for`——从单元目录向上到所属根找最近 `ct.pkg`，新增
+      `selfhost/ct-ast/ct.pkg` 与 `lib/core/ct.pkg` 两处内部层 manifest；
+      Module.h.ct 4676 -> 4853，发射 C 97535 -> 97707 行（+172：解析 helper 与
+      `find_builtin` 的根记录；用户语料生成物逐字节不变），切片清单仍为 76)
 -->
 
 ## 1 切片清单

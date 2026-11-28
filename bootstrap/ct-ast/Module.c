@@ -295,6 +295,13 @@ static int cycle_is_builtin_Box(struct frontend_module_Module *, const char *);
 static int cycle_Box_target(struct frontend_module_Module *, int, int);
 static int cycle_emit(struct frontend_module_Module *, int, int, int);
 static int module_src_declares_Box(const char *);
+static void pkgroot_note_builtin(const char *, const char *);
+static int pkgroot_under(const char *, const char *, size_t *);
+static int pkgroot_manifest_at(const char *);
+static char * pkgroot_parent(const char *);
+static const char * pkgroot_cwd(void);
+static const char * pkgroot_core(void);
+static int pkgroot_for(const char * *, int, const char *, char * *);
 struct frontend_module_Module * frontend_module_module_get(void);
 void frontend_module_ct_module_free_flags(void);
 void frontend_module_ct_module_bind(void *, void *, void *, void *, void *, void *, void *);
@@ -303,6 +310,9 @@ static int frontend_module_g_cycle_adj[CYCLE_ROWS][CYCLE_DEGREE];
 static int frontend_module_g_cycle_nout[CYCLE_ROWS];
 static int frontend_module_g_module_legacy_env_warned;
 static int frontend_module_g_module_legacy_path_warned;
+static char * frontend_module_g_pkgroot_cwd;
+static char * frontend_module_g_pkgroot_core;
+static char * frontend_module_g_pkgroot_builtin;
 static struct frontend_module_Module frontend_module_g_module = { .__frontend_module_moduleops_vptr = &frontend_module_Module_frontend_module_ModuleOps_vtable };
 static struct frontend_module_Unit * frontend_module_g_units;
 static int frontend_module_Module_frontend_module_ModuleOps_fail(void *self, const char * msg) {
@@ -699,6 +709,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_find_builtin(void *s
             return (-1);
         }
         fclose(probe);
+        pkgroot_note_builtin(cand, base);
         (*out) = cand;
         return 0;
     }
@@ -713,6 +724,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_find_builtin(void *s
                 probe = fopen(cand, "r");
                 if (probe) {
                     fclose(probe);
+                    pkgroot_note_builtin(cand, base);
                     (*out) = cand;
                     return 0;
                 }
@@ -725,6 +737,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_find_builtin(void *s
             probe = fopen(cand, "r");
             if (probe) {
                 fclose(probe);
+                pkgroot_note_builtin(cand, base);
                 (*out) = cand;
                 return 0;
             }
@@ -738,6 +751,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_find_builtin(void *s
             probe = fopen(cand, "r");
             if (probe) {
                 fclose(probe);
+                pkgroot_note_builtin(cand, base);
                 (*out) = cand;
                 return 0;
             }
@@ -753,6 +767,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_find_builtin(void *s
                     frontend_module_g_module_legacy_path_warned = 1;
                     fprintf(stderr, "ctc: warning: lib/std is deprecated; use lib/core (DOC-87)\n");
                 }
+                pkgroot_note_builtin(cand, base);
                 (*out) = cand;
                 return 0;
             }
@@ -768,6 +783,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_find_builtin(void *s
                     frontend_module_g_module_legacy_path_warned = 1;
                     fprintf(stderr, "ctc: warning: lib/std is deprecated; use lib/core (DOC-87)\n");
                 }
+                pkgroot_note_builtin(cand, base);
                 (*out) = cand;
                 return 0;
             }
@@ -2941,8 +2957,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_builtin_live_for(voi
 
 static int frontend_module_Module_frontend_module_ModuleOps_c_boundary_for(void *self, const char * path) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
-    int i;
     int r;
+    char * root;
     if (_self->c_boundary >= 0) {
         return _self->c_boundary;
     }
@@ -2955,14 +2971,9 @@ static int frontend_module_Module_frontend_module_ModuleOps_c_boundary_for(void 
             return 1;
         }
     }
-    for (i = 0; i < _self->ninc; i++) {
-        if (strncmp(path, _self->incdirs[i], strlen(_self->incdirs[i])) != 0) {
-            continue;
-        }
-        r = frontend_module_c_manifest_boundary(_self->incdirs[i]);
-        if (r >= 0) {
-            return r;
-        }
+    if (pkgroot_for(_self->incdirs, _self->ninc, path, (&root))) {
+        r = frontend_module_c_manifest_boundary(root);
+        return ((r >= 0) ? r : 1);
     }
     return 1;
 }
@@ -2970,31 +2981,14 @@ static int frontend_module_Module_frontend_module_ModuleOps_c_boundary_for(void 
 static int frontend_module_Module_frontend_module_ModuleOps_leaks_for(void *self, const char * path) {
     struct frontend_module_Module *_self = (struct frontend_module_Module *)self;
     const char * v;
-    char * dir;
-    int i;
-    int n;
-    size_t l;
-    if (path != 0) {
-        for (i = 0; i < _self->ninc; i++) {
-            l = strlen(_self->incdirs[i]);
-            if (((l == 0) || (strncmp(path, _self->incdirs[i], l) != 0))) {
-                continue;
-            }
-            if (frontend_module_ct_pkg_key(_self->incdirs[i], "leaks", (&v))) {
-                return ((strcmp(v, "error") == 0) ? 1 : 0);
-            }
-            return 0;
-        }
-    }
+    char * root;
     if (((path == 0) || (path[0] == 0))) {
         return 0;
     }
-    n = _self->__frontend_module_moduleops_vptr->path_dir(_self, path, (&dir));
-    if (n != 0) {
-        return 0;
-    }
-    if ((frontend_module_ct_pkg_key(dir, "leaks", (&v)) && (strcmp(v, "error") == 0))) {
-        return 1;
+    if (pkgroot_for(_self->incdirs, _self->ninc, path, (&root))) {
+        if (frontend_module_ct_pkg_key(root, "leaks", (&v))) {
+            return ((strcmp(v, "error") == 0) ? 1 : 0);
+        }
     }
     return 0;
 }
@@ -4861,6 +4855,184 @@ static int module_src_declares_Box(const char * path) {
         }
     }
     fclose(f);
+    return 0;
+}
+static void pkgroot_note_builtin(const char * cand, const char * base) {
+    size_t cl;
+    size_t bl;
+    if (((cand == 0) || (base == 0))) {
+        return;
+    }
+    cl = strlen(cand);
+    bl = strlen(base);
+    if (cl <= (bl + 1)) {
+        return;
+    }
+    if (cand[((cl - bl) - 1)] != '/') {
+        return;
+    }
+    frontend_module_g_pkgroot_builtin = tool_sh_ct_scratch_fmt("%.*s", (int)(((cl - bl) - 1)), cand);
+}
+static int pkgroot_under(const char * path, const char * root, size_t * len) {
+    size_t l;
+    if (((path == 0) || (root == 0))) {
+        return 0;
+    }
+    l = strlen(root);
+    if (l == 0) {
+        return 0;
+    }
+    if (strncmp(path, root, l) != 0) {
+        return 0;
+    }
+    if (((path[l] == 0) || (path[l] == '/'))) {
+        (*len) = l;
+        return 1;
+    }
+    if (root[(l - 1)] == '/') {
+        (*len) = l;
+        return 1;
+    }
+    return 0;
+}
+static int pkgroot_manifest_at(const char * dir) {
+    char * p;
+    FILE * f;
+    if (((dir == 0) || (dir[0] == 0))) {
+        return 0;
+    }
+    p = tool_sh_ct_scratch_fmt("%s/ct.pkg", dir);
+    f = fopen(p, "rb");
+    if ((!f)) {
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+static char * pkgroot_parent(const char * dir) {
+    const char * slash;
+    if (((dir == 0) || (strcmp(dir, "/") == 0))) {
+        return (char *)(0);
+    }
+    slash = strrchr(dir, '/');
+    if (slash == 0) {
+        return (char *)(0);
+    }
+    if (slash == dir) {
+        return tool_sh_ct_scratch_dup("/");
+    }
+    return tool_sh_ct_scratch_fmt("%.*s", (int)((slash - dir)), dir);
+}
+static const char * pkgroot_cwd(void) {
+    char buf[4096];
+    if (frontend_module_g_pkgroot_cwd == 0) {
+        if (getcwd(buf, sizeof(buf)) == 0) {
+            return (const char *)(0);
+        }
+        frontend_module_g_pkgroot_cwd = tool_sh_ct_scratch_dup(buf);
+    }
+    return frontend_module_g_pkgroot_cwd;
+}
+static const char * pkgroot_core(void) {
+    const char * env;
+    char * n;
+    if (frontend_module_g_pkgroot_core != 0) {
+        return frontend_module_g_pkgroot_core;
+    }
+    env = getenv("CT_CORE_DIR");
+    if (((env == 0) || (env[0] == 0))) {
+        env = getenv("CT_STD_DIR");
+    }
+    if (((env == 0) || (env[0] == 0))) {
+        env = "lib/core";
+    }
+    frontend_module_ct_norm_path(env, (&n));
+    frontend_module_g_pkgroot_core = n;
+    return frontend_module_g_pkgroot_core;
+}
+static int pkgroot_for(const char * * incdirs, int ninc, const char * path, char * * out) {
+    char * dir;
+    char * ndir;
+    char * cand;
+    char * ncand;
+    char * root;
+    char * cur;
+    const char * slash;
+    size_t rl;
+    size_t best;
+    int i;
+    (*out) = (char *)(0);
+    if (((path == 0) || (path[0] == 0))) {
+        return 0;
+    }
+    slash = strrchr(path, '/');
+    if (slash == 0) {
+        dir = ".";
+    }
+    else {
+        if (slash == path) {
+            dir = "/";
+        }
+        else {
+            dir = tool_sh_ct_scratch_fmt("%.*s", (int)((slash - path)), path);
+        }
+    }
+    frontend_module_ct_norm_path(dir, (&ndir));
+    root = 0;
+    best = 0;
+    for (i = 0; i < ninc; i++) {
+        if ((((incdirs == 0) || (incdirs[i] == 0)) || (incdirs[i][0] == 0))) {
+            continue;
+        }
+        frontend_module_ct_norm_path(incdirs[i], (&ncand));
+        if ((!pkgroot_under(ndir, ncand, (&rl)))) {
+            continue;
+        }
+        if (((root == 0) || (rl > best))) {
+            root = ncand;
+            best = rl;
+        }
+    }
+    if (frontend_module_g_pkgroot_builtin != 0) {
+        frontend_module_ct_norm_path(frontend_module_g_pkgroot_builtin, (&ncand));
+        if ((pkgroot_under(ndir, ncand, (&rl)) && ((root == 0) || (rl > best)))) {
+            root = ncand;
+            best = rl;
+        }
+    }
+    cand = (char *)(pkgroot_core());
+    if ((((cand != 0) && pkgroot_under(ndir, cand, (&rl))) && ((root == 0) || (rl > best)))) {
+        root = cand;
+        best = rl;
+    }
+    if (root == 0) {
+        cand = (char *)(pkgroot_cwd());
+        if (((cand != 0) && pkgroot_under(ndir, cand, (&rl)))) {
+            root = cand;
+            best = rl;
+        }
+    }
+    if (root == 0) {
+        root = ndir;
+    }
+    cur = ndir;
+    for (; ; ) {
+        if (pkgroot_manifest_at(cur)) {
+            (*out) = cur;
+            return 1;
+        }
+        if (strcmp(cur, root) == 0) {
+            break;
+        }
+        if (strlen(cur) <= strlen(root)) {
+            break;
+        }
+        cand = pkgroot_parent(cur);
+        if (cand == 0) {
+            break;
+        }
+        cur = cand;
+    }
     return 0;
 }
 static int ct_pkg_ns_clash(struct frontend_module_Module * m, char * * msg, char * * file) {
