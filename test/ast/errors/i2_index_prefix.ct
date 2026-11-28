@@ -1,0 +1,25 @@
+/* D-034 D2 / D7: the marker is postfix. Writing it before the return type is
+   one placement diagnostic (D034-7), not a mangled method signature. */
+trait Store {
+    index int get(char *k);
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    m.n = 1;
+    Store s = m;
+    return s.get("k");
+}

@@ -1,0 +1,25 @@
+/* D-034 D2 / D7: a marker after the `;` is not a modifier of the method that
+   just ended; it is a misplaced marker (D034-7), not a method named `index`. */
+trait Store {
+    int get(char *k);
+    index
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    m.n = 1;
+    return m.n;
+}

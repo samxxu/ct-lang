@@ -1,0 +1,26 @@
+/* D-034 D8: one indexed get per key type. The second `get(char *)` is a
+   duplicate (D034-5); key types are compared by `type_key`, the return type is
+   not part of the decision. */
+trait Store {
+    int get(char *k) index;
+    int get(char *name) index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    m.n = 1;
+    return m.n;
+}

@@ -1,0 +1,25 @@
+/* D-034 D7 / D034-6: an indexed `set` is the statement write slot, so it must
+   return void. */
+trait Store {
+    int set(char *k, int v) index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int set(char *k, int v)
+    {
+        (void)k;
+        self->n = v;
+        return 0;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    m.n = 1;
+    return m.n;
+}

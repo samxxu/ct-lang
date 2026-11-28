@@ -5403,6 +5403,16 @@ if bash test/ast/lang31_const_key.sh "$work/ct-ast" "$CC"; then
 else
     bad "lang31/const-key" "constant-key fold (D-031) failed"
 fi
+# D-034 / v1-PH-2 (I2-1): the `index` context modifier's syntax position. The
+# marker is postfix only; a prefix, a repeat, a stray marker after `;`, an
+# impl-side repeat, a duplicate key type and a non-void indexed `set` are the
+# six frozen placement / declaration diagnostics, and `index` stays an ordinary
+# identifier everywhere else.
+if bash test/ast/i2_index_syntax.sh "$work/ct-ast" "$CC"; then
+    ok "i2/syntax (D-034 index marker: position, duplicates, ident)"
+else
+    bad "i2/syntax" "index marker syntax (D-034) failed"
+fi
 # v1-PH-2 S3 / D-029: `(A, B) => R` is the function-pointer type in another
 # spelling. The forms fixture (`test/ast/p3_functor_forms`) and the pub-header
 # fixture (`test/ast/p3_functor_header`) run in the generic loops above; this

@@ -1,0 +1,23 @@
+/* D-034 D3: the marker belongs to the trait declaration. An impl that repeats
+   it is a hard error (D034-3): the two declarations can never disagree. */
+trait Store {
+    int get(char *k) index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(char *k) index {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    m.n = 1;
+    return m.n;
+}

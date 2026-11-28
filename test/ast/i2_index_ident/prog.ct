@@ -1,0 +1,38 @@
+/* D-034 (I2) / v1-PH-2: `index` is a context modifier, not a reserved word.
+   It is read as the marker only in the one position after a dynamic trait
+   method's parameter list; here it stays an ordinary field name, variable name
+   and method name, and the marked `get` keeps its ordinary explicit call. */
+
+trait Meter {
+    int index(int step);
+    int get(char *k) index;
+}
+
+struct Counter {
+    int index;
+    int n;
+} use Meter;
+
+impl Meter for Counter {
+    int index(int step)
+    {
+        return self->n + step;
+    }
+    int get(char *k)
+    {
+        (void)k;
+        return self->index;
+    }
+}
+
+int main(void)
+{
+    Counter c;
+    int index = 5;
+
+    c.index = 3;
+    c.n = 4;
+    Meter m = c;
+    printf("%d %d %d\n", index, m.index(2), m.get("k"));
+    return 0;
+}

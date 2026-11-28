@@ -1,0 +1,24 @@
+/* D-034 D2 / D7: the marker appears once. A second `index` in the same
+   position is the same placement error (D034-7). */
+trait Store {
+    int get(char *k) index index;
+}
+
+struct Mem {
+    int n;
+} use Store;
+
+impl Store for Mem {
+    int get(char *k)
+    {
+        (void)k;
+        return self->n;
+    }
+}
+
+int main(void)
+{
+    Mem m;
+    m.n = 1;
+    return m.n;
+}
