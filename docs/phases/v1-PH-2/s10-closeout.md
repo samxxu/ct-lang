@@ -133,19 +133,28 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > 状态词只用：`待签` / `待开` / `进行中` / `已完成` / `登记`。
 > **角色边界（所有者 2026-11-28）**：REV 只写评审报告与样例代码，不改其它文档或代码；
 > 产物头部的状态落笔由 EDITOR（或该产物的作者席位）执行，REV 只出评审结论。
+>
+> **非阻塞原则**：REQ 的文档同步（spec §4.66 / c-shim-contract）与 REV 的评审都**不进入
+> DEV 的提交前置**；DEV 可连续 M1 → M2 → M3，也可让 S8B 的 R3–R8 与 D032-C1 并行
+> （文件集不重叠）。任何一项若被写成"等 REQ 复核"或"等 REV 签字才能开工"，即视为排程错误。
+>
+> **REQ 复核记录（2026-11-28）**：R1/R2 审计表 `docs/design/s8b-rem-audit.tsv` 已复核——
+> 53 + 17 处逐条归桶齐全（38 带界拷贝 / 2 a / 1 c / 7 d / 5 vsnprintf / 17 b），
+> 与提交信息一致；小瑕：`Pkg.h.ct:3270` 的 function 列写成 `install_main`，实为
+> `pkg_official_resolve`，不阻塞。
 
 | # | 事项 | 状态 | 写者 / 批者 | 前置 | 依据 |
 | --- | --- | --- | --- | --- | --- |
 | Q-1 | D-032 设计签收（内部层 C 边界豁免） | **已完成** | REV | 无（ADR 已 `proposed`） | [D-032](../../decisions/D-032.md)、[签收包](../../reviews/2026-11-28-signoff-package.md) |
-| Q-2 | D032-C1 实施 M1（`c_boundary_for` 回退 + 两处 `ct.pkg`） | 待开 | DEV | Q-1 | [施工卡](../../design/d032-internal-c-boundary-construction.md) |
+| Q-2 | D032-C1 实施 M1（`c_boundary_for`/`leaks_for` 同源解析 + 两处 `ct.pkg`） | 待开 | DEV | **无**（D-032 已签，REQ 文档同步不阻塞） | [施工卡](../../design/d032-internal-c-boundary-construction.md) |
 | Q-3 | D032-C1 实施 M2（selfhost 63 个 shim 退场） | 待开 | DEV | Q-2 | 同上 |
 | Q-4 | D032-C1 实施 M3（lib/core 8 个 shim 退场，含 utf16 子树） | 待开 | DEV | Q-3 | 同上 |
 | Q-5 | S8B-REM-1 R1/R2（Pkg 2 处、Symbols 17 处） | **已完成**（`6ba2a627`、`1d93fd77`） | DEV | 无 | [S8B 施工卡](../../design/s8b-remaining-construction.md)、[审计表](../../design/s8b-rem-audit.tsv) |
-| Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | Q-5 与审计表复核 | 同上 §3 |
+| Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **登记（未立项）** | ARCH / REQ 出 ADR | 无 | 差异清单 §3d；需新 ADR，不属本卡 |
 | Q-8 | I2 接口值下标（四问待所有者裁定） | **登记（未立项）** | 所有者裁定 | 无 | RFC 评估 §3、§4 |
 | Q-9 | dist 冒烟 | 登记 | 所有者 / CI | tag 时 `release.yml` 在 ubuntu 上跑同组冒烟 | 卡 §7.3；本文 §5 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
 | Q-12 | LANG-31（常量键折叠） | 登记（deferred） | 下一窗口重评 | 所有者决定窗口 | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md) |
-| Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | 待开 | DEV | Q-5 已交付，缺汇总节 | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
+| Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | 待开 | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
