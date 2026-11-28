@@ -195,12 +195,12 @@ impl MemoryOps for Memory {
         fi = self->sym->find_func(self->arena->nodes[e].text2);
         if (fi < 0)
             for (i = 0; i < self->sym->nfunc; i++)
-                if (strcmp(self->sym->funcs[i].name, self->arena->nodes[e].text2) == 0) {
+                if (strcmp(self->sym->fn_at(i)->name, self->arena->nodes[e].text2) == 0) {
                     fi = i;
                     break;
                 }
         if (fi < 0) return 0;
-        ret = self->sym->funcs[fi].ret;
+        ret = self->sym->fn_at(fi)->ret;
         if (strncmp(ret, "struct ", 7) != 0) return 0;
         bl = strlen(ret);
         while (bl > 0 && ret[bl - 1] == ' ') bl--;
@@ -326,8 +326,8 @@ impl MemoryOps for Memory {
                 si = self->sym->find_struct(sname);
                 if (!heap && si >= 0 && self->arena->nodes[e].kind == N_CALL) {
                     int fi = self->sym->find_func(self->arena->nodes[e].text2);
-                    if (fi >= 0 && self->sym->funcs[fi].ret_owned)
-                        call_owned = self->ret_same_struct(self->sym->funcs[fi].ret, si);
+                    if (fi >= 0 && self->sym->fn_at(fi)->ret_owned)
+                        call_owned = self->ret_same_struct(self->sym->fn_at(fi)->ret, si);
                 }
             }
         }

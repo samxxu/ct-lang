@@ -64,7 +64,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -1492,7 +1497,7 @@ int backend_emit_closure_owned(struct backend_emit_Emitter * self, const char * 
         return 1;
     }
     fi = self->sym->__frontend_sym_symbolops_vptr->find_func(self->sym, owner);
-    if (((fi >= 0) && (strcmp(self->sym->funcs[fi].cname, cname) == 0))) {
+    if (((fi >= 0) && (strcmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, fi)->cname, cname) == 0))) {
         return 1;
     }
     if ((self->gprefix && self->gprefix[0])) {

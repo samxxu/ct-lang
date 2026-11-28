@@ -122,7 +122,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -3012,7 +3017,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
         }
         if (((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<"))) {
             int gfi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[n].text2);
-            if (((gfi >= 0) && (_self->sym->funcs[gfi].ntparams == 1))) {
+            if (((gfi >= 0) && (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, gfi)->ntparams == 1))) {
                 const char * targ;
                 int gi;
                 if (_self->in_generic) {
@@ -3022,7 +3027,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 if (_self->__frontend_parse_exprtypeparse_vptr->parse_type_text(_self, (&targ)) != 0) {
                     return (-1);
                 }
-                if (((_self->fnptr_state || (strcmp(targ, "void") == 0)) || (strcmp(targ, _self->sym->funcs[gfi].tparam) == 0))) {
+                if (((_self->fnptr_state || (strcmp(targ, "void") == 0)) || (strcmp(targ, _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, gfi)->tparam) == 0))) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, runtime_text_ct_internf("'%s' cannot be a generic type argument", targ));
                 }
                 if ((!((_self->lex->tok == T_PUNCT) && _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">")))) {
@@ -3278,7 +3283,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             int fi;
 {
                 int gchk = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[n].text2);
-                if (((gchk >= 0) && (_self->sym->funcs[gchk].ntparams == 1))) {
+                if (((gchk >= 0) && (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, gchk)->ntparams == 1))) {
                     char gmsg[MAX_TEXT + 64];
                     snprintf(gmsg, sizeof(gmsg), "generic function '%s' needs a type argument", _self->arena->nodes[n].text2);
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, gmsg);
@@ -3547,8 +3552,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int want;
                 int tail_ok;
                 got = (frontend_parse_arg_count(_self->arena, args) + _self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args));
-                want = _self->sym->funcs[fi].nparams;
-                tail_ok = (_self->sym->funcs[fi].variadic && (got > want));
+                want = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams;
+                tail_ok = (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->variadic && (got > want));
                 if (((!tail_ok) && (_self->__frontend_parse_exprcallcheck_vptr->arity_check(_self, id_line, id_col, _self->arena->nodes[n].text2, got, want) != 0))) {
                     return (-1);
                 }
@@ -3556,9 +3561,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             if (((fi >= 0) && (args > 0))) {
                 int lc = args;
                 int lk = 0;
-                while (((lc > 0) && (lk < _self->sym->funcs[fi].nparams))) {
+                while (((lc > 0) && (lk < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams))) {
                     int lcl = _self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, lc);
-                    if (((!lcl) && (_self->__frontend_parse_exprtypes_vptr->lit_coerce(_self, _self->sym->funcs[fi].ptype[lk], lc) != 0))) {
+                    if (((!lcl) && (_self->__frontend_parse_exprtypes_vptr->lit_coerce(_self, _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, lk), lc) != 0))) {
                         return (-1);
                     }
                     lc = _self->arena->nodes[lc].next;
@@ -3568,17 +3573,17 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             if (((((fi >= 0) && (args > 0)) && (_self->__frontend_parse_exprclosure_vptr->closure_arg_count(_self, args) == 0)) && frontend_parse_bind_conv_on())) {
                 int pc2 = args;
                 int pk3 = 0;
-                while (((pc2 > 0) && (pk3 < _self->sym->funcs[fi].nparams))) {
+                while (((pc2 > 0) && (pk3 < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams))) {
                     int apos = (_self->arg_base + pk3);
                     int aline2 = ((apos < _self->argcap) ? _self->arg_line[apos] : id_line);
                     int acol2 = ((apos < _self->argcap) ? _self->arg_col[apos] : id_col);
-                    if (_self->sym->funcs[fi].pann[pk3] != 3) {
+                    if (_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, fi, pk3) != 3) {
                         const char * at = "";
                         const char * fk;
                         const char * ak;
                         if (((((_self->sup->__frontend_parse_supportops_vptr->expr_type_text(_self->sup, pc2, (&at)) == 0) && at[0]) && frontend_parse_bind_conv_struct_like(_self, at)) && frontend_parse_bind_conv_any(_self, at, "as"))) {
                             ak = frontend_parse_bind_conv_key_text(at);
-                            fk = frontend_parse_bind_conv_key_text(_self->sym->funcs[fi].ptype[pk3]);
+                            fk = frontend_parse_bind_conv_key_text(_self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, pk3));
                             if (((!ak) || (!fk))) {
                                 return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                             }
@@ -3607,8 +3612,8 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
             if (fi >= 0) {
                 int ra = args;
                 int rai = 0;
-                while (((ra > 0) && (rai < _self->sym->funcs[fi].nparams))) {
-                    if (check_refout_arg(_self, ra, (int)((unsigned char)(_self->sym->funcs[fi].pann[rai])), _self->sym->funcs[fi].ptype[rai]) != 0) {
+                while (((ra > 0) && (rai < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams))) {
+                    if (check_refout_arg(_self, ra, (int)((unsigned char)(_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, fi, rai))), _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, rai)) != 0) {
                         return (-1);
                     }
                     ra = _self->arena->nodes[ra].next;
@@ -3616,7 +3621,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 }
             }
             if (fi >= 0) {
-                _self->arena->nodes[n].text2 = runtime_text_ct_intern(_self->sym->funcs[fi].cname);
+                _self->arena->nodes[n].text2 = runtime_text_ct_intern(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->cname);
                 if ((!_self->arena->nodes[n].text2)) {
                     return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                 }
@@ -3630,10 +3635,10 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 prev = (-1);
                 k = 0;
                 first_arg = args;
-                while (((cur > 0) && (k < _self->sym->funcs[fi].nparams))) {
+                while (((cur > 0) && (k < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams))) {
                     const char * tr;
                     int ip = 0;
-                    if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, _self->sym->funcs[fi].ptype[k], (&tr), (&ip))) {
+                    if (_self->sup->__frontend_parse_supportops_vptr->iface_ref_type_text(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, k), (&tr), (&ip))) {
                         int boxed = _self->sup->__frontend_parse_supportops_vptr->maybe_box(_self->sup, cur, tr, ip);
                         if (boxed < 0) {
                             return (-1);
@@ -3660,9 +3665,9 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 int prev = (-1);
                 int k = 0;
                 int first_arg = args;
-                while (((cur > 0) && (k < _self->sym->funcs[fi].nparams))) {
+                while (((cur > 0) && (k < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams))) {
                     int is_cl = _self->__frontend_parse_exprclosure_vptr->arg_is_closure(_self, cur);
-                    if (((!is_cl) && (strcmp(_self->sym->funcs[fi].ptype[k], "struct __ct_slice") == 0))) {
+                    if (((!is_cl) && (strcmp(_self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, k), "struct __ct_slice") == 0))) {
                         int view = _self->__frontend_parse_exprtypes_vptr->slice_view_from_array(_self, cur);
                         if (view < 0) {
                             return (-1);
@@ -3848,7 +3853,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 }
 {
                     int gt = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, nm);
-                    if (((gt >= 0) && (_self->sym->funcs[gt].ntparams == 1))) {
+                    if (((gt >= 0) && (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, gt)->ntparams == 1))) {
                         char tmsg[MAX_TEXT + 64];
                         snprintf(tmsg, sizeof(tmsg), "generic function '%s' needs a type argument", nm);
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tmsg);
@@ -3873,7 +3878,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_primary(void *self) 
                 vf = _self->sym->__frontend_sym_symbolops_vptr->resolve_func(_self->sym, nm);
                 if (vf >= 0) {
                     _self->arena->nodes[n].kind = N_RAW;
-                    _self->arena->nodes[n].text = runtime_text_ct_intern(_self->sym->funcs[vf].cname);
+                    _self->arena->nodes[n].text = runtime_text_ct_intern(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, vf)->cname);
                     if ((!_self->arena->nodes[n].text)) {
                         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
                     }
@@ -4184,7 +4189,7 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_qual_path(void *self
             rc = _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "no function of that name in that namespace");
             goto done;
         }
-        cname = _self->sym->funcs[fi].cname;
+        cname = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->cname;
         (*form) = 1;
         rc = 0;
         goto done;
@@ -4873,10 +4878,10 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
     int pi;
     np = 0;
     if (((kind == 0) && (a >= 0))) {
-        np = self->sym->funcs[a].nparams;
+        np = self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, a)->nparams;
         for (k = 0; ((k < np) && (k < 16)); k++) {
-            fts[k] = self->sym->funcs[a].ptype[k];
-            anns[k] = (int)((unsigned char)(self->sym->funcs[a].pann[k]));
+            fts[k] = self->sym->__frontend_sym_symbolops_vptr->fn_ptype(self->sym, a, k);
+            anns[k] = (int)((unsigned char)(self->sym->__frontend_sym_symbolops_vptr->fn_pann(self->sym, a, k)));
         }
     }
     else {
@@ -4905,7 +4910,7 @@ static int bind_outconv_rewrite(struct frontend_parse_Expr * self, int call, int
     }
     ret = "";
     if (kind == 0) {
-        ret = self->sym->funcs[a].ret;
+        ret = self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, a)->ret;
     }
     else {
         if (kind == 1) {

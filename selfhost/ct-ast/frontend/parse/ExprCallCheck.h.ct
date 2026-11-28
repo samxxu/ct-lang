@@ -139,17 +139,17 @@ pub int argtype_mismatch_text(struct Expr *self, int args, int fi, int ti, int m
     int cur, k, np, skip, r;
 
     if (out) *out = "";
-    if (fi >= 0) np = self->sym->funcs[fi].nparams;
+    if (fi >= 0) np = self->sym->fn_at(fi)->nparams;
     else np = self->sym->traits[ti].m[mi].nparams;
     cur = args;
     k = 0;
     while (cur > 0 && k < np) {
         skip = 0;
-        if (fi >= 0) ft = self->sym->funcs[fi].ptype[k];
+        if (fi >= 0) ft = self->sym->fn_ptype(fi, k);
         else ft = self->sym->traits[ti].m[mi].ptype[k];
         /* an array parameter is a pointer in disguise: the dims sit in
            `pdim` (a function) or ride in the spelling (a trait method) */
-        if (fi >= 0 && (self->sym->funcs[fi].pdim[k])[0]) skip = 1;
+        if (fi >= 0 && (self->sym->fn_pdim(fi, k))[0]) skip = 1;
         if (!skip && strchr(ft, '[')) skip = 1;
         if (!skip) {
             const char *itr = "";

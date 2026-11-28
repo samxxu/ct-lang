@@ -104,28 +104,28 @@ impl EmitHeader for Emitter {
         (void)self;
 
         /* a generic template is never a C symbol of its own (Phase 26) */
-        if (self->sym->funcs[i].ntparams > 0) return 0;
-        if (self->sym->funcs[i].is_static
-            || (self->abi_mode && *self->abi_mode && !self->sym->funcs[i].is_pub))
+        if (self->sym->fn_at(i)->ntparams > 0) return 0;
+        if (self->sym->fn_at(i)->is_static
+            || (self->abi_mode && *self->abi_mode && !self->sym->fn_at(i)->is_pub))
             fputs("static ", self->out);
-        fprintf(self->out, "%s %s(", self->sym->funcs[i].ret, self->sym->funcs[i].cname);
-        if (self->sym->funcs[i].nparams == 0) {
+        fprintf(self->out, "%s %s(", self->sym->fn_at(i)->ret, self->sym->fn_at(i)->cname);
+        if (self->sym->fn_at(i)->nparams == 0) {
             fputs("void", self->out);
         } else {
-            for (k = 0; k < self->sym->funcs[i].nparams; k++) {
+            for (k = 0; k < self->sym->fn_at(i)->nparams; k++) {
                 if (k > 0) fputs(", ", self->out);
-                fputs(self->sym->funcs[i].ptype[k], self->out);
-                if (self->sym->funcs[i].pann[k] == 2
-                    || self->sym->funcs[i].pann[k] == 3)
+                fputs(self->sym->fn_ptype(i, k), self->out);
+                if (self->sym->fn_pann(i, k) == 2
+                    || self->sym->fn_pann(i, k) == 3)
                     fputs(" *", self->out);
-                fputs(self->sym->funcs[i].pdim[k], self->out);
+                fputs(self->sym->fn_pdim(i, k), self->out);
             }
-            if (self->sym->funcs[i].variadic) fputs(", ...", self->out);
+            if (self->sym->fn_at(i)->variadic) fputs(", ...", self->out);
         }
         fputs(")", self->out);
         /* a GNU attribute rides after the parameter list, where the source had it */
-        if (self->sym->funcs[i].attr >= 0)
-            fprintf(self->out, " %s", self->arena->str_at(self->sym->funcs[i].attr));
+        if (self->sym->fn_at(i)->attr >= 0)
+            fprintf(self->out, " %s", self->arena->str_at(self->sym->fn_at(i)->attr));
         fputs(";\n", self->out);
         return 0;
     }
@@ -604,13 +604,13 @@ impl EmitHeader for Emitter {
         /* Stable, deterministic order: C symbol name. */
         for (i = 0; i < n; i++)
             for (j = i + 1; j < n; j++)
-                if (strcmp(self->sym->funcs[order[i]].cname,
-                           self->sym->funcs[order[j]].cname) > 0) {
+                if (strcmp(self->sym->fn_at(order[i])->cname,
+                           self->sym->fn_at(order[j])->cname) > 0) {
                     k = order[i]; order[i] = order[j]; order[j] = k;
                 }
         h = 2166136261UL;
         for (i = 0; i < n; i++) {
-            const char *s = self->sym->funcs[order[i]].cname;
+            const char *s = self->sym->fn_at(order[i])->cname;
             while (*s) {
                 h = (h ^ (unsigned char)*s) * 16777619UL;
                 h = h & 0xffffffffUL;
@@ -629,9 +629,9 @@ impl EmitHeader for Emitter {
         ns = 0;
         for (i = 0; i < n; i++) {
             int p;
-            for (p = -1; p < self->sym->funcs[order[i]].nparams; p++) {
-                const char *tp = p < 0 ? self->sym->funcs[order[i]].ret
-                                       : self->sym->funcs[order[i]].ptype[p];
+            for (p = -1; p < self->sym->fn_at(order[i])->nparams; p++) {
+                const char *tp = p < 0 ? self->sym->fn_at(order[i])->ret
+                                       : self->sym->fn_ptype(order[i], p);
                 const char *nm;
                 int q = 0;
                 /* REQ-ABI-3/4: struct, union and enum parameters all need a
@@ -667,15 +667,15 @@ impl EmitHeader for Emitter {
         if (ns > 0) fputs("\n", f);
         for (i = 0; i < n; i++) {
             fi = order[i];
-            fprintf(f, "%s %s(", self->sym->funcs[fi].ret, self->sym->funcs[fi].cname);
-            if (self->sym->funcs[fi].nparams == 0) fputs("void", f);
-            for (j = 0; j < self->sym->funcs[fi].nparams; j++) {
+            fprintf(f, "%s %s(", self->sym->fn_at(fi)->ret, self->sym->fn_at(fi)->cname);
+            if (self->sym->fn_at(fi)->nparams == 0) fputs("void", f);
+            for (j = 0; j < self->sym->fn_at(fi)->nparams; j++) {
                 if (j > 0) fputs(", ", f);
-                fputs(self->sym->funcs[fi].ptype[j], f);
+                fputs(self->sym->fn_ptype(fi, j), f);
                 /* Phase 78 S2: the ABI surface spells a ref/out parameter as
                    the pointer the definition actually takes. */
-                if (self->sym->funcs[fi].pann[j] == 2
-                    || self->sym->funcs[fi].pann[j] == 3)
+                if (self->sym->fn_pann(fi, j) == 2
+                    || self->sym->fn_pann(fi, j) == 3)
                     fputs(" *", f);
             }
             fputs(");\n", f);

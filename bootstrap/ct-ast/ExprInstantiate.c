@@ -120,7 +120,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -246,6 +251,8 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     const char * cname;
     const char * itxt;
+    struct frontend_sym_Fn * tmpl;
+    struct frontend_sym_Fn * inst;
     int i;
     int k;
     int ni;
@@ -269,13 +276,17 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
     if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self->sym, (_self->sym->nfunc + 1)) != 0) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, tool_sh_ct_scratch_fmt("too many functions (limit %d, whole program)", CAP_LIMIT));
     }
+    tmpl = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, gfi);
+    if ((!tmpl)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "function table out of range");
+    }
     taken = 1;
     for (suffix = 0; ((suffix <= 8) && taken); suffix++) {
         if (suffix == 0) {
-            cname = runtime_text_ct_internf("%s__ct%d", _self->sym->funcs[gfi].cname, seq);
+            cname = runtime_text_ct_internf("%s__ct%d", tmpl->cname, seq);
         }
         else {
-            cname = runtime_text_ct_internf("%s__ct%d_%d", _self->sym->funcs[gfi].cname, seq, suffix);
+            cname = runtime_text_ct_internf("%s__ct%d_%d", tmpl->cname, seq, suffix);
         }
         if ((!cname)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
@@ -293,40 +304,37 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
     }
     ni = _self->sym->nfunc;
     _self->sym->nfunc++;
-    memcpy((&_self->sym->funcs[ni]), (&_self->sym->funcs[gfi]), sizeof((*_self->sym->funcs)));
-    _self->sym->funcs[ni].ptype = 0;
-    _self->sym->funcs[ni].pdim = 0;
-    _self->sym->funcs[ni].pann = 0;
-    _self->sym->funcs[ni].pcap = 0;
-    if (_self->sym->funcs[gfi].nparams > 0) {
-        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self->sym, ni, _self->sym->funcs[gfi].nparams) != 0) {
-            return (-1);
-        }
-        memcpy(_self->sym->funcs[ni].ptype, _self->sym->funcs[gfi].ptype, ((size_t)(_self->sym->funcs[gfi].nparams) * sizeof(char *)));
-        memcpy(_self->sym->funcs[ni].pdim, _self->sym->funcs[gfi].pdim, ((size_t)(_self->sym->funcs[gfi].nparams) * sizeof(char *)));
-        memcpy(_self->sym->funcs[ni].pann, _self->sym->funcs[gfi].pann, (size_t)(_self->sym->funcs[gfi].nparams));
+    if (_self->sym->__frontend_sym_symbolops_vptr->fn_copy_row(_self->sym, ni, gfi) != 0) {
+        return (-1);
     }
-    _self->sym->funcs[ni].cname = cname;
-    _self->sym->funcs[ni].name = _self->sym->funcs[ni].cname;
-    _self->sym->funcs[ni].is_static = 1;
-    _self->sym->funcs[ni].is_pub = 0;
-    _self->sym->funcs[ni].ntparams = 0;
-    _self->sym->funcs[ni].tparam = runtime_text_ct_intern("");
-    if ((!_self->sym->funcs[ni].tparam)) {
+    inst = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, ni);
+    if ((!inst)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "function table out of range");
+    }
+    inst->cname = cname;
+    inst->name = inst->cname;
+    inst->is_static = 1;
+    inst->is_pub = 0;
+    inst->ntparams = 0;
+    inst->tparam = runtime_text_ct_intern("");
+    if ((!inst->tparam)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    itxt = frontend_sym_ct_generic_subst_text(_self->sym->funcs[gfi].ret, _self->sym->funcs[gfi].tparam, targ);
+    itxt = frontend_sym_ct_generic_subst_text(tmpl->ret, tmpl->tparam, targ);
     if ((!itxt)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    _self->sym->funcs[ni].ret = itxt;
-    for (k = 0; k < _self->sym->funcs[gfi].nparams; k++) {
-        const char * sub = frontend_sym_ct_generic_subst_text(_self->sym->funcs[gfi].ptype[k], _self->sym->funcs[gfi].tparam, targ);
+    inst->ret = itxt;
+    for (k = 0; k < tmpl->nparams; k++) {
+        const char * sub = frontend_sym_ct_generic_subst_text(_self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, gfi, k), tmpl->tparam, targ);
         if ((!sub)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        _self->sym->funcs[ni].ptype[k] = sub;
+        if (_self->sym->__frontend_sym_symbolops_vptr->fn_set_param(_self->sym, ni, k, sub, _self->sym->__frontend_sym_symbolops_vptr->fn_pdim(_self->sym, gfi, k), _self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, gfi, k)) != 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
+        }
     }
+    inst->nparams = tmpl->nparams;
     i = _self->sym->nginsts;
     _self->sym->ginsts[i].func = gfi;
     _self->sym->ginsts[i].row = ni;
@@ -335,7 +343,7 @@ static int frontend_parse_Expr_frontend_parse_ExprInstantiate_generic_instance(v
     if ((!_self->sym->ginsts[i].targ)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    _self->sym->ginsts[i].cname = _self->sym->funcs[ni].cname;
+    _self->sym->ginsts[i].cname = inst->cname;
     _self->sym->ginsts[i].line = line;
     _self->sym->ginsts[i].col = col;
     _self->sym->nginsts++;

@@ -313,8 +313,8 @@ static int tg_slot_fn(struct Symbols *sym, struct Unit *units, int unit,
     if (unit < 0) return 0;
     u = &units[unit];
     for (i = u->fn_start; i < u->fn_end; i++) {
-        if (sym->funcs[i].name && strcmp(sym->funcs[i].name, word) == 0) return 1;
-        if (sym->funcs[i].cname && strcmp(sym->funcs[i].cname, word) == 0) return 1;
+        if (sym->fn_at(i)->name && strcmp(sym->fn_at(i)->name, word) == 0) return 1;
+        if (sym->fn_at(i)->cname && strcmp(sym->fn_at(i)->cname, word) == 0) return 1;
     }
     return 0;
 }

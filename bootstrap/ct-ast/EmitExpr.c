@@ -129,7 +129,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -2306,14 +2311,14 @@ int backend_emit_em_expr_call(struct backend_emit_Emitter * self, int n, int nk)
                 fprintf(self->out, "__ct_cl_tramp_%d, &__ct_cl_env_v_%d", cv, cv);
             }
             else {
-                if ((((fi >= 0) && (ai < self->sym->funcs[fi].nparams)) && ((self->sym->funcs[fi].pann[ai] == 2) || (self->sym->funcs[fi].pann[ai] == 3)))) {
+                if ((((fi >= 0) && (ai < self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, fi)->nparams)) && ((self->sym->__frontend_sym_symbolops_vptr->fn_pann(self->sym, fi, ai) == 2) || (self->sym->__frontend_sym_symbolops_vptr->fn_pann(self->sym, fi, ai) == 3)))) {
                     if (self->__backend_emit_emitexpr_vptr->emit_ref_arg(self, c) != 0) {
                         return (-1);
                     }
                 }
                 else {
-                    if (((fi >= 0) && (ai < self->sym->funcs[fi].nparams))) {
-                        if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->sym->funcs[fi].ptype[ai], c) != 0) {
+                    if (((fi >= 0) && (ai < self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, fi)->nparams))) {
+                        if (self->__backend_emit_emitexpr_vptr->emit_value_for(self, self->sym->__frontend_sym_symbolops_vptr->fn_ptype(self->sym, fi, ai), c) != 0) {
                             return (-1);
                         }
                     }
@@ -4438,7 +4443,7 @@ int backend_emit_em_node_func(struct backend_emit_Emitter * self, int n, int ind
             if (fi < 0) {
                 continue;
             }
-            if (strcmp(self->sym->funcs[fi].cname, self->arena->nodes[n].text2) == 0) {
+            if (strcmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, fi)->cname, self->arena->nodes[n].text2) == 0) {
                 fputs("__attribute__((visibility(\"default\"))) ", self->out);
                 break;
             }

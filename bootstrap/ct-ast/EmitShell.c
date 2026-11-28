@@ -82,7 +82,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -825,7 +830,7 @@ int backend_emit_emit_generic_defs(struct backend_emit_Emitter * self, int u) {
             continue;
         }
         i = backend_lir_lmod_plan_row_node(r);
-        t = self->sym->funcs[self->sym->ginsts[i].func].body;
+        t = self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, self->sym->ginsts[i].func)->body;
         if (t < 0) {
             continue;
         }
@@ -834,7 +839,7 @@ int backend_emit_emit_generic_defs(struct backend_emit_Emitter * self, int u) {
         if (((((!self->gtparam) || (self->gtcap < 1)) || (!self->gtarg)) || (self->gtacap < 1))) {
             return self->__backend_emit_emitops_vptr->fail(self, "out of memory");
         }
-        self->gtparam[0] = self->sym->funcs[self->sym->ginsts[i].func].tparam;
+        self->gtparam[0] = self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, self->sym->ginsts[i].func)->tparam;
         self->gtarg[0] = self->sym->ginsts[i].targ;
         self->gtntparam = 1;
         self->gtname = runtime_text_ct_intern(self->sym->ginsts[i].cname);

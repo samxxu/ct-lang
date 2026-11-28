@@ -374,7 +374,7 @@ impl ExprClosure for Expr {
         const char *ft;
 
         e8 = "the compiler cannot see whether the callee keeps the environment; the environment dies with this frame";
-        if (fi >= 0) np = self->sym->funcs[fi].nparams;
+        if (fi >= 0) np = self->sym->fn_at(fi)->nparams;
         else np = 0;
         cur = args;
         pos = 0;
@@ -382,10 +382,10 @@ impl ExprClosure for Expr {
             if (self->arg_is_closure(cur)) {
                 ok = 0;
                 ft = "";
-                if (fi >= 0 && pos < np) ft = self->sym->funcs[fi].ptype[pos];
+                if (fi >= 0 && pos < np) ft = self->sym->fn_ptype(fi, pos);
                 if (fi >= 0 && pos + 1 < np)
                     ok = self->formal_is_env_fn(ft)
-                         && self->type_is_void_ptr(self->sym->funcs[fi].ptype[pos + 1]);
+                         && self->type_is_void_ptr(self->sym->fn_ptype(fi, pos + 1));
                 if (!ok) {
                     if (self->type_is_fnptr(ft) && !self->formal_is_env_fn(ft)) {
                         tool::diag::ct_sem_error(line, col,

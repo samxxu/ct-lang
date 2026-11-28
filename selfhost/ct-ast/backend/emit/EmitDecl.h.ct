@@ -1084,7 +1084,7 @@ pub int closure_owned(struct Emitter *self, const char *owner, const char *cname
 
     if (strcmp(owner, cname) == 0) return 1;
     fi = self->sym->find_func(owner);
-    if (fi >= 0 && strcmp(self->sym->funcs[fi].cname, cname) == 0) return 1;
+    if (fi >= 0 && strcmp(self->sym->fn_at(fi)->cname, cname) == 0) return 1;
     /* A closure inside a namespaced function records the short name, while the
        function is written under its mangled C spelling (`ns_apply`). Without
        this branch the lookup misses and the products are silently dropped,

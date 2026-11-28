@@ -1141,7 +1141,7 @@ impl EmitOps for Emitter {
         return 0;
     }
 
-    /* One prototype line for `self->sym->funcs[i]`. */
+    /* One prototype line for `self->sym->fn_at(i)`. */
 
     /* PH-48 D48-2: 1 when unit `u` declares a concrete `impl Drop for S` at its
        top level. Concrete impls are AST nodes (they have no `ct_impls` row), so

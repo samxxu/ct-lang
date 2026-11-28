@@ -49,7 +49,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -171,6 +176,461 @@ const struct frontend_sym_TypeAliasOps_vtbl frontend_sym_Symbols_frontend_sym_Ty
 extern void String_Drop_drop(void *self);
 extern void U16String_Drop_drop(void *self);
 
+struct frontend_sym_FnParam {
+    const char * type;
+    const char * dim;
+    char ann;
+};
+struct Vec_frontend__sym__FnParam {
+    struct ct_buf * h;
+};
+
+struct Vec_frontend__sym__Fn {
+    struct ct_buf * h;
+};
+
+struct frontend_sym_FnParamSet {
+    struct Vec_frontend__sym__FnParam rows;
+};
+struct frontend_sym_FnTable {
+    struct Vec_frontend__sym__Fn rows;
+};
+static void Vec_frontend__sym__FnParam__elem_retain(struct frontend_sym_FnParam *e);
+static void Vec_frontend__sym__FnParam__elem_release(struct frontend_sym_FnParam *e);
+static void Vec_frontend__sym__Fn__elem_retain(struct frontend_sym_Fn *e);
+static void Vec_frontend__sym__Fn__elem_release(struct frontend_sym_Fn *e);
+static __attribute__((unused)) struct Vec_frontend__sym__FnParam Vec_frontend__sym__FnParam_from(struct frontend_sym_FnParam * items, int n) {
+    struct Vec_frontend__sym__FnParam v;
+    void * raw;
+    struct frontend_sym_FnParam * nd;
+    int i;
+    v.h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+    if (v.h == 0) {
+        abort();
+    }
+    v.h->refs = 1;
+    v.h->len = 0;
+    v.h->cap = 0;
+    v.h->data = 0;
+    if (((items == 0) || (n <= 0))) {
+        return v;
+    }
+    raw = malloc((size_t)((n * (int)(sizeof(items[0])))));
+    if (raw == 0) {
+        abort();
+    }
+    nd = raw;
+    v.h->data = nd;
+    memcpy(v.h->data, items, (size_t)((n * (int)(sizeof(items[0])))));
+    for (i = 0; i < n; i++) {
+        Vec_frontend__sym__FnParam__elem_retain((&nd[i]));
+    }
+    v.h->len = n;
+    v.h->cap = n;
+    return v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__FnParam_len(void *self) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return _self->h->len;
+}
+
+static __attribute__((unused)) struct frontend_sym_FnParam Vec_frontend__sym__FnParam_get(void *self, int i) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    struct frontend_sym_FnParam z;
+    struct frontend_sym_FnParam * d;
+    memset((&z), 0, sizeof(z));
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return z;
+    }
+    d = _self->h->data;
+    return d[i];
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__FnParam_has(void *self, int i) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return ((i >= 0) && (i < _self->h->len));
+}
+
+static __attribute__((unused)) struct frontend_sym_FnParam * Vec_frontend__sym__FnParam_at(void *self, int i) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    struct frontend_sym_FnParam * d;
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return 0;
+    }
+    d = _self->h->data;
+    return (&d[i]);
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__FnParam_set(void *self, int i, struct frontend_sym_FnParam v) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    struct frontend_sym_FnParam * d;
+    void * raw;
+    int nc;
+    if (i < 0) {
+        abort();
+    }
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (((i >= _self->h->len) && ((i - _self->h->len) > 1024))) {
+        fprintf(stderr, "ctc: warning: Vec growth span %d exceeds CT_VEC_GROW_WARN_SPAN (1024)\n", (i - _self->h->len));
+    }
+    if (i >= _self->h->cap) {
+        nc = ((_self->h->cap == 0) ? 4 : _self->h->cap);
+        while (nc <= i) {
+            nc = (nc * 2);
+        }
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            abort();
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    if (i >= _self->h->len) {
+        memset((&d[_self->h->len]), 0, (size_t)((((i + 1) - _self->h->len) * (int)(sizeof(v)))));
+        _self->h->len = (i + 1);
+    }
+    Vec_frontend__sym__FnParam__elem_retain((&v));
+    Vec_frontend__sym__FnParam__elem_release((&d[i]));
+    d[i] = v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__FnParam_push(void *self, struct frontend_sym_FnParam v) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    struct frontend_sym_FnParam * d;
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (_self->h->len == _self->h->cap) {
+        int nc;
+        void * raw;
+        nc = ((_self->h->cap == 0) ? 4 : (_self->h->cap * 2));
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            return 0;
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    Vec_frontend__sym__FnParam__elem_retain((&v));
+    d[_self->h->len] = v;
+    _self->h->len = (_self->h->len + 1);
+    return 1;
+}
+
+static __attribute__((unused)) struct frontend_sym_FnParam Vec_frontend__sym__FnParam_pop(void *self) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    struct frontend_sym_FnParam z;
+    struct frontend_sym_FnParam * d;
+    memset((&z), 0, sizeof(z));
+    if (((_self->h == 0) || (_self->h->len == 0))) {
+        return z;
+    }
+    _self->h->len = (_self->h->len - 1);
+    d = _self->h->data;
+    z = d[_self->h->len];
+    Vec_frontend__sym__FnParam__elem_retain((&z));
+    Vec_frontend__sym__FnParam__elem_release((&d[_self->h->len]));
+    return z;
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__FnParam_clear(void *self) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    int i;
+    struct frontend_sym_FnParam * d;
+    if (_self->h == 0) {
+        return;
+    }
+    d = _self->h->data;
+    for (i = 0; i < _self->h->len; i++) {
+        Vec_frontend__sym__FnParam__elem_release((&d[i]));
+    }
+    _self->h->len = 0;
+}
+
+static __attribute__((unused)) struct Vec_frontend__sym__FnParam Vec_frontend__sym__FnParam_retain(void *self) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    struct Vec_frontend__sym__FnParam r;
+    r.h = _self->h;
+    if (r.h != 0) {
+        r.h->refs = (r.h->refs + 1);
+    }
+    return r;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__FnParam_release(void *self) {
+    struct Vec_frontend__sym__FnParam *_self = (struct Vec_frontend__sym__FnParam *)self;
+    int left;
+    int i;
+    struct frontend_sym_FnParam * d;
+    if (_self->h == 0) {
+        fprintf(stderr, "Vec: release on a released handle\n");
+        abort();
+    }
+    _self->h->refs = (_self->h->refs - 1);
+    left = _self->h->refs;
+    if (left <= 0) {
+        d = _self->h->data;
+        for (i = 0; i < _self->h->len; i++) {
+            Vec_frontend__sym__FnParam__elem_release((&d[i]));
+        }
+        free(_self->h->data);
+        free(_self->h);
+    }
+    _self->h = 0;
+    return ((left < 0) ? 0 : left);
+}
+
+static __attribute__((unused)) struct Vec_frontend__sym__Fn Vec_frontend__sym__Fn_from(struct frontend_sym_Fn * items, int n) {
+    struct Vec_frontend__sym__Fn v;
+    void * raw;
+    struct frontend_sym_Fn * nd;
+    int i;
+    v.h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+    if (v.h == 0) {
+        abort();
+    }
+    v.h->refs = 1;
+    v.h->len = 0;
+    v.h->cap = 0;
+    v.h->data = 0;
+    if (((items == 0) || (n <= 0))) {
+        return v;
+    }
+    raw = malloc((size_t)((n * (int)(sizeof(items[0])))));
+    if (raw == 0) {
+        abort();
+    }
+    nd = raw;
+    v.h->data = nd;
+    memcpy(v.h->data, items, (size_t)((n * (int)(sizeof(items[0])))));
+    for (i = 0; i < n; i++) {
+        Vec_frontend__sym__Fn__elem_retain((&nd[i]));
+    }
+    v.h->len = n;
+    v.h->cap = n;
+    return v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Fn_len(void *self) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return _self->h->len;
+}
+
+static __attribute__((unused)) struct frontend_sym_Fn Vec_frontend__sym__Fn_get(void *self, int i) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    struct frontend_sym_Fn z;
+    struct frontend_sym_Fn * d;
+    memset((&z), 0, sizeof(z));
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return z;
+    }
+    d = _self->h->data;
+    return d[i];
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Fn_has(void *self, int i) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    if (_self->h == 0) {
+        return 0;
+    }
+    return ((i >= 0) && (i < _self->h->len));
+}
+
+static __attribute__((unused)) struct frontend_sym_Fn * Vec_frontend__sym__Fn_at(void *self, int i) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    struct frontend_sym_Fn * d;
+    if ((((_self->h == 0) || (i < 0)) || (i >= _self->h->len))) {
+        return 0;
+    }
+    d = _self->h->data;
+    return (&d[i]);
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__Fn_set(void *self, int i, struct frontend_sym_Fn v) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    struct frontend_sym_Fn * d;
+    void * raw;
+    int nc;
+    if (i < 0) {
+        abort();
+    }
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (((i >= _self->h->len) && ((i - _self->h->len) > 1024))) {
+        fprintf(stderr, "ctc: warning: Vec growth span %d exceeds CT_VEC_GROW_WARN_SPAN (1024)\n", (i - _self->h->len));
+    }
+    if (i >= _self->h->cap) {
+        nc = ((_self->h->cap == 0) ? 4 : _self->h->cap);
+        while (nc <= i) {
+            nc = (nc * 2);
+        }
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            abort();
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    if (i >= _self->h->len) {
+        memset((&d[_self->h->len]), 0, (size_t)((((i + 1) - _self->h->len) * (int)(sizeof(v)))));
+        _self->h->len = (i + 1);
+    }
+    Vec_frontend__sym__Fn__elem_retain((&v));
+    Vec_frontend__sym__Fn__elem_release((&d[i]));
+    d[i] = v;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Fn_push(void *self, struct frontend_sym_Fn v) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    struct frontend_sym_Fn * d;
+    if (_self->h == 0) {
+        _self->h = (struct ct_buf *)(malloc(sizeof(struct ct_buf)));
+        if (_self->h == 0) {
+            abort();
+        }
+        _self->h->refs = 1;
+        _self->h->len = 0;
+        _self->h->cap = 0;
+        _self->h->data = 0;
+    }
+    if (_self->h->len == _self->h->cap) {
+        int nc;
+        void * raw;
+        nc = ((_self->h->cap == 0) ? 4 : (_self->h->cap * 2));
+        raw = realloc(_self->h->data, (size_t)((nc * (int)(sizeof(v)))));
+        if (raw == 0) {
+            return 0;
+        }
+        _self->h->data = raw;
+        _self->h->cap = nc;
+    }
+    d = _self->h->data;
+    Vec_frontend__sym__Fn__elem_retain((&v));
+    d[_self->h->len] = v;
+    _self->h->len = (_self->h->len + 1);
+    return 1;
+}
+
+static __attribute__((unused)) struct frontend_sym_Fn Vec_frontend__sym__Fn_pop(void *self) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    struct frontend_sym_Fn z;
+    struct frontend_sym_Fn * d;
+    memset((&z), 0, sizeof(z));
+    if (((_self->h == 0) || (_self->h->len == 0))) {
+        return z;
+    }
+    _self->h->len = (_self->h->len - 1);
+    d = _self->h->data;
+    z = d[_self->h->len];
+    Vec_frontend__sym__Fn__elem_retain((&z));
+    Vec_frontend__sym__Fn__elem_release((&d[_self->h->len]));
+    return z;
+}
+
+static __attribute__((unused)) void Vec_frontend__sym__Fn_clear(void *self) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    int i;
+    struct frontend_sym_Fn * d;
+    if (_self->h == 0) {
+        return;
+    }
+    d = _self->h->data;
+    for (i = 0; i < _self->h->len; i++) {
+        Vec_frontend__sym__Fn__elem_release((&d[i]));
+    }
+    _self->h->len = 0;
+}
+
+static __attribute__((unused)) struct Vec_frontend__sym__Fn Vec_frontend__sym__Fn_retain(void *self) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    struct Vec_frontend__sym__Fn r;
+    r.h = _self->h;
+    if (r.h != 0) {
+        r.h->refs = (r.h->refs + 1);
+    }
+    return r;
+}
+
+static __attribute__((unused)) int Vec_frontend__sym__Fn_release(void *self) {
+    struct Vec_frontend__sym__Fn *_self = (struct Vec_frontend__sym__Fn *)self;
+    int left;
+    int i;
+    struct frontend_sym_Fn * d;
+    if (_self->h == 0) {
+        fprintf(stderr, "Vec: release on a released handle\n");
+        abort();
+    }
+    _self->h->refs = (_self->h->refs - 1);
+    left = _self->h->refs;
+    if (left <= 0) {
+        d = _self->h->data;
+        for (i = 0; i < _self->h->len; i++) {
+            Vec_frontend__sym__Fn__elem_release((&d[i]));
+        }
+        free(_self->h->data);
+        free(_self->h);
+    }
+    _self->h = 0;
+    return ((left < 0) ? 0 : left);
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__FnParam__elem_retain(struct frontend_sym_FnParam *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__FnParam__elem_release(struct frontend_sym_FnParam *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__Fn__elem_retain(struct frontend_sym_Fn *e)
+{
+    (void)e;
+}
+
+static void __attribute__((unused)) Vec_frontend__sym__Fn__elem_release(struct frontend_sym_Fn *e)
+{
+    (void)e;
+}
+
 struct frontend_sym_StructTmpl * frontend_sym_ct_tmpls(int *);
 struct frontend_sym_StructInst * frontend_sym_ct_insts(int *);
 struct frontend_sym_StructImpl * frontend_sym_ct_impls(int *);
@@ -218,12 +678,11 @@ static int frontend_sym_g_nadts;
 static int frontend_sym_g_adtcap;
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_grow(void *self) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
-    if ((!_self->funcs)) {
-        _self->funcs = calloc((MAX_FUNCS + 64), sizeof((*_self->funcs)));
-        if ((!_self->funcs)) {
+    if ((!_self->ftab)) {
+        _self->ftab = (struct frontend_sym_FnTable *)(calloc(1, sizeof(struct frontend_sym_FnTable)));
+        if ((!_self->ftab)) {
             return (-1);
         }
-        _self->fncap = (MAX_FUNCS + 64);
     }
     if ((!_self->vars)) {
         _self->vars = calloc(MAX_VARS, sizeof((*_self->vars)));
@@ -306,72 +765,147 @@ static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_last_error(void 
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity(void *self, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
-    int cap;
-    void * grown;
-    if (need <= _self->fncap) {
+    struct frontend_sym_Fn z;
+    if (need <= 0) {
         return 0;
     }
-    cap = ((_self->fncap > 0) ? _self->fncap : (MAX_FUNCS + 64));
-    while (((cap < need) && (cap < CAP_LIMIT))) {
-        cap *= 2;
-    }
-    if (cap > CAP_LIMIT) {
-        cap = CAP_LIMIT;
-    }
-    if (need > cap) {
+    if (need > CAP_LIMIT) {
         return (-1);
     }
-    grown = realloc(_self->funcs, ((size_t)(cap) * sizeof((*_self->funcs))));
-    if ((!grown)) {
+    if ((!_self->ftab)) {
+        _self->ftab = (struct frontend_sym_FnTable *)(calloc(1, sizeof(struct frontend_sym_FnTable)));
+        if ((!_self->ftab)) {
+            return (-1);
+        }
+    }
+    while (Vec_frontend__sym__Fn_len(&_self->ftab->rows) < need) {
+        memset((&z), 0, sizeof(z));
+        z.body = (-1);
+        z.attr = (-1);
+        if (Vec_frontend__sym__Fn_push(&_self->ftab->rows, z) == 0) {
+            return (-1);
+        }
+    }
+    return 0;
+}
+
+static struct frontend_sym_Fn * frontend_sym_Symbols_frontend_sym_SymbolOps_fn_at(void *self, int i) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    if (((!_self->ftab) || (i < 0))) {
+        return (struct frontend_sym_Fn *)(0);
+    }
+    return Vec_frontend__sym__Fn_at(&_self->ftab->rows, i);
+}
+
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_fn_ptype(void *self, int fi, int k) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    struct frontend_sym_Fn * r;
+    struct frontend_sym_FnParam * p;
+    r = _self->__frontend_sym_symbolops_vptr->fn_at(_self, fi);
+    if (((!r) || (!r->pset))) {
+        return "";
+    }
+    p = Vec_frontend__sym__FnParam_at(&r->pset->rows, k);
+    return (p ? p->type : "");
+}
+
+static const char * frontend_sym_Symbols_frontend_sym_SymbolOps_fn_pdim(void *self, int fi, int k) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    struct frontend_sym_Fn * r;
+    struct frontend_sym_FnParam * p;
+    r = _self->__frontend_sym_symbolops_vptr->fn_at(_self, fi);
+    if (((!r) || (!r->pset))) {
+        return "";
+    }
+    p = Vec_frontend__sym__FnParam_at(&r->pset->rows, k);
+    return (p ? p->dim : "");
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_fn_pann(void *self, int fi, int k) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    struct frontend_sym_Fn * r;
+    struct frontend_sym_FnParam * p;
+    r = _self->__frontend_sym_symbolops_vptr->fn_at(_self, fi);
+    if (((!r) || (!r->pset))) {
+        return 0;
+    }
+    p = Vec_frontend__sym__FnParam_at(&r->pset->rows, k);
+    return (p ? (int)((unsigned char)(p->ann)) : 0);
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_fn_set_param(void *self, int fi, int k, const char * type, const char * dim, int ann) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    struct frontend_sym_Fn * r;
+    struct frontend_sym_FnParam * p;
+    if (_self->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self, fi, (k + 1)) != 0) {
         return (-1);
     }
-    _self->funcs = grown;
-    memset((_self->funcs + _self->fncap), 0, ((size_t)((cap - _self->fncap)) * sizeof((*_self->funcs))));
-    _self->fncap = cap;
+    r = _self->__frontend_sym_symbolops_vptr->fn_at(_self, fi);
+    if (((!r) || (!r->pset))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "function table out of range");
+    }
+    p = Vec_frontend__sym__FnParam_at(&r->pset->rows, k);
+    if ((!p)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "function table out of range");
+    }
+    p->type = type;
+    p->dim = dim;
+    p->ann = (char)(ann);
+    return 0;
+}
+
+static int frontend_sym_Symbols_frontend_sym_SymbolOps_fn_copy_row(void *self, int dst, int src) {
+    struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
+    struct frontend_sym_Fn * s;
+    struct frontend_sym_Fn * d;
+    struct frontend_sym_FnParamSet * keep;
+    if (_self->__frontend_sym_symbolops_vptr->ensure_fn_capacity(_self, (dst + 1)) != 0) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    }
+    s = _self->__frontend_sym_symbolops_vptr->fn_at(_self, src);
+    d = _self->__frontend_sym_symbolops_vptr->fn_at(_self, dst);
+    if (((!s) || (!d))) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "function table out of range");
+    }
+    keep = d->pset;
+    if (keep) {
+        Vec_frontend__sym__FnParam_clear(&keep->rows);
+    }
+    memcpy(d, s, sizeof((*d)));
+    d->pset = keep;
+    d->nparams = 0;
     return 0;
 }
 
 static int frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_param_capacity(void *self, int fi, int need) {
     struct frontend_sym_Symbols *_self = (struct frontend_sym_Symbols *)self;
-    int cap;
-    const char * * types;
-    const char * * dims;
-    char * anns;
+    struct frontend_sym_Fn * r;
+    struct frontend_sym_FnParam p;
     if (((fi < 0) || (fi >= _self->nfunc))) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "function table out of range");
     }
-    if (need <= _self->funcs[fi].pcap) {
+    if (need <= 0) {
         return 0;
     }
-    cap = ((_self->funcs[fi].pcap > 0) ? _self->funcs[fi].pcap : MAX_PARAMS);
-    while (((cap < need) && (cap < CAP_LIMIT))) {
-        cap *= 2;
-    }
-    if (cap > CAP_LIMIT) {
-        cap = CAP_LIMIT;
-    }
-    if (need > cap) {
+    if (need > CAP_LIMIT) {
         return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
     }
-    types = (const char * *)(realloc(_self->funcs[fi].ptype, ((size_t)(cap) * sizeof((*types)))));
-    if ((!types)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    r = _self->__frontend_sym_symbolops_vptr->fn_at(_self, fi);
+    if ((!r)) {
+        return _self->__frontend_sym_symbolops_vptr->fail(_self, "function table out of range");
     }
-    memset((types + _self->funcs[fi].pcap), 0, ((size_t)((cap - _self->funcs[fi].pcap)) * sizeof((*types))));
-    _self->funcs[fi].ptype = types;
-    dims = (const char * *)(realloc(_self->funcs[fi].pdim, ((size_t)(cap) * sizeof((*dims)))));
-    if ((!dims)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    if ((!r->pset)) {
+        r->pset = (struct frontend_sym_FnParamSet *)(calloc(1, sizeof(struct frontend_sym_FnParamSet)));
+        if ((!r->pset)) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
     }
-    memset((dims + _self->funcs[fi].pcap), 0, ((size_t)((cap - _self->funcs[fi].pcap)) * sizeof((*dims))));
-    _self->funcs[fi].pdim = dims;
-    anns = (char *)(realloc(_self->funcs[fi].pann, (size_t)(cap)));
-    if ((!anns)) {
-        return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+    while (Vec_frontend__sym__FnParam_len(&r->pset->rows) < need) {
+        memset((&p), 0, sizeof(p));
+        if (Vec_frontend__sym__FnParam_push(&r->pset->rows, p) == 0) {
+            return _self->__frontend_sym_symbolops_vptr->fail(_self, "out of memory");
+        }
     }
-    memset((anns + _self->funcs[fi].pcap), 0, (size_t)((cap - _self->funcs[fi].pcap)));
-    _self->funcs[fi].pann = anns;
-    _self->funcs[fi].pcap = cap;
     return 0;
 }
 
@@ -880,7 +1414,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_find_func(void *self, con
     int i;
     (void)(_self);
     for (i = 0; i < _self->nfunc; i++) {
-        if (strcmp(_self->funcs[i].cname, cname) == 0) {
+        if (strcmp(_self->__frontend_sym_symbolops_vptr->fn_at(_self, i)->cname, cname) == 0) {
             return i;
         }
     }
@@ -975,7 +1509,7 @@ static int frontend_sym_Symbols_frontend_sym_SymbolOps_resolve_func(void *self, 
     }
     hits = 0;
     for (i = 0; i < _self->nfunc; i++) {
-        if (strcmp(_self->funcs[i].name, name) == 0) {
+        if (strcmp(_self->__frontend_sym_symbolops_vptr->fn_at(_self, i)->name, name) == 0) {
             hits++;
         }
     }
@@ -1954,6 +2488,12 @@ const struct frontend_sym_SymbolOps_vtbl frontend_sym_Symbols_frontend_sym_Symbo
     .fail = frontend_sym_Symbols_frontend_sym_SymbolOps_fail,
     .last_error = frontend_sym_Symbols_frontend_sym_SymbolOps_last_error,
     .ensure_fn_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_capacity,
+    .fn_at = frontend_sym_Symbols_frontend_sym_SymbolOps_fn_at,
+    .fn_ptype = frontend_sym_Symbols_frontend_sym_SymbolOps_fn_ptype,
+    .fn_pdim = frontend_sym_Symbols_frontend_sym_SymbolOps_fn_pdim,
+    .fn_pann = frontend_sym_Symbols_frontend_sym_SymbolOps_fn_pann,
+    .fn_set_param = frontend_sym_Symbols_frontend_sym_SymbolOps_fn_set_param,
+    .fn_copy_row = frontend_sym_Symbols_frontend_sym_SymbolOps_fn_copy_row,
     .ensure_fn_param_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_fn_param_capacity,
     .ensure_var_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_var_capacity,
     .ensure_scope_capacity = frontend_sym_Symbols_frontend_sym_SymbolOps_ensure_scope_capacity,

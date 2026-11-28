@@ -142,7 +142,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -460,7 +465,7 @@ static int backend_emit_Emitter_backend_emit_EmitHoist_emit_hoists(void *self, i
         hd = 0;
         f = ((_self->arena->nodes[_self->hoist_calls[i]].kind == N_CALL) ? _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[_self->hoist_calls[i]].text2) : (-1));
         if (f >= 0) {
-            hty = runtime_text_ct_intern(_self->sym->funcs[f].ret);
+            hty = runtime_text_ct_intern(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, f)->ret);
         }
         else {
             if (((_self->arena->nodes[_self->hoist_calls[i]].kind == N_CALL) && _self->arena->nodes[_self->hoist_calls[i]].text[0])) {

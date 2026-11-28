@@ -1243,7 +1243,7 @@ static int check_generic_bounds(struct Parser *self)
         int ok;
         if (self->sym->ginsts[i].checked) continue;
         self->sym->ginsts[i].checked = 1;
-        if (!self->sym->funcs[f].bound[0]) continue;
+        if (!self->sym->fn_at(f)->bound[0]) continue;
         targ = self->sym->ginsts[i].targ ? self->sym->ginsts[i].targ : "";
         tl = strlen(targ);
         while (tl > 0 && (targ[tl - 1] == ' ' || targ[tl - 1] == '*')) tl--;
@@ -1256,19 +1256,19 @@ static int check_generic_bounds(struct Parser *self)
         if (si < 0) {
             snprintf(msg, sizeof msg,
                      "type argument '%s' cannot satisfy trait '%s' (not a struct)",
-                     self->sym->ginsts[i].targ, self->sym->funcs[f].bound);
+                     self->sym->ginsts[i].targ, self->sym->fn_at(f)->bound);
             tool::diag::ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col,
                                      msg, self->mem->path);
             continue;
         }
-        ok = impl_declares(self, si, self->sym->funcs[f].bound);
+        ok = impl_declares(self, si, self->sym->fn_at(f)->bound);
         for (k = 0; !ok && k < self->sym->structs[si].nuse; k++)
-            if (strcmp(self->sym->structs[si].use[k], self->sym->funcs[f].bound) == 0)
+            if (strcmp(self->sym->structs[si].use[k], self->sym->fn_at(f)->bound) == 0)
                 ok = 1;
         if (!ok) {
             snprintf(msg, sizeof msg,
                      "type argument '%s' does not implement trait '%s'",
-                     self->sym->structs[si].name, self->sym->funcs[f].bound);
+                     self->sym->structs[si].name, self->sym->fn_at(f)->bound);
             tool::diag::ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col,
                                      msg, self->mem->path);
         }
@@ -2132,12 +2132,12 @@ impl ParseOps for Parser {
                 self->sup->pop_scope();
                 return -1;
             }
-            if (attr >= 0) self->sym->funcs[fi].attr = attr;
+            if (attr >= 0) self->sym->fn_at(fi)->attr = attr;
             /* `extern` names a C library symbol: never mangled, even when the
                prototype is exported to the header */
-            if (is_extern && is_pub) self->sym->funcs[fi].is_pub = 1;
-            self->sym->funcs[fi].variadic = self->variadic;
-            self->sym->funcs[fi].line = func_line;
+            if (is_extern && is_pub) self->sym->fn_at(fi)->is_pub = 1;
+            self->sym->fn_at(fi)->variadic = self->variadic;
+            self->sym->fn_at(fi)->line = func_line;
             self->sup->pop_scope();
             return NO_NODE;
         }
@@ -2198,28 +2198,28 @@ impl ParseOps for Parser {
             self->sup->pop_scope();
             return -1;
         }
-        if (attr >= 0) self->sym->funcs[fi].attr = attr;
-        self->sym->funcs[fi].ret_owned = self->mem->ret_owned;
-        self->sym->funcs[fi].variadic = self->variadic;
-        self->sym->funcs[fi].line = func_line;
+        if (attr >= 0) self->sym->fn_at(fi)->attr = attr;
+        self->sym->fn_at(fi)->ret_owned = self->mem->ret_owned;
+        self->sym->fn_at(fi)->variadic = self->variadic;
+        self->sym->fn_at(fi)->line = func_line;
         if (is_generic) {
-            self->sym->funcs[fi].ntparams = 1;
-            self->sym->funcs[fi].is_static = 1;   /* D26-4: instances stay in this unit */
-            self->sym->funcs[fi].tparam = runtime::text::ct_intern(tparam);
-            if (!self->sym->funcs[fi].tparam) return self->sup->fail("out of memory");
-            self->sym->funcs[fi].bound = runtime::text::ct_intern(bound);
-            if (!self->sym->funcs[fi].bound) return self->sup->fail("out of memory");
+            self->sym->fn_at(fi)->ntparams = 1;
+            self->sym->fn_at(fi)->is_static = 1;   /* D26-4: instances stay in this unit */
+            self->sym->fn_at(fi)->tparam = runtime::text::ct_intern(tparam);
+            if (!self->sym->fn_at(fi)->tparam) return self->sup->fail("out of memory");
+            self->sym->fn_at(fi)->bound = runtime::text::ct_intern(bound);
+            if (!self->sym->fn_at(fi)->bound) return self->sup->fail("out of memory");
         }
         f = self->sup->new_node(N_FUNC);
         if (f < 0) {
             self->sup->pop_scope();
             return -1;
         }
-        self->sym->funcs[fi].body = f;
+        self->sym->fn_at(fi)->body = f;
         self->arena->nodes[f].text = runtime::text::ct_intern(ret);
         if (!self->arena->nodes[f].text) return self->sup->fail("out of memory");
         /* the C spelling only: `cur_func` and the map keep the short name */
-        self->arena->nodes[f].text2 = runtime::text::ct_intern(self->sym->funcs[fi].cname);
+        self->arena->nodes[f].text2 = runtime::text::ct_intern(self->sym->fn_at(fi)->cname);
         if (!self->arena->nodes[f].text2) return self->sup->fail("out of memory");
         self->arena->nodes[f].aux = is_generic ? 1 : is_static;
         self->arena->nodes[f].d = is_pub;

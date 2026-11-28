@@ -30,7 +30,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -276,7 +281,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_own_factory_ok(void *self, i
     fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[e].text2);
     if (fi < 0) {
         for (i = 0; i < _self->sym->nfunc; i++) {
-            if (strcmp(_self->sym->funcs[i].name, _self->arena->nodes[e].text2) == 0) {
+            if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->name, _self->arena->nodes[e].text2) == 0) {
                 fi = i;
                 break;
             }
@@ -285,7 +290,7 @@ static int backend_mem_Memory_backend_mem_MemoryOps_own_factory_ok(void *self, i
     if (fi < 0) {
         return 0;
     }
-    ret = _self->sym->funcs[fi].ret;
+    ret = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ret;
     if (strncmp(ret, "struct ", 7) != 0) {
         return 0;
     }
@@ -464,8 +469,8 @@ static int backend_mem_Memory_backend_mem_MemoryOps_leak_decl(void *self, int n)
             si = _self->sym->__frontend_sym_symbolops_vptr->find_struct(_self->sym, sname);
             if ((((!heap) && (si >= 0)) && (_self->arena->nodes[e].kind == N_CALL))) {
                 int fi = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, _self->arena->nodes[e].text2);
-                if (((fi >= 0) && _self->sym->funcs[fi].ret_owned)) {
-                    call_owned = _self->__backend_mem_memoryops_vptr->ret_same_struct(_self, _self->sym->funcs[fi].ret, si);
+                if (((fi >= 0) && _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ret_owned)) {
+                    call_owned = _self->__backend_mem_memoryops_vptr->ret_same_struct(_self, _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ret, si);
                 }
             }
         }

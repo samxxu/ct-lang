@@ -126,7 +126,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -1560,8 +1565,8 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
             return tool_diag_ct_sem_error(1, 1, msg, root_path);
         }
         for (fi = _self->units[u].fn_start; fi < _self->units[u].fn_end; fi++) {
-            if (((strcmp(_self->sym->funcs[fi].name, "main") == 0) && (_self->sym->funcs[fi].body >= 0))) {
-                return tool_diag_ct_sem_error(_self->sym->funcs[fi].line, 1, "a --lib build cannot contain 'main'", _self->units[u].path);
+            if (((strcmp(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->name, "main") == 0) && (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->body >= 0))) {
+                return tool_diag_ct_sem_error(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->line, 1, "a --lib build cannot contain 'main'", _self->units[u].path);
             }
         }
         for (gi = _self->arena->nodes[_self->units[u].prog].a; gi >= 0; gi = _self->arena->nodes[gi].next) {
@@ -1581,27 +1586,27 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
         for (fi = _self->units[u].fn_start; fi < _self->units[u].fn_end; fi++) {
             int k;
             int is_root_candidate;
-            if ((!_self->sym->funcs[fi].is_pub)) {
+            if ((!_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->is_pub)) {
                 continue;
             }
-            is_root_candidate = ((u == root_u) && (_self->sym->funcs[fi].body >= 0));
+            is_root_candidate = ((u == root_u) && (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->body >= 0));
             if ((!is_root_candidate)) {
                 nonroot++;
                 continue;
             }
             count++;
-            if (_self->sym->funcs[fi].ntparams > 0) {
-                msg = tool_sh_ct_scratch_fmt("'%s' not exported: generic template has no external symbol", _self->sym->funcs[fi].name);
-                if (tool_diag_ct_type_warn(_self->sym->funcs[fi].line, 1, "", msg, root_path) != 0) {
+            if (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ntparams > 0) {
+                msg = tool_sh_ct_scratch_fmt("'%s' not exported: generic template has no external symbol", _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->name);
+                if (tool_diag_ct_type_warn(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->line, 1, "", msg, root_path) != 0) {
                     return 1;
                 }
                 continue;
             }
             bad = 0;
-            msg = tool_sh_ct_scratch_fmt("'%s' cannot be exported: ", _self->sym->funcs[fi].name);
+            msg = tool_sh_ct_scratch_fmt("'%s' cannot be exported: ", _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->name);
 {
-                for (k = (-1); k < _self->sym->funcs[fi].nparams; k++) {
-                    const char * tp = ((k < 0) ? _self->sym->funcs[fi].ret : _self->sym->funcs[fi].ptype[k]);
+                for (k = (-1); k < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams; k++) {
+                    const char * tp = ((k < 0) ? _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ret : _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, k));
                     const char * base = tp;
                     if (strncmp(base, "struct ", 7) == 0) {
                         base += 7;
@@ -1634,7 +1639,7 @@ static int frontend_module_Module_frontend_module_ModuleOps_lib_scan(void *self,
                 }
             }
             if (bad) {
-                return tool_diag_ct_sem_error(_self->sym->funcs[fi].line, 1, msg, root_path);
+                return tool_diag_ct_sem_error(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->line, 1, msg, root_path);
             }
             if (_self->abi_n < 256) {
                 _self->abi_exports[_self->abi_n++] = fi;
@@ -3912,7 +3917,7 @@ static int ct_shell_plan_add_protos(struct frontend_module_Module * self, int un
         if (backend_lir_lmod_plan_shell_add_stage(LPS_PROTO, unit, i, 0, 0, 0) != 0) {
             return 1;
         }
-        if ((((unit >= 0) && self->sym->funcs[i].is_pub) && (!self->sym->funcs[i].is_static))) {
+        if ((((unit >= 0) && self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->is_pub) && (!self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->is_static))) {
             if (backend_lir_lmod_plan_shell_add_stage(LPS_PROTO, unit, i, 0, 1, 0) != 0) {
                 return 1;
             }
@@ -4223,7 +4228,7 @@ static int ct_shell_plan_add_surface(struct frontend_module_Module * self, int p
         if (((unit >= 0) && (self->sym->ginsts[i].owner != unit))) {
             continue;
         }
-        if (self->sym->funcs[self->sym->ginsts[i].func].body < 0) {
+        if (self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, self->sym->ginsts[i].func)->body < 0) {
             continue;
         }
         if (backend_lir_lmod_plan_shell_add_stage(LPS_GINIT, unit, i, 0, 0, 0) != 0) {
@@ -4291,7 +4296,7 @@ static int ct_shell_plan_add_program(struct frontend_module_Module * self, int p
                         else {
                             if (k == N_FUNC) {
                                 int cur = self->sym->__frontend_sym_symbolops_vptr->find_func(self->sym, ar->nodes[n].text2);
-                                int aux = (((cur >= 0) && (self->sym->funcs[cur].ntparams > 0)) ? 1 : 0);
+                                int aux = (((cur >= 0) && (self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, cur)->ntparams > 0)) ? 1 : 0);
                                 if (backend_lir_lmod_plan_shell_add(LPS_FUNC, unit, n, aux, 0) != 0) {
                                     return 1;
                                 }
@@ -4444,7 +4449,7 @@ static int ct_map_plan_build(struct frontend_module_Module * self, int prog, int
         }
     }
     for (i = fns; i < fne; i++) {
-        if (ct_map_plan_add(LMP_FUNC, u, (-1), self->sym->funcs[i].line, 0, self->sym->funcs[i].nparams, self->sym->funcs[i].name, self->sym->funcs[i].ret, 0, 0, 0) != 0) {
+        if (ct_map_plan_add(LMP_FUNC, u, (-1), self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->line, 0, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->nparams, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->name, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->ret, 0, 0, 0) != 0) {
             return 1;
         }
     }
@@ -4609,15 +4614,15 @@ static int ct_model_plan_build(struct frontend_module_Module * self, int prog) {
         }
     }
     for (i = 0; i < self->sym->nfunc; i++) {
-        if ((((((strncmp(self->sym->funcs[i].name, "str_", 4) == 0) || (strncmp(self->sym->funcs[i].name, "vec_", 4) == 0)) || (strncmp(self->sym->funcs[i].name, "map_", 4) == 0)) || (strncmp(self->sym->funcs[i].name, "option_", 7) == 0)) || (strncmp(self->sym->funcs[i].name, "result_", 7) == 0))) {
+        if ((((((strncmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->name, "str_", 4) == 0) || (strncmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->name, "vec_", 4) == 0)) || (strncmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->name, "map_", 4) == 0)) || (strncmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->name, "option_", 7) == 0)) || (strncmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->name, "result_", 7) == 0))) {
             continue;
         }
         parent = backend_lir_lmod_map_plan_count();
-        if (ct_map_plan_add(LMP_MFUNC, (-1), (-1), self->sym->funcs[i].line, 0, 0, self->sym->funcs[i].name, self->sym->funcs[i].cname, self->sym->funcs[i].ret, 0, 0) != 0) {
+        if (ct_map_plan_add(LMP_MFUNC, (-1), (-1), self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->line, 0, 0, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->name, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->cname, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->ret, 0, 0) != 0) {
             return 1;
         }
-        for (j = 0; j < self->sym->funcs[i].nparams; j++) {
-            if (ct_map_plan_add(LMP_MFUNC_PARAM, (-1), parent, 0, 0, 0, self->sym->funcs[i].ptype[j], 0, 0, 0, 0) != 0) {
+        for (j = 0; j < self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->nparams; j++) {
+            if (ct_map_plan_add(LMP_MFUNC_PARAM, (-1), parent, 0, 0, 0, self->sym->__frontend_sym_symbolops_vptr->fn_ptype(self->sym, i, j), 0, 0, 0, 0) != 0) {
                 return 1;
             }
         }

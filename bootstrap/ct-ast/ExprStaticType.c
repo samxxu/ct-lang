@@ -120,7 +120,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -1094,22 +1099,22 @@ static const char * frontend_parse_Expr_frontend_parse_ExprStaticType_expr_fnptr
     }
     named_func:
         ;
-        if (_self->sym->funcs[fi].variadic) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->variadic) {
             return (const char *)(0);
         }
-        n = _self->sym->funcs[fi].nparams;
+        n = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams;
         for (i = 0; i < n; i++) {
-            if (((_self->sym->funcs[fi].pann[i] == 2) || (_self->sym->funcs[fi].pann[i] == 3))) {
+            if (((_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, fi, i) == 2) || (_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, fi, i) == 3))) {
                 return (const char *)(0);
             }
-            if ((_self->sym->funcs[fi].pdim[i] && _self->sym->funcs[fi].pdim[i][0])) {
+            if ((_self->sym->__frontend_sym_symbolops_vptr->fn_pdim(_self->sym, fi, i) && _self->sym->__frontend_sym_symbolops_vptr->fn_pdim(_self->sym, fi, i)[0])) {
                 return (const char *)(0);
             }
         }
         if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
             return (const char *)(0);
         }
-        if (tool_sh_ct_text_cat((&buf), (&cap), _self->sym->funcs[fi].ret) != 0) {
+        if (tool_sh_ct_text_cat((&buf), (&cap), _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ret) != 0) {
             goto fail;
         }
         if (tool_sh_ct_text_cat((&buf), (&cap), " (*)(") != 0) {
@@ -1119,7 +1124,7 @@ static const char * frontend_parse_Expr_frontend_parse_ExprStaticType_expr_fnptr
             if (((i > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ", ") != 0))) {
                 goto fail;
             }
-            if (tool_sh_ct_text_cat((&buf), (&cap), _self->sym->funcs[fi].ptype[i]) != 0) {
+            if (tool_sh_ct_text_cat((&buf), (&cap), _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, i)) != 0) {
                 goto fail;
             }
         }
@@ -1394,10 +1399,10 @@ const char * frontend_parse_ctype_call(struct frontend_parse_Expr * self, int n,
     }
     i = self->sym->__frontend_sym_symbolops_vptr->resolve_func(self->sym, self->arena->nodes[n].text2);
     if (i >= 0) {
-        if (((!self->sym->funcs[i].ret[0]) || (strcmp(self->sym->funcs[i].ret, "void") == 0))) {
+        if (((!self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->ret[0]) || (strcmp(self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->ret, "void") == 0))) {
             return (const char *)(0);
         }
-        return self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(self, self->sym->funcs[i].ret, 0);
+        return self->__frontend_parse_exprstatictype_vptr->ctype_expand_text(self, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->ret, 0);
     }
     i = self->sym->__frontend_sym_symbolops_vptr->find_var(self->sym, self->arena->nodes[n].text2);
     if (i < 0) {

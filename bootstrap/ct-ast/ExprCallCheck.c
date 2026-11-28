@@ -117,7 +117,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -382,7 +387,7 @@ int frontend_parse_argtype_mismatch_text(struct frontend_parse_Expr * self, int 
         (*out) = "";
     }
     if (fi >= 0) {
-        np = self->sym->funcs[fi].nparams;
+        np = self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, fi)->nparams;
     }
     else {
         np = self->sym->traits[ti].m[mi].nparams;
@@ -392,12 +397,12 @@ int frontend_parse_argtype_mismatch_text(struct frontend_parse_Expr * self, int 
     while (((cur > 0) && (k < np))) {
         skip = 0;
         if (fi >= 0) {
-            ft = self->sym->funcs[fi].ptype[k];
+            ft = self->sym->__frontend_sym_symbolops_vptr->fn_ptype(self->sym, fi, k);
         }
         else {
             ft = self->sym->traits[ti].m[mi].ptype[k];
         }
-        if (((fi >= 0) && self->sym->funcs[fi].pdim[k][0])) {
+        if (((fi >= 0) && self->sym->__frontend_sym_symbolops_vptr->fn_pdim(self->sym, fi, k)[0])) {
             skip = 1;
         }
         if (((!skip) && strchr(ft, '['))) {

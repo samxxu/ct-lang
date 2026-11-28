@@ -599,6 +599,7 @@ impl SupportOps for ParseSupport {
     int add_func(const char *name, const char *ret, int is_static, int is_pub, int first_param)
     {
         const char *cname;
+        struct Fn *fn;
         int i, k, p, pub_now, fresh, prev_nparams;
 
         /* `__ct_` names the compiler's own locals and closure products; a user
@@ -621,7 +622,7 @@ impl SupportOps for ParseSupport {
         }
         if (i < 0 && !is_pub) i = self->sym->find_func(name);
         pub_now = is_pub;
-        if (i >= 0 && self->sym->funcs[i].is_pub) pub_now = 1;
+        if (i >= 0 && self->sym->fn_at(i)->is_pub) pub_now = 1;
         fresh = 0;
         if (i < 0) {
             if (self->sym->ensure_fn_capacity(self->sym->nfunc + 1) != 0)
@@ -629,69 +630,72 @@ impl SupportOps for ParseSupport {
                     "too many functions (limit %d, whole program)", CAP_LIMIT));
             i = self->sym->nfunc;
             self->sym->nfunc++;
-            self->sym->funcs[i].name = runtime::text::ct_intern(name);
-            if (!self->sym->funcs[i].name) return self->fail("out of memory");
-            self->sym->funcs[i].tparam = runtime::text::ct_intern("");
-            if (!self->sym->funcs[i].tparam) return self->fail("out of memory");
-            self->sym->funcs[i].bound = runtime::text::ct_intern("");
-            if (!self->sym->funcs[i].bound) return self->fail("out of memory");
-            self->sym->funcs[i].is_pub = 0;
-            self->sym->funcs[i].ret_owned = 0;   /* fresh row: no ownership fact yet */
-            self->sym->funcs[i].attr = -1;       /* fresh row: no attribute yet */
-            self->sym->funcs[i].body = -1;       /* Phase 26: no definition node yet */
             fresh = 1;
         }
-        if (pub_now) self->sym->funcs[i].is_pub = 1;
+        /* S8b R5: the row is fetched once. Every later grow in this function
+           touches the row's own parameter block, never the function table, so
+           the pointer stays valid (no `&row.vec` is taken across a table
+           growth). */
+        fn = self->sym->fn_at(i);
+        if (!fn) return self->fail("function table out of range");
+        if (fresh) {
+            fn->name = runtime::text::ct_intern(name);
+            if (!fn->name) return self->fail("out of memory");
+            fn->tparam = runtime::text::ct_intern("");
+            if (!fn->tparam) return self->fail("out of memory");
+            fn->bound = runtime::text::ct_intern("");
+            if (!fn->bound) return self->fail("out of memory");
+            fn->is_pub = 0;
+            fn->ret_owned = 0;   /* fresh row: no ownership fact yet */
+            fn->attr = -1;       /* fresh row: no attribute yet */
+            fn->body = -1;       /* Phase 26: no definition node yet */
+        }
+        if (pub_now) fn->is_pub = 1;
         if (!(pub_now && self->sym->ns && self->sym->ns[0])) {
             /* A static helper keeps its plain name even inside a namespace. */
             cname = runtime::text::ct_intern(name);
             if (!cname) return self->fail("out of memory");
         }
-        self->sym->funcs[i].cname = cname;
+        fn->cname = cname;
         /* The return type belongs to the first declaration: a prototype such as
            `_Noreturn void f(void);` keeps its prefix when the definition repeats
            the signature as `void f(void) {}`. */
         if (fresh) {
-            self->sym->funcs[i].ret = runtime::text::ct_intern(ret);
-            if (!self->sym->funcs[i].ret) return self->fail("out of memory");
+            fn->ret = runtime::text::ct_intern(ret);
+            if (!fn->ret) return self->fail("out of memory");
         }
-        self->sym->funcs[i].is_static = is_static;
-        prev_nparams = self->sym->funcs[i].nparams;
-        self->sym->funcs[i].nparams = 0;
+        fn->is_static = is_static;
+        prev_nparams = fn->nparams;
+        fn->nparams = 0;
         p = first_param;
         k = 0;
         while (p > 0) {
-            if (self->sym->ensure_fn_param_capacity(i, k + 1) != 0)
-                return self->fail(self->sym->last_error());
-            self->sym->funcs[i].ptype[k] =
-                runtime::text::ct_intern(self->arena->nodes[p].text);
-            if (!self->sym->funcs[i].ptype[k]) return self->fail("out of memory");
-            self->sym->funcs[i].pdim[k] =
-                runtime::text::ct_intern(self->arena->nodes[p].text3);
-            if (!self->sym->funcs[i].pdim[k]) return self->fail("out of memory");
+            const char *pty = runtime::text::ct_intern(self->arena->nodes[p].text);
+            const char *pdm = runtime::text::ct_intern(self->arena->nodes[p].text3);
+            int ann = (int)self->arena->nodes[p].aux;
+            if (!pty || !pdm) return self->fail("out of memory");
             /* Phase 78 S2a: `ref` / `out` is part of the C signature (the
                emitter spells `T *`), so a prototype and its definition must
                agree; silently taking the last one would emit two conflicting
                C declarations. */
             if (!fresh && k < prev_nparams
-                && self->sym->funcs[i].pann[k] != (char)self->arena->nodes[p].aux)
+                && self->sym->fn_pann(i, k) != (char)ann)
                 return self->fail(tool::sh::ct_scratch_fmt(
                     "redeclaration of '%s' changes the ref/out annotation of parameter %d",
                     name, k + 1));
-            self->sym->funcs[i].pann[k] = (char)self->arena->nodes[p].aux;
             /* a parameter's trailing `__attribute__` rides with its name/dims,
                so the prototype and the definition spell it the same way */
             if (self->arena->nodes[p].attr >= 0) {
-                const char *dim = runtime::text::ct_internf("%s %s",
-                    self->sym->funcs[i].pdim[k],
-                    self->arena->str_at(self->arena->nodes[p].attr));
-                if (!dim) return self->fail("out of memory");
-                self->sym->funcs[i].pdim[k] = dim;
+                pdm = runtime::text::ct_internf("%s %s", pdm,
+                          self->arena->str_at(self->arena->nodes[p].attr));
+                if (!pdm) return self->fail("out of memory");
             }
+            if (self->sym->fn_set_param(i, k, pty, pdm, ann) != 0)
+                return self->fail(self->sym->last_error());
             k++;
             p = self->arena->nodes[p].next;
         }
-        self->sym->funcs[i].nparams = k;
+        fn->nparams = k;
         return i;
     }
 

@@ -582,7 +582,7 @@ static const char *tb_call_ret(const char *name)
     sym = tb_sym();
     fi = sym->find_func(name);
     if (fi < 0) return (const char *)0;
-    return sym->funcs[fi].ret;
+    return sym->fn_at(fi)->ret;
 }
 
 /* The trait table's canonical spelling: the parser records a namespace-mangled
@@ -1023,10 +1023,10 @@ static int tb_target_call(struct TBuilder *tb, int eid, int n)
     fi = sym->find_func(name);
     if (fi >= 0) {
         const char *fn;
-        fn = sym->funcs[fi].name;
+        fn = sym->fn_at(fi)->name;
         decl = tb_find_decl(m, TD_FUNC, fn);
         if (decl <= 0) {
-            fn = sym->funcs[fi].cname;
+            fn = sym->fn_at(fi)->cname;
             decl = tb_find_decl(m, TD_FUNC, fn);
         }
         if (decl > 0) return tb_set_target(m, eid, RT_DIRECT, decl, BI_NONE, name);
@@ -2159,7 +2159,7 @@ static int tb_func_decl(struct TBuilder *tb, int n, const char *name, int recv_t
     decl = tmod_new_decl(m, TD_FUNC, name, tb->file, tb_line(n), tb_col(n), tb->unit);
     if (decl < 0) return -1;
     fi = sym->find_func(ar->nodes[n].text2);
-    tmpl = (fi >= 0 && sym->funcs[fi].ntparams > 0) ? 1 : 0;
+    tmpl = (fi >= 0 && sym->fn_at(fi)->ntparams > 0) ? 1 : 0;
     if (tmod_spelling_free(ar->nodes[n].text)) tmpl = 1;
     if (recv_type > 0 && tmod_spelling_free(tmod_cspell(m, recv_type))) tmpl = 1;
     for (c = ar->nodes[n].a; c > 0; c = ar->nodes[c].next)
@@ -2190,11 +2190,11 @@ static int tb_func_decl(struct TBuilder *tb, int n, const char *name, int recv_t
         if (tmod_decl_add_param(m, decl, pt) != 0) return -1;
         if (tb_declare(tb, c, 1, 0) < 0) return -1;
     }
-    m->decls[decl - 1].cname = (fi >= 0 && sym->funcs[fi].cname[0])
-                                ? runtime::text::ct_intern(sym->funcs[fi].cname)
+    m->decls[decl - 1].cname = (fi >= 0 && sym->fn_at(fi)->cname[0])
+                                ? runtime::text::ct_intern(sym->fn_at(fi)->cname)
                                 : runtime::text::ct_intern(name);
     m->decls[decl - 1].is_template = tmpl
-        || (fi >= 0 && sym->funcs[fi].ntparams > 0);
+        || (fi >= 0 && sym->fn_at(fi)->ntparams > 0);
     m->decls[decl - 1].is_static = ar->nodes[n].aux ? 1 : 0;
     m->decls[decl - 1].is_inline = ar->nodes[n].num ? 1 : 0;
     m->decls[decl - 1].is_vararg = ar->nodes[n].c ? 1 : 0;
@@ -2551,8 +2551,8 @@ static int tb_instances(struct TBuilder *tb)
         struct GenericInst *g;
         g = &sym->ginsts[i];
         if (g->func < 0 || g->func >= sym->nfunc) continue;
-        tmpl = tb_find_decl(m, TD_FUNC, sym->funcs[g->func].name);
-        if (tmpl <= 0) tmpl = tb_find_decl(m, TD_FUNC, sym->funcs[g->func].cname);
+        tmpl = tb_find_decl(m, TD_FUNC, sym->fn_at(g->func)->name);
+        if (tmpl <= 0) tmpl = tb_find_decl(m, TD_FUNC, sym->fn_at(g->func)->cname);
         if (tmpl <= 0) continue;
         args[0] = tmod_type(m, g->targ, 1);
         if (args[0] <= 0) continue;

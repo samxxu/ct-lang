@@ -644,7 +644,7 @@ pub int emit_generic_defs(struct Emitter *self, int u)
         if (backend::lir::lmod_plan_row_kind(r) != LPS_GINIT) continue;
         if (backend::lir::lmod_plan_row_unit(r) != u) continue;
         i = backend::lir::lmod_plan_row_node(r);
-        t = self->sym->funcs[self->sym->ginsts[i].func].body;
+        t = self->sym->fn_at(self->sym->ginsts[i].func)->body;
         if (t < 0) continue;
         self->gtparam = frontend::sym::ct_text_rows_reserve(self->gtparam, self->gtcap,
                                                             1, &self->gtcap);
@@ -654,7 +654,7 @@ pub int emit_generic_defs(struct Emitter *self, int u)
             return self->fail("out of memory");
         /* S1a-0 C2p-6: `Func.tparam` / `GenericInst.targ` are pool texts, so
            the row is a reference and the whole 2000-byte argument survives. */
-        self->gtparam[0] = self->sym->funcs[self->sym->ginsts[i].func].tparam;
+        self->gtparam[0] = self->sym->fn_at(self->sym->ginsts[i].func)->tparam;
         self->gtarg[0] = self->sym->ginsts[i].targ;
         self->gtntparam = 1;
         self->gtname = runtime::text::ct_intern(self->sym->ginsts[i].cname);

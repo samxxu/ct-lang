@@ -66,7 +66,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -192,34 +197,34 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_emit_proto(void *self, i
     struct backend_emit_Emitter *_self = (struct backend_emit_Emitter *)self;
     int k;
     (void)(_self);
-    if (_self->sym->funcs[i].ntparams > 0) {
+    if (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->ntparams > 0) {
         return 0;
     }
-    if ((_self->sym->funcs[i].is_static || ((_self->abi_mode && (*_self->abi_mode)) && (!_self->sym->funcs[i].is_pub)))) {
+    if ((_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->is_static || ((_self->abi_mode && (*_self->abi_mode)) && (!_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->is_pub)))) {
         fputs("static ", _self->out);
     }
-    fprintf(_self->out, "%s %s(", _self->sym->funcs[i].ret, _self->sym->funcs[i].cname);
-    if (_self->sym->funcs[i].nparams == 0) {
+    fprintf(_self->out, "%s %s(", _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->ret, _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->cname);
+    if (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->nparams == 0) {
         fputs("void", _self->out);
     }
     else {
-        for (k = 0; k < _self->sym->funcs[i].nparams; k++) {
+        for (k = 0; k < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->nparams; k++) {
             if (k > 0) {
                 fputs(", ", _self->out);
             }
-            fputs(_self->sym->funcs[i].ptype[k], _self->out);
-            if (((_self->sym->funcs[i].pann[k] == 2) || (_self->sym->funcs[i].pann[k] == 3))) {
+            fputs(_self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, i, k), _self->out);
+            if (((_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, i, k) == 2) || (_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, i, k) == 3))) {
                 fputs(" *", _self->out);
             }
-            fputs(_self->sym->funcs[i].pdim[k], _self->out);
+            fputs(_self->sym->__frontend_sym_symbolops_vptr->fn_pdim(_self->sym, i, k), _self->out);
         }
-        if (_self->sym->funcs[i].variadic) {
+        if (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->variadic) {
             fputs(", ...", _self->out);
         }
     }
     fputs(")", _self->out);
-    if (_self->sym->funcs[i].attr >= 0) {
-        fprintf(_self->out, " %s", _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->sym->funcs[i].attr));
+    if (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->attr >= 0) {
+        fprintf(_self->out, " %s", _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->attr));
     }
     fputs(";\n", _self->out);
     return 0;
@@ -835,7 +840,7 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_abi_header(void *s
     }
     for (i = 0; i < n; i++) {
         for (j = (i + 1); j < n; j++) {
-            if (strcmp(_self->sym->funcs[order[i]].cname, _self->sym->funcs[order[j]].cname) > 0) {
+            if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, order[i])->cname, _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, order[j])->cname) > 0) {
                 k = order[i];
                 order[i] = order[j];
                 order[j] = k;
@@ -844,7 +849,7 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_abi_header(void *s
     }
     h = 2166136261UL;
     for (i = 0; i < n; i++) {
-        const char * s = _self->sym->funcs[order[i]].cname;
+        const char * s = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, order[i])->cname;
         while ((*s)) {
             h = ((h ^ (unsigned char)((*s))) * 16777619UL);
             h = (h & 4294967295UL);
@@ -863,8 +868,8 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_abi_header(void *s
     ns = 0;
     for (i = 0; i < n; i++) {
         int p;
-        for (p = (-1); p < _self->sym->funcs[order[i]].nparams; p++) {
-            const char * tp = ((p < 0) ? _self->sym->funcs[order[i]].ret : _self->sym->funcs[order[i]].ptype[p]);
+        for (p = (-1); p < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, order[i])->nparams; p++) {
+            const char * tp = ((p < 0) ? _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, order[i])->ret : _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, order[i], p));
             const char * nm;
             int q = 0;
             if (strncmp(tp, "struct ", 7) == 0) {
@@ -924,16 +929,16 @@ static int backend_emit_Emitter_backend_emit_EmitHeader_write_abi_header(void *s
     }
     for (i = 0; i < n; i++) {
         fi = order[i];
-        fprintf(f, "%s %s(", _self->sym->funcs[fi].ret, _self->sym->funcs[fi].cname);
-        if (_self->sym->funcs[fi].nparams == 0) {
+        fprintf(f, "%s %s(", _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ret, _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->cname);
+        if (_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams == 0) {
             fputs("void", f);
         }
-        for (j = 0; j < _self->sym->funcs[fi].nparams; j++) {
+        for (j = 0; j < _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams; j++) {
             if (j > 0) {
                 fputs(", ", f);
             }
-            fputs(_self->sym->funcs[fi].ptype[j], f);
-            if (((_self->sym->funcs[fi].pann[j] == 2) || (_self->sym->funcs[fi].pann[j] == 3))) {
+            fputs(_self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, j), f);
+            if (((_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, fi, j) == 2) || (_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, fi, j) == 3))) {
                 fputs(" *", f);
             }
         }

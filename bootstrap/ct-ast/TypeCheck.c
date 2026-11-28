@@ -55,7 +55,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -2084,14 +2089,14 @@ static int frontend_type_TypeCheck_frontend_type_TypeOps_rewrite_init_names(void
         fn_bad = 0;
         fn_cn = "";
         for (fi = 0; fi < _self->sym->nfunc; fi++) {
-            if (strcmp(_self->sym->funcs[fi].name, id) != 0) {
+            if (strcmp(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->name, id) != 0) {
                 continue;
             }
             if (fn_hits == 0) {
-                fn_cn = _self->sym->funcs[fi].cname;
+                fn_cn = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->cname;
             }
             else {
-                if (strcmp(fn_cn, _self->sym->funcs[fi].cname) != 0) {
+                if (strcmp(fn_cn, _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->cname) != 0) {
                     fn_bad = 1;
                 }
             }
@@ -2406,7 +2411,7 @@ static int tc_expr_call(struct frontend_type_TypeCheck * self, int n, char * out
     if (i < 0) {
         return (-1);
     }
-    if (snprintf(out, (size_t)(cap), "%s", self->sym->funcs[i].ret) >= cap) {
+    if (snprintf(out, (size_t)(cap), "%s", self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, i)->ret) >= cap) {
         return (-1);
     }
     return 0;

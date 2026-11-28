@@ -789,10 +789,10 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
        (`a` = trait, `b` = method), 2 = inherent method (`a` = first N_PARAM) */
     np = 0;
     if (kind == 0 && a >= 0) {
-        np = self->sym->funcs[a].nparams;
+        np = self->sym->fn_at(a)->nparams;
         for (k = 0; k < np && k < 16; k++) {
-            fts[k] = self->sym->funcs[a].ptype[k];
-            anns[k] = (int)(unsigned char)self->sym->funcs[a].pann[k];
+            fts[k] = self->sym->fn_ptype(a, k);
+            anns[k] = (int)(unsigned char)self->sym->fn_pann(a, k);
         }
     } else if (kind == 1 && a >= 0 && b >= 0) {
         np = self->sym->traits[a].m[b].nparams;
@@ -811,7 +811,7 @@ static int bind_outconv_rewrite(struct Expr *self, int call, int args, int kind,
     }
     if (!bind_conv_on() || call < 0 || args <= 0 || np <= 0) return args;
     ret = "";
-    if (kind == 0) ret = self->sym->funcs[a].ret;
+    if (kind == 0) ret = self->sym->fn_at(a)->ret;
     else if (kind == 1) ret = self->sym->traits[a].m[b].ret;
     else if (retin) ret = retin;
     prev = -1;
@@ -3752,7 +3752,7 @@ impl ExprOps for Expr {
                so `a < b` on a variable stays a comparison (D26-1/D26-3). */
             if (self->lex->tok == T_PUNCT && self->lex->tok_is("<")) {
                 int gfi = self->sym->find_func(self->arena->nodes[n].text2);
-                if (gfi >= 0 && self->sym->funcs[gfi].ntparams == 1) {
+                if (gfi >= 0 && self->sym->fn_at(gfi)->ntparams == 1) {
                     const char *targ;
                     int gi;
                     if (self->in_generic)
@@ -3760,7 +3760,7 @@ impl ExprOps for Expr {
                     self->sup->lex_next();
                     if (self->parse_type_text(&targ) != 0) return -1;
                     if (self->fnptr_state || strcmp(targ, "void") == 0
-                        || strcmp(targ, self->sym->funcs[gfi].tparam) == 0) {
+                        || strcmp(targ, self->sym->fn_at(gfi)->tparam) == 0) {
                         return self->sup->fail(runtime::text::ct_internf(
                                  "'%s' cannot be a generic type argument", targ));
                     }
@@ -4005,7 +4005,7 @@ impl ExprOps for Expr {
                    argument; the instance does not exist before this point. */
                 {
                     int gchk = self->sym->find_func(self->arena->nodes[n].text2);
-                    if (gchk >= 0 && self->sym->funcs[gchk].ntparams == 1) {
+                    if (gchk >= 0 && self->sym->fn_at(gchk)->ntparams == 1) {
                         char gmsg[MAX_TEXT + 64];
                         snprintf(gmsg, sizeof gmsg,
                                  "generic function '%s' needs a type argument",
@@ -4246,8 +4246,8 @@ impl ExprOps for Expr {
                 if (fi >= 0) {
                     int got, want, tail_ok;
                     got = arg_count(self->arena, args) + self->closure_arg_count(args);
-                    want = self->sym->funcs[fi].nparams;
-                    tail_ok = self->sym->funcs[fi].variadic && got > want;
+                    want = self->sym->fn_at(fi)->nparams;
+                    tail_ok = self->sym->fn_at(fi)->variadic && got > want;
                     if (!tail_ok && self->arity_check(id_line, id_col, self->arena->nodes[n].text2,
                                                       got, want) != 0)
                         return -1;
@@ -4259,10 +4259,10 @@ impl ExprOps for Expr {
                    reject the `char *` spelling against a by-value struct. */
                 if (fi >= 0 && args > 0) {
                     int lc = args, lk = 0;
-                    while (lc > 0 && lk < self->sym->funcs[fi].nparams) {
+                    while (lc > 0 && lk < self->sym->fn_at(fi)->nparams) {
                         int lcl = self->arg_is_closure(lc);
                         if (!lcl
-                            && self->lit_coerce(self->sym->funcs[fi].ptype[lk], lc) != 0)
+                            && self->lit_coerce(self->sym->fn_ptype(fi, lk), lc) != 0)
                             return -1;
                         lc = self->arena->nodes[lc].next;
                         lk += lcl ? 2 : 1;
@@ -4276,11 +4276,11 @@ impl ExprOps for Expr {
                 if (fi >= 0 && args > 0 && self->closure_arg_count(args) == 0
                     && bind_conv_on()) {
                     int pc2 = args, pk3 = 0;
-                    while (pc2 > 0 && pk3 < self->sym->funcs[fi].nparams) {
+                    while (pc2 > 0 && pk3 < self->sym->fn_at(fi)->nparams) {
                         int apos = self->arg_base + pk3;
                         int aline2 = apos < self->argcap ? self->arg_line[apos] : id_line;
                         int acol2 = apos < self->argcap ? self->arg_col[apos] : id_col;
-                        if (self->sym->funcs[fi].pann[pk3] != 3) {
+                        if (self->sym->fn_pann(fi, pk3) != 3) {
                             const char *at = "";
                             const char *fk;
                             const char *ak;
@@ -4288,7 +4288,7 @@ impl ExprOps for Expr {
                                 && bind_conv_struct_like(self, at)
                                 && bind_conv_any(self, at, "as")) {
                                 ak = bind_conv_key_text(at);
-                                fk = bind_conv_key_text(self->sym->funcs[fi].ptype[pk3]);
+                                fk = bind_conv_key_text(self->sym->fn_ptype(fi, pk3));
                                 if (!ak || !fk) return self->sup->fail("out of memory");
                                 if (strcmp(ak, fk) != 0) {
                                     char pmsg[MAX_TEXT * 2];
@@ -4327,10 +4327,10 @@ impl ExprOps for Expr {
                 if (fi >= 0) {
                     int ra = args;
                     int rai = 0;
-                    while (ra > 0 && rai < self->sym->funcs[fi].nparams) {
+                    while (ra > 0 && rai < self->sym->fn_at(fi)->nparams) {
                         if (check_refout_arg(self, ra,
-                                (int)(unsigned char)self->sym->funcs[fi].pann[rai],
-                                self->sym->funcs[fi].ptype[rai]) != 0)
+                                (int)(unsigned char)self->sym->fn_pann(fi, rai),
+                                self->sym->fn_ptype(fi, rai)) != 0)
                             return -1;
                         ra = self->arena->nodes[ra].next;
                         rai++;
@@ -4338,7 +4338,7 @@ impl ExprOps for Expr {
                 }
                 /* the emitted call must spell the definition's C name */
                 if (fi >= 0) {
-                        self->arena->nodes[n].text2 = runtime::text::ct_intern(self->sym->funcs[fi].cname);
+                        self->arena->nodes[n].text2 = runtime::text::ct_intern(self->sym->fn_at(fi)->cname);
                         if (!self->arena->nodes[n].text2) return self->sup->fail("out of memory");
                 }
                 if (fi >= 0 && args > 0) {
@@ -4347,10 +4347,10 @@ impl ExprOps for Expr {
                     prev = -1;
                     k = 0;
                     first_arg = args;
-                    while (cur > 0 && k < self->sym->funcs[fi].nparams) {
+                    while (cur > 0 && k < self->sym->fn_at(fi)->nparams) {
                         const char *tr;
                         int ip = 0;
-                        if (self->sup->iface_ref_type_text(self->sym->funcs[fi].ptype[k], &tr, &ip)) {
+                        if (self->sup->iface_ref_type_text(self->sym->fn_ptype(fi, k), &tr, &ip)) {
                             int boxed = self->sup->maybe_box(cur, tr, ip);
                             if (boxed < 0) return -1;
                             if (boxed != cur) {
@@ -4371,10 +4371,10 @@ impl ExprOps for Expr {
                    after the checks above, which judge the source spelling. */
                 if (fi >= 0 && args > 0) {
                     int cur = args, prev = -1, k = 0, first_arg = args;
-                    while (cur > 0 && k < self->sym->funcs[fi].nparams) {
+                    while (cur > 0 && k < self->sym->fn_at(fi)->nparams) {
                         int is_cl = self->arg_is_closure(cur);
                         if (!is_cl
-                            && strcmp(self->sym->funcs[fi].ptype[k], "struct __ct_slice") == 0) {
+                            && strcmp(self->sym->fn_ptype(fi, k), "struct __ct_slice") == 0) {
                             int view = self->slice_view_from_array(cur);
                             if (view < 0) return -1;
                             if (view != cur) {
@@ -4574,7 +4574,7 @@ impl ExprOps for Expr {
                    name cannot slip through as a macro either. */
                 {
                     int gt = self->sym->find_func(nm);
-                    if (gt >= 0 && self->sym->funcs[gt].ntparams == 1) {
+                    if (gt >= 0 && self->sym->fn_at(gt)->ntparams == 1) {
                         char tmsg[MAX_TEXT + 64];
                         snprintf(tmsg, sizeof tmsg,
                                  "generic function '%s' needs a type argument", nm);
@@ -4601,7 +4601,7 @@ impl ExprOps for Expr {
                 vf = self->sym->resolve_func(nm);
                 if (vf >= 0) {
                     self->arena->nodes[n].kind = N_RAW;
-                    self->arena->nodes[n].text = runtime::text::ct_intern(self->sym->funcs[vf].cname);
+                    self->arena->nodes[n].text = runtime::text::ct_intern(self->sym->fn_at(vf)->cname);
                     if (!self->arena->nodes[n].text) return self->sup->fail("out of memory");
                     return n;
                 }
@@ -4922,7 +4922,7 @@ impl ExprOps for Expr {
                 rc = self->sup->fail("no function of that name in that namespace");
                 goto done;
             }
-            cname = self->sym->funcs[fi].cname;
+            cname = self->sym->fn_at(fi)->cname;
             *form = 1;
             rc = 0;
             goto done;

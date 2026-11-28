@@ -117,7 +117,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -342,7 +347,7 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_check(void
     const char * ft;
     e8 = "the compiler cannot see whether the callee keeps the environment; the environment dies with this frame";
     if (fi >= 0) {
-        np = _self->sym->funcs[fi].nparams;
+        np = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->nparams;
     }
     else {
         np = 0;
@@ -354,10 +359,10 @@ static int frontend_parse_Expr_frontend_parse_ExprClosure_closure_arg_check(void
             ok = 0;
             ft = "";
             if (((fi >= 0) && (pos < np))) {
-                ft = _self->sym->funcs[fi].ptype[pos];
+                ft = _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, pos);
             }
             if (((fi >= 0) && ((pos + 1) < np))) {
-                ok = (_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprclosure_vptr->type_is_void_ptr(_self, _self->sym->funcs[fi].ptype[(pos + 1)]));
+                ok = (_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft) && _self->__frontend_parse_exprclosure_vptr->type_is_void_ptr(_self, _self->sym->__frontend_sym_symbolops_vptr->fn_ptype(_self->sym, fi, (pos + 1))));
             }
             if ((!ok)) {
                 if ((_self->__frontend_parse_exprclosure_vptr->type_is_fnptr(_self, ft) && (!_self->__frontend_parse_exprclosure_vptr->formal_is_env_fn(_self, ft)))) {

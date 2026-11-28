@@ -96,7 +96,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -1716,13 +1721,13 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
             return (-1);
         }
         if (attr >= 0) {
-            _self->sym->funcs[fi].attr = attr;
+            _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->attr = attr;
         }
         if ((is_extern && is_pub)) {
-            _self->sym->funcs[fi].is_pub = 1;
+            _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->is_pub = 1;
         }
-        _self->sym->funcs[fi].variadic = _self->variadic;
-        _self->sym->funcs[fi].line = func_line;
+        _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->variadic = _self->variadic;
+        _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->line = func_line;
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return NO_NODE;
     }
@@ -1781,20 +1786,20 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         return (-1);
     }
     if (attr >= 0) {
-        _self->sym->funcs[fi].attr = attr;
+        _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->attr = attr;
     }
-    _self->sym->funcs[fi].ret_owned = _self->mem->ret_owned;
-    _self->sym->funcs[fi].variadic = _self->variadic;
-    _self->sym->funcs[fi].line = func_line;
+    _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ret_owned = _self->mem->ret_owned;
+    _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->variadic = _self->variadic;
+    _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->line = func_line;
     if (is_generic) {
-        _self->sym->funcs[fi].ntparams = 1;
-        _self->sym->funcs[fi].is_static = 1;
-        _self->sym->funcs[fi].tparam = runtime_text_ct_intern(tparam);
-        if ((!_self->sym->funcs[fi].tparam)) {
+        _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->ntparams = 1;
+        _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->is_static = 1;
+        _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->tparam = runtime_text_ct_intern(tparam);
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->tparam)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
-        _self->sym->funcs[fi].bound = runtime_text_ct_intern(bound);
-        if ((!_self->sym->funcs[fi].bound)) {
+        _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->bound = runtime_text_ct_intern(bound);
+        if ((!_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->bound)) {
             return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
         }
     }
@@ -1803,12 +1808,12 @@ static int frontend_parse_Parser_frontend_parse_ParseOps_parse_func(void *self, 
         _self->sup->__frontend_parse_supportops_vptr->pop_scope(_self->sup);
         return (-1);
     }
-    _self->sym->funcs[fi].body = f;
+    _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->body = f;
     _self->arena->nodes[f].text = runtime_text_ct_intern(ret);
     if ((!_self->arena->nodes[f].text)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
-    _self->arena->nodes[f].text2 = runtime_text_ct_intern(_self->sym->funcs[fi].cname);
+    _self->arena->nodes[f].text2 = runtime_text_ct_intern(_self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, fi)->cname);
     if ((!_self->arena->nodes[f].text2)) {
         return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
     }
@@ -5574,7 +5579,7 @@ static int check_generic_bounds(struct frontend_parse_Parser * self) {
             continue;
         }
         self->sym->ginsts[i].checked = 1;
-        if ((!self->sym->funcs[f].bound[0])) {
+        if ((!self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound[0])) {
             continue;
         }
         targ = (self->sym->ginsts[i].targ ? self->sym->ginsts[i].targ : "");
@@ -5599,18 +5604,18 @@ static int check_generic_bounds(struct frontend_parse_Parser * self) {
         }
         si = self->sym->__frontend_sym_symbolops_vptr->find_struct(self->sym, tbase);
         if (si < 0) {
-            snprintf(msg, sizeof(msg), "type argument '%s' cannot satisfy trait '%s' (not a struct)", self->sym->ginsts[i].targ, self->sym->funcs[f].bound);
+            snprintf(msg, sizeof(msg), "type argument '%s' cannot satisfy trait '%s' (not a struct)", self->sym->ginsts[i].targ, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound);
             tool_diag_ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col, msg, self->mem->path);
             continue;
         }
-        ok = impl_declares(self, si, self->sym->funcs[f].bound);
+        ok = impl_declares(self, si, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound);
         for (k = 0; ((!ok) && (k < self->sym->structs[si].nuse)); k++) {
-            if (strcmp(self->sym->structs[si].use[k], self->sym->funcs[f].bound) == 0) {
+            if (strcmp(self->sym->structs[si].use[k], self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound) == 0) {
                 ok = 1;
             }
         }
         if ((!ok)) {
-            snprintf(msg, sizeof(msg), "type argument '%s' does not implement trait '%s'", self->sym->structs[si].name, self->sym->funcs[f].bound);
+            snprintf(msg, sizeof(msg), "type argument '%s' does not implement trait '%s'", self->sym->structs[si].name, self->sym->__frontend_sym_symbolops_vptr->fn_at(self->sym, f)->bound);
             tool_diag_ct_sem_error(self->sym->ginsts[i].line, self->sym->ginsts[i].col, msg, self->mem->path);
         }
     }

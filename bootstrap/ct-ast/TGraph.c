@@ -46,7 +46,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -425,10 +430,10 @@ static int tg_slot_fn(struct frontend_sym_Symbols * sym, struct frontend_module_
     }
     u = (&units[unit]);
     for (i = u->fn_start; i < u->fn_end; i++) {
-        if ((sym->funcs[i].name && (strcmp(sym->funcs[i].name, word) == 0))) {
+        if ((sym->__frontend_sym_symbolops_vptr->fn_at(sym, i)->name && (strcmp(sym->__frontend_sym_symbolops_vptr->fn_at(sym, i)->name, word) == 0))) {
             return 1;
         }
-        if ((sym->funcs[i].cname && (strcmp(sym->funcs[i].cname, word) == 0))) {
+        if ((sym->__frontend_sym_symbolops_vptr->fn_at(sym, i)->cname && (strcmp(sym->__frontend_sym_symbolops_vptr->fn_at(sym, i)->cname, word) == 0))) {
             return 1;
         }
     }

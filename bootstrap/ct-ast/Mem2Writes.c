@@ -34,7 +34,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -259,7 +264,7 @@ static int mem2_fn_params(struct runtime_arena_Arena * ar, struct frontend_sym_S
     if (((fi < 0) || (fi >= sym->nfunc))) {
         return (-1);
     }
-    body = sym->funcs[fi].body;
+    body = sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->body;
     if (((body < 0) || (body >= ar->nnode))) {
         return (-1);
     }
@@ -477,14 +482,14 @@ int frontend_parse_mem2_finish_unit(struct runtime_arena_Arena * ar, struct fron
         if (caller == callee) {
             continue;
         }
-        if (sym->funcs[callee].ntparams > 0) {
+        if (sym->__frontend_sym_symbolops_vptr->fn_at(sym, callee)->ntparams > 0) {
             continue;
         }
         cparams = mem2_fn_params(ar, sym, callee);
         if (cparams < 0) {
             continue;
         }
-        for (j = 0; j < sym->funcs[callee].nparams; j++) {
+        for (j = 0; j < sym->__frontend_sym_symbolops_vptr->fn_at(sym, callee)->nparams; j++) {
             p = mem2_param_node(ar, cparams, j);
             if (p < 0) {
                 continue;
@@ -492,10 +497,10 @@ int frontend_parse_mem2_finish_unit(struct runtime_arena_Arena * ar, struct fron
             if (((ar->nodes[p].num == 0) && (ar->nodes[p].sflags == 0))) {
                 continue;
             }
-            if ((int)((unsigned char)(sym->funcs[callee].pann[j])) == 1) {
+            if ((int)((unsigned char)(sym->__frontend_sym_symbolops_vptr->fn_pann(sym, callee, j))) == 1) {
                 continue;
             }
-            ptype = sym->funcs[callee].ptype[j];
+            ptype = sym->__frontend_sym_symbolops_vptr->fn_ptype(sym, callee, j);
             if (((!ptype) || (strchr(ptype, '*') == 0))) {
                 continue;
             }
@@ -516,7 +521,7 @@ int frontend_parse_mem2_finish_unit(struct runtime_arena_Arena * ar, struct fron
             if (wline == 0) {
                 wline = ar->nodes[p].sflags;
             }
-            snprintf(msg, sizeof(msg), "call to '%s': parameter '%s' is stored outside the call (write at line %ld); declare the parameter 'borrow'", sym->funcs[callee].name, (pname ? pname : "?"), wline);
+            snprintf(msg, sizeof(msg), "call to '%s': parameter '%s' is stored outside the call (write at line %ld); declare the parameter 'borrow'", sym->__frontend_sym_symbolops_vptr->fn_at(sym, callee)->name, (pname ? pname : "?"), wline);
             if (check_mode) {
                 tool_diag_ct_sem_error(frontend_parse_mem2_calls[c].line, 1, msg, path);
                 errors++;

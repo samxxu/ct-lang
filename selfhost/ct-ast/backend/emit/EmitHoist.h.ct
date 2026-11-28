@@ -379,7 +379,7 @@ impl EmitHoist for Emitter {
                     ? self->sym->find_func(self->arena->nodes[self->hoist_calls[i]].text2)
                     : -1;
             if (f >= 0) {
-                hty = runtime::text::ct_intern(self->sym->funcs[f].ret);
+                hty = runtime::text::ct_intern(self->sym->fn_at(f)->ret);
             } else if (self->arena->nodes[self->hoist_calls[i]].kind == N_CALL
                      && self->arena->nodes[self->hoist_calls[i]].text[0]) {
                 hty = runtime::text::ct_intern(self->arena->nodes[self->hoist_calls[i]].text);

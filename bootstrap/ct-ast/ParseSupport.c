@@ -47,7 +47,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -642,6 +647,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_var_type(void *
 static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *self, const char * name, const char * ret, int is_static, int is_pub, int first_param) {
     struct frontend_parse_ParseSupport *_self = (struct frontend_parse_ParseSupport *)self;
     const char * cname;
+    struct frontend_sym_Fn * fn;
     int i;
     int k;
     int p;
@@ -664,7 +670,7 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
         i = _self->sym->__frontend_sym_symbolops_vptr->find_func(_self->sym, name);
     }
     pub_now = is_pub;
-    if (((i >= 0) && _self->sym->funcs[i].is_pub)) {
+    if (((i >= 0) && _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i)->is_pub)) {
         pub_now = 1;
     }
     fresh = 0;
@@ -674,26 +680,32 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
         }
         i = _self->sym->nfunc;
         _self->sym->nfunc++;
-        _self->sym->funcs[i].name = runtime_text_ct_intern(name);
-        if ((!_self->sym->funcs[i].name)) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
-        }
-        _self->sym->funcs[i].tparam = runtime_text_ct_intern("");
-        if ((!_self->sym->funcs[i].tparam)) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
-        }
-        _self->sym->funcs[i].bound = runtime_text_ct_intern("");
-        if ((!_self->sym->funcs[i].bound)) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
-        }
-        _self->sym->funcs[i].is_pub = 0;
-        _self->sym->funcs[i].ret_owned = 0;
-        _self->sym->funcs[i].attr = (-1);
-        _self->sym->funcs[i].body = (-1);
         fresh = 1;
     }
+    fn = _self->sym->__frontend_sym_symbolops_vptr->fn_at(_self->sym, i);
+    if ((!fn)) {
+        return _self->__frontend_parse_supportops_vptr->fail(_self, "function table out of range");
+    }
+    if (fresh) {
+        fn->name = runtime_text_ct_intern(name);
+        if ((!fn->name)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
+        fn->tparam = runtime_text_ct_intern("");
+        if ((!fn->tparam)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
+        fn->bound = runtime_text_ct_intern("");
+        if ((!fn->bound)) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
+        }
+        fn->is_pub = 0;
+        fn->ret_owned = 0;
+        fn->attr = (-1);
+        fn->body = (-1);
+    }
     if (pub_now) {
-        _self->sym->funcs[i].is_pub = 1;
+        fn->is_pub = 1;
     }
     if ((!((pub_now && _self->sym->ns) && _self->sym->ns[0]))) {
         cname = runtime_text_ct_intern(name);
@@ -701,45 +713,41 @@ static int frontend_parse_ParseSupport_frontend_parse_SupportOps_add_func(void *
             return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
         }
     }
-    _self->sym->funcs[i].cname = cname;
+    fn->cname = cname;
     if (fresh) {
-        _self->sym->funcs[i].ret = runtime_text_ct_intern(ret);
-        if ((!_self->sym->funcs[i].ret)) {
+        fn->ret = runtime_text_ct_intern(ret);
+        if ((!fn->ret)) {
             return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
         }
     }
-    _self->sym->funcs[i].is_static = is_static;
-    prev_nparams = _self->sym->funcs[i].nparams;
-    _self->sym->funcs[i].nparams = 0;
+    fn->is_static = is_static;
+    prev_nparams = fn->nparams;
+    fn->nparams = 0;
     p = first_param;
     k = 0;
     while (p > 0) {
-        if (_self->sym->__frontend_sym_symbolops_vptr->ensure_fn_param_capacity(_self->sym, i, (k + 1)) != 0) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
-        }
-        _self->sym->funcs[i].ptype[k] = runtime_text_ct_intern(_self->arena->nodes[p].text);
-        if ((!_self->sym->funcs[i].ptype[k])) {
+        const char * pty = runtime_text_ct_intern(_self->arena->nodes[p].text);
+        const char * pdm = runtime_text_ct_intern(_self->arena->nodes[p].text3);
+        int ann = (int)(_self->arena->nodes[p].aux);
+        if (((!pty) || (!pdm))) {
             return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
         }
-        _self->sym->funcs[i].pdim[k] = runtime_text_ct_intern(_self->arena->nodes[p].text3);
-        if ((!_self->sym->funcs[i].pdim[k])) {
-            return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
-        }
-        if ((((!fresh) && (k < prev_nparams)) && (_self->sym->funcs[i].pann[k] != (char)(_self->arena->nodes[p].aux)))) {
+        if ((((!fresh) && (k < prev_nparams)) && (_self->sym->__frontend_sym_symbolops_vptr->fn_pann(_self->sym, i, k) != (char)(ann)))) {
             return _self->__frontend_parse_supportops_vptr->fail(_self, tool_sh_ct_scratch_fmt("redeclaration of '%s' changes the ref/out annotation of parameter %d", name, (k + 1)));
         }
-        _self->sym->funcs[i].pann[k] = (char)(_self->arena->nodes[p].aux);
         if (_self->arena->nodes[p].attr >= 0) {
-            const char * dim = runtime_text_ct_internf("%s %s", _self->sym->funcs[i].pdim[k], _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->arena->nodes[p].attr));
-            if ((!dim)) {
+            pdm = runtime_text_ct_internf("%s %s", pdm, _self->arena->__runtime_arena_arenaops_vptr->str_at(_self->arena, _self->arena->nodes[p].attr));
+            if ((!pdm)) {
                 return _self->__frontend_parse_supportops_vptr->fail(_self, "out of memory");
             }
-            _self->sym->funcs[i].pdim[k] = dim;
+        }
+        if (_self->sym->__frontend_sym_symbolops_vptr->fn_set_param(_self->sym, i, k, pty, pdm, ann) != 0) {
+            return _self->__frontend_parse_supportops_vptr->fail(_self, _self->sym->__frontend_sym_symbolops_vptr->last_error(_self->sym));
         }
         k++;
         p = _self->arena->nodes[p].next;
     }
-    _self->sym->funcs[i].nparams = k;
+    fn->nparams = k;
     return i;
 }
 

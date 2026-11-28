@@ -268,7 +268,12 @@ struct tool_sh_Sh;
 struct Vec_char_p;
 struct frontend_sym_SymbolsTypeText;
 struct frontend_sym_TypeAlias;
+struct frontend_sym_FnParam;
+struct frontend_sym_FnParamSet;
+struct Vec_frontend__sym__FnParam;
 struct frontend_sym_Fn;
+struct frontend_sym_FnTable;
+struct Vec_frontend__sym__Fn;
 struct frontend_sym_Var;
 struct frontend_sym_Closure;
 struct frontend_sym_MethAnn;
@@ -683,7 +688,7 @@ static const char * tb_call_ret(const char * name) {
     if (fi < 0) {
         return (const char *)(0);
     }
-    return sym->funcs[fi].ret;
+    return sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->ret;
 }
 static const char * tb_trait_canon(const char * name) {
     int ti;
@@ -1191,10 +1196,10 @@ static int tb_target_call(struct backend_tir_TBuilder * tb, int eid, int n) {
     fi = sym->__frontend_sym_symbolops_vptr->find_func(sym, name);
     if (fi >= 0) {
         const char * fn;
-        fn = sym->funcs[fi].name;
+        fn = sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->name;
         decl = tb_find_decl(m, TD_FUNC, fn);
         if (decl <= 0) {
-            fn = sym->funcs[fi].cname;
+            fn = sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->cname;
             decl = tb_find_decl(m, TD_FUNC, fn);
         }
         if (decl > 0) {
@@ -2368,7 +2373,7 @@ static int tb_func_decl(struct backend_tir_TBuilder * tb, int n, const char * na
         return (-1);
     }
     fi = sym->__frontend_sym_symbolops_vptr->find_func(sym, ar->nodes[n].text2);
-    tmpl = (((fi >= 0) && (sym->funcs[fi].ntparams > 0)) ? 1 : 0);
+    tmpl = (((fi >= 0) && (sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->ntparams > 0)) ? 1 : 0);
     if (backend_tir_tmod_spelling_free(ar->nodes[n].text)) {
         tmpl = 1;
     }
@@ -2413,8 +2418,8 @@ static int tb_func_decl(struct backend_tir_TBuilder * tb, int n, const char * na
             return (-1);
         }
     }
-    m->decls[(decl - 1)].cname = (((fi >= 0) && sym->funcs[fi].cname[0]) ? runtime_text_ct_intern(sym->funcs[fi].cname) : runtime_text_ct_intern(name));
-    m->decls[(decl - 1)].is_template = (tmpl || ((fi >= 0) && (sym->funcs[fi].ntparams > 0)));
+    m->decls[(decl - 1)].cname = (((fi >= 0) && sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->cname[0]) ? runtime_text_ct_intern(sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->cname) : runtime_text_ct_intern(name));
+    m->decls[(decl - 1)].is_template = (tmpl || ((fi >= 0) && (sym->__frontend_sym_symbolops_vptr->fn_at(sym, fi)->ntparams > 0)));
     m->decls[(decl - 1)].is_static = (ar->nodes[n].aux ? 1 : 0);
     m->decls[(decl - 1)].is_inline = (ar->nodes[n].num ? 1 : 0);
     m->decls[(decl - 1)].is_vararg = (ar->nodes[n].c ? 1 : 0);
@@ -2839,9 +2844,9 @@ static int tb_instances(struct backend_tir_TBuilder * tb) {
         if (((g->func < 0) || (g->func >= sym->nfunc))) {
             continue;
         }
-        tmpl = tb_find_decl(m, TD_FUNC, sym->funcs[g->func].name);
+        tmpl = tb_find_decl(m, TD_FUNC, sym->__frontend_sym_symbolops_vptr->fn_at(sym, g->func)->name);
         if (tmpl <= 0) {
-            tmpl = tb_find_decl(m, TD_FUNC, sym->funcs[g->func].cname);
+            tmpl = tb_find_decl(m, TD_FUNC, sym->__frontend_sym_symbolops_vptr->fn_at(sym, g->func)->cname);
         }
         if (tmpl <= 0) {
             continue;

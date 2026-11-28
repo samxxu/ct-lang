@@ -308,9 +308,9 @@ pub const char *ctype_call(struct Expr *self, int n, int *array_depth, int depth
     }
     i = self->sym->resolve_func(self->arena->nodes[n].text2);
     if (i >= 0) {
-        if (!self->sym->funcs[i].ret[0] || strcmp(self->sym->funcs[i].ret, "void") == 0)
+        if (!self->sym->fn_at(i)->ret[0] || strcmp(self->sym->fn_at(i)->ret, "void") == 0)
             return (const char *)0;
-        return self->ctype_expand_text(self->sym->funcs[i].ret, 0);
+        return self->ctype_expand_text(self->sym->fn_at(i)->ret, 0);
     }
     /* `fp()` on a function-pointer variable (a plain name). */
     i = self->sym->find_var(self->arena->nodes[n].text2);
@@ -1151,25 +1151,25 @@ impl ExprStaticType for Expr {
         fi = self->sym->find_func(name);
         if (fi < 0) return (const char *)0;
     named_func:
-        if (self->sym->funcs[fi].variadic) return (const char *)0;
-        n = self->sym->funcs[fi].nparams;
+        if (self->sym->fn_at(fi)->variadic) return (const char *)0;
+        n = self->sym->fn_at(fi)->nparams;
         for (i = 0; i < n; i++) {
             /* pann 1 is `borrow`: it changes no C signature, so the address of
                such a function is still spellable. Only `ref` / `out` add the
                pointer the C function-pointer type cannot express. */
-            if (self->sym->funcs[fi].pann[i] == 2
-                || self->sym->funcs[fi].pann[i] == 3) return (const char *)0;
-            if (self->sym->funcs[fi].pdim[i] && self->sym->funcs[fi].pdim[i][0])
+            if (self->sym->fn_pann(fi, i) == 2
+                || self->sym->fn_pann(fi, i) == 3) return (const char *)0;
+            if (self->sym->fn_pdim(fi, i) && self->sym->fn_pdim(fi, i)[0])
                 return (const char *)0;
         }
         if (tool::sh::ct_text_init(&buf, &cap, 64) != 0) return (const char *)0;
-        if (tool::sh::ct_text_cat(&buf, &cap, self->sym->funcs[fi].ret) != 0)
+        if (tool::sh::ct_text_cat(&buf, &cap, self->sym->fn_at(fi)->ret) != 0)
             goto fail;
         if (tool::sh::ct_text_cat(&buf, &cap, " (*)(") != 0) goto fail;
         for (i = 0; i < n; i++) {
             if (i > 0 && tool::sh::ct_text_cat(&buf, &cap, ", ") != 0) goto fail;
             if (tool::sh::ct_text_cat(&buf, &cap,
-                                      self->sym->funcs[fi].ptype[i]) != 0)
+                                      self->sym->fn_ptype(fi, i)) != 0)
                 goto fail;
         }
         if (n == 0 && tool::sh::ct_text_cat(&buf, &cap, "void") != 0) goto fail;

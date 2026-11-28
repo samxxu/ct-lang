@@ -138,7 +138,7 @@ static int mem2_fn_params(struct Arena *ar, struct Symbols *sym, int fi)
 {
     int body;
     if (fi < 0 || fi >= sym->nfunc) return -1;
-    body = sym->funcs[fi].body;
+    body = sym->fn_at(fi)->body;
     if (body < 0 || body >= ar->nnode) return -1;
     if (ar->nodes[body].kind != 3) return -1;
     return ar->nodes[body].a;
@@ -326,15 +326,15 @@ pub int mem2_finish_unit(struct Arena *ar, struct Symbols *sym,
         if (callee < fn_start || callee >= fn_end) continue;   /* cross-unit: pass */
         if (caller < fn_start || caller >= fn_end) continue;
         if (caller == callee) continue;                        /* recursion: pass */
-        if (sym->funcs[callee].ntparams > 0) continue;         /* template: pass */
+        if (sym->fn_at(callee)->ntparams > 0) continue;         /* template: pass */
         cparams = mem2_fn_params(ar, sym, callee);
         if (cparams < 0) continue;
-        for (j = 0; j < sym->funcs[callee].nparams; j++) {
+        for (j = 0; j < sym->fn_at(callee)->nparams; j++) {
             p = mem2_param_node(ar, cparams, j);
             if (p < 0) continue;
             if (ar->nodes[p].num == 0 && ar->nodes[p].sflags == 0) continue;
-            if ((int)(unsigned char)sym->funcs[callee].pann[j] == 1) continue; /* borrow */
-            ptype = sym->funcs[callee].ptype[j];
+            if ((int)(unsigned char)sym->fn_pann(callee, j) == 1) continue; /* borrow */
+            ptype = sym->fn_ptype(callee, j);
             if (!ptype || strchr(ptype, '*') == 0) continue;
             /* Opaque C pointers and function-pointer parameters are passed:
                the first is the C-boundary / closure-environment form (the
@@ -351,7 +351,7 @@ pub int mem2_finish_unit(struct Arena *ar, struct Symbols *sym,
             if (wline == 0) wline = ar->nodes[p].sflags;
             snprintf(msg, sizeof msg,
                      "call to '%s': parameter '%s' is stored outside the call (write at line %ld); declare the parameter 'borrow'",
-                     sym->funcs[callee].name, pname ? pname : "?", wline);
+                     sym->fn_at(callee)->name, pname ? pname : "?", wline);
             if (check_mode) {
                 tool::diag::ct_sem_error(mem2_calls[c].line, 1, msg, path);
                 errors++;

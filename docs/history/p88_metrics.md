@@ -8,7 +8,7 @@
 
 <!-- p88-metrics: emitter_before=8876 emitter_after=1590 total_slices=76 expr_slices=34
      node_slices=26 decl_slices=6 inline_slices=8 field_slices=2
-     emitted_before=48223 emitted_after=95088 io_cap=2048
+     emitted_before=48223 emitted_after=95994 io_cap=2048
      (v1-PH-2 S8 收尾 D-013 真 lowering 后复测：owning 句柄局部/形参/结果、
       rebind、struct raw init 字段 retain、跳转清理与 match 守卫/or-pattern 进
       LIR；`Emitter.h.ct` 仍 1623，发射 C 92473 -> 93703 行（仅 .c）)
@@ -262,6 +262,12 @@
       与整数输出改 `ct_scratch_fmt` / `ct_internf`，去掉 5 个定长行；
       Emitter.h.ct 不变（1590），发射 C 95100 -> 95096 行（-4；用户语料
       生成物逐字节不变），切片清单仍为 76)
+     (S8B-REM-1 R5 后复测：`Symbols.funcs` 与 `Fn` 的参数三条并行行
+      （`ptype`/`pdim`/`pann`）改 `Vec` 行块——函数表是 `Vec<struct Fn>`
+      藏在不进头文件的 `FnTable` 指针后，每个函数参数是 `Vec<struct FnParam>`
+      藏在 `FnParamSet` 指针后，行搬移只搬句柄；Symbols 的 `funcs` 与参数表
+      realloc 4 处归零。发射 C 95088 -> 95994 行（+906：两个 `Vec` 实例与
+      行访问器；用户语料生成物逐字节不变），切片清单仍为 76)
 -->
 
 ## 1 切片清单

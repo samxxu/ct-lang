@@ -95,6 +95,30 @@ pub trait TypeAliasOps {
     int resolve_exported_type_aliases(int owner);
 }
 
+/* S8b R5: one parameter row. The three parallel rows `ptype` / `pdim` /
+   `pann` became this record, so a parameter's spelling and its ref/out
+   annotation are named once and always move together. */
+struct FnParam {
+    /* S1a-0 C2p-3: interned texts, so a 2000-byte parameter type is not cut
+       at a MAX_TEXT stride. The row copy is a pointer copy. */
+    const char *type;
+    /* array dims are kept apart from the type: the prototype must spell them
+       (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
+       call side still compares bare types for boxing */
+    const char *dim;
+    /* Phase 78 (S2): 0 = plain, 1 = `borrow`, 2 = `ref`, 3 = `out`. The
+       stored type stays the caller's base type (type checking compares it),
+       and the emitter adds the C pointer at the declaration/call boundary. */
+    char ann;
+}
+
+/* S8b R5: the parameter rows of one function, kept behind an opaque pointer
+   (only `struct Fn` sees it). The rows grow through `Vec`, whose buffer is
+   owned by the handle, so a moved `struct Fn` row moves the handle alone. */
+struct FnParamSet {
+    Vec<struct FnParam> rows;
+}
+
 pub struct Fn {
     /* S1a-0 C2n-1: the row's spellings are interned texts owned by
        runtime::text::Intern. A row copy is a pointer copy, and a per-unit
@@ -104,22 +128,12 @@ pub struct Fn {
        prefix, a static helper keeps the plain name */
     const char *cname;
     const char *ret;
-    /* S1a-0 C1/C2p-3: the parameter rows are three parallel heap blocks owned
-       by this row, grown on demand. `ptype`/`pdim` are pointer rows (each an
-       interned text), so a 2000-byte parameter type is not cut at a MAX_TEXT
-       stride; `pann` is one byte per position. `pcap` is their common
-       capacity; a row reused after the per-unit reset keeps its blocks. */
-    const char **ptype;
-    /* array dims are kept apart from the type: the prototype must spell them
-       (`int f(Expr a[])` vs `int f(Expr a)` are conflicting types), while the
-       call side still compares bare types for boxing */
-    const char **pdim;
-    /* Phase 78 (S2): 0 = plain, 2 = `ref`, 3 = `out`. The stored type stays
-       the caller's base type (type checking compares it), and the emitter adds
-       the C pointer at the declaration/call boundary. */
-    char *pann;
+    /* S8b R5: the parameter rows are one `Vec` behind this opaque pointer
+       (`struct FnParamSet`, defined above and kept out of the generated
+       header). A moved `struct Fn` row copies the handle, never the rows;
+       a row reused after the per-unit reset keeps its buffer. */
+    struct FnParamSet *pset;
     int  nparams;
-    int  pcap;
     int  is_static;
     int  is_pub;
     int  variadic;      /* `int f(int n, ...)`: the prototype needs the `...` */
@@ -130,7 +144,7 @@ pub struct Fn {
     const char *tparam;
     /* Phase 28: the one trait bound of a generic template (`T name<T: Trait>`),
        empty when the parameter is unbounded. Instances inherit it through the
-       template row, so the satisfaction check reads it off `funcs[ginst.func]`. */
+       template row, so the satisfaction check reads it off `fn_at(ginst.func)`. */
     const char *bound;
     /* Phase 26: the template's N_FUNC node, so the emitter can monomorphise it
        once per instance without a second AST copy (-1 for a plain row). */
@@ -142,6 +156,13 @@ pub struct Fn {
        prototype re-emits it after the parameter list (the C compiler owns the
        meaning). */
     int  attr;
+}
+
+/* S8b R5: the backing store of the function table. `struct Symbols` is
+   published in the generated header, so its field is a pointer to this
+   record and the `Vec` itself stays in this unit's `.c`. */
+struct FnTable {
+    Vec<struct Fn> rows;
 }
 
 pub struct Var {
@@ -404,10 +425,27 @@ pub trait SymbolOps {
        variable type is not cut before a caller compares or quotes it. */
     const char *var_type_text(const char *name);
     int  find_func(const char *cname);
+    /* S8b R5: grow the function table to `need` row slots. The row block is a
+       `Vec` behind `ftab`; a new slot is a zeroed row and a reused slot keeps
+       its parameter handle, so the per-unit reset costs no reallocation. */
     int  ensure_fn_capacity(int need);
-    /* S1a-0 C1: grow function `fi`'s parameter rows to hold `need` positions.
-       The three blocks move together and the new slots are zeroed; -1 only at
-       allocation failure or past CAP_LIMIT. */
+    /* S8b R5: the function row / its parameter columns. The row is named by
+       index; `fn_at` answers 0 for an index with no row, the column readers
+       answer "" / 0 for a position with no row, the way the zeroed parallel
+       arrays did. */
+    struct Fn *fn_at(int i);
+    const char *fn_ptype(int fi, int k);
+    const char *fn_pdim(int fi, int k);
+    int  fn_pann(int fi, int k);
+    /* S8b R5: write one parameter position; grows the row first. */
+    int  fn_set_param(int fi, int k, const char *type, const char *dim, int ann);
+    /* S8b R5: the generic-instance row clone. Scalars are copied; the
+       parameter rows are deep-copied into `dst`'s own block, so the
+       substitution that follows cannot write into the template's rows. */
+    int  fn_copy_row(int dst, int src);
+    /* S8b R5: grow function `fi`'s parameter rows to hold `need` positions.
+       The rows are one `Vec`; the new slots are zeroed and a reused row keeps
+       its buffer. -1 only at allocation failure or past CAP_LIMIT. */
     int  ensure_fn_param_capacity(int fi, int need);
     /* S1a-0 C1: the variable table and the scope stack grow on demand. */
     int  ensure_var_capacity(int need);
@@ -777,10 +815,13 @@ pub struct BareTypeRow {
 pub struct Symbols {
     /* The four big tables are heap blocks allocated in `symbols_get` (SH-42):
        as inline arrays in the file-scope instance they put ~21 MB of zeroes
-       into __DATA. Their caps stay literal, mirroring the MAX_* values above. */
-    struct Fn   *funcs;
+       into __DATA. Their caps stay literal, mirroring the MAX_* values above.
+       S8b R5: the function table is a `Vec<struct Fn>` behind `ftab` (the
+       backing record is opaque to the header); `nfunc` is the live count of
+       the unit being parsed and the rows are reused across units, so the
+       table is reset by index only and never freed. */
+    struct FnTable *ftab;
     int  nfunc;
-    int  fncap;
     /* Phase 41: any ct_atomic_* builtin was lowered in this program, so the
        emitter must write the static inline helper block into each .c. */
     int  atomic_used;
@@ -898,13 +939,14 @@ pub struct Symbols *symbols_get(void);
 impl SymbolOps for Symbols {
     /* Give the four big tables their backing store. calloc keeps the zero-filled
        semantics the static arrays had, and it runs before any writer -- the parser
-       appends to `funcs` directly -- so no access can meet a NULL table. */
+       appends to the function table directly -- so no access can meet a NULL
+       table. S8b R5: the function table's `Vec` lives behind `ftab`, which is
+       still a heap allocation (SH-42: never the file-scope __DATA instance). */
     int grow(void)
     {
-        if (!self->funcs) {
-            self->funcs = calloc(MAX_FUNCS + 64, sizeof(*self->funcs));
-            if (!self->funcs) return -1;
-            self->fncap = MAX_FUNCS + 64;
+        if (!self->ftab) {
+            self->ftab = (struct FnTable *)calloc(1, sizeof(struct FnTable));
+            if (!self->ftab) return -1;
         }
         if (!self->vars) {
             self->vars = calloc(MAX_VARS, sizeof(*self->vars));
@@ -975,55 +1017,125 @@ impl SymbolOps for Symbols {
        the generated C either. */
     /* SH-109: grow the function table on demand instead of treating 512 as
        a hard whole-program limit. 512 is the initial capacity; the safety
-       valve is CAP_LIMIT (65536). */
+       valve is CAP_LIMIT (65536).
+       S8b R5: the table is one `Vec` row block. A slot that already exists is
+       left alone (a reused row keeps its parameter handle); only slots past
+       the current length are appended as zeroed rows. */
     int ensure_fn_capacity(int need)
     {
-        int cap;
-        void *grown;
-        if (need <= self->fncap) return 0;
-        cap = self->fncap > 0 ? self->fncap : MAX_FUNCS + 64;
-        while (cap < need && cap < CAP_LIMIT) cap *= 2;
-        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
-        if (need > cap) return -1;
-        grown = realloc(self->funcs, (size_t)cap * sizeof(*self->funcs));
-        if (!grown) return -1;
-        self->funcs = grown;
-        memset(self->funcs + self->fncap, 0, (size_t)(cap - self->fncap) * sizeof(*self->funcs));
-        self->fncap = cap;
+        struct Fn z;
+        if (need <= 0) return 0;
+        if (need > CAP_LIMIT) return -1;
+        if (!self->ftab) {
+            self->ftab = (struct FnTable *)calloc(1, sizeof(struct FnTable));
+            if (!self->ftab) return -1;
+        }
+        while (self->ftab->rows.len() < need) {
+            memset(&z, 0, sizeof(z));
+            z.body = -1;            /* Phase 26: no definition node yet */
+            z.attr = -1;            /* no GNU attribute yet */
+            if (self->ftab->rows.push(z) == 0) return -1;
+        }
         return 0;
     }
 
-    /* S1a-0 C1: a function's parameter rows are three parallel heap blocks.
-       They are owned by the row and grow together, so a moved `funcs` table
-       does not invalidate them and a reused row keeps its capacity. */
+    /* S8b R5: the row named by index. 0 for an index with no row. */
+    struct Fn *fn_at(int i)
+    {
+        if (!self->ftab || i < 0) return (struct Fn *)0;
+        return self->ftab->rows.at(i);
+    }
+
+    /* S8b R5: the three parameter columns. Each answers the zero value the
+       old parallel rows answered for a missing position ("" / 0). */
+    const char *fn_ptype(int fi, int k)
+    {
+        struct Fn *r;
+        struct FnParam *p;
+        r = self->fn_at(fi);
+        if (!r || !r->pset) return "";
+        p = r->pset->rows.at(k);
+        return p ? p->type : "";
+    }
+
+    const char *fn_pdim(int fi, int k)
+    {
+        struct Fn *r;
+        struct FnParam *p;
+        r = self->fn_at(fi);
+        if (!r || !r->pset) return "";
+        p = r->pset->rows.at(k);
+        return p ? p->dim : "";
+    }
+
+    int fn_pann(int fi, int k)
+    {
+        struct Fn *r;
+        struct FnParam *p;
+        r = self->fn_at(fi);
+        if (!r || !r->pset) return 0;
+        p = r->pset->rows.at(k);
+        return p ? (int)(unsigned char)p->ann : 0;
+    }
+
+    /* S8b R5: write one parameter position. The row grows first, so a caller
+       may fill positions in order without a separate reserve. */
+    int fn_set_param(int fi, int k, const char *type, const char *dim, int ann)
+    {
+        struct Fn *r;
+        struct FnParam *p;
+        if (self->ensure_fn_param_capacity(fi, k + 1) != 0) return -1;
+        r = self->fn_at(fi);
+        if (!r || !r->pset) return self->fail("function table out of range");
+        p = r->pset->rows.at(k);
+        if (!p) return self->fail("function table out of range");
+        p->type = type;
+        p->dim = dim;
+        p->ann = (char)ann;
+        return 0;
+    }
+
+    /* S8b R5: the generic-instance row clone. The scalars are copied wholesale
+       (the old `memcpy` of a row); the parameter handle is detached and the
+       rows are deep-copied into `dst`'s own block, so the substitution that
+       follows cannot write into the template's rows. */
+    int fn_copy_row(int dst, int src)
+    {
+        struct Fn *s, *d;
+        struct FnParamSet *keep;
+        if (self->ensure_fn_capacity(dst + 1) != 0) return self->fail("out of memory");
+        s = self->fn_at(src);
+        d = self->fn_at(dst);
+        if (!s || !d) return self->fail("function table out of range");
+        keep = d->pset;
+        if (keep) keep->rows.clear();
+        memcpy(d, s, sizeof(*d));
+        d->pset = keep;
+        d->nparams = 0;
+        return 0;
+    }
+
+    /* S8b R5: a function's parameter rows are one `Vec` behind the row's
+       `pset`. The block is owned by the row and moves as a handle, so a moved
+       function table does not invalidate it and a reused row keeps its
+       capacity. */
     int ensure_fn_param_capacity(int fi, int need)
     {
-        int cap;
-        const char **types, **dims;
-        char *anns;
+        struct Fn *r;
+        struct FnParam p;
         if (fi < 0 || fi >= self->nfunc) return self->fail("function table out of range");
-        if (need <= self->funcs[fi].pcap) return 0;
-        cap = self->funcs[fi].pcap > 0 ? self->funcs[fi].pcap : MAX_PARAMS;
-        while (cap < need && cap < CAP_LIMIT) cap *= 2;
-        if (cap > CAP_LIMIT) cap = CAP_LIMIT;
-        if (need > cap) return self->fail("out of memory");
-        types = (const char **)realloc(self->funcs[fi].ptype,
-                                       (size_t)cap * sizeof(*types));
-        if (!types) return self->fail("out of memory");
-        memset(types + self->funcs[fi].pcap, 0,
-               (size_t)(cap - self->funcs[fi].pcap) * sizeof(*types));
-        self->funcs[fi].ptype = types;
-        dims = (const char **)realloc(self->funcs[fi].pdim,
-                                      (size_t)cap * sizeof(*dims));
-        if (!dims) return self->fail("out of memory");
-        memset(dims + self->funcs[fi].pcap, 0,
-               (size_t)(cap - self->funcs[fi].pcap) * sizeof(*dims));
-        self->funcs[fi].pdim = dims;
-        anns = (char *)realloc(self->funcs[fi].pann, (size_t)cap);
-        if (!anns) return self->fail("out of memory");
-        memset(anns + self->funcs[fi].pcap, 0, (size_t)(cap - self->funcs[fi].pcap));
-        self->funcs[fi].pann = anns;
-        self->funcs[fi].pcap = cap;
+        if (need <= 0) return 0;
+        if (need > CAP_LIMIT) return self->fail("out of memory");
+        r = self->fn_at(fi);
+        if (!r) return self->fail("function table out of range");
+        if (!r->pset) {
+            r->pset = (struct FnParamSet *)calloc(1, sizeof(struct FnParamSet));
+            if (!r->pset) return self->fail("out of memory");
+        }
+        while (r->pset->rows.len() < need) {
+            memset(&p, 0, sizeof(p));
+            if (r->pset->rows.push(p) == 0) return self->fail("out of memory");
+        }
         return 0;
     }
 
@@ -1445,7 +1557,7 @@ impl SymbolOps for Symbols {
         int i;
         (void)self;
         for (i = 0; i < self->nfunc; i++)
-            if (strcmp(self->funcs[i].cname, cname) == 0) return i;
+            if (strcmp(self->fn_at(i)->cname, cname) == 0) return i;
         return -1;
     }
 
@@ -1532,7 +1644,7 @@ impl SymbolOps for Symbols {
         if (i >= 0) return i;
         hits = 0;
         for (i = 0; i < self->nfunc; i++)
-            if (strcmp(self->funcs[i].name, name) == 0) hits++;
+            if (strcmp(self->fn_at(i)->name, name) == 0) hits++;
         if (hits > 1)
             return self->fail("that function is exported by more than one namespace");
         if (hits == 1)
