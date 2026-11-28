@@ -60,9 +60,63 @@
 | 问题 | 裁定 | 说明 |
 | --- | --- | --- |
 | I2-Q1 | **(a) 立项做** | 随 v1.2 交付（`E-V3-9e`），`v1.2.0` 的 tag 推迟到 I1/I2 落地后 |
-| I2-Q2 | **B（显式 opt-in）** | 复用 `get` 槽，但接口值只有声明过 `Indexable` 标记才支持 `o[k]`；标记不占 vtable 槽，避免给所有 `get` 意外加语法 |
+| I2-Q2 | **方法级 `index`（合并，取消 `Indexable`）** | 只保留一个 trait；在其 `get` 签名后写 `index` 表示"该 get 就是 `[]`"。不新增 trait、不占 vtable 槽；`index` 是上下文修饰词，其它位置仍是普通标识符 |
 | I2-Q3 | 待裁 | — |
 | I2-Q4 | 待裁 | — |
+
+### 3.1.1 Q2 定稿样例（2026-11-28）
+
+```ct
+trait Store {
+    Str get(Str k) index;     // 这个 get 就是 []
+    int get(int slot);        // 普通方法，不参与 []
+}
+
+Store s = open_json(path);
+Str n = s["name"];            // ok   → get(Str)
+int  x = s[7];                // 硬错：没有带 index 的 get(int)
+int  y = s.get(7);            // ok   → 普通调用
+```
+
+```ct
+trait Table {
+    Str get(Str k) index;
+    Str get(int row) index;   // 两个键类型都标：按键类型分派（与 D-028 一致）
+}
+Table t = open_table();
+Str a = t["name"];            // → get(Str)
+Str b = t[3];                 // → get(int)
+```
+
+```ct
+struct JsonStore use Store { ... }
+impl Store for JsonStore {
+    Str get(Str k) { ... }    // 实现侧不重复写 index；标记属于 trait 声明
+}
+```
+
+```ct
+trait Env { Str get(Str k); }     // 未标 index
+Env e = ...;
+Str p = e["PATH"];                // error: trait 'Env' 的 get(Str) 未标 'index'
+Str q = e.get("PATH");            // ok
+```
+
+```ct
+struct Config { Str name; int port; }
+Config c = load();
+Str n = c["name"];                // I1：字面量 + struct → 折叠成 c.name（无需标记）
+
+Store s = open_json();
+Str m = s["name"];                // I2：接口值 → vtable 的 get(Str)
+```
+
+**必须先钉住的边界（D-028 的"只认固有 impl"）**：`impl Store for JsonStore` 是 trait impl，
+因此具体类型 `JsonStore j; j["x"]` 今天不成立（它只认固有 `impl JsonStore { get }`）。
+ADR（`D-034`）必须在两个口径里选一个：
+
+- (i) 保持分裂：具体类型只认固有 impl，接口值只认 trait 的 `index`；
+- (ii) 统一：具体类型先找固有 `get`，没有再找 trait 里标 `index` 的 `get`（扩展 D-028，需负例）。
 
 ## 4 来稿 §13 八问的 Ct 侧答复
 
