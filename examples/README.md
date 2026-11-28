@@ -109,12 +109,12 @@ std 侧 API 尚未落地，不进编译与运行门禁）。分为六组：**imp
 | `33_vec_brace_init` | `Vec` 花括号初值（Phase 31）：拥有型元素、空 `{}` 的非空 header、与 `from` 等价 | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 | `34_map_literal` | `Map` 字面量（Phase 31）：插入序、重复键原位覆盖、编译期重复键报 `duplicate key` | ct-ast | `test/run.sh` + `check-ast.sh` + `check-warnings.sh` |
 
-## 新句柄层与新特性（ref/out、切片、Box/new、ADT/match、模式扩展、泛型 ADT）
+## 新句柄层与新特性（ref/out、切片、Box/new、ADT/match、模式扩展、泛型 ADT、U16、常量键折叠、接口值下标）
 
-四个最小句柄样例覆盖 PH-78 / PH-79 / PH-81 / PH-84；`67`–`69` 覆盖 v1-PH-2 的
-S4 模式扩展、S5 or/守卫与 S6 泛型 ADT；每个只有一份 `prog.ct`，不依赖 shim。
-文件首行的 `//@ct-requires: ct-ast` 让 `test/run.sh` 走 ct-ast 路径，`check-ast.sh`
-的语料层也会编译、运行并与 `prog.expected.out` 逐字节比对。
+四个最小句柄样例覆盖 PH-78 / PH-79 / PH-81 / PH-84；`67`–`72` 覆盖 v1-PH-2 的
+S4 模式扩展、S5 or/守卫、S6 泛型 ADT、U16 字符串、常量键折叠与接口值下标；每个只有一份
+`prog.ct`，不依赖 shim。文件首行的 `//@ct-requires: ct-ast` 让 `test/run.sh` 走 ct-ast 路径，
+`check-ast.sh` 的语料层也会编译、运行并与 `prog.expected.out` 逐字节比对。
 
 | 目录 | 演示什么 | 前置条件 | 本地门禁归属 |
 | --- | --- | --- | --- |
@@ -129,6 +129,9 @@ S4 模式扩展、S5 or/守卫与 S6 泛型 ADT；每个只有一份 `prog.ct`�
 | `67_adt_patterns` | S4 模式：整数/字符字面量、枚举负载里的嵌套模式（`Shape.At(Point { x: 0, y })`）、结构体模式的显式子模式 / 简写绑定 / `..` | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
 | `68_adt_guards` | S5 模式：or 模式（`Circle(r) \| Square(r)`、`0 \| 1`）与守卫（`pattern if expr`）；守卫不计穷尽 | ct-ast | 同上 |
 | `69_generic_adt` | S6 泛型 ADT：`enum Opt<T>` / `enum Res<T,E>` 的实例化、显式与推断构造、`match` 模式、嵌套实例 `Opt<Opt<int>>` | ct-ast | 同上 |
+| `70_const_key_fold` | 常量键折叠（D-031）：`p["x"]` 与 `p["y"]` 在编译期折叠为字段访问，生成 C 无 `get` 调用/临时量；未知字段与同名 `get` 并存有硬错 | ct-ast | `check-ast.sh`（compile + 运行）+ `check-warnings.sh` |
+| `71_iface_subscript` | 接口值下标（I2 / D-034）：trait 方法 `get`/`set` 带 `index` 修饰后，接口值 `s[k]` / `s[k] = v` 复用既有 get/set 槽，零新增 vtable 槽；int 键、零指针 | ct-ast | 同上 |
+| `72_u16_strings` | `String` / `Str` ↔ `U16String` / `U16Str`：`from_utf8`、`as_str`、`len` 与 release 的所有权边界 | ct-ast | 同上 |
 
 ## 近相能力（TEST-23）
 

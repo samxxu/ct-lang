@@ -1,0 +1,14 @@
+//@ct-requires: ct-ast
+
+int main(void)
+{
+    String s = "hi";
+    Str v = s.as_str();
+    U16String u = U16String.from_utf8(v);
+    U16Str w = u.as_str();
+
+    printf("%d %d %d %d\n", s.len, v.len, u.len, w.len);
+    u.release();
+    s.release();
+    return 0;
+}
