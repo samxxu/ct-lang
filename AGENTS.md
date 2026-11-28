@@ -30,7 +30,7 @@
 - 本项目只能加严；放宽必须写 `deviation:` 并由用户签字（日期 + 理由）。
 - 生成块由 `bin/sync-agents.sh --write AGENTS.md` 维护，不得手改块内任何字符。
 
-<!-- spec:begin version=1.18.0 sha256=ff7fc569594831a8510d069d38afb4d3943ff630e9514aea2bb7a0a8c13dc75c -->
+<!-- spec:begin version=1.18.0 sha256=27a6456db1b1809d657c4478ed5680edddb7b9d1f5f906fdf0d9c5090ca9300e -->
 <!-- 由 sync-agents.sh 生成，禁止手改（11.5）。主规范：/Users/samxx/trae-ws/.ai-engineering/methodology/ai-coding-workflow.md -->
 <!-- 全文副本：docs/spec/ai-coding-workflow.md；该文件的 sha256 必须等于上面的 sha256。 -->
 <!-- 块内是“每轮必做判据”的摘录 + 章节索引，不是规范全文；未写入的规则仍在主规范，冲突以主规范为准。 -->
@@ -582,9 +582,13 @@ AI_ENGINEERING_SPEC=<主规范路径> ...                          # 覆盖默�
 | --- | --- | --- |
 | 需求 / 提案 / phase 卡 | REQ | EDITOR |
 | 评审报告 / 状态词 | REVIEW | EDITOR |
-| ADR / battle 判决 | EDITOR | REQ 或 REVIEW（不得自签） |
+| ADR（技术设计） | ARCH | EDITOR |
+| battle 判决 | EDITOR | REQ 或 REVIEW（不得自签） |
 | 实现 / 测试夹具 | DEV | VERIFY（红证）+ EDITOR（范围与证据齐全） |
 | 发布 | DEV / EDITOR | EDITOR + 用户 |
+
+- ADR 的技术设计与选型归 ARCH（[§3.4](docs/spec/ai-coding-workflow.md#34-架构arch)），签收归主编
+  EDITOR；ARCH 不得缺位，也不由 REQ/DEV 代笔 ADR。
 
 - 签收 = 范围、判据、证据齐全且无未决异议；**签收不等于同意**。
 - 有异议不得拒签了事：转 `battle` 或 `CR-*`；仍不一致由用户裁决。
