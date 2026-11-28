@@ -1,0 +1,24 @@
+// 70_const_key_fold - LANG-31 / D-031: a string-literal key that names a
+// struct field is folded to the same field access as `p.x` at compile time.
+//
+// Normal path: `p["x"]` and `p["y"]` become `p.x` / `p.y`; the generated C
+// carries no `get` call and no temporary. A key that names no field falls
+// back to the type's `get(char *)`, and a type that has both the field and
+// `get` is a compile-time ambiguity instead of a silent choice.
+//
+// License: MIT; see LICENSE.EXCEPTION
+//@ct-requires: ct-ast
+
+struct Point {
+    int x;
+    int y;
+}
+
+int main(void)
+{
+    Point p;
+    p.x = 7;
+    p.y = 9;
+    printf("%d %d\n", p["x"], p["y"]);
+    return 0;
+}

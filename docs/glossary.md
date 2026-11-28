@@ -270,6 +270,7 @@
 | 借用视图 ↔ 拥有句柄 | 借用（`get` / `entry` / `foreach item`）指向容器存储，不能 `release`，容器变更后失效；拥有句柄来自 `retain` / `pop` / `from` / 花括号初值 |
 | 容器句柄 ↔ `ct_buf` 头 | 句柄只有一个 `h` 指针（H-A）；`refs` / `len` / `cap` / `data` 都在共享头里，扩容不会让兄弟句柄悬空 |
 | 下标 ↔ 写入 | `v[i]` / `m[k]` 是只读糖（等价 `get`）；赋值、复合赋值、自增、取址都是硬错，写用 `set` / `put` |
+| 常量键折叠 ↔ `get` 回退 | 字面量键 + 非指针用户 struct 的读形态 `p["x"]` 在编译期折叠为字段访问 `p.x`；键不命中字段才回退 `get`，字段与 `get` 并存即歧义（[D-031](decisions/D-031.md)、[language-spec](language-spec.md) §4.79） |
 
 ### 10. 协作与流程术语
 
