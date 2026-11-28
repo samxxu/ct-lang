@@ -270,12 +270,11 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 **DEV 执行顺序（2026-11-28 排定，无外部阻塞）**
 
 1. D-032 线：M1 ✅（`feb6caa5`）→ M2 ✅（`981f2ee9`）→ M3 ✅（`653dec09`，lib/core 8 → 0、
-   seed 5 → 3）；**D032-C1 三片已全部落地**，余 REV 只读复核与 EDITOR 落状态；
+   seed 5 → 3）；**D032-C1 三片已全部落地**；REV 复核已出（评估 §1），D-032 签收包已更新为已签；
 2. S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13）：**均已完成**（R3 `e23338db` … R8 `bd252782`、
    §3.8 `9eb519c4`），DEV 侧无剩余动作；余 REVIEW 对 E-V3-9b 签字；
-3. I1（Q-12）：**DEV 实施已完成**（T1–T5），REQ 验收通过（见 issue §7）；**DEV 侧无剩余动作**
-   （ARCH 附条件 C1–C4 的补探针另列，不阻塞 EDITOR 签收）。
-   余 **EDITOR 签收 `D-031` 与 issue `verified`**（ARCH 技术审定已完成，见 D-031 §8）；
+3. I1（Q-12）：**已完成**——DEV 实施 T1–T5、REQ 验收、ARCH 技术审定、**EDITOR 签收 `D-031`
+   与 issue `verified`（均 2026-11-28）**；DEV 侧无剩余动作（附条件 C1–C4 的补探针另行补测）；
 4. I2（Q-8）：`D-034` 已 **accepted**（ARCH 起草 2026-11-28、EDITOR 签收 2026-11-28），
    **I2-1 可立即开工**，DEV 按 I2-1 → I2-2（只读，`E-V3-9e`）→ I2-3 → I2-4（写入，`E-V3-9f`）
    → I2-5 实施，每片独立提交（见 [I2-C1 §9](../../design/i2-interface-subscript-construction.md)）。
