@@ -1,0 +1,21 @@
+/* LANG-31 / D-031 C4: a `get` whose parameter type is not `char *` does not
+   match the literal key, so it is not an ambiguity: the field folds. */
+
+struct Pair {
+    int x;
+}
+
+impl Pair {
+    int get(int k)
+    {
+        return k;
+    }
+}
+
+int main(void)
+{
+    Pair p;
+    p.x = 4;
+    printf("%d\n", p["x"]);
+    return 0;
+}

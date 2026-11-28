@@ -1,0 +1,15 @@
+/* LANG-31 / D-031 C3: a forward declaration followed by the definition is
+   enough; at the use point the field rows exist and the key folds. */
+
+struct P;
+
+struct P { int x; int y; }
+
+int main(void)
+{
+    P p;
+    p.x = 12;
+    p.y = 30;
+    printf("%d %d\n", p["x"], p["y"]);
+    return 0;
+}

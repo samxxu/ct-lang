@@ -1,0 +1,20 @@
+/* LANG-31 / D-031 C1: a call result is a temporary, not a place, so a
+   constant key on it does not fold; the existing L52-1 wording is kept
+   (never the field-level D031-2). */
+struct Point {
+    int x;
+    int y;
+}
+
+Point make(void)
+{
+    Point p;
+    p.x = 3;
+    p.y = 5;
+    return p;
+}
+
+int main(void)
+{
+    return make()["x"];
+}

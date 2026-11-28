@@ -1,0 +1,14 @@
+/* LANG-31 / D-031 C3: a forward-declared struct has no field rows yet, so a
+   constant key neither folds nor reports "no field"; the existing L52-1
+   wording is kept. */
+struct P;
+
+int peek(struct P *p)
+{
+    return (*p)["x"];
+}
+
+struct P {
+    int x;
+    int y;
+}

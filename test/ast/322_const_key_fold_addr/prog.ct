@@ -1,0 +1,16 @@
+/* LANG-31 / D-031 C2: `&p["x"]` is a read position. The fold happens before
+   the L52-7 address rejection, so the product is the field address `&p.x`
+   with no `get` call and no temporary. */
+
+struct Point { int x; int y; }
+
+int main(void)
+{
+    Point p;
+    p.x = 41;
+    p.y = 7;
+    int *q = &p["x"];
+    *q = 42;
+    printf("%d %d\n", p.x, *q);
+    return 0;
+}
