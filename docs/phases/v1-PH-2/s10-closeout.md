@@ -163,7 +163,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-6 | S8B-REM-1 R3/R4（取值 API、lock 字段）与 R5–R7（三大表）、R8（判别式） | 待开 | DEV | **无**（R1/R2 审计已由 REQ 复核；c/d 类由 DEV 自判，REQ 事后验收） | 同上 §3、[审计表](../../design/s8b-rem-audit.tsv) |
 | Q-7 | S8「拼写表迁 `LModulePlan`」 | **立项（`planned`，未开工）** | ARCH 出 ADR（拟 `D-033`）→ DEV | 实施排在 S8B-REM-1 R8 之后；排期口径见下注 | [REQ-SPELL-1](../../planning/requirements-pool.md)、差异清单 §3d |
 | Q-8 | I2 接口值下标（两阶段） | **四问已裁定；待 ADR `D-034`** | ARCH 起草 `D-034` → DEV | 施工卡 [I2-C1](../../design/i2-interface-subscript-construction.md) 已交 | [REQ-I2-1](../../planning/requirements-pool.md)、[RFC 评估 §3.1](../../reviews/2026-11-27-indexable-rfc-evaluation.md) |
-| Q-9 | dist 产物冒烟 | **立项（`planned`）** | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
+| Q-9 | dist 产物冒烟 | **已完成**（`0911029a`：CI 解包产物，用包内 `ct` 跑 `-v` + 50/52 样例） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
 | Q-12 | LANG-31（常量键折叠，I1） | **待开（2026-11-28 撤回 deferred）** | DEV | ADR `D-031` + spec §4.79（施工卡已有） | [LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
@@ -190,6 +190,12 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > 本地尝试记录：macOS + Podman（libkrun，linux/amd64）在 `machine start` 后端口短暂可连、
 > 随后 gvproxy 转发消失（`127.0.0.1:53316` connection refused，krunkit 进程仍在），
 > **本机冒烟受阻于环境，不作为结论**；以 CI 步骤为准。
+>
+> **实施记录（2026-11-28，`0911029a`）**：`ci.yml` 新增 "distribution artefact smoke (Q-9)"
+> 一步——`make-dist.sh --out /tmp/ct-dist` 出包、`tar -xzf` 解包、先跑包内 `ct -v`，
+> 再用**包内 `ct`** 构建并运行 `examples/50_ref_out`（期望 `2 3 4`）与
+> `examples/52_box_new`（期望 `4 4`）；期望不符即硬失败，不设跳过分支。本地 macOS
+> 无法运行 linux/amd64 二进制，未复跑；以 CI 首次运行结果为准，若红先回退该步、不改判据。
 
 **DEV 执行顺序（2026-11-28 排定，无外部阻塞）**
 
