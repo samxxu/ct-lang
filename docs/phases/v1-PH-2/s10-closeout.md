@@ -251,3 +251,38 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 5. Q-7（拼写表）：**不进 1.2**，`D-033` 由 ARCH 起草、EDITOR 签收（与 `D-034` 同批更省往返）；
    实施排在 S8B R8 之后、`v1.2.0` tag 后的技术债批，见本节 Q-7 注；
 6. REQ 的 spec / c-shim-contract 同步（M3 后）与 REV 的复核都**不进 DEV 前置**。
+
+## 13 `v1.2.0` 发版就绪清单（REQ，2026-11-28）
+
+> 用途：tag 前的单一勾选表；只记录状态与证据，**不改判据**（判据仍以卡 §3/§8 为准）。
+> 状态词：`✅` 已就绪 / `🟡` 待办（不阻塞 tag） / `⛔` 阻塞 tag。
+
+| # | 项 | 状态 | 负责 | 证据 / 命令 |
+| --- | --- | --- | --- | --- |
+| A1 | I1 `LANG-31` 实现 T1–T5 | ✅ | DEV | `93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`；REQ 验收见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) |
+| A2 | `D-031` ARCH 技术审定 + EDITOR 签收 | ⛔ | ARCH / EDITOR | 前置 B1、B2；见 Q-12 注 |
+| A3 | `LANG-31` issue 转 `verified` | 🟡 | EDITOR | 验收证据已齐（issue §7）；状态词由 EDITOR 落 |
+| A4 | `D-034` 起草 + 签收 | ⛔ | ARCH / EDITOR | I2 硬前置；见 [I2-C1 §2](../../design/i2-interface-subscript-construction.md#2-前置开工前必须) |
+| A5 | I2 阶段一（只读，`E-V3-9e`） | ⛔ | DEV | I2-1 → I2-3；验收清单见 [I2-C1 §10](../../design/i2-interface-subscript-construction.md#10-验收清单e-v3-9e--e-v3-9f) |
+| A6 | I2 阶段二（写入，`E-V3-9f`） | ⛔ | DEV | I2-4；同属 1.2 |
+| A7 | I2 文档（spec 新节 / 矩阵 / stable-subset） | ⛔ | REQ | I2-5；随 A5/A6 同步 |
+| B1 | T-8 门禁允许 EDITOR 签 ADR | ⛔ | DEV | `test/docs/check-docs.py` 的 `check_signoffs` ADR 分支 |
+| B2 | `AGENTS.md` §0.7 + 规范矩阵 + `docs/spec` sha pin | ⛔ | EDITOR | 三处同批；`bash tools/check.sh g0` |
+| B3 | D-032 REV 只读复核 + EDITOR 落状态 | 🟡 | REV / EDITOR | M1–M3 已落地、REQ 验收全绿（shim 74 → 3） |
+| B4 | S8B R3–R8（Q-6）与 `dogfooding §3.8`（Q-13） | 🟡 | DEV | E-V3-9b 已按「部分」签收；若要求全绿则升 ⛔，需所有者裁定 |
+| B5 | 门禁全绿：8 门 / seed 两轮 / goldens 25/25 / warnings 0 / `test/ir` 15 / `check-docs` | ✅（I1 后） | DEV / REQ | I2 落地后必须重跑一遍再 tag |
+| B6 | CI 首绿（含 Q-9 dist 冒烟） | 🟡 | DEV | `0911029a` 已入库；以首次 CI 结果为准 |
+| C1 | `CTC_VERSION 1.2.0` | ✅ | — | `selfhost/ct-ast/main.ct` |
+| C2 | `roadmap` 的 `v1-PH-2` 行转 ✅ | ⛔ | REQ | tag 前；现为 🟨 |
+| C3 | I1 文档：spec §4.79 / 矩阵第 26 行 / stable-subset 冻结行 | ✅ | REQ | `367ba1a8` |
+| C4 | I2 文档：spec 新节 / 矩阵行 / stable-subset 行 | ⛔ | REQ | 随 A7 |
+| C5 | 流水账 `v1.2.0` 行与收口记录补 I1/I2 | ⛔ | EDITOR / REQ | `docs/history/phase-log.md` |
+| C6 | `examples/README` 补 `70_const_key_fold` 索引行 | 🟡 | REV | `examples/` 不在 REQ 写权限内 |
+| D1 | 从**最终源码**重出 dist 并更新 sha | ⛔ | DEV | 旧值 `98130730…`（卡 §7.3）已被 I1 改动；本机方案 B 实测为 `c59acea5…`，tag 前须以最终提交重出 |
+| D2 | 分支推送（本地领先 `origin/main` 若干提交） | ⛔ | 所有者 / DEV | 卡 §7.5 第 ④ 项要求收口提交在远端 |
+| D3 | annotated tag `v1.2.0` + 五项校验 | ⛔ | 所有者 | 卡 §7.5 |
+| D4 | GitHub Release 与资产（可选） | 🟡 | 所有者 | 卡 §7.5；资产 sha 与 D1 一致 |
+
+**当前缺口结论（2026-11-28）**：硬阻塞集中在 **A2、A4–A7、B1、B2、C2、C4、C5、D1–D3**。
+其中 A2/B1/B2 是同一根因（ADR 签收口径切换未落地）；A4–A7 是 I2 本体；D1–D3 是发版动作。
+I1 侧 DEV 已无剩余动作；Q-7（`D-033`）按裁定在 1.2 之后，不进本清单。

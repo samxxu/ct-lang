@@ -142,3 +142,49 @@ REQ 的 spec 同步与 REV 复核都不进 DEV 提交前置。
 **裁定（所有者 2026-11-28）**：**ARCH 不得缺位**——技术设计规划由 ARCH 完成，ADR 由 **EDITOR**
 审核签收，签收后由 **REQ** 安排具体任务与排期。此前"ARCH 不在场时由 REQ/DEV 代笔 ADR"的
 临时口径作废。
+
+## 10 验收清单（`E-V3-9e` / `E-V3-9f`）
+
+> REQ 只读验收用；夹具名以 DEV 落地为准（下表给建议名，放在 `test/ast/i2_*`）。
+> 每条都要有「命令 + 末行输出」证据，写入 `E-V3-9e` / `E-V3-9f` 的验收行。
+
+### 10.1 阶段一（只读，`E-V3-9e`）
+
+| # | 用例 | 期望 | 建议落点 |
+| --- | --- | --- | --- |
+| A1 | `trait Store { Str get(Str k) index; }`，接口值 `s["name"]` | 调 vtable 的 `get(Str)`；与 `s.get("name")` 生成 C 逐字节一致 | `test/ast/i2_index_read/` |
+| A2 | 同一 trait 两个键类型都标 `index`（`get(Str)` / `get(int)`） | `s["k"]` 与 `s[7]` 分别命中，C 符号各不相同 | `i2_index_read_keys/` |
+| A3 | trait 在 `.h.ct`、impl 在他单元、调用在第三单元 | `ct build` 全量重编、vtable 一致、运行输出正确 | `test/modules/i2_cross_unit/` |
+| A4 | struct 的 D-028 / I1 路径 | `p52_*`、`320_*`、`321_*` 生成 C 逐字节不变 | 既有夹具 |
+| A5 | 未标 `index` 的 trait 用 `o[k]` | 硬错 `trait 'T' declares no indexed get; 'o[k]' is not available` | `test/ast/errors/i2_no_index.ct` |
+| A6 | `o[0]` 但只有 `get(Str) index` | 硬错并列出可用键类型 | `errors/i2_key_mismatch.ct` |
+| A7 | `impl` 侧写 `index` | 硬错，提示标记只属 trait 声明 | `errors/i2_impl_index.ct` |
+| A8 | 阶段一对 `o[k] = v` | 只读诊断（写入属阶段二），不写产物 | `errors/i2_write_phase1.ct` |
+| A9 | 对非接口值误用 I2 路径 | 走 D-028 的既有诊断，不声称接口规则 | `errors/i2_non_iface.ct` |
+
+### 10.2 阶段二（写入，`E-V3-9f`）
+
+| # | 用例 | 期望 |
+| --- | --- | --- |
+| B1 | `void set(K,V) index;` + `o[k] = v` | 调 vtable 的 `set`；与 `o.set(k, v)` 生成 C 逐字节一致 |
+| B2 | 只读实现（无 `set`）被写入 | ADR 定形态（空实现 / 运行期报错 / 拒绝标注），按 `D-034` 判定 |
+| B3 | 键类型与 `set` 不匹配 | 硬错并列出可用键类型 |
+| B4 | 写入值的所有权/生命周期越过对象 | 借用检查或 ASAN 拒绝 |
+| B5 | 阶段二不改变阶段一 | A1–A3 的生成 C 逐字节不变 |
+
+### 10.3 执行命令（REQ）
+
+```sh
+cc -Wall -Wextra -std=c99 -I bootstrap/ct-ast bootstrap/ct-ast/*.c -o /tmp/ct-i2
+sh test/ast/i2_index.sh /tmp/ct-i2                       # 阶段一探针（DEV 提供）
+sh test/ast/i2_index_write.sh /tmp/ct-i2                 # 阶段二探针（DEV 提供）
+CT_C_BOUNDARY=allow bash selfhost/check-goldens-ast.sh /tmp/ct-i2   # 25/25
+bash selfhost/check-ast.sh /tmp/ct-i2                    # 0 失败（至少 p52_*/320/321 + 新夹具）
+bash selfhost/check-seed.sh                              # 两轮逐字节
+bash selfhost/check-warnings.sh                          # 0
+sh test/ir/run.sh /tmp/ct-i2                             # 15 checks
+python3 test/docs/check-docs.py                          # OK
+```
+
+**门槛**：`E-V3-9e` 只要求 10.1 全绿；`E-V3-9f` 要求 10.1 + 10.2 全绿且 A4/B5 的逐字节不变成立。
+任一负例出现「多诊断 / 写产物 / 退出 0」即验收失败，退回 DEV，不改判据。
