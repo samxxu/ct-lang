@@ -172,7 +172,7 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 | Q-9 | dist 产物冒烟 | **已完成**（`0911029a`；本地方案 B 复跑通过，见下注） | DEV（CI/构建） | 无 | 卡 §7.3；口径见本节末注 |
 | Q-10 | `v1.2.0` annotated tag + release | 待开（仅所有者） | 所有者 | 收口提交已推送；§7.5 五项校验 | 卡 §7.5 |
 | Q-11 | TEST-27 / DESIGN-1 状态 | 待复核 | **REV 出评审结论 → EDITOR 签状态**（T-8：状态词由 REVIEW 写、EDITOR 签） | 证据包 | 本文 §1 |
-| Q-12 | LANG-31（常量键折叠，I1） | **ADR 初稿已入库（`b6fe515d`）；签收归 EDITOR（方案 a）；等 T-8 扩 gate** | DEV 初稿 → ARCH 技术审定 → **EDITOR 签收** → REQ 排期 → DEV | spec §4.79（施工卡已有） | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
+| Q-12 | LANG-31（常量键折叠，I1） | **实现已落地，REQ 验收通过（证据见 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28)）；ADR 追签 + `verified` 待 ARCH/EDITOR** | DEV 初稿 → ARCH 技术审定 → **EDITOR 签收** → REQ 排期 → DEV（已完成 T1–T5） | spec §4.79（已落）；前置 T-8 扩 gate 见下注 | [D-031](../../decisions/D-031.md)、[LANG-31](../../../issues/lang/lang-31-const-key-fold.md)、[REQ-INDEXFOLD-1](../../planning/requirements-pool.md) |
 | Q-13 | 补 S8b R1/R2 的收官报告节（`dogfooding` §3.8：LOC/`snprintf` 前后、审计表引用） | 待开 | DEV | **无** | [S8B 施工卡](../../design/s8b-remaining-construction.md) §4 第 6 条 |
 
 > **Q-7 排期口径（2026-11-28）**：本条是架构债、无用户可见收益，**不进 1.2 窗口**
@@ -224,6 +224,13 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 > 两项落地前 `D-031` 头部保留 `签收：REVIEW（待签）` 并注明终签归 EDITOR，避免门禁红。
 > 同一口径适用于 `D-033`（Q-7）与 `D-034`（Q-8）。
 >
+> **Q-12 REQ 验收（2026-11-28）**：`LANG-31` 的实现 T1–T5 已在 DEV 侧落地
+> （`93b1bc2c`/`0c10bd2d`/`27becd9a`/`1ede1dce`，探针重钉 `9e4e87e4`），REQ 只读验收通过：
+> 8 条探针（折叠 / 链式 / get 回退 / 三条负例 / 写形态 / Box 内部）+ `examples/70` 输出 `7 9`
+> 且生成 C 无 `get`/临时；goldens 25/25、seed 两轮、`check-warnings` 622/0、`test/ir` 15 checks。
+> **遗留**：① `D-031` 追签（ARCH 技术审定 → EDITOR 签收，方案 a 前置未变）；② issue 的
+> `verified` 由 EDITOR 落；③ 实现先于 ADR 签收，已在 [issue §7](../../../issues/lang/lang-31-const-key-fold.md#7-验收记录req2026-11-28) 如实登记。
+>
 > **实施记录（2026-11-28，`0911029a`）**：`ci.yml` 新增 "distribution artefact smoke (Q-9)"
 > 一步——`make-dist.sh --out /tmp/ct-dist` 出包、`tar -xzf` 解包、先跑包内 `ct -v`，
 > 再用**包内 `ct`** 构建并运行 `examples/50_ref_out`（期望 `2 3 4`）与
@@ -235,8 +242,8 @@ S10 提交里的收口记录（卡 §7 或流水账）必须回答，缺一不�
 1. D-032 线：M1 ✅（`feb6caa5`）→ M2 ✅（`981f2ee9`）→ M3 ✅（`653dec09`，lib/core 8 → 0、
    seed 5 → 3）；**D032-C1 三片已全部落地**，余 REV 只读复核与 EDITOR 落状态；
 2. 可并行：S8B R3–R8（Q-6）、dogfooding §3.8（Q-13），与 D-032 线文件集不重叠；
-3. I1（Q-12）：`D-031` 初稿已入库（`b6fe515d`，DEV 初稿）→ ARCH 技术审定 → **EDITOR 签收**
-   （前置：DEV 扩 T-8 gate + EDITOR 对齐 AGENTS §0.7，见 Q-12 注）→ REQ 排期 → DEV 按 `T1–T5` 开工；
+3. I1（Q-12）：**DEV 实施已完成**（T1–T5），REQ 验收通过（见 issue §7）；**DEV 侧无剩余动作**。
+   余 **ARCH 技术审定 → EDITOR 签收 `D-031` 与 issue `verified`**（方案 a 前置见 Q-12 注）；
 4. I2（Q-8）：`D-034` 由 **ARCH 起草**、**EDITOR 签收**（前置同上），签收后由 REQ 排期；DEV 随后按
    I2-1 → I2-2（只读，`E-V3-9e`）→ I2-3 → I2-4（写入，`E-V3-9f`）→ I2-5 实施，每片独立提交
    （见 [I2-C1 §9](../../design/i2-interface-subscript-construction.md)）。`D-034` 未签期间

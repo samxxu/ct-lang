@@ -8,7 +8,8 @@
 | 锚点 | `4b57567d`（2026-11-27） |
 | 依据 | [RFC-0000 评估](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md) §3、[lang31-const-key-fold-construction](../../docs/design/lang31-const-key-fold-construction.md)、[D-028](../../docs/decisions/D-028.md) |
 | 状态 | open |
-| 负责人 | DEV（实施）；REVIEW（ADR 签收）；REQ（验收） |
+| 验收 | REQ 2026-11-28 通过（证据见 §7）；待 EDITOR 签 `verified` |
+| 负责人 | ARCH（ADR 技术审定）；EDITOR（ADR 签收与状态）；DEV（实施）；REVIEW（复核）；REQ（排期与验收） |
 | 交付窗口 | **v1.2 必做（所有者 2026-11-28 撤回 deferred）**：与 I2 一起随 1.2 交付；1.2.0 已提交但未打 tag，tag 推迟到本项与 I2 落地后 |
 | 处置证据 | 施工卡已交 DEV（2026-11-27）：[lang31-const-key-fold-construction](../../docs/design/lang31-const-key-fold-construction.md)；前置 ADR 与 spec 新节。**2026-11-28 转回 `open`**：所有者裁定不再后推，随 [卡 §8 CR-V3-2](../../docs/phases/v1-PH-2/card.md#8-判据变更记录) 纳入 1.2；与 I2 共用 D-028 的下标解析表，但独立交付。 |
 
@@ -57,3 +58,28 @@
 - [RFC-0000 评估](../../docs/reviews/2026-11-27-indexable-rfc-evaluation.md)
 - [REQ-INDEXFOLD-1](../../docs/planning/requirements-pool.md)
 - [spec §4.64](../../docs/language-spec.md)（既有下标协议）
+
+## 7 验收记录（REQ，2026-11-28）
+
+实现提交：T1 `93b1bc2c`、T2 `0c10bd2d`、T4 `27becd9a`（spec §4.79 + glossary +
+`examples/70_const_key_fold`）、T5 `1ede1dce`（seed 重生成）、探针重钉 `9e4e87e4`。
+验收环境：从当前 `bootstrap/ct-ast` 重建 ct-ast（`ct-ast v1.2.0`）。
+
+| 判据 | 结果 |
+| --- | --- |
+| E31-1 `p["x"]`/`p["y"]` 折叠为 `p.x`/`p.y`，LIR 与 `--ir=off` 逐字节一致，生成 C 无 `get(`、无 `__ct_*` | 通过 |
+| E31-2 字段链 `h.p.x`、数组元素 `ps[0].x`、泛型实例 `g.v` 均折叠 | 通过 |
+| E31-3 未命中字段的字面量键仍走 `X_get(&x, "a")`（`p52_read` 生成的 C 不变） | 通过 |
+| E31-4 三条负例：未知字段 / 重命名字段 / 字段与 `get` 并存歧义，位置指向 `[`，仅 1 条诊断、不写产物 | 通过（`12:13`、`12:13`、`19:13`） |
+| E31-5 常量键写形态不折叠，报只读下标诊断 | 通过（`11:6`） |
+| E31-6 `Box<struct Point>` 内部字段不可达 | 通过（`8:14`） |
+| `examples/70_const_key_fold` 运行输出 `7 9`，生成 C 无 `get`/临时量 | 通过 |
+| `CT_C_BOUNDARY=allow check-goldens-ast` 25/25 | 通过 |
+| `check-seed` 两轮逐字节（73 .c + 75 .h） | 通过 |
+| `check-warnings` 622 ok / 0 failed | 通过 |
+| `test/ir/run.sh` 15 checks、83 语料逐字节 | 通过 |
+
+> 过程说明：实现先于 `D-031` 签收落地（DEV 2026-11-28，早于"签收前不改实现"的口径）；
+> ADR 追签路径为 **ARCH 技术审定 → EDITOR 签收**（方案 a，前置见
+> [s10 Q-12 注](../../docs/phases/v1-PH-2/s10-closeout.md#12-收口后队列2026-11-28)）。
+> 本记录不经手 issue 状态词；`verified` 由 EDITOR 落。
