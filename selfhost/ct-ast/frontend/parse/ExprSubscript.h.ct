@@ -25,6 +25,7 @@ import frontend::sym::Symbols::Closure as Closure;
 import frontend::sym::Symbols::StructTmpl as StructTmpl;
 import frontend::sym::Symbols::StructInst as StructInst;
 import frontend::sym::Symbols::StructImpl as StructImpl;
+import frontend::sym::Symbols::MethodSig as MethodSig;
 import frontend::type::TypeCheck;
 import runtime::arena::Arena;
 import runtime::arena::Arena::NodeKind as NodeKind;
@@ -638,6 +639,131 @@ impl ExprSubscript for Expr {
         }
         return ci_emit_failure(self, code, bty, name, want, writable,
                                idx_node, line, col);
+    }
+
+    /* D-034 (I2) / v1-PH-2: the interface-value subscript. The receiver's
+       static type is `struct T_iface` and the protocol is the trait's own
+       declaration: only a method the declaration marked `index` participates,
+       matched by name + arity + the key's `type_key` (D-028 §1.1, no implicit
+       conversion). The four frozen D034 diagnostics own every miss; the
+       existing L52-4 / L52-9 wording is reused for arity and inference so the
+       two protocols stay one family. On success the chosen slot's suffix
+       (`$<key>` when the trait declares that name twice) is stored on the call
+       node; the node itself is the explicit `o.get(k)` shape, so the emitter
+       needs no interface branch of its own. */
+    int iface_index_method(const char *trname, const char *name, int want,
+                           int idx_node, int line, int col, int writable,
+                           int call_node)
+    {
+        int ti, j, nidx = 0, nfit = 0, match = -1, nmatch = 0, zero = 0;
+        const char *actual, *ak, *msg, *label;
+        char *buf = 0;
+        int cap = 0, ncand = 0;
+
+        ti = self->sym->find_trait(trname);
+        label = trname ? trname : "";
+        /* D034-1 / D034-8: nothing marked `index` for this operation. */
+        if (ti >= 0)
+            for (j = 0; j < self->sym->traits[ti].nm; j++) {
+                struct MethodSig *m =
+                    &self->sym->traits[ti].m[j];
+                if (!m->is_index || !m->name || strcmp(m->name, name) != 0)
+                    continue;
+                nidx++;
+                if (m->nparams == want) nfit++;
+            }
+        if (nidx == 0) {
+            if (writable)
+                msg = tool::sh::ct_scratch_fmt(
+                    "trait '%s' declares no indexed set; 'o[k] = v' is not available",
+                    label);
+            else
+                msg = tool::sh::ct_scratch_fmt(
+                    "trait '%s' declares no indexed get; 'o[k]' is not available",
+                    label);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        /* The existing L52-4 arity wording, with the interface as its type. */
+        if (nfit == 0) {
+            if (writable)
+                msg = tool::sh::ct_scratch_fmt(
+                    "type '%s' has no writable subscript: 'set' must take 2 parameters",
+                    label);
+            else
+                msg = tool::sh::ct_scratch_fmt(
+                    "type '%s' has no subscript: 'get' must take 1 parameter",
+                    label);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        actual = idx_node >= 0 ? self->chk_type_text(idx_node, &zero) : 0;
+        if (!actual || !actual[0]) {
+            msg = tool::sh::ct_scratch_fmt(
+                "type '%s' has no subscript: cannot infer the subscript type; bind it to a local first",
+                label);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        ak = frontend::type::type_key_text(actual);
+        if (!ak) return self->sup->fail("out of memory");
+        for (j = 0; j < self->sym->traits[ti].nm; j++) {
+            struct MethodSig *m =
+                &self->sym->traits[ti].m[j];
+            const char *pk;
+            if (!m->is_index || !m->name || strcmp(m->name, name) != 0)
+                continue;
+            if (m->nparams != want || !m->ptype[0]) continue;
+            pk = frontend::type::type_key_text(m->ptype[0]);
+            if (!pk) return self->sup->fail("out of memory");
+            if (strcmp(pk, ak) != 0) continue;
+            match = j;
+            nmatch++;
+        }
+        if (nmatch == 0) {
+            /* D034-2: list the declared key types of the indexed candidates. */
+            if (tool::sh::ct_text_init(&buf, &cap, 64) != 0)
+                return self->sup->fail("out of memory");
+            for (j = 0; j < self->sym->traits[ti].nm; j++) {
+                struct MethodSig *m =
+                    &self->sym->traits[ti].m[j];
+                if (!m->is_index || !m->name || strcmp(m->name, name) != 0)
+                    continue;
+                if (m->nparams != want || !m->ptype[0]) continue;
+                if (ncand > 0 && tool::sh::ct_text_cat(&buf, &cap, ", ") != 0)
+                    goto oom;
+                if (tool::sh::ct_text_cat(&buf, &cap, "'") != 0) goto oom;
+                if (tool::sh::ct_text_cat(&buf, &cap, m->ptype[0]) != 0) goto oom;
+                if (tool::sh::ct_text_cat(&buf, &cap, "'") != 0) goto oom;
+                ncand++;
+            }
+            {
+                const char *cands = runtime::text::ct_intern(buf);
+                tool::sh::ct_text_free(&buf, &cap);
+                buf = 0;
+                if (!cands) return self->sup->fail("out of memory");
+                msg = tool::sh::ct_scratch_fmt(
+                    "trait '%s' has no indexed '%s' matching key type '%s': candidates are %s",
+                    label, name, actual, cands);
+            }
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        if (nmatch > 1) {
+            /* The declaration-side D034-5 check makes this unreachable for a
+               well-formed trait; keep one wording instead of picking a slot. */
+            msg = tool::sh::ct_scratch_fmt(
+                "trait '%s' marks more than one indexed '%s' for key type '%s'",
+                label, name, self->sym->traits[ti].m[match].ptype[0]);
+            return tool::diag::ct_sem_error(line, col, msg, self->sup->mem->path);
+        }
+        if (call_node >= 0 && call_node < self->arena->nnode) {
+            /* The call shape is the explicit `o.get(k)` one. A trait that
+               declares the same name twice needs distinct vtable slots; that
+               slot spelling arrives with I2-3, so this slice keeps the bare
+               slot (one indexed get per name, the D-034 default). */
+            self->arena->nodes[call_node].suffix = "";
+        }
+        return 0;
+oom:
+        tool::sh::ct_text_free(&buf, &cap);
+        return self->sup->fail("out of memory");
     }
 
     /* D-028 §1.4: the write form. 1 = the parsed read sugar `x[k]` becomes the

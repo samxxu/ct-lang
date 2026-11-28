@@ -984,7 +984,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_container_subscript
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     while (n >= 0) {
         int k = _self->arena->nodes[n].kind;
-        if ((((k == N_MCALL) && ((_self->arena->nodes[n].aux == 9) || (_self->arena->nodes[n].aux == 10))) && ((strcmp(_self->arena->nodes[n].text2, "get") == 0) || (strcmp(_self->arena->nodes[n].text2, "at") == 0)))) {
+        if ((((k == N_MCALL) && (((_self->arena->nodes[n].aux == 9) || (_self->arena->nodes[n].aux == 10)) || (_self->arena->nodes[n].aux == 3))) && ((strcmp(_self->arena->nodes[n].text2, "get") == 0) || (strcmp(_self->arena->nodes[n].text2, "at") == 0)))) {
             if (((strncmp(_self->arena->nodes[n].text, "struct Vec_", 11) == 0) || (strncmp(_self->arena->nodes[n].text, "Vec_", 4) == 0))) {
                 return 1;
             }
@@ -992,7 +992,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_container_subscript
                 return 2;
             }
             if (((_self->arena->nodes[n].line > 0) && (_self->arena->nodes[n].num > 0))) {
-                return 3;
+                return ((_self->arena->nodes[n].aux == 3) ? 4 : 3);
             }
             return 0;
         }
@@ -1020,6 +1020,9 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_container_write_che
     if (k == 3) {
         return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a custom subscript supports only '='; use set(k, v)", _self->sup->mem->path);
     }
+    if (k == 4) {
+        return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)", _self->sup->mem->path);
+    }
     return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "a Map subscript is read-only; use put(k, v)", _self->sup->mem->path);
 }
 
@@ -1033,7 +1036,7 @@ static int frontend_parse_Expr_frontend_parse_ExprStaticType_container_addr_chec
     while (((at >= 0) && ((_self->arena->nodes[at].kind == N_MEMBER) || (_self->arena->nodes[at].kind == N_ARROW)))) {
         at = _self->arena->nodes[at].a;
     }
-    if (k == 3) {
+    if (((k == 3) || (k == 4))) {
         return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "cannot take the address of a custom subscript; bind it to a local first", _self->sup->mem->path);
     }
     return tool_diag_ct_sem_error(_self->arena->nodes[at].line, _self->arena->nodes[at].num, "cannot take the address of a container subscript; bind it to a local first", _self->sup->mem->path);

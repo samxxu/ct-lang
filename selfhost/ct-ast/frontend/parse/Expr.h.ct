@@ -2207,6 +2207,78 @@ impl ExprOps for Expr {
                         continue;
                     }
                 }
+                /* D-034 (I2) / v1-PH-2: an interface value. Its static
+                   type is `struct T_iface`, so `o[k]` is resolved against the
+                   trait declaration's `index` methods -- never the impl, and
+                   never the D-028 inherent path below (D1 = (i): the two
+                   dispatch models stay apart). The node is the explicit
+                   `o.get(k)` shape (N_MCALL / aux 3, the trait's vtable slot),
+                   so the emitter, TIR and LIR need no new branch. */
+                if (known && bd == 0 && strchr(bty, '*') == 0
+                    && self->sup->is_iface_type_text(bty, &trname)) {
+                    int bl = self->lex->tokline;
+                    int bc = self->lex->tokstart - self->lex->lstart + 1;
+                    int rd3 = 0;
+                    self->sup->lex_next();
+                    idx = self->parse_expr();
+                    if (idx < 0) return -1;
+                    if (self->sup->expect("]") != 0) return -1;
+                    /* D-034 D4 (stage one): the whole write family is a hard
+                       error at the subscript, before the read protocol is
+                       resolved and before any product is written. The
+                       `&o[k]` form keeps the L52-7 wording through
+                       `container_addr_check`. */
+                    if (self->lex->tok == T_PUNCT
+                        && (self->lex->tok_is("=")
+                            || self->lex->tok_is("+=")
+                            || self->lex->tok_is("-=")
+                            || self->lex->tok_is("*=")
+                            || self->lex->tok_is("/=")
+                            || self->lex->tok_is("%=")
+                            || self->lex->tok_is("&=")
+                            || self->lex->tok_is("|=")
+                            || self->lex->tok_is("^=")
+                            || self->lex->tok_is("<<=")
+                            || self->lex->tok_is(">>=")
+                            || self->lex->tok_is("++")
+                            || self->lex->tok_is("--")))
+                        return tool::diag::ct_sem_error(bl, bc,
+                            "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)",
+                            self->sup->mem->path);
+                    m = self->sup->new_node(N_MCALL);
+                    if (m < 0) return -1;
+                    self->arena->nodes[m].aux = 3;
+                    self->arena->nodes[m].line = bl;
+                    self->arena->nodes[m].num = bc;
+                    self->arena->nodes[m].text = runtime::text::ct_intern(trname);
+                    if (!self->arena->nodes[m].text) return self->sup->fail("out of memory");
+                    self->arena->nodes[m].text2 = runtime::text::ct_internf("get");
+                    if (!self->arena->nodes[m].text2) return self->sup->fail("out of memory");
+                    self->arena->nodes[m].a = n;
+                    self->arena->nodes[m].b = idx;
+                    if (self->iface_index_method(trname, "get", 1, idx, bl, bc, 0,
+                                                 m) != 0)
+                        return -1;
+                    /* A call receiver is an rvalue: the emitter names it in a
+                       temporary before taking its address, which is why the
+                       result type is read here, while locals still resolve. */
+                    {
+                        int rt3 = n;
+                        while (rt3 >= 0 && (self->arena->nodes[rt3].kind == N_MEMBER
+                                            || self->arena->nodes[rt3].kind == N_ARROW))
+                            rt3 = self->arena->nodes[rt3].a;
+                        if (rt3 >= 0 && self->arena->nodes[rt3].kind == N_CALL
+                            && !self->arena->nodes[rt3].text[0]) {
+                            const char *rty3 = self->static_ctype_text(rt3, &rd3, 0);
+                            if (rty3 && rd3 == 0)
+                                self->arena->nodes[rt3].text = rty3;
+                            if (!self->arena->nodes[rt3].text)
+                                return self->sup->fail("out of memory");
+                        }
+                    }
+                    n = m;
+                    continue;
+                }
                 /* PH-52 D52-2/D52-5: a non-pointer struct value with an
                    inherent `get` uses the same N_MCALL shape as the container
                    sugar. Missing / bad protocols are hard errors here -- the

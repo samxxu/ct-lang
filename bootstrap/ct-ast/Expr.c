@@ -1507,6 +1507,59 @@ static int frontend_parse_Expr_frontend_parse_ExprOps_parse_postfix(void *self) 
                     continue;
                 }
             }
+            if ((((known && (bd == 0)) && (strchr(bty, '*') == 0)) && _self->sup->__frontend_parse_supportops_vptr->is_iface_type_text(_self->sup, bty, (&trname)))) {
+                int bl = _self->lex->tokline;
+                int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);
+                int rd3 = 0;
+                _self->sup->__frontend_parse_supportops_vptr->lex_next(_self->sup);
+                idx = _self->__frontend_parse_exprops_vptr->parse_expr(_self);
+                if (idx < 0) {
+                    return (-1);
+                }
+                if (_self->sup->__frontend_parse_supportops_vptr->expect(_self->sup, "]") != 0) {
+                    return (-1);
+                }
+                if (((_self->lex->tok == T_PUNCT) && ((((((((((((_self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "=") || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "+=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "-=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "*=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "/=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "%=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "&=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "|=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "^=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "<<=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, ">>=")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "++")) || _self->lex->__frontend_lex_lexops_vptr->tok_is(_self->lex, "--")))) {
+                    return tool_diag_ct_sem_error(bl, bc, "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)", _self->sup->mem->path);
+                }
+                m = _self->sup->__frontend_parse_supportops_vptr->new_node(_self->sup, N_MCALL);
+                if (m < 0) {
+                    return (-1);
+                }
+                _self->arena->nodes[m].aux = 3;
+                _self->arena->nodes[m].line = bl;
+                _self->arena->nodes[m].num = bc;
+                _self->arena->nodes[m].text = runtime_text_ct_intern(trname);
+                if ((!_self->arena->nodes[m].text)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                _self->arena->nodes[m].text2 = runtime_text_ct_internf("get");
+                if ((!_self->arena->nodes[m].text2)) {
+                    return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                }
+                _self->arena->nodes[m].a = n;
+                _self->arena->nodes[m].b = idx;
+                if (_self->__frontend_parse_exprsubscript_vptr->iface_index_method(_self, trname, "get", 1, idx, bl, bc, 0, m) != 0) {
+                    return (-1);
+                }
+{
+                    int rt3 = n;
+                    while (((rt3 >= 0) && ((_self->arena->nodes[rt3].kind == N_MEMBER) || (_self->arena->nodes[rt3].kind == N_ARROW)))) {
+                        rt3 = _self->arena->nodes[rt3].a;
+                    }
+                    if ((((rt3 >= 0) && (_self->arena->nodes[rt3].kind == N_CALL)) && (!_self->arena->nodes[rt3].text[0]))) {
+                        const char * rty3 = _self->__frontend_parse_exprstatictype_vptr->static_ctype_text(_self, rt3, (&rd3), 0);
+                        if ((rty3 && (rd3 == 0))) {
+                            _self->arena->nodes[rt3].text = rty3;
+                        }
+                        if ((!_self->arena->nodes[rt3].text)) {
+                            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+                        }
+                    }
+                }
+                n = m;
+                continue;
+            }
             if ((((((known && (bd == 0)) && (strchr(bty, '*') == 0)) && (strncmp(bty, "struct ", 7) == 0)) && (strncmp(bty, "struct Vec_", 11) != 0)) && (strncmp(bty, "struct Map_", 11) != 0))) {
                 int bl = _self->lex->tokline;
                 int bc = ((_self->lex->tokstart - _self->lex->lstart) + 1);

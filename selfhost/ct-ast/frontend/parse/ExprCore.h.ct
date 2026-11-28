@@ -290,6 +290,14 @@ pub trait ExprSubscript {
        C-symbol suffix for an overloaded method. */
     int  custom_index_write_form(int e, int line, int col);
     const char *custom_index_suffix(const char *bty, int m, int row, int node);
+    /* D-034 (I2) / v1-PH-2: an interface value's `o[k]` resolves against the
+       TRAIT declaration -- the methods marked `index` -- never the impl. The
+       key matches by static type (`type_key`), a miss is a hard error with the
+       frozen D034 text, and `call_node` (when >= 0) receives the vtable slot
+       suffix. 0 = resolved, -1 = a diagnostic was emitted. */
+    int  iface_index_method(const char *trname, const char *name, int want,
+                            int idx_node, int line, int col, int writable,
+                            int call_node);
     /* LANG-31 / D-031: the constant-key fold. Answers a field-access node
        (> 0) when the key is one string literal naming a visible field, 0 when
        the caller must keep the D-028 `get` path, and -1 after a diagnostic

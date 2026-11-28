@@ -1032,7 +1032,11 @@ impl ExprStaticType for Expr {
                form); the write path must rewrite that node to `put` as well,
                so both names mark a writable container subscript. */
             if (k == N_MCALL
-                && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10)
+                && (self->arena->nodes[n].aux == 9 || self->arena->nodes[n].aux == 10
+                    /* D-034: an interface value's subscript sugar is the
+                       trait vtable call (aux 3) and only the position marks it
+                       as a write target. */
+                    || self->arena->nodes[n].aux == 3)
                 && (strcmp(self->arena->nodes[n].text2, "get") == 0
                     || strcmp(self->arena->nodes[n].text2, "at") == 0)) {
                 if (strncmp(self->arena->nodes[n].text, "struct Vec_", 11) == 0
@@ -1045,7 +1049,7 @@ impl ExprStaticType for Expr {
                    `x.get(k)` call does not, so it keeps the generic
                    "not assignable" wording instead of the subscript rule. */
                 if (self->arena->nodes[n].line > 0 && self->arena->nodes[n].num > 0)
-                    return 3;
+                    return self->arena->nodes[n].aux == 3 ? 4 : 3;
                 return 0;
             }
             if (k != N_MEMBER && k != N_ARROW) return 0;
@@ -1073,6 +1077,13 @@ impl ExprStaticType for Expr {
                                             self->arena->nodes[at].num,
                                             "a custom subscript supports only '='; use set(k, v)",
                                             self->sup->mem->path);
+        /* D-034 D4 (stage one): the write family of an interface subscript is
+           refused at the check point, before `get` is resolved. */
+        if (k == 4)
+            return tool::diag::ct_sem_error(self->arena->nodes[at].line,
+                                            self->arena->nodes[at].num,
+                                            "interface subscript is read-only in this phase; declare 'void set(K, V) index' (stage 2)",
+                                            self->sup->mem->path);
         return tool::diag::ct_sem_error(self->arena->nodes[at].line,
                                         self->arena->nodes[at].num,
                                         "a Map subscript is read-only; use put(k, v)",
@@ -1088,7 +1099,9 @@ impl ExprStaticType for Expr {
         while (at >= 0 && (self->arena->nodes[at].kind == N_MEMBER
                            || self->arena->nodes[at].kind == N_ARROW))
             at = self->arena->nodes[at].a;
-        if (k == 3)
+        /* D-034 D4: `&o[k]` keeps the v0-PH-52 L52-7 wording (the interface
+           path only widens the object, not the text). */
+        if (k == 3 || k == 4)
             return tool::diag::ct_sem_error(self->arena->nodes[at].line,
                                             self->arena->nodes[at].num,
                                             "cannot take the address of a custom subscript; bind it to a local first",

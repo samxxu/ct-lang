@@ -329,6 +329,133 @@ static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method(
     return ci_emit_failure(_self, code, bty, name, want, writable, idx_node, line, col);
 }
 
+static int frontend_parse_Expr_frontend_parse_ExprSubscript_iface_index_method(void *self, const char * trname, const char * name, int want, int idx_node, int line, int col, int writable, int call_node) {
+    struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
+    int ti;
+    int j;
+    int nidx = 0;
+    int nfit = 0;
+    int match = (-1);
+    int nmatch = 0;
+    int zero = 0;
+    const char * actual;
+    const char * ak;
+    const char * msg;
+    const char * label;
+    char * buf = 0;
+    int cap = 0;
+    int ncand = 0;
+    ti = _self->sym->__frontend_sym_symbolops_vptr->find_trait(_self->sym, trname);
+    label = (trname ? trname : "");
+    if (ti >= 0) {
+        for (j = 0; j < _self->sym->traits[ti].nm; j++) {
+            struct frontend_sym_MethodSig * m = (&_self->sym->traits[ti].m[j]);
+            if ((((!m->is_index) || (!m->name)) || (strcmp(m->name, name) != 0))) {
+                continue;
+            }
+            nidx++;
+            if (m->nparams == want) {
+                nfit++;
+            }
+        }
+    }
+    if (nidx == 0) {
+        if (writable) {
+            msg = tool_sh_ct_scratch_fmt("trait '%s' declares no indexed set; 'o[k] = v' is not available", label);
+        }
+        else {
+            msg = tool_sh_ct_scratch_fmt("trait '%s' declares no indexed get; 'o[k]' is not available", label);
+        }
+        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+    }
+    if (nfit == 0) {
+        if (writable) {
+            msg = tool_sh_ct_scratch_fmt("type '%s' has no writable subscript: 'set' must take 2 parameters", label);
+        }
+        else {
+            msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript: 'get' must take 1 parameter", label);
+        }
+        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+    }
+    actual = ((idx_node >= 0) ? _self->__frontend_parse_exprtypes_vptr->chk_type_text(_self, idx_node, (&zero)) : 0);
+    if (((!actual) || (!actual[0]))) {
+        msg = tool_sh_ct_scratch_fmt("type '%s' has no subscript: cannot infer the subscript type; bind it to a local first", label);
+        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+    }
+    ak = frontend_type_type_key_text(actual);
+    if ((!ak)) {
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+    }
+    for (j = 0; j < _self->sym->traits[ti].nm; j++) {
+        struct frontend_sym_MethodSig * m = (&_self->sym->traits[ti].m[j]);
+        const char * pk;
+        if ((((!m->is_index) || (!m->name)) || (strcmp(m->name, name) != 0))) {
+            continue;
+        }
+        if (((m->nparams != want) || (!m->ptype[0]))) {
+            continue;
+        }
+        pk = frontend_type_type_key_text(m->ptype[0]);
+        if ((!pk)) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        if (strcmp(pk, ak) != 0) {
+            continue;
+        }
+        match = j;
+        nmatch++;
+    }
+    if (nmatch == 0) {
+        if (tool_sh_ct_text_init((&buf), (&cap), 64) != 0) {
+            return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+        }
+        for (j = 0; j < _self->sym->traits[ti].nm; j++) {
+            struct frontend_sym_MethodSig * m = (&_self->sym->traits[ti].m[j]);
+            if ((((!m->is_index) || (!m->name)) || (strcmp(m->name, name) != 0))) {
+                continue;
+            }
+            if (((m->nparams != want) || (!m->ptype[0]))) {
+                continue;
+            }
+            if (((ncand > 0) && (tool_sh_ct_text_cat((&buf), (&cap), ", ") != 0))) {
+                goto oom;
+            }
+            if (tool_sh_ct_text_cat((&buf), (&cap), "'") != 0) {
+                goto oom;
+            }
+            if (tool_sh_ct_text_cat((&buf), (&cap), m->ptype[0]) != 0) {
+                goto oom;
+            }
+            if (tool_sh_ct_text_cat((&buf), (&cap), "'") != 0) {
+                goto oom;
+            }
+            ncand++;
+        }
+{
+            const char * cands = runtime_text_ct_intern(buf);
+            tool_sh_ct_text_free((&buf), (&cap));
+            buf = 0;
+            if ((!cands)) {
+                return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+            }
+            msg = tool_sh_ct_scratch_fmt("trait '%s' has no indexed '%s' matching key type '%s': candidates are %s", label, name, actual, cands);
+        }
+        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+    }
+    if (nmatch > 1) {
+        msg = tool_sh_ct_scratch_fmt("trait '%s' marks more than one indexed '%s' for key type '%s'", label, name, _self->sym->traits[ti].m[match].ptype[0]);
+        return tool_diag_ct_sem_error(line, col, msg, _self->sup->mem->path);
+    }
+    if (((call_node >= 0) && (call_node < _self->arena->nnode))) {
+        _self->arena->nodes[call_node].suffix = "";
+    }
+    return 0;
+    oom:
+        ;
+        tool_sh_ct_text_free((&buf), (&cap));
+        return _self->sup->__frontend_parse_supportops_vptr->fail(_self->sup, "out of memory");
+}
+
 static int frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_write_form(void *self, int e, int line, int col) {
     struct frontend_parse_Expr *_self = (struct frontend_parse_Expr *)self;
     const char * bty;
@@ -539,6 +666,7 @@ const struct frontend_parse_ExprSubscript_vtbl frontend_parse_Expr_frontend_pars
     .custom_index_label_text = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label_text,
     .custom_index_label = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_label,
     .custom_index_method = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_method,
+    .iface_index_method = frontend_parse_Expr_frontend_parse_ExprSubscript_iface_index_method,
     .custom_index_write_form = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_write_form,
     .custom_index_suffix = frontend_parse_Expr_frontend_parse_ExprSubscript_custom_index_suffix,
     .const_key_fold = frontend_parse_Expr_frontend_parse_ExprSubscript_const_key_fold
